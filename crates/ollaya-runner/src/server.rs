@@ -23,7 +23,8 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::onnx::{Device, ModelFiles, OnnxModel};
+use crate::engine::{self, Engine};
+use crate::onnx::{Device, ModelFiles};
 use crate::{Error, QuestionOutput};
 
 /// Which device to try. `Auto` prefers CUDA and falls back to CPU.
@@ -82,12 +83,12 @@ struct QuestionLogits {
 }
 
 struct AppState {
-    model: OnnxModel,
+    model: Box<dyn Engine>,
     loaded: Loaded,
 }
 
 /// Load the model on the best available device.
-pub fn load(config: &RunnerConfig) -> Result<(OnnxModel, Loaded), Error> {
+pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
     let files = |graph: &PathBuf| ModelFiles {
         graph: graph.clone(),
         tokenizer: config.tokenizer.clone(),
@@ -111,7 +112,7 @@ pub fn load(config: &RunnerConfig) -> Result<(OnnxModel, Loaded), Error> {
                     (None, Some(g)) => (g, "fp32"),
                     (None, None) => return Err(Error::Model("no graph given".into())),
                 };
-                match OnnxModel::load_files(&files(graph), Device::Cuda(id), config.threads) {
+                match engine::load(&files(graph), Device::Cuda(id), config.threads) {
                     Ok(model) => {
                         return Ok((
                             model,
@@ -139,7 +140,7 @@ pub fn load(config: &RunnerConfig) -> Result<(OnnxModel, Loaded), Error> {
     } else {
         "fp16"
     };
-    let model = OnnxModel::load_files(&files(graph), Device::Cpu, config.threads)?;
+    let model = engine::load(&files(graph), Device::Cpu, config.threads)?;
     Ok((
         model,
         Loaded {
@@ -173,11 +174,30 @@ fn cuda_providers_present() -> Result<(), String> {
     }
 }
 
+/// Run one small request before announcing readiness. The first run on a device pays one-off
+/// costs (CUDA/cuDNN handles, kernel selection, arena growth) that would otherwise land on the
+/// caller's first request.
+fn warm_up(model: &dyn Engine) {
+    let questions = serde_json::json!({
+        "warm_up": {"type": "choice", "instructions": "Pick one.", "criteria": {"a": "first", "b": "second", "c": "third"}},
+        "check": {"type": "noul", "instructions": "Is this a warm-up?"},
+    });
+    if let Ok(q) = ollaya_decision::parse_questions(&questions)
+        && let Err(e) = model.run(&Value::String("Warm-up request for the runner.".into()), &q)
+    {
+        tracing::warn!("warm-up failed: {e}");
+    }
+}
+
 /// Load, bind, announce the port on stdout, and serve until killed.
 pub async fn run(config: RunnerConfig) -> Result<(), Error> {
-    let (model, loaded) = tokio::task::spawn_blocking(move || load(&config))
-        .await
-        .map_err(|e| Error::Model(format!("load task failed: {e}")))??;
+    let (model, loaded) = tokio::task::spawn_blocking(move || {
+        let (model, loaded) = load(&config)?;
+        warm_up(model.as_ref());
+        Ok::<_, Error>((model, loaded))
+    })
+    .await
+    .map_err(|e| Error::Model(format!("load task failed: {e}")))??;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|e| Error::Model(e.to_string()))?;

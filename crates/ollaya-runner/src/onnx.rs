@@ -76,6 +76,19 @@ impl TokenEncoder for Tokenizer {
     }
 }
 
+/// An ONNX Runtime session on `device`. Every engine builds its sessions here, so all of them
+/// get the same execution-provider settings.
+pub fn session(graph: &Path, device: Device, intra_threads: Option<usize>) -> Result<Session, Error> {
+    let mut builder = Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
+    if let Some(n) = intra_threads {
+        builder = builder.with_intra_threads(n)?;
+    }
+    if let Device::Cuda(id) = device {
+        builder = with_cuda(builder, id)?;
+    }
+    Ok(builder.commit_from_file(graph)?)
+}
+
 #[cfg(feature = "cuda")]
 fn with_cuda(
     builder: ort::session::builder::SessionBuilder,
@@ -153,15 +166,7 @@ impl OnnxModel {
         let tokenizer = tokenizers::Tokenizer::from_file(&files.tokenizer)
             .map_err(|e| Error::Model(format!("{}: {e}", files.tokenizer.display())))?;
 
-        let mut builder =
-            Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
-        if let Some(n) = intra_threads {
-            builder = builder.with_intra_threads(n)?;
-        }
-        if let Device::Cuda(id) = device {
-            builder = with_cuda(builder, id)?;
-        }
-        let session = builder.commit_from_file(&files.graph)?;
+        let session = session(&files.graph, device, intra_threads)?;
 
         Ok(OnnxModel {
             session: Mutex::new(session),

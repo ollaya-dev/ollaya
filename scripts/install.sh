@@ -216,7 +216,9 @@ main() {
             NVIDIA_STATE=nodriver
         else
             for dev in /sys/bus/pci/devices/*; do
-                [ -r "$dev/vendor" ] && [ -r "$dev/class" ] || continue
+                if [ ! -r "$dev/vendor" ] || [ ! -r "$dev/class" ]; then
+                    continue
+                fi
                 if [ "$(cat "$dev/vendor")" = 0x10de ]; then
                     case $(cat "$dev/class") in 0x03*) NVIDIA_STATE=nodriver ;; esac
                 fi

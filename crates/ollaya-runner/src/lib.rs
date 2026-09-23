@@ -3,9 +3,11 @@
 //! An engine turns a (state, questions) request into raw option logits. Calibration and answer
 //! rendering happen in `ollaya-decision`, so engines stay small and interchangeable.
 
+pub mod engine;
 pub mod onnx;
 pub mod server;
 
+pub use engine::Engine;
 pub use onnx::{Device, Encoding, ModelFiles, OnnxModel};
 
 /// Raw network output for one question.
