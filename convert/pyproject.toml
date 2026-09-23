@@ -1,0 +1,28 @@
+[project]
+name = "ollaya-convert"
+version = "0.0.0"
+description = "Build-time conversion of decision models to the Ollaya (ONNX) model format"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+dependencies = [
+    "laya==0.3.7",
+    "torch==2.14.*",
+    "transformers==5.17.*",
+    "tokenizers==0.23.*",
+    "onnx==1.23.*",
+    "onnxscript==0.7.*",
+    "onnxruntime==1.30.*",
+    "numpy>=2",
+    "pyarrow>=20",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/cobanov/ollaya"
+rust-version = "1.90"
+
+[workspace.dependencies]
+ollaya-decision = { path = "crates/ollaya-decision" }
+
+anyhow = "1.0.104"
+indexmap = { version = "2.14.2", features = ["serde"] }
+ndarray = "0.17.2"
+serde = { version = "1.0", features = ["derive"] }
+# preserve_order: criteria and answers must keep the caller's key order, as Python dicts do.
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+thiserror = "2.0.20"
+# Pure-Rust regex backend keeps the binary free of C dependencies; the golden encoding
+# tests prove it tokenizes identically to the Python (onig) build laya uses.
+tokenizers = { version = "=0.23.2", default-features = false, features = ["fancy-regex"] }
+# ort is a release candidate with breaking renames between RCs: pin it exactly.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "tracing", "api-24"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

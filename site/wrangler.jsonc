@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Ollaya website — a fully static site served by Workers Static Assets.
+  // There is no Worker script ("main"): requests never run code, so it stays on the free plan.
+  // Build first (`npm run build` writes ./dist), then `wrangler deploy` uploads ./dist.
+  "name": "ollaya",
+  "compatibility_date": "2026-09-15",
+
+  "assets": {
+    "directory": "./dist",
+    // Unknown paths get dist/404.html with status 404.
+    "not_found_handling": "404-page",
+    // "/docs/api" serves docs/api.html; "/docs/api.html" and "/docs/api/" redirect to "/docs/api".
+    "html_handling": "auto-trailing-slash"
+  },
+
+  // Custom domain — the zone (cobanov.dev) must be in the same Cloudflare account.
+  // Wrangler creates the DNS record and certificate on deploy.
+  // The public origin used inside the pages is set at build time: SITE_ORIGIN=https://… npm run build
+  "routes": [
+    { "pattern": "ollaya.cobanov.dev", "custom_domain": true }
+    // Later, to serve ollaya.dev (zone ollaya.dev added to the account), rebuild with
+    // SITE_ORIGIN=https://ollaya.dev and add:
+    // , { "pattern": "ollaya.dev", "custom_domain": true }
+  ],
+
+  // Keep the *.workers.dev URL for smoke tests; set to false once the custom domain is live.
+  "workers_dev": true,
+  "preview_urls": false
+}

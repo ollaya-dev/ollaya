@@ -1,0 +1,32 @@
+{
+  "name": "ollaya-site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Website for Ollaya — a static site (Hono JSX pre-rendered at build time, Tailwind CSS) served by Cloudflare Workers static assets",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "gen": "node scripts/gen-content.mjs",
+    "typecheck": "npm run gen && tsc --noEmit",
+    "build": "npm run typecheck && node scripts/build.mjs && node scripts/check.mjs",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "esbuild": "0.28.1",
+    "hono": "4.13.8",
+    "marked": "18.0.14",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "wrangler": "4.137.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260921.1": true,
+    "@parcel/watcher": false
+  }
+}

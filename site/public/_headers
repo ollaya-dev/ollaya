@@ -1,0 +1,25 @@
+# Response headers for Cloudflare Workers static assets (also understood by Cloudflare Pages
+# and Netlify). Other static hosts ignore this file; the site works without it.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
+# Files under /static/ are referenced with a ?v=<content-hash> query, so they can be cached forever.
+/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/install.sh
+  Content-Type: text/x-shellscript; charset=utf-8
+  Cache-Control: public, max-age=300
+
+/search.json
+  Cache-Control: public, max-age=300
+
+/favicon.svg
+  Cache-Control: public, max-age=86400
+
+# /v2/ is reserved for the static model registry (manifests copied in by the packaging step).

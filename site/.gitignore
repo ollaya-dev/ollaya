@@ -1,0 +1,6 @@
+node_modules/
+.wrangler/
+dist/
+# generated from docs/ and content/ by scripts/gen-content.mjs
+src/generated/
+.dist-tmp/

@@ -1,0 +1,9 @@
+# Redirects and rewrites for Cloudflare Workers static assets (Cloudflare Pages / Netlify use the
+# same syntax). Other static hosts ignore this file: they serve dist/library.html (a meta-refresh
+# to /search) and the colon-named tag pages (dist/library/laya:en.html) directly.
+
+/library /search 302
+
+# Tag pages: /library/laya:en is served from library/laya/tags/en.html with status 200, so the
+# URL keeps its colon (Cloudflare would otherwise 307 it to /library/laya%3Aen).
+/library/:model:* /library/:model/tags/:splat 200
