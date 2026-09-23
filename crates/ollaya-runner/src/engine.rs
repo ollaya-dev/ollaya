@@ -29,13 +29,22 @@ pub const LAYOUTS: &[&str] = &["laya-markers-v1"];
 
 /// The layout a `decision` layer declares.
 pub fn layout_of(decision: &Path) -> Result<String, Error> {
-    let text = std::fs::read_to_string(decision).map_err(|e| Error::Model(format!("{}: {e}", decision.display())))?;
-    let v: Value = serde_json::from_str(&text).map_err(|e| Error::Model(format!("{}: {e}", decision.display())))?;
-    v["layout"].as_str().map(str::to_owned).ok_or_else(|| Error::Model("decision layer has no layout".into()))
+    let text = std::fs::read_to_string(decision)
+        .map_err(|e| Error::Model(format!("{}: {e}", decision.display())))?;
+    let v: Value = serde_json::from_str(&text)
+        .map_err(|e| Error::Model(format!("{}: {e}", decision.display())))?;
+    v["layout"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| Error::Model("decision layer has no layout".into()))
 }
 
 /// Load the engine for a model's layout on `device`.
-pub fn load(files: &ModelFiles, device: Device, threads: Option<usize>) -> Result<Box<dyn Engine>, Error> {
+pub fn load(
+    files: &ModelFiles,
+    device: Device,
+    threads: Option<usize>,
+) -> Result<Box<dyn Engine>, Error> {
     match layout_of(&files.decision)?.as_str() {
         "laya-markers-v1" => Ok(Box::new(OnnxModel::load_files(files, device, threads)?)),
         other => Err(Error::Model(format!(

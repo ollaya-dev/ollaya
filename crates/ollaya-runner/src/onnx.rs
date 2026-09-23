@@ -78,8 +78,13 @@ impl TokenEncoder for Tokenizer {
 
 /// An ONNX Runtime session on `device`. Every engine builds its sessions here, so all of them
 /// get the same execution-provider settings.
-pub fn session(graph: &Path, device: Device, intra_threads: Option<usize>) -> Result<Session, Error> {
-    let mut builder = Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
+pub fn session(
+    graph: &Path,
+    device: Device,
+    intra_threads: Option<usize>,
+) -> Result<Session, Error> {
+    let mut builder =
+        Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
     if let Some(n) = intra_threads {
         builder = builder.with_intra_threads(n)?;
     }
