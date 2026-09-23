@@ -1,0 +1,36 @@
+[package]
+name = "ollaya"
+description = "Run open decision models locally"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "ollaya"
+path = "src/main.rs"
+
+[features]
+default = []
+cuda = ["ollaya-runner/cuda"]
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+dirs.workspace = true
+indexmap.workspace = true
+indicatif.workspace = true
+ollaya-api.workspace = true
+ollaya-decision.workspace = true
+ollaya-runner.workspace = true
+ollaya-server.workspace = true
+rustyline.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

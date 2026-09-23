@@ -14,7 +14,10 @@ default = []
 cuda = ["ort/cuda", "ort/tensorrt", "ort/nvrtx"]
 
 [dependencies]
+axum.workspace = true
 ollaya-decision.workspace = true
+tokio.workspace = true
+tracing.workspace = true
 ndarray.workspace = true
 ort = { workspace = true, features = ["download-binaries", "copy-dylibs", "tls-rustls"] }
 serde.workspace = true

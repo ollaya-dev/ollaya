@@ -1,0 +1,36 @@
+{
+  "intent": {
+    "type": "choice",
+    "instructions": "What does the customer want in `message`?",
+    "criteria": {
+      "refund": "money returned or a duplicate charge reversed",
+      "technical_help": "a bug, outage or integration problem",
+      "billing_question": "a question about an invoice, plan or payment method",
+      "information": "general information, pricing or how-to",
+      "cancellation": "wants to cancel or downgrade",
+      "other": "none of the other options fits"
+    }
+  },
+  "is_urgent": {
+    "type": "noul",
+    "instructions": "Does `message` communicate time pressure or a deadline?"
+  },
+  "frustration": {
+    "type": "score",
+    "instructions": "How frustrated does the customer sound in `message`?",
+    "criteria": [
+      "calm and neutral",
+      "concerned but civil",
+      "clearly annoyed",
+      "very angry or using strong language"
+    ]
+  },
+  "refund_requested": {
+    "type": "noul",
+    "instructions": "Does the customer ask for money back?"
+  },
+  "churn_risk": {
+    "type": "noul",
+    "instructions": "Does `message` suggest the customer may leave for a competitor or cancel?"
+  }
+}

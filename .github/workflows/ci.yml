@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          # ort's build script downloads pyke's ONNX Runtime build (CPU) into this directory.
+          cache-directories: ~/.cache/ort.pyke.io
+      - run: cargo fmt --all --check
+      # Default features only: the CPU build. CUDA and CoreML builds run in release.yml.
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+  site:
+    name: Site build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  packaging:
+    name: Packaging scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ShellCheck
+        run: shellcheck scripts/install.sh scripts/package.sh packaging/docker-healthcheck.sh
+      - name: install.sh parses under dash
+        run: dash -n scripts/install.sh
+      - name: install.sh embeds packaging/ollaya.service unchanged
+        run: |
+          awk '/# BEGIN packaging\/ollaya.service/ { on = 1; next }
+               on && /cat <<EOF/ { copy = 1; next }
+               copy && /^EOF$/ { exit }
+               copy' scripts/install.sh |
+            sed 's|[$]BINDIR|/usr/local/bin|' |
+            diff -u packaging/ollaya.service -

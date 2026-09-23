@@ -1,0 +1,33 @@
+[package]
+name = "ollaya-server"
+description = "The Ollaya daemon: HTTP API, model resolution and the runner scheduler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+indexmap.workspace = true
+ollaya-api.workspace = true
+ollaya-decision.workspace = true
+ollaya-lang.workspace = true
+ollaya-registry.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+# The HTTP tests run the test binary itself as a fake runner (`<test exe> runner ...`), so they
+# need their own `main`.
+[[test]]
+name = "http"
+harness = false

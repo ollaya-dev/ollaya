@@ -22,9 +22,14 @@ pub enum Error {
     #[error("{0}")]
     Invalid(String),
     #[error(
-        "question options exceed the model's option budget ({options} options, head_max_len={head_max_len})"
+        "question {question:?}: {options} options exceed the model's option budget (head_max_len={head_max_len})"
     )]
-    TooManyOptions { options: usize, head_max_len: usize },
+    TooManyOptions {
+        /// Filled in by the caller that knows the question id (see [`Error::for_question`]).
+        question: String,
+        options: usize,
+        head_max_len: usize,
+    },
     #[error("tokenizer: {0}")]
     Tokenizer(String),
 }
@@ -32,5 +37,21 @@ pub enum Error {
 impl Error {
     pub fn invalid(msg: impl Into<String>) -> Self {
         Error::Invalid(msg.into())
+    }
+
+    /// Attach the question id to an error raised while encoding that question.
+    pub fn for_question(self, qid: &str) -> Self {
+        match self {
+            Error::TooManyOptions {
+                options,
+                head_max_len,
+                ..
+            } => Error::TooManyOptions {
+                question: qid.to_owned(),
+                options,
+                head_max_len,
+            },
+            e => e,
+        }
     }
 }

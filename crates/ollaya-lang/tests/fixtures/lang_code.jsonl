@@ -1,0 +1,57 @@
+{"code": "en", "english": true}
+{"code": "EN", "english": true}
+{"code": "en-US", "english": true}
+{"code": "en_US", "english": true}
+{"code": "en_US.UTF-8", "english": true}
+{"code": " en ", "english": true}
+{"code": "\ten\n", "english": true}
+{"code": "eng", "english": true}
+{"code": "English", "english": true}
+{"code": "ENGLISH", "english": true}
+{"code": "english-uk", "english": true}
+{"code": "english_US", "english": true}
+{"code": "eng-GB", "english": true}
+{"code": "en-", "english": true}
+{"code": "-en", "english": null}
+{"code": "_en", "english": null}
+{"code": ".en", "english": null}
+{"code": ".", "english": null}
+{"code": "", "english": null}
+{"code": "   ", "english": null}
+{"code": "\n", "english": null}
+{"code": "_", "english": null}
+{"code": "-", "english": null}
+{"code": "._", "english": null}
+{"code": "..en", "english": null}
+{"code": "fr", "english": false}
+{"code": "fr-CA", "english": false}
+{"code": "de_DE.UTF-8", "english": false}
+{"code": "pt-BR", "english": false}
+{"code": "zh-Hans-CN", "english": false}
+{"code": "C", "english": false}
+{"code": "C.UTF-8", "english": false}
+{"code": "POSIX", "english": false}
+{"code": "e", "english": false}
+{"code": "enn", "english": false}
+{"code": "en.", "english": true}
+{"code": "EN_us", "english": true}
+{"code": "en@euro", "english": false}
+{"code": "En_Us.utf8", "english": true}
+{"code": "en_US.ISO-8859-1", "english": true}
+{"code": "es-en", "english": false}
+{"code": "x-en", "english": false}
+{"code": "e-n", "english": false}
+{"code": "\u001cen\u001f", "english": true}
+{"code": "　en　", "english": true}
+{"code": " en ", "english": true}
+{"code": "​en", "english": false}
+{"code": "ｅｎ", "english": false}
+{"code": "İn", "english": false}
+{"code": "ENİ", "english": false}
+{"code": "en ", "english": true}
+{"code": "und", "english": false}
+{"code": "mul", "english": false}
+{"code": "tr", "english": false}
+{"code": "hi-IN", "english": false}
+{"code": "english.", "english": true}
+{"code": "en-GB-oxendict", "english": true}

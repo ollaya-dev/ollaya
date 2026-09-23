@@ -1,0 +1,12 @@
+# NVIDIA runtime libraries shipped in lib/ollaya/cuda_v13 (see docs/distribution.md).
+# pyke's ORT 1.28 CUDA build needs CUDA >= 13.2 and cuDNN >= 9.23.
+# Edit the pins here, then regenerate cuda-requirements.txt (hashes) with:
+#   uv pip compile packaging/cuda-requirements.in --no-deps --universal --generate-hashes \
+#     --no-annotate -o packaging/cuda-requirements.txt
+nvidia-cuda-runtime==13.4.92
+nvidia-cublas==13.8.0.4
+nvidia-cudnn-cu13==9.26.0.51
+nvidia-cufft==12.4.0.43
+nvidia-curand==10.4.4.72
+nvidia-cuda-nvrtc==13.4.92
+nvidia-nvjitlink==13.4.92

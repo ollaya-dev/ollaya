@@ -4,8 +4,9 @@
 //! rendering happen in `ollaya-decision`, so engines stay small and interchangeable.
 
 pub mod onnx;
+pub mod server;
 
-pub use onnx::{Device, OnnxModel};
+pub use onnx::{Device, Encoding, ModelFiles, OnnxModel};
 
 /// Raw network output for one question.
 #[derive(Debug, Clone)]
@@ -22,6 +23,10 @@ pub struct Output {
     pub questions: Vec<QuestionOutput>,
     /// Encoder tokens processed, summed over questions (TypeSafe's `usage.input_tokens`).
     pub input_tokens: usize,
+    /// Tokens in the serialized state, before truncation.
+    pub state_tokens: usize,
+    /// The state was cut to fit at least one question's sequence.
+    pub state_truncated: bool,
 }
 
 #[derive(Debug, thiserror::Error)]

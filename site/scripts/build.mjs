@@ -100,8 +100,41 @@ for (const f of files) {
   await writeFile(target, f.body)
 }
 
+// The static model registry (../registry, written by convert/ollaya_convert/package.py): manifests
+// under /v2/ and derived blobs under /blobs/. Manifests carry absolute blob URLs, so they must
+// have been packaged for the origin this site is built for.
+const registry = join(root, '..', 'registry')
+let registryFiles = 0
+if (await stat(registry).catch(() => null)) {
+  for (const sub of ['v2', 'blobs']) {
+    const src = join(registry, sub)
+    if (await stat(src).catch(() => null)) await cp(src, join(dist, sub), { recursive: true })
+  }
+  const walk = async (d) => (await readdir(d, { withFileTypes: true })).flatMap((e) => (e.isDirectory() ? [] : [join(d, e.name)]))
+  const manifestDirs = []
+  const collect = async (d) => {
+    for (const e of await readdir(d, { withFileTypes: true })) {
+      if (e.isDirectory()) await collect(join(d, e.name))
+      else if (d.endsWith('/manifests')) manifestDirs.push(join(d, e.name))
+    }
+  }
+  if (await stat(join(dist, 'v2')).catch(() => null)) await collect(join(dist, 'v2'))
+  for (const m of manifestDirs) {
+    const manifest = JSON.parse(await readFile(m, 'utf8'))
+    for (const layer of [manifest.config, ...manifest.layers]) {
+      for (const url of layer.urls ?? []) {
+        if (url.includes('/blobs/sha256-') && !url.startsWith(`${origin}/blobs/`)) {
+          throw new Error(`${relative(dist, m)}: blob URL ${url} is not under ${origin}; rerun package.py with SITE_ORIGIN=${origin}`)
+        }
+      }
+    }
+  }
+  registryFiles = manifestDirs.length + (await walk(join(dist, 'blobs')).catch(() => [])).length
+}
+
 await rm(finalDist, { recursive: true, force: true })
 await rename(dist, finalDist)
+if (registryFiles) console.log(`registry: ${registryFiles} manifests and blobs copied into dist/`)
 
 const pagesCount = files.filter((f) => f.path.endsWith('.html')).length
 console.log(

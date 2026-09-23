@@ -1,0 +1,17 @@
+# The image build needs the Rust workspace and the packaging scripts only. Allowlist, so that
+# model weights, conversion outputs, node_modules and target/ never reach the build context.
+*
+!Cargo.toml
+!Cargo.lock
+!crates/
+!.cargo/
+!rust-toolchain.toml
+!LICENSE
+!README.md
+!scripts/package.sh
+!packaging/
+
+**/target/
+**/*.onnx
+**/*.onnx.data
+**/*.safetensors

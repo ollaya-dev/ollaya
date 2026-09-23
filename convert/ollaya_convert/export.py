@@ -25,7 +25,7 @@ from . import laya_ref
 
 INPUT_NAMES = ["input_ids", "attention_mask", "marker_pos", "marker_mask", "qtype"]
 OUTPUT_NAMES = ["logits", "act_logits"]
-OPSET = 20
+OPSET = int(os.environ.get("OLLAYA_OPSET", "20"))
 # DecisionModel.forward picks topk(2) vs a zero-padded topk(1) with a Python `if` on the marker
 # width, so the exported graph always takes topk(2). Runtimes pad the marker axis to at least this
 # many slots; a masked slot scores -1e4, so probabilities, entropy and k are unchanged.
@@ -40,6 +40,37 @@ def onnx_feed(batch):
         feed["marker_pos"] = np.pad(feed["marker_pos"], ((0, 0), (0, pad)))
         feed["marker_mask"] = np.pad(feed["marker_mask"], ((0, 0), (0, pad)))
     return feed
+
+
+def expand_attention_masks(model):
+    """Give every opset-23 `Attention` node a mask with the full query dimension.
+
+    The decision head's `nn.TransformerEncoderLayer` passes a key-padding mask shaped
+    [B, 1, 1, S]. The ONNX spec lets it broadcast over queries, but ONNX Runtime 1.28's kernel
+    requires the query dimension spelled out ([B, 1, S_q, S]). Expanding it is exact.
+    """
+    from onnx import helper
+
+    nodes, added = [], 0
+    for node in model.graph.node:
+        if node.op_type == "Attention" and len(node.input) > 3 and node.input[3]:
+            q, mask = node.input[0], node.input[3]
+            p = "%s_mask" % node.name
+            nodes += [
+                helper.make_node("Shape", [q], [p + "_qshape"], start=2, end=3),
+                helper.make_node("Constant", [], [p + "_ones"],
+                                 value=helper.make_tensor(p + "_ones_v", onnx.TensorProto.INT64, [2], [1, 1])),
+                helper.make_node("Constant", [], [p + "_one"],
+                                 value=helper.make_tensor(p + "_one_v", onnx.TensorProto.INT64, [1], [1])),
+                helper.make_node("Concat", [p + "_ones", p + "_qshape", p + "_one"], [p + "_target"], axis=0),
+                helper.make_node("Expand", [mask, p + "_target"], [p + "_full"]),
+            ]
+            node.input[3] = p + "_full"
+            added += 1
+        nodes.append(node)
+    del model.graph.node[:]
+    model.graph.node.extend(nodes)
+    return added
 
 
 class Graph(torch.nn.Module):
@@ -91,9 +122,13 @@ def export(name: str, out_dir: str, root: str) -> str:
         program = torch.onnx.export(
             graph, args, dynamo=True, opset_version=OPSET,
             input_names=INPUT_NAMES, output_names=OUTPUT_NAMES,
-            dynamic_shapes=dynamic_shapes, optimize=True,
+            dynamic_shapes=dynamic_shapes, optimize=os.environ.get("OLLAYA_ONNX_OPTIMIZE", "1") == "1",
         )
     program.save(path, external_data=False)
+    if OPSET >= 23:
+        model = onnx.load(path, load_external_data=True)
+        expand_attention_masks(model)
+        onnx.save(model, path, save_as_external_data=True, location="model.onnx.data")
     onnx.checker.check_model(path, full_check=True)
 
     # The tokenizer and decision config travel with the graph as their own layers.

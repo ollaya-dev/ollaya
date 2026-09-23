@@ -1,0 +1,21 @@
+[package]
+name = "ollaya-api"
+description = "Ollaya's HTTP contract: request/response types, boundary validation and the async client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+futures-util.workspace = true
+indexmap.workspace = true
+ollaya-decision.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

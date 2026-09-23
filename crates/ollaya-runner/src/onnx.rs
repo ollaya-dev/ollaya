@@ -9,7 +9,7 @@
 //! calibration.json                 temperatures
 //! ```
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use ndarray::Array2;
@@ -48,6 +48,14 @@ fn one() -> usize {
     1
 }
 
+/// Encoder input for one request: every question against the shared state.
+#[derive(Debug, Clone)]
+pub struct Encoding {
+    pub questions: Vec<ollaya_decision::Encoded>,
+    /// Tokens in the serialized state, before any truncation.
+    pub state_tokens: usize,
+}
+
 pub struct OnnxModel {
     session: Mutex<Session>,
     tokenizer: Tokenizer,
@@ -68,26 +76,82 @@ impl TokenEncoder for Tokenizer {
     }
 }
 
+#[cfg(feature = "cuda")]
+fn with_cuda(
+    builder: ort::session::builder::SessionBuilder,
+    device_id: i32,
+) -> Result<ort::session::builder::SessionBuilder, Error> {
+    // TF32 matmuls keep 10 mantissa bits, which moves calibrated probabilities by ~1e-3 and
+    // flips close decisions. fp32 graphs run in true fp32; speed comes from fp16 graphs.
+    Ok(builder.with_execution_providers([ort::ep::CUDA::default()
+        .with_device_id(device_id)
+        .with_tf32(false)
+        .build()
+        .error_on_failure()])?)
+}
+
+#[cfg(not(feature = "cuda"))]
+fn with_cuda(
+    _builder: ort::session::builder::SessionBuilder,
+    _device_id: i32,
+) -> Result<ort::session::builder::SessionBuilder, Error> {
+    Err(Error::Model(
+        "this build of ollaya has no CUDA support".into(),
+    ))
+}
+
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, Error> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| Error::Model(format!("{}: {e}", path.display())))?;
     serde_json::from_str(&text).map_err(|e| Error::Model(format!("{}: {e}", path.display())))
 }
 
+/// The files one model loads from. In the blob store they are `sha256-<hex>` blobs; in a
+/// development export they are the named files of one directory.
+#[derive(Debug, Clone)]
+pub struct ModelFiles {
+    pub graph: PathBuf,
+    pub tokenizer: PathBuf,
+    pub decision: PathBuf,
+    pub calibration: Option<PathBuf>,
+}
+
+impl ModelFiles {
+    /// `model.onnx`, `tokenizer.json`, `decision.json`, `calibration.json` in one directory.
+    pub fn dir(dir: &Path) -> Self {
+        ModelFiles {
+            graph: dir.join("model.onnx"),
+            tokenizer: dir.join("tokenizer.json"),
+            decision: dir.join("decision.json"),
+            calibration: Some(dir.join("calibration.json")),
+        }
+    }
+}
+
 impl OnnxModel {
+    /// Load a model exported to one directory (development and parity tooling).
     pub fn load(dir: &Path, device: Device, intra_threads: Option<usize>) -> Result<Self, Error> {
-        let config: DecisionConfig = read_json(&dir.join("decision.json"))?;
+        Self::load_files(&ModelFiles::dir(dir), device, intra_threads)
+    }
+
+    pub fn load_files(
+        files: &ModelFiles,
+        device: Device,
+        intra_threads: Option<usize>,
+    ) -> Result<Self, Error> {
+        let config: DecisionConfig = read_json(&files.decision)?;
         if config.engine != "onnx" || config.layout != "laya-markers-v1" {
             return Err(Error::Model(format!(
                 "unsupported engine/layout {}/{}; this runner serves onnx/laya-markers-v1",
                 config.engine, config.layout
             )));
         }
-        let calibration = Calibration::from_file(&read_json::<CalibrationFile>(
-            &dir.join("calibration.json"),
-        )?);
-        let tokenizer = tokenizers::Tokenizer::from_file(dir.join("tokenizer.json"))
-            .map_err(|e| Error::Model(format!("tokenizer.json: {e}")))?;
+        let calibration = match &files.calibration {
+            Some(path) => Calibration::from_file(&read_json::<CalibrationFile>(path)?),
+            None => Calibration::default(),
+        };
+        let tokenizer = tokenizers::Tokenizer::from_file(&files.tokenizer)
+            .map_err(|e| Error::Model(format!("{}: {e}", files.tokenizer.display())))?;
 
         let mut builder =
             Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
@@ -95,15 +159,9 @@ impl OnnxModel {
             builder = builder.with_intra_threads(n)?;
         }
         if let Device::Cuda(id) = device {
-            // TF32 matmuls keep 10 mantissa bits, which moves calibrated probabilities by ~1e-3
-            // and flips close decisions. fp32 graphs run in true fp32; speed comes from fp16 graphs.
-            builder = builder.with_execution_providers([ort::ep::CUDA::default()
-                .with_device_id(id)
-                .with_tf32(false)
-                .build()
-                .error_on_failure()])?;
+            builder = with_cuda(builder, id)?;
         }
-        let session = builder.commit_from_file(dir.join("model.onnx"))?;
+        let session = builder.commit_from_file(&files.graph)?;
 
         Ok(OnnxModel {
             session: Mutex::new(session),
@@ -120,18 +178,22 @@ impl OnnxModel {
     }
 
     /// Encode every question against the shared state (token ids and marker positions).
-    pub fn encode(
-        &self,
-        state: &Value,
-        questions: &Questions,
-    ) -> Result<Vec<ollaya_decision::Encoded>, Error> {
+    pub fn encode(&self, state: &Value, questions: &Questions) -> Result<Encoding, Error> {
         let state_ids = self
             .layout
             .encode_state(&self.tokenizer, &ollaya_decision::serialize_state(state))?;
-        questions
-            .values()
-            .map(|q| Ok(self.layout.encode(&self.tokenizer, &state_ids, q)?))
-            .collect()
+        let questions = questions
+            .iter()
+            .map(|(qid, q)| {
+                self.layout
+                    .encode(&self.tokenizer, &state_ids, q)
+                    .map_err(|e| Error::Decision(e.for_question(qid)))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Encoding {
+            questions,
+            state_tokens: state_ids.len(),
+        })
     }
 
     /// Answer every question in one forward pass.
@@ -140,11 +202,8 @@ impl OnnxModel {
         self.run_encoded(&encoded, questions)
     }
 
-    pub fn run_encoded(
-        &self,
-        encoded: &[ollaya_decision::Encoded],
-        questions: &Questions,
-    ) -> Result<Output, Error> {
+    pub fn run_encoded(&self, encoding: &Encoding, questions: &Questions) -> Result<Output, Error> {
+        let encoded = &encoding.questions;
         let n = encoded.len();
         let seq = encoded.iter().map(|e| e.ids.len()).max().unwrap_or(0);
         let k = encoded
@@ -195,6 +254,8 @@ impl OnnxModel {
         Ok(Output {
             questions,
             input_tokens,
+            state_tokens: encoding.state_tokens,
+            state_truncated: encoded.iter().any(|e| e.state_truncated),
         })
     }
 }

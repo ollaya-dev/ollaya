@@ -50,17 +50,9 @@ function Hero() {
     <section class="mx-auto max-w-6xl px-4 pt-10 md:px-6 md:pt-20" aria-labelledby="hero-title">
       <div class="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-16">
         <div>
-          <a
-            href={GITHUB_URL}
-            class="inline-flex items-center gap-2 rounded-full border border-line px-3 py-1 text-[13px] text-muted hover:border-line-strong hover:text-fg"
-          >
-            <span class="size-1.5 rounded-full bg-fg" aria-hidden="true"></span>
-            Pre-release · first version in progress
-            <Icon name="arrowRight" class="size-3.5" />
-          </a>
           <h1
             id="hero-title"
-            class="mt-6 text-4xl leading-[1.05] font-medium tracking-tight text-fg md:text-5xl lg:text-[3.5rem]"
+            class="text-4xl leading-[1.05] font-medium tracking-tight text-fg md:text-5xl lg:text-[3.5rem]"
           >
             Run decision models locally.
           </h1>
@@ -95,7 +87,9 @@ const mockRows = [
 
 function TerminalMock() {
   return (
-    <figure class="min-w-0">
+    // The caption sits outside the flow on wide screens, so the hero text centres on the terminal
+    // window itself rather than on window + caption.
+    <figure class="relative min-w-0">
       <div class="overflow-hidden rounded-xl border border-line bg-term shadow-2xl shadow-black/5">
         <div class="flex items-center gap-1.5 border-b border-line px-4 py-3" aria-hidden="true">
           <span class="size-2.5 rounded-full bg-line-strong"></span>
@@ -143,7 +137,7 @@ function TerminalMock() {
           </p>
         </div>
       </div>
-      <figcaption class="mt-3 text-[13px] text-muted">
+      <figcaption class="mt-3 text-[13px] text-muted lg:absolute lg:top-full lg:left-0">
         Illustrative output — the CLI is being built and may change.
       </figcaption>
     </figure>

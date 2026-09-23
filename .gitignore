@@ -11,3 +11,6 @@ __pycache__/
 *.onnx
 *.onnx.data
 *.safetensors
+
+# Derived registry blobs are build outputs (package.py); manifests are tracked.
+/registry/blobs/

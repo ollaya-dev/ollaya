@@ -52,6 +52,8 @@ pub struct Encoded {
     pub ids: Vec<u32>,
     /// Position of each option's `[MASK]`, in option order.
     pub markers: Vec<usize>,
+    /// The state did not fit after the question and was cut (laya keeps its beginning).
+    pub state_truncated: bool,
 }
 
 /// The state as the model reads it: strings verbatim, anything else as `json.dumps`.
@@ -127,10 +129,15 @@ impl LayaLayout {
 
         if markers.len() != options.len() {
             return Err(Error::TooManyOptions {
+                question: String::new(),
                 options: options.len(),
                 head_max_len: self.head_max_len,
             });
         }
-        Ok(Encoded { ids, markers })
+        Ok(Encoded {
+            ids,
+            markers,
+            state_truncated: room < state_ids.len(),
+        })
     }
 }

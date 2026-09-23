@@ -1,0 +1,435 @@
+#!/bin/sh
+# Build Ollaya release archives from a cargo target directory.
+#
+#   scripts/package.sh [options] <target-dir> <version>
+#   scripts/package.sh --checksums <dir>
+#
+# Archives, written to --out (default: ./dist):
+#   ollaya-<platform>.tar.zst        bin/ollaya + share/doc/ollaya/ (LICENSE, THIRD_PARTY_NOTICES)
+#   ollaya-linux-amd64-cuda.tar.zst  lib/ollaya/cuda_v13/ (ORT CUDA provider + NVIDIA CUDA/cuDNN
+#                                    libraries) + share/doc/ollaya/cuda_v13/ (notices, NVIDIA licenses)
+#   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
+#   sha256sum.txt                    over every archive in --out
+#
+# Options:
+#   --platform P  linux-amd64 | linux-arm64 | darwin-arm64 (default: this host)
+#   --cuda        also build the CUDA archive (linux-amd64 only). The binary must have been built
+#                 with `--features ollaya-runner/cuda`, which also puts the ORT provider libraries
+#                 in <target-dir>.
+#   --no-base     skip the base archive (only useful with --cuda)
+#   --stage DIR   stage the file trees into DIR/<archive name>/ and stop: no archives, no checksums
+#                 (the Dockerfile uses this)
+#   --out DIR     output directory (default: dist)
+#   --checksums D only (re)write D/sha256sum.txt
+#
+# Environment:
+#   OLLAYA_BIN             binary to package (default: <target-dir>/ollaya)
+#   OLLAYA_CARGO_PACKAGE   package whose dependency tree is listed in the notices (default: ollaya)
+#   OLLAYA_CARGO_FEATURES  cargo features of the build (default: ollaya-runner/cuda on linux-amd64,
+#                          ollaya-runner/coreml on darwin-arm64, none on linux-arm64)
+#   OLLAYA_CACHE           download cache (default: ${XDG_CACHE_HOME:-~/.cache}/ollaya-package)
+#   PYTHON                 interpreter used for `pip download` (default: python3, else `uvx pip`)
+#   ZSTD_LEVEL             zstd level (default: 19)
+#   SOURCE_DATE_EPOCH      timestamp for archive entries (default: last commit, else now)
+
+set -eu
+
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+
+# ONNX Runtime version inside ort-sys (=2.0.0-rc.13 pins ORT 1.28.0). Bump together with `ort`.
+ORT_VERSION=1.28.0
+ORT_LICENSE_SHA256=2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c
+ORT_NOTICES_SHA256=0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2
+
+# ORT provider libraries shipped in the CUDA archive. TensorRT and NV TensorRT RTX providers are
+# left out: they need TensorRT 10 (libnvinfer), which is not shipped, and the runner only registers
+# the CUDA execution provider.
+ORT_PROVIDERS="libonnxruntime_providers_shared.so libonnxruntime_providers_cuda.so"
+
+# NVIDIA libraries to keep from the wheels in packaging/cuda-requirements.txt. Everything else in
+# the wheels (static libs, headers, cufftw, nvrtc .alt builds) is dropped.
+CUDA_LIBS_REQUIRED="libcudart.so.13 libcublas.so.13 libcublasLt.so.13 libcufft.so.12 libcurand.so.10
+libnvrtc.so.13 libnvJitLink.so.13 libcudnn.so.9"
+
+say() { printf '>>> %s\n' "$*" >&2; }
+die() { printf 'package.sh: error: %s\n' "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+usage() {
+    sed -n '2,/^$/s/^# \{0,1\}//p' "$0" >&2
+    exit 2
+}
+
+sha256_of() {
+    if have sha256sum; then
+        sha256sum "$1" | cut -d' ' -f1
+    elif have shasum; then
+        shasum -a 256 "$1" | cut -d' ' -f1
+    else
+        openssl dgst -sha256 -r "$1" | cut -d' ' -f1
+    fi
+}
+
+human_size() {
+    # MiB with one decimal; `du -h` rounds differently on GNU and BSD.
+    wc -c <"$1" | awk '{ printf "%.1f MiB", $1 / 1048576 }'
+}
+
+write_checksums() {
+    dir=$1
+    [ -d "$dir" ] || die "no such directory: $dir"
+    (
+        cd "$dir"
+        LC_ALL=C
+        export LC_ALL
+        : >sha256sum.txt.tmp
+        for f in *; do
+            case $f in *.tar.zst | *.tgz) [ -f "$f" ] || continue ;; *) continue ;; esac
+            printf '%s  %s\n' "$(sha256_of "$f")" "$f" >>sha256sum.txt.tmp
+        done
+        [ -s sha256sum.txt.tmp ] || { rm -f sha256sum.txt.tmp; die "no archives in $dir"; }
+        mv sha256sum.txt.tmp sha256sum.txt
+    )
+    say "Wrote $dir/sha256sum.txt"
+}
+
+# fetch URL DEST SHA256: download into the cache once, verify every time.
+fetch() {
+    url=$1 dest=$2 want=$3
+    if [ ! -f "$dest" ] || [ "$(sha256_of "$dest")" != "$want" ]; then
+        mkdir -p "$(dirname "$dest")"
+        curl -fsSL --retry 3 -o "$dest.part" "$url" || die "download failed: $url"
+        mv "$dest.part" "$dest"
+    fi
+    got=$(sha256_of "$dest")
+    [ "$got" = "$want" ] || die "sha256 mismatch for $url: got $got, want $want"
+}
+
+# --- arguments ---------------------------------------------------------------------------------
+
+PLATFORM='' CUDA=0 BASE=1 STAGE='' OUT=dist
+while [ $# -gt 0 ]; do
+    case $1 in
+        --platform) [ $# -ge 2 ] || usage; PLATFORM=$2; shift 2 ;;
+        --platform=*) PLATFORM=${1#*=}; shift ;;
+        --cuda) CUDA=1; shift ;;
+        --no-base) BASE=0; shift ;;
+        --stage) [ $# -ge 2 ] || usage; STAGE=$2; shift 2 ;;
+        --out) [ $# -ge 2 ] || usage; OUT=$2; shift 2 ;;
+        --checksums) [ $# -eq 2 ] || usage; write_checksums "$2"; exit 0 ;;
+        -h | --help) usage ;;
+        --) shift; break ;;
+        -*) die "unknown option: $1" ;;
+        *) break ;;
+    esac
+done
+[ $# -eq 2 ] || usage
+TARGET_DIR=$1
+VERSION=${2#v}
+case $VERSION in '' | *[!0-9A-Za-z.+-]*) die "bad version: $2" ;; esac
+[ -d "$TARGET_DIR" ] || die "no such target directory: $TARGET_DIR"
+TARGET_DIR=$(CDPATH='' cd -- "$TARGET_DIR" && pwd)
+
+if [ -z "$PLATFORM" ]; then
+    case "$(uname -s)-$(uname -m)" in
+        Linux-x86_64) PLATFORM=linux-amd64 ;;
+        Linux-aarch64 | Linux-arm64) PLATFORM=linux-arm64 ;;
+        Darwin-arm64) PLATFORM=darwin-arm64 ;;
+        *) die "unsupported host $(uname -s)-$(uname -m); pass --platform" ;;
+    esac
+fi
+case $PLATFORM in
+    linux-amd64) TRIPLE=x86_64-unknown-linux-gnu DEFAULT_FEATURES=ollaya-runner/cuda ;;
+    linux-arm64) TRIPLE=aarch64-unknown-linux-gnu DEFAULT_FEATURES= ;;
+    darwin-arm64) TRIPLE=aarch64-apple-darwin DEFAULT_FEATURES=ollaya-runner/coreml ;;
+    *) die "unknown platform: $PLATFORM" ;;
+esac
+FEATURES=${OLLAYA_CARGO_FEATURES-$DEFAULT_FEATURES}
+[ "$CUDA" = 0 ] || [ "$PLATFORM" = linux-amd64 ] || die "--cuda is only supported for linux-amd64"
+[ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || die "--no-base without --cuda leaves nothing to do"
+
+BIN=${OLLAYA_BIN:-$TARGET_DIR/ollaya}
+CARGO_PACKAGE=${OLLAYA_CARGO_PACKAGE:-ollaya}
+CACHE=${OLLAYA_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ollaya-package}
+ZSTD_LEVEL=${ZSTD_LEVEL:-19}
+if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
+    SOURCE_DATE_EPOCH=$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || date +%s)
+fi
+
+for tool in curl tar; do have "$tool" || die "missing tool: $tool"; done
+if [ -z "$STAGE" ]; then have zstd || die "missing tool: zstd"; fi
+
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/ollaya-package.XXXXXX")
+trap 'rm -rf "$WORK"' EXIT
+trap 'exit 130' INT TERM
+
+if [ -n "$STAGE" ]; then
+    mkdir -p "$STAGE"
+    STAGE=$(CDPATH='' cd -- "$STAGE" && pwd)
+    TREES=$STAGE
+else
+    mkdir -p "$OUT"
+    OUT=$(CDPATH='' cd -- "$OUT" && pwd)
+    TREES=$WORK/trees
+fi
+
+# --- ONNX Runtime notices ----------------------------------------------------------------------
+
+ORT_RAW=https://raw.githubusercontent.com/microsoft/onnxruntime/v$ORT_VERSION
+fetch "$ORT_RAW/LICENSE" "$CACHE/onnxruntime-$ORT_VERSION/LICENSE" "$ORT_LICENSE_SHA256"
+fetch "$ORT_RAW/ThirdPartyNotices.txt" "$CACHE/onnxruntime-$ORT_VERSION/ThirdPartyNotices.txt" \
+    "$ORT_NOTICES_SHA256"
+
+ort_notice() {
+    cat <<EOF
+ONNX Runtime $ORT_VERSION (https://github.com/microsoft/onnxruntime), prebuilt by pyke
+(https://ort.pyke.io). $1
+License: MIT. The components ONNX Runtime bundles are listed in
+onnxruntime-ThirdPartyNotices.txt next to this file.
+
+EOF
+    sed 's/^/    /' "$CACHE/onnxruntime-$ORT_VERSION/LICENSE"
+}
+
+# --- Rust dependency notices -------------------------------------------------------------------
+
+# Lists every crate compiled into the binary (normal dependencies of $CARGO_PACKAGE for $TRIPLE)
+# with its license, then each distinct license text once, with the crates that ship it. License
+# files are read from cargo's registry sources, which the build has already downloaded.
+rust_notices() {
+    have cargo || die "missing tool: cargo (needed to list Rust dependencies)"
+    d=$WORK/rust
+    registry=${CARGO_HOME:-$HOME/.cargo}/registry/src
+    mkdir -p "$d/texts"
+    set -- --locked -p "$CARGO_PACKAGE" --target "$TRIPLE" -e normal
+    [ -z "$FEATURES" ] || set -- "$@" --features "$FEATURES"
+    (cd "$ROOT" && cargo tree "$@" --prefix none --format '{p}|{l}|{r}') >"$d/tree" ||
+        die "cargo tree failed for package $CARGO_PACKAGE (set OLLAYA_CARGO_PACKAGE?)"
+    # "name vX.Y.Z[ (proc-macro)| (/path)]|license|repo[ (*)]". Path crates are this workspace.
+    sed 's/ (\*)$//' "$d/tree" | awk -F '|' '$1 !~ / \(\// {
+        split($1, p, " "); printf "%s|%s|%s|%s\n", p[1], substr(p[2], 2), $2, $3 }' |
+        LC_ALL=C sort -u >"$d/crates"
+    printf '%-32s %-14s %-36s %s\n' Crate Version License Repository
+    # POSIX sh has no `local`: the loop variables are prefixed so they can't clobber the caller's.
+    while IFS='|' read -r c_name c_version c_license c_repo; do
+        printf '%-32s %-14s %-36s %s\n' "$c_name" "$c_version" "${c_license:-see license file}" "$c_repo"
+        found=0
+        for c_dir in "$registry"/*/"$c_name-$c_version"; do
+            for c_file in "$c_dir"/LICENSE* "$c_dir"/LICENCE* "$c_dir"/COPYING* "$c_dir"/NOTICE* \
+                "$c_dir"/UNLICENSE*; do
+                [ -f "$c_file" ] || continue
+                found=1
+                h=$(sha256_of "$c_file")
+                [ -f "$d/texts/$h" ] || cp "$c_file" "$d/texts/$h"
+                printf '%s %s (%s)\n' "$c_name" "$c_version" "${c_file##*/}" >>"$d/texts/$h.users"
+            done
+            [ "$found" = 0 ] || break
+        done
+        [ "$found" = 1 ] || printf '%s %s\n' "$c_name" "$c_version" >>"$d/no-text"
+    done <"$d/crates"
+    count=$(wc -l <"$d/crates" | tr -d ' ')
+    printf '\n%s crates. Their license texts follow; identical texts are printed once.\n' "$count"
+    if [ -f "$d/no-text" ]; then
+        printf 'These crates ship no license file; the license named above applies as published:\n'
+        sed 's/^/  /' "$d/no-text"
+    fi
+    for users in "$d"/texts/*.users; do
+        [ -f "$users" ] || continue
+        printf '\n%s\n' '--------------------------------------------------------------------------------'
+        sed 's/^/Used by: /' "$users"
+        printf '\n'
+        cat "${users%.users}"
+    done
+}
+
+# --- staging -----------------------------------------------------------------------------------
+
+stage_base() {
+    name=ollaya-$PLATFORM
+    root=$TREES/$name
+    rm -rf "$root"
+    mkdir -p "$root/bin" "$root/share/doc/ollaya"
+    [ -f "$BIN" ] || die "binary not found: $BIN (build with cargo build --release -p ollaya)"
+    if have file; then
+        kind=$(file -bL "$BIN")
+        case "$PLATFORM:$kind" in
+            linux-amd64:*ELF*x86-64* | linux-arm64:*ELF*aarch64* | darwin-arm64:*Mach-O*arm64*) ;;
+            *) die "$BIN is not a $PLATFORM executable: $kind" ;;
+        esac
+    fi
+    if [ "${PLATFORM%%-*}" = linux ] && have readelf; then
+        if readelf -d "$BIN" | grep -q 'NEEDED.*libonnxruntime\.so'; then
+            die "$BIN links libonnxruntime.so dynamically; release builds link ORT statically"
+        fi
+        if have objdump; then
+            glibc=$(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -t. -k1,1 -k2,2n -u | tail -n 1)
+            say "$BIN needs ${glibc:-an unknown glibc} (install.sh enforces the floor)"
+        fi
+    fi
+    cp "$BIN" "$root/bin/ollaya"
+    chmod 0755 "$root/bin/ollaya"
+    cp "$ROOT/LICENSE" "$root/share/doc/ollaya/LICENSE"
+    cp "$CACHE/onnxruntime-$ORT_VERSION/ThirdPartyNotices.txt" \
+        "$root/share/doc/ollaya/onnxruntime-ThirdPartyNotices.txt"
+    {
+        printf 'Ollaya %s (%s): third-party notices\n\n' "$VERSION" "$PLATFORM"
+        printf 'Ollaya is licensed under the Apache License 2.0 (see LICENSE). bin/ollaya also\n'
+        printf 'contains the third-party software below.\n\n'
+        printf '1. '
+        ort_notice "Statically linked into bin/ollaya."
+        printf '\n2. Rust crates compiled into bin/ollaya\n\n'
+        rust_notices
+    } >"$root/share/doc/ollaya/THIRD_PARTY_NOTICES"
+    say "Staged $name"
+}
+
+pip_download() {
+    dest=$1
+    set -- download --no-deps --only-binary=:all: --python-version 3.12 \
+        --platform manylinux_2_28_x86_64 --platform manylinux_2_27_x86_64 \
+        --platform manylinux_2_17_x86_64 --platform manylinux2014_x86_64 \
+        --platform manylinux_2_12_x86_64 --platform manylinux2010_x86_64 \
+        --require-hashes -r "$ROOT/packaging/cuda-requirements.txt" -d "$dest"
+    py=${PYTHON:-python3}
+    if have "$py" && "$py" -m pip --version >/dev/null 2>&1; then
+        "$py" -m pip --disable-pip-version-check -q "$@"
+    elif have uvx; then
+        uvx pip --disable-pip-version-check -q "$@"
+    else
+        die "need pip (python3 -m pip) or uv (uvx) to download the NVIDIA wheels"
+    fi
+}
+
+stage_cuda() {
+    name=ollaya-$PLATFORM-cuda
+    root=$TREES/$name
+    lib=$root/lib/ollaya/cuda_v13
+    doc=$root/share/doc/ollaya/cuda_v13
+    rm -rf "$root"
+    mkdir -p "$lib" "$doc/licenses"
+    have unzip || die "missing tool: unzip"
+
+    for p in $ORT_PROVIDERS; do
+        [ -e "$TARGET_DIR/$p" ] ||
+            die "$TARGET_DIR/$p not found; build with --features ollaya-runner/cuda"
+        cp -L "$TARGET_DIR/$p" "$lib/$p"
+    done
+
+    wheels=$CACHE/wheels
+    mkdir -p "$wheels"
+    say "Fetching NVIDIA wheels (about 1.2 GB on first run, cached in $wheels)"
+    pip_download "$wheels"
+
+    : >"$WORK/cuda-libs"
+    sed -n 's/^\(nvidia-[a-z0-9-]*\)==\([^ ]*\).*/\1 \2/p' "$ROOT/packaging/cuda-requirements.txt" \
+        >"$WORK/cuda-pins"
+    while read -r pname pver; do
+        pkg=$pname==$pver
+        wprefix=$(printf '%s' "$pname" | tr - _)-$pver-
+        whl=
+        for w in "$wheels/$wprefix"*x86_64*.whl; do [ -f "$w" ] && whl=$w; done
+        [ -n "$whl" ] || die "wheel for $pkg missing from $wheels"
+        for m in $(unzip -Z1 "$whl"); do
+            base=${m##*/}
+            case $m in
+                */lib/*) ;;
+                *.dist-info/licenses/* | *.dist-info/License.txt | *.dist-info/LICENSE*)
+                    unzip -p "$whl" "$m" >"$doc/licenses/$pname-$base"
+                    continue
+                    ;;
+                *) continue ;;
+            esac
+            case $base in
+                libcudart.so.13 | libcublas.so.13 | libcublasLt.so.13 | libcufft.so.12 | \
+                    libcurand.so.10 | libnvrtc.so.13 | libnvJitLink.so.13 | libcudnn*.so.9 | \
+                    libnvrtc-builtins.so.13.*) ;;
+                *) continue ;;
+            esac
+            # Copied byte for byte: the NVIDIA EULA only allows redistribution of unmodified files.
+            unzip -p "$whl" "$m" >"$lib/$base"
+            chmod 0644 "$lib/$base"
+            printf '%s\t%s\n' "$base" "$pkg" >>"$WORK/cuda-libs"
+        done
+    done <"$WORK/cuda-pins"
+    for f in $CUDA_LIBS_REQUIRED; do
+        [ -f "$lib/$f" ] || die "$f not found in the NVIDIA wheels"
+    done
+    ls "$lib"/libnvrtc-builtins.so.13.* >/dev/null 2>&1 || die "libnvrtc-builtins not found"
+
+    cp "$CACHE/onnxruntime-$ORT_VERSION/ThirdPartyNotices.txt" "$doc/onnxruntime-ThirdPartyNotices.txt"
+    {
+        printf 'Ollaya %s CUDA accelerator package (%s): third-party notices\n\n' "$VERSION" "$PLATFORM"
+        printf 'Everything in lib/ollaya/cuda_v13 is third-party software. None of it is covered by\n'
+        printf "Ollaya's Apache-2.0 license.\n\n"
+        printf '1. '
+        ort_notice "Execution provider libraries: $ORT_PROVIDERS."
+        cat <<'EOF'
+
+2. NVIDIA CUDA and cuDNN runtime libraries
+
+These files are NVIDIA's own binaries, unmodified, taken from NVIDIA's wheels on PyPI. They are
+distributed under the NVIDIA Software License Agreement and CUDA Supplement (CUDA Toolkit EULA,
+https://docs.nvidia.com/cuda/eula/) and the NVIDIA cuDNN Software License Agreement
+(https://docs.nvidia.com/deeplearning/cudnn/latest/reference/eula.html). The license texts
+shipped in each wheel are in licenses/. The libraries are licensed for use only on systems with
+NVIDIA GPUs, and only by Ollaya.
+
+EOF
+        printf '    %-44s %s\n' File 'PyPI package'
+        LC_ALL=C sort "$WORK/cuda-libs" | awk -F '\t' '{ printf "    %-44s %s\n", $1, $2 }'
+    } >"$doc/THIRD_PARTY_NOTICES"
+    say "Staged $name ($(du -sk "$lib" | awk '{ printf "%.0f MiB", $1 / 1024 }') of libraries)"
+}
+
+# --- archives ----------------------------------------------------------------------------------
+
+# tar_create DIR ENTRIES...: deterministic tar stream of DIR/ENTRIES on stdout. Only the named
+# top-level entries go in (never "."), so extracting over a prefix leaves its own mode alone.
+tar_create() {
+    dir=$1
+    shift
+    if tar --version 2>/dev/null | grep -q 'GNU tar'; then
+        gnutar=tar
+    elif have gtar; then
+        gnutar=gtar
+    else
+        gnutar=
+    fi
+    if [ -n "$gnutar" ]; then
+        "$gnutar" -C "$dir" --sort=name --owner=0 --group=0 --numeric-owner \
+            --mtime="@$SOURCE_DATE_EPOCH" --mode='u+rwX,go+rX,go-w' --format=gnu -cf - "$@"
+    else
+        # bsdtar (macOS without gtar): not byte-reproducible, but owner-neutral.
+        tar -C "$dir" --uid 0 --gid 0 --uname root --gname wheel -cf - "$@"
+    fi
+}
+
+archive() {
+    name=$1
+    shift
+    src=$TREES/$name
+    tar_create "$src" "$@" | zstd -q -T0 -"$ZSTD_LEVEL" -o "$OUT/$name.tar.zst.part" -f
+    # POSIX sh has no pipefail: read the archive back so a failed tar can't ship a truncated one.
+    zstd -dc "$OUT/$name.tar.zst.part" | tar -tf - >"$WORK/listing"
+    grep -q . "$WORK/listing" || die "$name.tar.zst is empty or corrupt"
+    mv "$OUT/$name.tar.zst.part" "$OUT/$name.tar.zst"
+    say "Built $name.tar.zst ($(human_size "$OUT/$name.tar.zst"))"
+    if [ "${PLATFORM%%-*}" = darwin ]; then
+        tar_create "$src" "$@" | gzip -n -9 >"$OUT/$name.tgz.part"
+        tar -tzf "$OUT/$name.tgz.part" >/dev/null || die "$name.tgz is corrupt"
+        mv "$OUT/$name.tgz.part" "$OUT/$name.tgz"
+        say "Built $name.tgz ($(human_size "$OUT/$name.tgz"))"
+    fi
+}
+
+[ "$BASE" = 0 ] || stage_base
+[ "$CUDA" = 0 ] || stage_cuda
+
+if [ -n "$STAGE" ]; then
+    say "Staged trees are in $STAGE"
+    exit 0
+fi
+
+[ "$BASE" = 0 ] || archive "ollaya-$PLATFORM" bin share
+[ "$CUDA" = 0 ] || archive "ollaya-$PLATFORM-cuda" lib share
+write_checksums "$OUT"

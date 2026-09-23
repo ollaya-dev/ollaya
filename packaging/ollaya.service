@@ -1,0 +1,23 @@
+# Ollaya daemon. scripts/install.sh writes this unit to /etc/systemd/system/ollaya.service with
+# ExecStart pointing at the installed binary; CI checks that its copy matches this file.
+# Change settings with a drop-in (sudo systemctl edit ollaya), for example:
+#   [Service]
+#   Environment="OLLAYA_HOST=0.0.0.0:11435"
+#   Environment="OLLAYA_KEEP_ALIVE=30m"
+#   Environment="OLLAYA_DEBUG=1"
+[Unit]
+Description=Ollaya Service
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ollaya serve
+User=ollaya
+Group=ollaya
+Restart=always
+RestartSec=3
+Environment="HOME=/usr/share/ollaya"
+Environment="OLLAYA_HOST=127.0.0.1:11435"
+Environment="OLLAYA_MODELS=/usr/share/ollaya/.ollaya/models"
+
+[Install]
+WantedBy=default.target

@@ -54,15 +54,19 @@ fn main() -> Result<()> {
             questions += 1;
             let ids: Vec<u32> = serde_json::from_value(gold["ids"].clone())?;
             let markers: Vec<usize> = serde_json::from_value(gold["markers"].clone())?;
-            if encoded[r].ids != ids || encoded[r].markers != markers {
+            if encoded.questions[r].ids != ids || encoded.questions[r].markers != markers {
                 enc_bad += 1;
                 if enc_bad <= 5 {
-                    let first = encoded[r].ids.iter().zip(&ids).position(|(a, b)| a != b);
+                    let first = encoded.questions[r]
+                        .ids
+                        .iter()
+                        .zip(&ids)
+                        .position(|(a, b)| a != b);
                     println!(
                         "ENCODING {id} {qid}: len {} vs {}, markers {:?} vs {:?}, first diff at {first:?}",
-                        encoded[r].ids.len(),
+                        encoded.questions[r].ids.len(),
                         ids.len(),
-                        encoded[r].markers,
+                        encoded.questions[r].markers,
                         markers
                     );
                 }

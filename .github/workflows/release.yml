@@ -1,0 +1,228 @@
+name: Release
+
+# A v* tag builds the tarballs, publishes a GitHub Release with them and sha256sum.txt, and pushes
+# ghcr.io/<owner>/ollaya:{<version>,latest} (cpu, amd64 + arm64) and :{<version>-cuda,cuda}.
+# Tags with a hyphen (v0.2.0-rc.1) become prereleases and don't move latest or cuda.
+# Running it by hand (workflow_dispatch) builds and packages everything but publishes nothing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # One linux-amd64 binary with ORT's CUDA provider bridge; it runs on the CPU unless the
+          # -cuda tarball's libraries are installed next to it.
+          - platform: linux-amd64
+            runner: ubuntu-latest
+            features: ollaya-runner/cuda
+            package-args: --cuda
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            features: ''
+            package-args: ''
+          - platform: darwin-arm64
+            runner: macos-latest
+            features: ollaya-runner/coreml
+            package-args: ''
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Version
+        id: version
+        shell: bash
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          [ "$PUBLISH" = true ] || version=0.0.0-dev.${GITHUB_SHA::7}
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: ${{ matrix.platform }}
+          # pyke's ONNX Runtime download, cached by ort's build script (Linux, macOS paths).
+          cache-directories: |
+            ~/.cache/ort.pyke.io
+            ~/Library/Caches/ort.pyke.io
+      - name: Install zstd
+        if: runner.os == 'macOS'
+        run: command -v zstd >/dev/null || brew install zstd
+      - name: Build
+        shell: bash
+        env:
+          FEATURES: ${{ matrix.features }}
+          OLLAYA_BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: cargo build --release --locked -p ollaya ${FEATURES:+--features "$FEATURES"}
+      - name: Smoke test
+        run: target/release/ollaya --version
+      - name: Minimum macOS version
+        if: runner.os == 'macOS'
+        run: vtool -show-build target/release/ollaya
+      - name: Package
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          PACKAGE_ARGS: ${{ matrix.package-args }}
+          OLLAYA_CARGO_FEATURES: ${{ matrix.features }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/package.sh --platform "$PLATFORM" ${PACKAGE_ARGS:+"$PACKAGE_ARGS"} target/release "$VERSION"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-${{ matrix.platform }}
+          path: |
+            dist/*.tar.zst
+            dist/*.tgz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  release:
+    name: GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          scripts/package.sh --checksums dist
+          ls -l dist
+          cat dist/sha256sum.txt
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
+
+  image:
+    name: Image ${{ matrix.target }} ${{ matrix.arch }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: cpu, arch: amd64, runner: ubuntu-latest }
+          - { target: cpu, arch: arm64, runner: ubuntu-24.04-arm }
+          - { target: cuda, arch: amd64, runner: ubuntu-latest }
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Image name and version
+        id: meta
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >>"$GITHUB_OUTPUT"
+          version=${GITHUB_REF_NAME#v}
+          [ "$PUBLISH" = true ] || version=0.0.0-dev.${GITHUB_SHA::7}
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+      - name: Free disk space
+        if: matrix.target == 'cuda'
+        # The CUDA image stages about 2 GB of libraries on top of the Rust build.
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Each architecture builds natively and is pushed by digest only; the manifest job below
+      # tags the multi-arch index once the GitHub Release exists.
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/${{ matrix.arch }}
+          build-args: OLLAYA_BUILD_VERSION=${{ steps.meta.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.licenses=Apache-2.0
+          outputs: type=image,name=${{ steps.meta.outputs.image }},push-by-digest=true,name-canonical=true,push=${{ env.PUBLISH }}
+      - name: Record digest
+        if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p digests
+          touch "digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: env.PUBLISH == 'true'
+        with:
+          name: digests-${{ matrix.target }}-${{ matrix.arch }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  manifest:
+    name: Tag images
+    needs: [release, image]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digests-*
+          path: digests
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create tags
+        run: |
+          image=ghcr.io/${GITHUB_REPOSITORY,,}
+          version=${GITHUB_REF_NAME#v}
+          # The digest artifacts hold one empty file per image, named after its sha256.
+          refs() { local f; for f in "$@"; do echo "$image@sha256:${f##*/}"; done; }
+          mapfile -t cpu_refs < <(refs digests/digests-cpu-*/*)
+          mapfile -t cuda_refs < <(refs digests/digests-cuda-*/*)
+          cpu_tags=(-t "$image:$version")
+          cuda_tags=(-t "$image:$version-cuda")
+          if [[ $version != *-* ]]; then
+            cpu_tags+=(-t "$image:latest")
+            cuda_tags+=(-t "$image:cuda")
+          fi
+          docker buildx imagetools create "${cpu_tags[@]}" "${cpu_refs[@]}"
+          docker buildx imagetools create "${cuda_tags[@]}" "${cuda_refs[@]}"
+          docker buildx imagetools inspect "$image:$version"
+          docker buildx imagetools inspect "$image:$version-cuda"
