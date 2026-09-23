@@ -4,6 +4,7 @@
 //  2. The stylesheet contains the design tokens.
 //  3. No public host name is hard-coded in sources (it must come from SITE_ORIGIN).
 //  4. Every internal href/src in every page resolves to a file in dist/.
+//  5. /install.sh is the real installer (../scripts/install.sh), byte for byte.
 
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
@@ -59,7 +60,8 @@ for (const token of ['--color-canvas', '--color-fg', 'prefers-color-scheme:dark'
 const hostPattern = /ollaya\.(cobanov\.)?dev/i
 for (const dir of ['src', 'docs', 'content', 'public']) {
   for (const file of await walk(join(root, dir))) {
-    if (/\.(png|ico|woff2?)$/.test(file)) continue
+    // src/generated/registry.ts mirrors the registry's manifests, whose blob URLs build.mjs checks against SITE_ORIGIN.
+    if (/\.(png|ico|woff2?)$/.test(file) || file.includes(`${sep}generated${sep}`)) continue
     const m = hostPattern.exec(await readFile(file, 'utf8'))
     if (m) errors.push(`${relative(root, file)}: hard-coded host "${m[0]}" — use SITE_ORIGIN / {{SITE_ORIGIN}}`)
   }
@@ -83,12 +85,20 @@ for (const file of files.filter((f) => f.endsWith('.html'))) {
   pages++
   const html = await readFile(join(dist, file), 'utf8')
   if (!html.startsWith('<!DOCTYPE html>')) errors.push(`dist/${file}: missing doctype`)
-  if (html.includes('{{SITE_ORIGIN}}')) errors.push(`dist/${file}: unreplaced {{SITE_ORIGIN}}`)
+  if (/\{\{SITE_(ORIGIN|HOST)\}\}/.test(html)) errors.push(`dist/${file}: unreplaced {{SITE_ORIGIN}}/{{SITE_HOST}}`)
+  if (/coming soon|pre-release|illustrative output|being built/i.test(html.replace(/<[^>]+>/g, ' '))) {
+    errors.push(`dist/${file}: still says "coming soon", "pre-release", "illustrative output" or "being built"`)
+  }
   if (/htmx/i.test(html)) errors.push(`dist/${file}: still references htmx`)
   for (const [, url] of html.matchAll(/(?:href|src)="(\/(?!\/)[^"#?]*)[^"]*"/g)) {
     if (!resolves(url)) errors.push(`dist/${file}: broken internal link ${url}`)
   }
 }
+
+// 5. Installer -------------------------------------------------------------------------------------
+const installer = await readFile(join(root, '..', 'scripts', 'install.sh')).catch(() => null)
+const served = await readFile(join(dist, 'install.sh')).catch(() => null)
+if (!installer || !served || !installer.equals(served)) errors.push('dist/install.sh is not a copy of ../scripts/install.sh')
 
 if (errors.length) {
   console.error(`check: ${errors.length} problem(s)\n  - ${errors.join('\n  - ')}`)

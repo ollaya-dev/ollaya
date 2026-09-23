@@ -92,14 +92,16 @@ export function SearchPage() {
         </div>
       </div>
 
-      <aside class="mt-10 rounded-lg border border-line p-5" aria-labelledby="coming-next">
-        <h2 id="coming-next" class="text-sm font-semibold text-fg">
-          Coming next
-        </h2>
-        <p class="mt-1.5 text-[15px] text-body">
-          More open decision models are planned: {comingNext.join(', ')}. They are not pullable yet.
-        </p>
-      </aside>
+      {comingNext.length ? (
+        <aside class="mt-10 rounded-lg border border-line p-5" aria-labelledby="planned">
+          <h2 id="planned" class="text-sm font-semibold text-fg">
+            Planned
+          </h2>
+          <p class="mt-1.5 text-[15px] text-body">
+            More open decision models are on the way: {comingNext.join(', ')}.
+          </p>
+        </aside>
+      ) : null}
     </div>
   )
 }
@@ -110,7 +112,7 @@ export function ModelRow({ model }: { model: Model }) {
       data-search={haystack(model)}
       data-caps={model.capabilities.join(' ')}
       data-rank={String(model.rank)}
-      data-updated={model.updated}
+      data-updated={model.updated ?? ''}
     >
       <a href={`/library/${model.name}`} class="group block py-6">
         <h2 class="text-xl font-medium text-fg underline-offset-4 group-hover:underline md:text-2xl">{model.name}</h2>
@@ -128,7 +130,7 @@ export function ModelRow({ model }: { model: Model }) {
             <Icon name="tag" class="size-4" />
             {model.tags.length} Tags
           </span>
-          <Updated iso={model.updated} />
+          {model.updated ? <Updated iso={model.updated} /> : null}
         </p>
       </a>
     </li>

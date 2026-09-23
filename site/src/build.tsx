@@ -23,7 +23,7 @@ import { DocsIndex, DocView, withOrigin } from './pages/docs'
 import { DownloadPage } from './pages/download'
 import { HomePage } from './pages/home'
 import { LibraryRedirect, ModelPage, TagPage, TagsPage } from './pages/library'
-import { installScript, robotsTxt, sitemapXml } from './pages/meta'
+import { robotsTxt, sitemapXml } from './pages/meta'
 import { NotFoundPage } from './pages/notFound'
 import { SearchPage } from './pages/search'
 
@@ -66,7 +66,7 @@ function pages(origin: string): Page[] {
       url: '/download',
       meta: {
         title: 'Download',
-        description: 'Download Ollaya for Linux, macOS or Docker. The first release is in progress.',
+        description: 'Install Ollaya on Linux or macOS with one command, or run the Docker image.',
         nav: 'download',
       },
       render: () => <DownloadPage origin={origin} />,
@@ -152,7 +152,6 @@ export async function renderSite({ origin, assetVersions }: BuildOptions): Promi
     ),
   })
   out.push({ path: 'library.html', body: await toHtml(<LibraryRedirect origin={origin} />) })
-  out.push({ path: 'install.sh', body: installScript() })
   out.push({ path: 'robots.txt', body: robotsTxt(origin) })
   out.push({ path: 'sitemap.xml', body: sitemapXml(origin, all.map((p) => p.url)) })
   out.push({ path: 'search.json', body: `${JSON.stringify(searchIndex())}\n` })

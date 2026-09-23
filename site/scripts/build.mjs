@@ -4,15 +4,17 @@
 //   2. Tailwind compiles src/styles/app.css → dist/static/app.css.
 //   3. Files in dist/static are hashed (for ?v=<hash> cache busting).
 //   4. src/build.tsx is bundled with esbuild and renderSite() pre-renders every page, 404.html,
-//      install.sh, robots.txt, sitemap.xml and search.json; the result replaces dist/.
+//      robots.txt, sitemap.xml and search.json.
+//   5. /install.sh is a copy of the real installer, ../scripts/install.sh.
+//   6. The static registry (../registry/{v2,blobs}) is copied in; the result is synced into dist/.
 //
 // SITE_ORIGIN (env) sets the public origin used in canonical/OG URLs, the install command,
-// robots.txt and sitemap.xml. Run `node scripts/gen-content.mjs` first (npm run build does).
+// robots.txt and sitemap.xml. Run `npm run gen` first (npm run build does).
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, join, relative, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
@@ -20,8 +22,7 @@ const DEFAULT_ORIGIN = 'https://ollaya.cobanov.dev'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const finalDist = join(root, 'dist')
-// Build into a sibling directory and swap it in at the end, so a running `wrangler dev`
-// never sees a half-written dist/.
+// Build into a sibling directory first, then sync it into dist/ (see the end of this file).
 const dist = join(root, '.dist-tmp')
 const cacheDir = join(root, 'node_modules', '.cache', 'ollaya-site')
 
@@ -48,10 +49,12 @@ async function listFiles(dir) {
 const origin = resolveOrigin(process.env.SITE_ORIGIN?.trim() || DEFAULT_ORIGIN)
 const started = Date.now()
 
-try {
-  await stat(join(root, 'src', 'generated', 'content.ts'))
-} catch {
-  throw new Error('src/generated/content.ts is missing — run `node scripts/gen-content.mjs` first')
+for (const generated of ['content.ts', 'registry.ts']) {
+  try {
+    await stat(join(root, 'src', 'generated', generated))
+  } catch {
+    throw new Error(`src/generated/${generated} is missing — run \`npm run gen\` first`)
+  }
 }
 
 // 1. Fresh dist/ with the public files.
@@ -100,10 +103,18 @@ for (const f of files) {
   await writeFile(target, f.body)
 }
 
+// The real installer: `curl -fsSL <origin>/install.sh | sh` serves ../scripts/install.sh unchanged.
+const installer = join(root, '..', 'scripts', 'install.sh')
+const installText = await readFile(installer, 'utf8').catch(() => {
+  throw new Error(`${installer} is missing: /install.sh must serve the real installer`)
+})
+if (!installText.startsWith('#!/bin/sh')) throw new Error(`${installer} does not start with #!/bin/sh`)
+await writeFile(join(dist, 'install.sh'), installText)
+
 // The static model registry (../registry, written by convert/ollaya_convert/package.py): manifests
 // under /v2/ and derived blobs under /blobs/. Manifests carry absolute blob URLs, so they must
 // have been packaged for the origin this site is built for.
-const registry = join(root, '..', 'registry')
+const registry = process.env.OLLAYA_REGISTRY_DIR ? resolve(process.env.OLLAYA_REGISTRY_DIR) : join(root, '..', 'registry')
 let registryFiles = 0
 if (await stat(registry).catch(() => null)) {
   for (const sub of ['v2', 'blobs']) {
@@ -132,8 +143,30 @@ if (await stat(registry).catch(() => null)) {
   registryFiles = manifestDirs.length + (await walk(join(dist, 'blobs')).catch(() => [])).length
 }
 
-await rm(finalDist, { recursive: true, force: true })
-await rename(dist, finalDist)
+// Sync the fresh build into dist/ file by file: a running `wrangler dev` keeps watching the same
+// directory (replacing the whole directory at once can leave it serving 500s).
+async function removeEmptyDirs(dir) {
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue
+    const p = join(dir, e.name)
+    await removeEmptyDirs(p)
+    if ((await readdir(p)).length === 0) await rm(p, { recursive: true })
+  }
+}
+const fresh = new Set((await listFiles(dist)).map((f) => relative(dist, f)))
+const existing = (await listFiles(finalDist).catch(() => [])).map((f) => relative(finalDist, f))
+for (const f of existing) if (!fresh.has(f)) await rm(join(finalDist, f), { force: true })
+for (const f of fresh) {
+  const body = await readFile(join(dist, f))
+  const target = join(finalDist, f)
+  const current = await readFile(target).catch(() => null)
+  if (current && current.equals(body)) continue
+  await mkdir(dirname(target), { recursive: true })
+  await writeFile(`${target}.tmp`, body)
+  await rename(`${target}.tmp`, target)
+}
+await removeEmptyDirs(finalDist)
+await rm(dist, { recursive: true, force: true })
 if (registryFiles) console.log(`registry: ${registryFiles} manifests and blobs copied into dist/`)
 
 const pagesCount = files.filter((f) => f.path.endsWith('.html')).length

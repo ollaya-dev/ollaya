@@ -1,11 +1,18 @@
-/** Site-wide constants. The public host is NOT here on purpose — see env.ts / SITE_ORIGIN. */
+/** Site-wide constants. The public host is NOT here on purpose — see SITE_ORIGIN in scripts/build.mjs. */
 export const SITE_NAME = 'Ollaya'
 export const TAGLINE = 'Run decision models locally.'
 export const SITE_DESCRIPTION =
   'Ollaya downloads and serves open decision models on your own machine. Typed, calibrated answers in milliseconds — private and open source.'
 
-export const GITHUB_URL = 'https://github.com/cobanov/ollaya'
-export const DOCKER_IMAGE = 'ghcr.io/cobanov/ollaya'
+export const GITHUB_URL = 'https://github.com/ollaya-dev/ollaya'
+export const RELEASES_URL = `${GITHUB_URL}/releases`
+export const ISSUES_URL = `${GITHUB_URL}/issues`
+/** Planned features, tracked on GitHub. */
+export const MCP_ISSUE_URL = `${GITHUB_URL}/issues/1`
+export const SKILL_ISSUE_URL = `${GITHUB_URL}/issues/2`
+
+/** Container images: CPU (linux/amd64, linux/arm64) and NVIDIA GPU (`:cuda`, linux/amd64). */
+export const DOCKER_IMAGE = 'ghcr.io/ollaya-dev/ollaya'
 
 /** Default address of the local Ollaya server (the runtime, not this website). */
 export const LOCAL_PORT = 11435

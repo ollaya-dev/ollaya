@@ -1,5 +1,5 @@
 import { Icon } from '../components/Icon'
-import { CapBadge, CodeTabs, OutlinePill, PreReleaseNotice, SizeBadge, textLink } from '../components/ui'
+import { CapBadge, CodeTabs, OutlinePill, SizeBadge, textLink } from '../components/ui'
 import { Updated } from '../components/Updated'
 import {
   featuredTags,
@@ -61,17 +61,19 @@ function MetaLine({ model, extra }: { model: Model; extra?: string[] }) {
           {model.tags.length} Tags
         </a>
       </span>
-      <Updated iso={model.updated} />
+      {model.updated ? <Updated iso={model.updated} /> : null}
       {items.map((i) => (
         <span>{i}</span>
       ))}
-      <span>{model.license}</span>
-      <span>
-        by{' '}
-        <a href={model.publisher.url} class="underline-offset-4 hover:text-fg hover:underline">
-          {model.publisher.name}
-        </a>
-      </span>
+      {model.license ? <span>{model.license}</span> : null}
+      {model.publisher ? (
+        <span>
+          by{' '}
+          <a href={model.publisher.url} class="underline-offset-4 hover:text-fg hover:underline">
+            {model.publisher.name}
+          </a>
+        </span>
+      ) : null}
     </p>
   )
 }
@@ -87,7 +89,11 @@ function ModelHeader({ model, tag, crumb }: { model: Model; tag?: Tag; crumb?: s
       </h1>
       <MetaLine
         model={model}
-        extra={tag && tag.kind === 'model' ? [`${tag.params} params`, `${tag.context} context`, tag.languages] : undefined}
+        extra={
+          tag && tag.kind === 'model'
+            ? [tag.params ? `${tag.params} params` : '', tag.context ? `${tag.context} context` : '', tag.languages].filter(Boolean)
+            : undefined
+        }
       />
       <p class="mt-4 text-base text-body md:text-lg">{tag ? tag.summary : model.description}</p>
       {caps.length || sizes.length ? (
@@ -104,18 +110,9 @@ function ModelHeader({ model, tag, crumb }: { model: Model; tag?: Tag; crumb?: s
   )
 }
 
-function Notice() {
-  return (
-    <PreReleaseNotice class="mt-8">
-      <strong class="font-medium text-fg">Pre-release.</strong> Ollaya's first release is in progress; these
-      commands will work once it ships.
-    </PreReleaseNotice>
-  )
-}
-
 function Usage({ refName }: { refName: string }) {
   return (
-    <section class="mt-6" aria-label="Usage">
+    <section class="mt-8" aria-label="Usage">
       <CodeTabs id="usage" label="Usage examples" tabs={usageTabs(refName)} />
     </section>
   )
@@ -139,7 +136,8 @@ function TagName({ model, tag }: { model: Model; tag: Tag }) {
   )
 }
 
-const inputLabel = (tag: Tag) => (tag.kind === 'router' ? 'Text · auto (en / multilingual)' : `Text · ${tag.languages}`)
+const inputLabel = (tag: Tag) =>
+  tag.kind === 'router' ? `Text · auto (${(tag.routesTo ?? []).join(' / ')})` : `Text · ${tag.languages}`
 
 function ModelsTable({ model }: { model: Model }) {
   return (
@@ -191,7 +189,7 @@ function ModelsTable({ model }: { model: Model }) {
         </table>
       </div>
       <p class="mt-2 text-[13px] text-muted">
-        Sizes are approximate (fp16 / fp32). Bare tags pull fp16 on a GPU and fp32 on CPU.
+        Each model carries fp16 and fp32 graphs over one weights file, and loads fp16 on a CUDA GPU and fp32 on CPU.
       </p>
     </section>
   )
@@ -202,7 +200,6 @@ export function ModelPage({ model }: { model: Model }) {
   return (
     <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
       <ModelHeader model={model} />
-      <Notice />
       <Usage refName={model.name} />
       <ModelsTable model={model} />
       {readme ? (
@@ -270,9 +267,8 @@ export function TagsPage({ model }: { model: Model }) {
           </table>
         </div>
         <p class="mt-2 text-[13px] text-muted">
-          Sizes are approximate until the first artifacts are published. Tags without a suffix resolve to fp16 on a
-          GPU and fp32 on CPU; add <code class="font-mono">-fp16</code> or <code class="font-mono">-fp32</code> to pick
-          one explicitly.
+          Tags without a suffix load fp16 on a CUDA GPU and fp32 on CPU; add <code class="font-mono">-fp16</code> or{' '}
+          <code class="font-mono">-fp32</code> to pin one precision.
         </p>
       </section>
     </div>
@@ -287,7 +283,6 @@ export function TagPage({ model, tag }: { model: Model; tag: Tag }) {
   return (
     <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
       <ModelHeader model={model} tag={tag} crumb={tag.name} />
-      <Notice />
       <Usage refName={tag.name === 'latest' ? model.name : ref} />
 
       <section class="mt-10" aria-labelledby="details-title">
@@ -299,7 +294,13 @@ export function TagPage({ model, tag }: { model: Model; tag: Tag }) {
             <li class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[7rem_minmax(0,1fr)_auto]">
               <span class="text-sm font-medium text-fg">{l.kind}</span>
               <span class="text-right text-[13px] whitespace-nowrap text-muted tabular-nums sm:order-last">
-                {l.size ?? ''}
+                {l.digest ? (
+                  <span class="font-mono text-[11px]" title={`sha256:${l.digest}…`}>
+                    {l.digest}
+                  </span>
+                ) : null}
+                {l.digest ? ' · ' : ''}
+                {l.size}
               </span>
               <code
                 class="col-span-2 font-mono text-[13px] break-words text-muted sm:col-span-1 sm:truncate"
@@ -311,8 +312,8 @@ export function TagPage({ model, tag }: { model: Model; tag: Tag }) {
           ))}
         </ul>
         <p class="mt-2 text-[13px] text-muted">
-          Layer digests will be listed once artifacts are published.
-          {layers.some((l) => l.size) ? ' Sizes are approximate.' : ''}
+          Every layer is checked against its sha256 when it is pulled. Weights and tokenizers download from the
+          model author's Hugging Face repository at a pinned commit; Ollaya never re-hosts them.
         </p>
       </section>
 

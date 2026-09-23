@@ -1,67 +1,106 @@
 ---
 title: CLI reference
 nav: CLI
-description: Every ollaya command — run, pull, serve, list, ps, show, rm, cp, create, push and stop.
+description: Every ollaya command and flag — run, pull, serve, list, ps, show, stop, rm, cp and create.
 order: 2
 ---
 
 # CLI reference
 
-Ollaya is a single binary. If you have used Ollama, the commands will feel familiar.
+Ollaya is a single binary: the CLI, the server and the model runners. If you have used Ollama, the commands will feel familiar.
 
 | Command | What it does |
 |---|---|
 | `ollaya serve` | Start the server on `127.0.0.1:11435` |
-| `ollaya run MODEL [STATE]` | Answer questions about a state; pulls the model first if needed |
+| `ollaya run MODEL [STATE]` | Answer questions about a state, or open a prompt; pulls and loads the model as needed |
 | `ollaya pull MODEL` | Download a model from the registry |
-| `ollaya list` | List models on this machine |
+| `ollaya list` (`ls`) | List models on this machine |
 | `ollaya ps` | List models loaded in memory |
-| `ollaya show MODEL` | Show a model's details, questions and license |
+| `ollaya show MODEL` | Show a model's details, capabilities and license |
 | `ollaya stop MODEL` | Unload a running model |
-| `ollaya rm MODEL` | Delete a model |
+| `ollaya rm MODEL…` | Remove one or more models |
 | `ollaya cp SOURCE DESTINATION` | Copy a model under a new name |
-| `ollaya create NAME -f Modelfile` | Create a model from a [Modelfile](/docs/modelfile) |
-| `ollaya push MODEL` | Upload a model to a registry |
+| `ollaya create NAME [-f Modelfile]` | Create a model from a [Modelfile](/docs/modelfile) |
+| `ollaya -v` | Print the server's (and the client's) version |
+
+Every command except `serve` talks to the server at `OLLAYA_HOST`. When nothing answers there and the address is local, the CLI starts `ollaya serve` in the background, logging to `~/.ollaya/logs/server.log`.
 
 ## Model names
 
-Models are referenced as `name:tag`. When the tag is left out, `latest` is used:
+Models are referenced as `name:tag`; without a tag, `latest` is used. Names are case-insensitive.
 
 ```shell
-ollaya run laya                 # same as laya:latest
+ollaya run laya                 # same as laya:latest, a router
 ollaya run laya:multilingual
 ollaya pull laya:en-fp32
 ```
 
-Tags without a precision suffix resolve to **fp16 on a GPU** and **fp32 on CPU**. Add `-fp16` or `-fp32` to choose explicitly.
+A model such as `laya:en` carries an fp16 and an fp32 graph that share one weights file. The precision is picked when the model loads: fp16 on a CUDA GPU, fp32 on the CPU. The `-fp16` and `-fp32` tags pin one.
+
+## ollaya run
+
+```shell
+ollaya run laya --preset triage "I was charged twice for my subscription this month and want a refund."
+```
+
+`run` connects to the server (starting it if needed), pulls the model if it is not on this machine, loads it and prints one row per question: the answer, a bar and its probability.
+
+| Flag | Effect |
+|---|---|
+| `--preset NAME` | Use a built-in question set: `triage`, `email`, `guard`, `moderation` or `router` |
+| `--questions FILE` | Use the questions in a JSON file (question id → question). Overrides the model's own |
+| `--format text\|json` | `text` (default) prints the table; `json` prints the full [`/api/decide`](/docs/api#decide) response |
+| `--keepalive DURATION` | How long to keep the model loaded afterwards: `5m`, `1h`, `0` (unload now), `-1` (keep loaded) |
+| `--verbose` | Also print every option's probability, the routing decision and the timings |
+| `--state-json` | Parse the state as JSON. A state that looks like a JSON object or array is detected anyway |
+
+Where the questions come from, first match wins: `--questions`, then `--preset`, then questions built into the model with a Modelfile. A model with none needs one of the flags.
+
+**The state** is the rest of the command line. Without one, `run` reads piped stdin:
+
+```shell
+cat ticket.txt | ollaya run laya --preset triage
+```
+
+On a terminal without a state, `run` opens a prompt. Type a state and press Enter; wrap several lines in `"""`. Commands:
+
+| Command | Effect |
+|---|---|
+| `/preset NAME` | Switch to a built-in question set |
+| `/set questions FILE` | Use the questions in a JSON file |
+| `/show` | Show the model and the current questions |
+| `/clear` | Clear the screen |
+| `/bye` | Exit (or Ctrl+D) |
+| `/?`, `/help` | Help |
 
 ## ollaya serve
 
-Starts the server that the CLI and your applications talk to. It listens on `127.0.0.1:11435` and serves both the native API (`/api/*`) and the TypeSafe-compatible API (`/v1/*`). See the [API reference](/docs/api).
+Starts the server that the CLI and your applications talk to. It serves the native API (`/api/*`) and the TypeSafe-compatible API (`/v1/*`); see the [API reference](/docs/api). The Linux installer runs it as the `ollaya` systemd service.
 
 ```shell
 ollaya serve
 ```
 
-## ollaya run
+It is configured with environment variables:
 
-Runs a model against a state and prints the answers. The model is pulled automatically if it is not on this machine yet.
+| Variable | Default | Effect |
+|---|---|---|
+| `OLLAYA_HOST` | `127.0.0.1:11435` | Address to bind; the CLI's target |
+| `OLLAYA_MODELS` | `~/.ollaya/models` | Model store |
+| `OLLAYA_KEEP_ALIVE` | `5m` | How long a model stays loaded after its last request |
+| `OLLAYA_MAX_LOADED_MODELS` | `3` | Models kept loaded at once |
+| `OLLAYA_MAX_QUEUE` | `512` | Decision requests in flight before `503 QUEUE_FULL` |
+| `OLLAYA_LOAD_TIMEOUT` | `5m` | How long a model may take to load |
+| `OLLAYA_DEVICE` | `auto` | `auto` (CUDA if available, else CPU), `cpu`, `cuda` or `cuda:<n>` |
+| `OLLAYA_API_KEY` | unset | Require `Authorization: Bearer <key>`; the CLI sends it too |
+| `OLLAYA_ORIGINS` | unset | Extra browser origins to allow, comma-separated |
+| `OLLAYA_REGISTRY` | `{{SITE_HOST}}` | Default registry host in model names |
 
-```shell
-ollaya run laya --preset triage "I was charged twice for my subscription this month."
-```
-
-`--preset NAME` uses a built-in question set such as `triage`. Models created from a Modelfile with `QUESTIONS` already know what to ask, so the state is all you pass:
-
-```shell
-ollaya run triage "My invoice shows the wrong company name."
-```
-
-After a request, the model stays loaded for `keep_alive` (five minutes by default), so the next request skips the load.
+For the systemd service, change them with `sudo systemctl edit ollaya` and `Environment=` lines.
 
 ## ollaya pull
 
-Downloads a model and verifies every layer.
+Downloads a model and verifies every layer against its sha256. Pulling a router also pulls every model it routes to. Only the layers this machine needs are downloaded, and interrupted downloads resume.
 
 ```shell
 ollaya pull laya
@@ -69,19 +108,29 @@ ollaya pull laya
 
 ## ollaya list and ollaya ps
 
-`list` shows models on disk with their size and when they were modified. `ps` shows models loaded in memory and how long they will stay loaded.
+`list` shows the models on this machine with their ID, size and when they were pulled. `ps` shows the loaded models, the device they run on (`cpu`, `cuda:0`), the precision and when they will be unloaded.
+
+```text
+NAME                ID             SIZE     MODIFIED
+laya:latest         b87ca1631b11   11 KB    13 seconds ago
+laya:multilingual   ba7a334675b4   684 MB   13 seconds ago
+laya:en             bf30e4654e94   854 MB   30 seconds ago
+```
 
 ## ollaya show
 
-Prints a model's details: backbone, context length, precision, baked-in questions, calibration and license.
+Prints a model's architecture, parameters, context length, precisions, languages, capabilities and license. For a router, it prints the routes.
 
-```shell
-ollaya show laya:en
-```
+| Flag | Prints only |
+|---|---|
+| `--questions` | The questions built into the model |
+| `--license` | The license |
+| `--modelfile` | A Modelfile that recreates the model |
+| `--parameters` | The parameters, such as a pinned precision |
 
 ## ollaya stop
 
-Unloads a running model right away instead of waiting for `keep_alive` to expire.
+Unloads a running model once its in-flight requests finish, instead of waiting for the keep-alive to run out.
 
 ## ollaya rm and ollaya cp
 
@@ -90,14 +139,12 @@ ollaya cp laya:en my-guardrail
 ollaya rm my-guardrail
 ```
 
+`rm` also deletes the blobs no other model uses. Removing a router keeps the models it routes to. `cp` overwrites an existing destination.
+
 ## ollaya create
 
-Builds a derived model from a [Modelfile](/docs/modelfile), for example to bake a question schema or a refit calibration into a model.
+Builds a model from a [Modelfile](/docs/modelfile), for example to bake in a question set, a refit calibration or a pinned precision. `-f` defaults to `./Modelfile`.
 
 ```shell
 ollaya create triage -f Modelfile
 ```
-
-## ollaya push
-
-Uploads a model you created to a registry, so others can `pull` it.

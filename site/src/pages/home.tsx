@@ -79,10 +79,14 @@ function Hero() {
   )
 }
 
+// Real output of the command shown (laya routed to laya:en; the triage preset's five questions).
+const MOCK_STATE = 'I was charged twice for my subscription this month and want a refund.'
 const mockRows = [
-  { q: 'department', a: 'billing', p: 0.85, w: 'w-[85%]' },
-  { q: 'urgency', a: 'normal · 1.20', p: 0.56, w: 'w-[56%]' },
-  { q: 'refund', a: 'yes', p: 0.91, w: 'w-[91%]' },
+  { q: 'intent', a: 'refund', p: 1.0, w: 'w-full' },
+  { q: 'is_urgent', a: 'no', p: 0.88, w: 'w-[88%]' },
+  { q: 'frustration', a: '1.76 / 3', note: 'clearly annoyed', p: 0.36, w: 'w-[36%]' },
+  { q: 'refund_requested', a: 'yes', p: 0.9, w: 'w-[90%]' },
+  { q: 'churn_risk', a: 'no', p: 0.61, w: 'w-[61%]' },
 ]
 
 function TerminalMock() {
@@ -98,14 +102,12 @@ function TerminalMock() {
         </div>
         <div class="p-4 font-mono text-[13px] leading-6 text-fg sm:p-5">
           <p class="break-words">
-            <span class="text-muted select-none">$ </span>ollaya run laya --preset triage "I was charged twice for my
-            subscription this month…"
+            <span class="text-muted select-none">$ </span>ollaya run laya --preset triage "{MOCK_STATE}"
           </p>
-          <p class="text-muted">routed to laya:en (English)</p>
           <table class="mt-4 w-full border-collapse text-left">
             <caption class="sr-only">Answers returned by the model</caption>
-            <thead>
-              <tr class="text-[11px] tracking-wider text-muted uppercase">
+            <thead class="sr-only">
+              <tr>
                 <th scope="col" class="pr-4 pb-1 font-normal">Question</th>
                 <th scope="col" class="pr-4 pb-1 font-normal">Answer</th>
                 <th scope="col" class="pb-1 font-normal">
@@ -118,10 +120,13 @@ function TerminalMock() {
               {mockRows.map((r) => (
                 <tr>
                   <td class="py-0.5 pr-4 text-muted">{r.q}</td>
-                  <td class="py-0.5 pr-4 whitespace-nowrap">{r.a}</td>
+                  <td class="py-0.5 pr-4 whitespace-nowrap">
+                    {r.a}
+                    {r.note ? <span class="hidden text-muted sm:inline">{`  ${r.note}`}</span> : null}
+                  </td>
                   <td class="py-0.5">
                     <span class="flex items-center gap-2.5">
-                      <span class="hidden h-1.5 w-20 overflow-hidden rounded-full bg-fill-strong min-[380px]:block" aria-hidden="true">
+                      <span class="hidden h-1.5 w-12 overflow-hidden rounded-full bg-fill-strong min-[380px]:block sm:w-20" aria-hidden="true">
                         <span class={`block h-full rounded-full bg-bar ${r.w}`}></span>
                       </span>
                       <span class="tabular-nums">{r.p.toFixed(2)}</span>
@@ -137,9 +142,6 @@ function TerminalMock() {
           </p>
         </div>
       </div>
-      <figcaption class="mt-3 text-[13px] text-muted lg:absolute lg:top-full lg:left-0">
-        Illustrative output — the CLI is being built and may change.
-      </figcaption>
     </figure>
   )
 }
@@ -186,7 +188,7 @@ function Fast() {
       id="fast"
       title="Fast"
       lead="Decisions in tens of milliseconds."
-      body="A decision model answers in a single forward pass. There is no token-by-token generation, so one question takes under 40 ms on a single NVIDIA T4."
+      body="A decision model answers in a single forward pass, with no token-by-token generation. On an RTX 4090 at fp16, a request with five questions takes 9–16 ms."
     >
       <figure>
         <figcaption class="text-sm font-medium text-fg">
@@ -235,13 +237,13 @@ function Fast() {
   )
 }
 
-const compatRequest = `# Point an existing TypeSafe SDK at your local server
+const compatRequest = `# Point the TypeSafe SDK at Ollaya
 export TYPESAFE_BASE_URL=${LOCAL_API}
+export TYPESAFE_API_KEY=local        # any value works
+export TYPESAFE_DEFAULT_MODEL=laya
 
 # …or call the compatible endpoint directly
-curl ${LOCAL_API}/v1/systemone \\
-  -H "Content-Type: application/json" \\
-  -d '{
+curl ${LOCAL_API}/v1/systemone -d '{
     "model": "laya",
     "state": "Can I get an invoice for last month?",
     "questions": {
@@ -258,21 +260,21 @@ curl ${LOCAL_API}/v1/systemone \\
   }'`
 
 const compatResponse = `{
-  "model": "laya",
+  "model": "laya:en",
   "answers": {
     "intent": {
       "type": "choice",
       "choice": "invoice",
-      "confidence": 0.9,
+      "confidence": 0.9547,
       "probabilities": {
-        "invoice": 0.933,
-        "refund": 0.021,
-        "other": 0.046
+        "invoice": 0.9698,
+        "refund": 0.0172,
+        "other": 0.013
       }
     }
   },
   "usage": {
-    "input_tokens": 52,
+    "input_tokens": 43,
     "output_tokens": 0
   }
 }`
@@ -286,8 +288,8 @@ function Compatible() {
       body={
         <>
           Ollaya serves <code class="font-mono text-[0.9em]">/v1/systemone</code> and{' '}
-          <code class="font-mono text-[0.9em]">/v1/models</code> with the same request and response shapes, so
-          existing TypeSafe SDKs work by changing one environment variable.
+          <code class="font-mono text-[0.9em]">/v1/models</code> with TypeSafe's request and response shapes. The
+          official TypeSafe Python SDK 0.7.1 works unchanged against a local server.
         </>
       }
     >
@@ -310,29 +312,48 @@ function Compatible() {
   )
 }
 
+/** One row per model, or — while the registry holds a single family — one row per featured tag. */
+function modelRows(): { href: string; name: string; summary: string; meta: string }[] {
+  if (catalog.length === 1) {
+    const m = catalog[0]!
+    return featuredTags(m).map((t) => ({
+      href: `/library/${fullName(m, t)}`,
+      name: fullName(m, t),
+      summary: t.summary,
+      meta: t.kind === 'router' ? 'router' : [t.params, t.context && `${t.context} ctx`].filter(Boolean).join(' · '),
+    }))
+  }
+  return catalog.slice(0, 8).map((m) => ({
+    href: `/library/${m.name}`,
+    name: m.name,
+    summary: m.description,
+    meta: m.sizes.join(' · '),
+  }))
+}
+
 function OpenModels() {
-  const laya = catalog[0]!
+  const rows = modelRows()
+  const laya = catalog.some((m) => m.name === 'laya')
   return (
     <Section
       id="models"
       title="Open models"
       lead="Open weights, ready to pull."
-      body="Start with Laya from Convai Innovations: an English model, a 100+ language model, a model fine-tuned for typed decisions, and a router that picks for you."
+      body={
+        laya
+          ? 'Start with Laya from Convai Innovations: an English model, a 100+ language model, a model fine-tuned for typed decisions, and a router that picks for you.'
+          : 'Open decision models from their authors, pulled by name.'
+      }
     >
       <ul class="divide-y divide-line border-y border-line" role="list">
-        {featuredTags(laya).map((t) => (
+        {rows.map((r) => (
           <li>
-            <a
-              href={`/library/${fullName(laya, t)}`}
-              class="group flex flex-col gap-1 py-5 sm:flex-row sm:items-baseline sm:gap-6"
-            >
+            <a href={r.href} class="group flex flex-col gap-1 py-5 sm:flex-row sm:items-baseline sm:gap-6">
               <span class="shrink-0 font-mono text-[15px] text-fg underline-offset-4 group-hover:underline sm:w-52">
-                {fullName(laya, t)}
+                {r.name}
               </span>
-              <span class="flex-1 text-body">{t.summary}</span>
-              <span class="text-[13px] whitespace-nowrap text-muted">
-                {t.kind === 'router' ? 'router' : `${t.params} · ${t.context} ctx`}
-              </span>
+              <span class="flex-1 text-body">{r.summary}</span>
+              <span class="text-[13px] whitespace-nowrap text-muted">{r.meta}</span>
             </a>
           </li>
         ))}
@@ -341,9 +362,11 @@ function OpenModels() {
         <a href="/search" class="inline-flex items-center gap-1.5 text-sm font-medium text-fg underline-offset-4 hover:underline">
           Browse all models <Icon name="arrowRight" class="size-4" />
         </a>
-        <p class="max-w-md text-[13px] text-muted sm:text-right">
-          Coming next: more open decision models — {comingNext.join(', ')}.
-        </p>
+        {comingNext.length ? (
+          <p class="max-w-md text-[13px] text-muted sm:text-right">
+            Planned: more open decision models — {comingNext.join(', ')}.
+          </p>
+        ) : null}
       </div>
     </Section>
   )
@@ -353,12 +376,12 @@ const pillars: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'computer',
     title: 'Local',
-    text: 'Runs on your machine with ONNX Runtime — CUDA, Core ML or plain CPU. The server listens on 127.0.0.1 by default.',
+    text: 'Runs on your machine with ONNX Runtime, on the CPU or an NVIDIA GPU. The server listens on 127.0.0.1 by default.',
   },
   {
     icon: 'code',
     title: 'Open weights',
-    text: 'Apache-2.0 models you can inspect, fine-tune and redistribute. The runtime is Apache-2.0 too.',
+    text: 'Weights come from their authors’ Hugging Face repositories, pinned to a commit and checked against sha256. Ollaya never re-hosts them, and the runtime is Apache-2.0.',
   },
   {
     icon: 'banknotes',
@@ -410,11 +433,10 @@ function Closer() {
         </a>
       </div>
       <p class="mt-4 text-[13px] text-muted">
-        Pre-release —{' '}
+        Linux, macOS and Docker · Apache-2.0 ·{' '}
         <a href={GITHUB_URL} class={textLink}>
-          watch the repository
-        </a>{' '}
-        for the first version.
+          GitHub
+        </a>
       </p>
     </section>
   )

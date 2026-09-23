@@ -1,5 +1,4 @@
 import type { Child } from 'hono/jsx'
-import { GITHUB_URL } from '../site'
 import { Icon } from './Icon'
 
 export const btnPrimary =
@@ -108,35 +107,5 @@ export function CodeTabs({ id, label, tabs, selected }: { id: string; label: str
         </div>
       ))}
     </div>
-  )
-}
-
-/** Honest pre-release notice used on download, model and docs pages. */
-export function PreReleaseNotice({ children, class: cls = '' }: { children?: Child; class?: string }) {
-  return (
-    <div class={`flex gap-3 rounded-lg border border-line p-4 text-sm ${cls}`} role="note">
-      <Icon name="info" class="mt-0.5 size-5 shrink-0 text-muted" />
-      <p class="text-body">
-        {children ?? (
-          <>
-            <strong class="font-medium text-fg">Coming soon — first release in progress.</strong> Nothing is
-            downloadable yet.{' '}
-          </>
-        )}{' '}
-        <a href={GITHUB_URL} class={textLink}>
-          Star / watch on GitHub
-        </a>{' '}
-        to hear about the first release.
-      </p>
-    </div>
-  )
-}
-
-/** Small "Coming soon" label for commands that don't work yet. */
-export function SoonLabel() {
-  return (
-    <span class="inline-flex items-center rounded-md bg-fill px-2 py-[2px] text-[13px] font-medium text-muted">
-      Coming soon
-    </span>
   )
 }

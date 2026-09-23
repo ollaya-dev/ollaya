@@ -1,7 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { Icon } from '../components/Icon'
-import { CodeBlock, PreReleaseNotice, SoonLabel, textLink } from '../components/ui'
-import { DOCKER_IMAGE, LOCAL_PORT } from '../site'
+import { CodeBlock, textLink } from '../components/ui'
+import { DOCKER_IMAGE, LOCAL_PORT, RELEASES_URL } from '../site'
 
 type Os = 'linux' | 'macos' | 'docker'
 
@@ -13,29 +13,29 @@ function Panel({ id, selected, children }: { id: Os; selected: Os; children: Chi
   )
 }
 
-function Step({ title, soon, children }: { title: string; soon?: boolean; children: Child }) {
+function Step({ title, children }: { title: string; children: Child }) {
   return (
     <div class="mt-8 first:mt-0">
-      <div class="flex flex-wrap items-center gap-2">
-        <h3 class="text-sm font-semibold text-fg">{title}</h3>
-        {soon ? <SoonLabel /> : null}
-      </div>
+      <h3 class="text-sm font-semibold text-fg">{title}</h3>
       <div class="mt-3">{children}</div>
     </div>
   )
 }
 
-function Requirements({ items }: { items: string[] }) {
+function Requirements({ items }: { items: Child[] }) {
   return (
-    <Step title="Planned requirements">
+    <Step title="Requirements">
       <ul class="list-disc space-y-1.5 pl-5 text-[15px] text-body marker:text-muted">
         {items.map((i) => (
           <li>{i}</li>
         ))}
       </ul>
-      <p class="mt-3 text-[13px] text-muted">Final requirements will be published with the first release.</p>
     </Step>
   )
+}
+
+function Note({ children }: { children: Child }) {
+  return <p class="mt-3 text-[13px] text-muted">{children}</p>
 }
 
 /** /download — Linux is selected by default; app.js switches to macOS for Mac visitors. */
@@ -47,15 +47,18 @@ export function DownloadPage({ origin }: { origin: string }) {
     { id: 'macos', label: 'macOS' },
     { id: 'docker', label: 'Docker' },
   ]
-  const volume = '-v ollaya:/root/.ollaya'
+  const volume = '-v ollaya:/home/ollaya/.ollaya'
   const port = `-p ${LOCAL_PORT}:${LOCAL_PORT}`
+  const script = (
+    <a href="/install.sh" class={textLink}>
+      The script
+    </a>
+  )
 
   return (
     <div class="mx-auto max-w-2xl px-4 pt-12 md:px-6 md:pt-20">
       <h1 class="text-center text-4xl font-medium tracking-tight text-fg md:text-5xl">Download Ollaya</h1>
       <p class="mt-4 text-center text-lg text-body">One binary for Linux and macOS, or a Docker image.</p>
-
-      <PreReleaseNotice class="mt-10" />
 
       <div class="mt-10">
         <div role="tablist" aria-label="Platform" data-os-tabs class="mx-auto flex w-fit gap-1 rounded-full border border-line p-1">
@@ -79,61 +82,73 @@ export function DownloadPage({ origin }: { origin: string }) {
 
         <div class="mt-10">
           <Panel id="linux" selected={selected}>
-            <Step title="Install with one command" soon>
+            <Step title="Install with one command">
               <CodeBlock code={install} />
-              <p class="mt-3 text-[13px] text-muted">
-                Until the first release ships,{' '}
-                <a href="/install.sh" class={textLink}>
-                  the script
-                </a>{' '}
-                only prints a notice and exits.
-              </p>
+              <Note>
+                {script} detects your CPU and NVIDIA GPU, downloads the release from{' '}
+                <a href={RELEASES_URL} class={textLink}>
+                  GitHub
+                </a>
+                , checks its sha256 and, where systemd runs, sets up the <code class="font-mono">ollaya</code>{' '}
+                service. With a GPU it also fetches the CUDA libraries (about 1 GB). It never installs drivers.
+              </Note>
+            </Step>
+            <Step title="Run a model">
+              <CodeBlock code="ollaya run laya" />
             </Step>
             <Requirements
               items={[
-                'Runs on the CPU out of the box (ONNX Runtime).',
-                'NVIDIA GPUs are accelerated with CUDA.',
-                'Roughly 0.65–1.7 GB of disk per model, depending on model and precision.',
+                'x86-64 or ARM64 with glibc 2.38 or newer: Ubuntu 24.04, Debian 13, Fedora 39, RHEL 10 or newer.',
+                'Runs on the CPU. An NVIDIA GPU is optional: driver R580 or newer (CUDA 13), on x86-64.',
+                'Windows: use WSL 2 with the Linux installer. A native Windows build is planned.',
               ]}
             />
           </Panel>
 
           <Panel id="macos" selected={selected}>
-            <Step title="Install with one command" soon>
+            <Step title="Install with one command">
               <CodeBlock code={install} />
-              <p class="mt-3 text-[13px] text-muted">
-                Until the first release ships,{' '}
-                <a href="/install.sh" class={textLink}>
-                  the script
+              <Note>
+                {script} downloads the release from{' '}
+                <a href={RELEASES_URL} class={textLink}>
+                  GitHub
                 </a>{' '}
-                only prints a notice and exits.
-              </p>
+                and checks its sha256. Start the server with <code class="font-mono">ollaya serve</code>, or let{' '}
+                <code class="font-mono">ollaya run</code> start it for you.
+              </Note>
             </Step>
-            <Requirements
-              items={[
-                'Accelerated with Core ML; runs on the CPU as a fallback.',
-                'Roughly 0.65–1.7 GB of disk per model, depending on model and precision.',
-              ]}
-            />
+            <Step title="Run a model">
+              <CodeBlock code="ollaya run laya" />
+            </Step>
+            <Requirements items={['A Mac with Apple silicon (arm64).']} />
           </Panel>
 
           <Panel id="docker" selected={selected}>
-            <Step title="CPU only" soon>
-              <CodeBlock code={`docker run -d ${port} ${volume} --name ollaya ${DOCKER_IMAGE}`} />
+            <Step title="CPU">
+              <CodeBlock code={`docker run -d --name ollaya ${port} ${volume} ${DOCKER_IMAGE}`} />
             </Step>
-            <Step title="NVIDIA GPU" soon>
-              <CodeBlock code={`docker run -d --gpus=all ${port} ${volume} --name ollaya ${DOCKER_IMAGE}`} />
-              <p class="mt-3 text-[13px] text-muted">Requires the NVIDIA Container Toolkit on the host.</p>
+            <Step title="NVIDIA GPU">
+              <CodeBlock code={`docker run -d --name ollaya --gpus=all ${port} ${volume} ${DOCKER_IMAGE}:cuda`} />
+              <Note>Needs the NVIDIA Container Toolkit and a host driver with CUDA 13 support (R580 or newer).</Note>
             </Step>
-            <Step title="Run a model" soon>
-              <CodeBlock code={`docker exec -it ollaya ollaya run laya --preset triage "I was charged twice this month."`} />
+            <Step title="Run a model">
+              <CodeBlock code="docker exec -it ollaya ollaya run laya" />
             </Step>
-            <p class="mt-6 text-[13px] text-muted">
-              The image will be published to <code class="font-mono">{DOCKER_IMAGE}</code> with the first release.
-            </p>
+            <Note>
+              The CPU image is built for linux/amd64 and linux/arm64, the <code class="font-mono">:cuda</code> image
+              for linux/amd64. Models are kept in the <code class="font-mono">ollaya</code> volume.
+            </Note>
           </Panel>
         </div>
       </div>
+
+      <p class="mt-10 text-center text-[13px] text-muted">
+        Prefer a tarball? Every release on{' '}
+        <a href={RELEASES_URL} class={textLink}>
+          GitHub Releases
+        </a>{' '}
+        has the archives and a <code class="font-mono">sha256sum.txt</code>.
+      </p>
 
       <div class="mt-16 grid gap-4 border-t border-line pt-10 sm:grid-cols-2">
         <a href="/docs/quickstart" class="group rounded-lg border border-line p-5 hover:border-line-strong">

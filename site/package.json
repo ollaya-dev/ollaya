@@ -2,14 +2,14 @@
   "name": "ollaya-site",
   "version": "0.0.0",
   "private": true,
-  "description": "Website for Ollaya — a static site (Hono JSX pre-rendered at build time, Tailwind CSS) served by Cloudflare Workers static assets",
+  "description": "Website for Ollaya \u2014 a static site (Hono JSX pre-rendered at build time, Tailwind CSS) served by Cloudflare Workers static assets",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "gen": "node scripts/gen-content.mjs",
+    "gen": "node scripts/gen-content.mjs && node scripts/gen-registry.mjs",
     "typecheck": "npm run gen && tsc --noEmit",
     "build": "npm run typecheck && node scripts/build.mjs && node scripts/check.mjs",
     "dev": "npm run build && wrangler dev",

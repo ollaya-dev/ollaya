@@ -5,17 +5,12 @@ import { docPages, type DocPage } from '../generated/content'
 const escapeHtml = (s: string) =>
   s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
-/** Docs HTML is rendered from Markdown at build time; this fills in the {{SITE_ORIGIN}} placeholder. */
-export const withOrigin = (html: string, origin: string) => html.replaceAll('{{SITE_ORIGIN}}', escapeHtml(origin))
-
-function PreviewNote() {
-  return (
-    <p class="inline-flex items-center gap-1.5 rounded-md bg-fill px-2 py-[2px] text-[13px] font-medium text-muted">
-      <Icon name="info" class="size-4" />
-      Preview — subject to change
-    </p>
-  )
-}
+/**
+ * Docs HTML is rendered from Markdown at build time; this fills in the {{SITE_ORIGIN}}
+ * (https://host) and {{SITE_HOST}} (host) placeholders.
+ */
+export const withOrigin = (html: string, origin: string) =>
+  html.replaceAll('{{SITE_ORIGIN}}', escapeHtml(origin)).replaceAll('{{SITE_HOST}}', escapeHtml(origin.replace(/^https?:\/\//, '')))
 
 function NavList({ current }: { current?: string }) {
   return (
@@ -73,8 +68,7 @@ function DocsShell({ current, title, children }: { current?: string; title: stri
 export function DocsIndex() {
   return (
     <DocsShell title="Overview">
-      <PreviewNote />
-      <h1 class="mt-5 text-[30px] leading-tight font-medium tracking-tight text-fg">Documentation</h1>
+      <h1 class="text-[30px] leading-tight font-medium tracking-tight text-fg">Documentation</h1>
       <p class="mt-3 text-lg text-body">
         Ollaya downloads and serves open decision models locally. A decision model reads a state — text, an email, a
         ticket, JSON — plus typed questions, and returns typed answers with calibrated probabilities in a single
@@ -103,8 +97,7 @@ export function DocView({ page, html }: { page: DocPage; html: string }) {
   const next = docPages[i + 1]
   return (
     <DocsShell current={page.slug} title={page.nav}>
-      <PreviewNote />
-      <article class="prose mt-5" dangerouslySetInnerHTML={{ __html: html }}></article>
+      <article class="prose" dangerouslySetInnerHTML={{ __html: html }}></article>
       <nav aria-label="Previous and next" class="mt-16 grid gap-4 border-t border-line pt-8 sm:grid-cols-2">
         {prev ? (
           <a href={`/docs/${prev.slug}`} class="group rounded-lg border border-line p-4 hover:border-line-strong">
