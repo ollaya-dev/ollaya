@@ -50,6 +50,10 @@ churn_risk        no           ██████████░░░░░░ 
 - **Weights come from their authors.** Ollaya publishes only small ONNX graphs, about 3 MB each.
   These graphs read the original `model.safetensors` from the author's Hugging Face repository,
   pinned to a commit and verified by sha256. Ollaya never re-hosts weights.
+- **For agents.** `ollaya mcp` serves the models to Claude Code, Claude Desktop, Cursor and other
+  MCP clients (`claude mcp add ollaya -- ollaya mcp`), and the
+  [`ollaya-decisions` skill](skills/ollaya-decisions/SKILL.md) teaches agents when and how to use
+  them (`npx skills add ollaya-dev/ollaya`).
 - **Routers.** `laya` detects the script and language of each request, then answers with
   `laya:en` or `laya:multilingual`.
 - **Modelfiles.** You can bake a question set into your own model:

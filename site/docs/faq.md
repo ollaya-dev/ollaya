@@ -1,7 +1,7 @@
 ---
 title: FAQ
 description: How Ollaya relates to Ollama and TypeSafe, hardware, privacy, where weights come from, and licensing.
-order: 6
+order: 7
 ---
 
 # FAQ
@@ -68,7 +68,7 @@ With temperature scaling per question type and number of options, shipped with e
 
 ## Is there an MCP server or an agent skill?
 
-Both are planned: an [MCP server](https://github.com/ollaya-dev/ollaya/issues/1) and an [Agent Skill](https://github.com/ollaya-dev/ollaya/issues/2). Follow the issues for progress.
+Both. `ollaya mcp` serves the local models to Claude Code, Claude Desktop, Cursor and other MCP clients (`claude mcp add ollaya -- ollaya mcp`), and the `ollaya-decisions` skill teaches agents when and how to use them. See [Agents](/docs/agents).
 
 ## How do I uninstall it?
 
@@ -76,11 +76,11 @@ On Linux, after the installer set up the service:
 
 ```shell
 sudo systemctl disable --now ollaya && sudo rm /etc/systemd/system/ollaya.service
-sudo rm -rf /usr/local/bin/ollaya /usr/local/lib/ollaya /usr/local/share/doc/ollaya
+sudo rm -rf /usr/local/bin/ollaya /usr/local/lib/ollaya /usr/local/share/doc/ollaya /usr/local/share/ollaya
 sudo userdel -r ollaya    # also deletes /usr/share/ollaya, including the models
 ```
 
-For an install without root (in `~/.local`), delete `~/.local/bin/ollaya`, `~/.local/lib/ollaya` and `~/.local/share/doc/ollaya`, and the models in `~/.ollaya`.
+For an install without root (in `~/.local`), delete `~/.local/bin/ollaya`, `~/.local/lib/ollaya`, `~/.local/share/doc/ollaya` and `~/.local/share/ollaya`, and the models in `~/.ollaya`.
 
 ## What is the license?
 

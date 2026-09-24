@@ -1,7 +1,7 @@
 ---
 title: CLI reference
 nav: CLI
-description: Every ollaya command and flag — run, pull, serve, list, ps, show, stop, rm, cp and create.
+description: Every ollaya command and flag — run, pull, serve, list, ps, show, stop, rm, cp, create and mcp.
 order: 2
 ---
 
@@ -19,6 +19,7 @@ Ollaya is a single binary: the CLI, the server and the model runners. If you hav
 | `ollaya show MODEL` | Show a model's details, capabilities and license |
 | `ollaya stop MODEL` | Unload a running model |
 | `ollaya stop` | Stop the server that the CLI started |
+| `ollaya mcp [--http [ADDR]]` | Serve the models to AI agents over MCP ([Agents](/docs/agents)) |
 | `ollaya rm MODEL…` | Remove one or more models |
 | `ollaya cp SOURCE DESTINATION` | Copy a model under a new name |
 | `ollaya create NAME [-f Modelfile]` | Create a model from a [Modelfile](/docs/modelfile) |

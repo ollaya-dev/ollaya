@@ -271,6 +271,9 @@ stage_base() {
     cp "$BIN" "$root/bin/ollaya"
     chmod 0755 "$root/bin/ollaya"
     cp "$ROOT/LICENSE" "$root/share/doc/ollaya/LICENSE"
+    # The agent skill (skills/ollaya-decisions), for agents on machines without the repository.
+    mkdir -p "$root/share/ollaya/skills"
+    cp -R "$ROOT/skills/ollaya-decisions" "$root/share/ollaya/skills/ollaya-decisions"
     cp "$CACHE/onnxruntime-$ORT_VERSION/ThirdPartyNotices.txt" \
         "$root/share/doc/ollaya/onnxruntime-ThirdPartyNotices.txt"
     {

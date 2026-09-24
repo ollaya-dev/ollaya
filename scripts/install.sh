@@ -329,6 +329,13 @@ main() {
     fi
     $SUDO rm -rf "$PREFIX/share/doc/ollaya"
     $SUDO mv "$STAGE/share/doc/ollaya" "$PREFIX/share/doc/ollaya"
+    # The agent skill (0.4.0 and later). Only share/ollaya/skills is replaced: with a /usr prefix,
+    # share/ollaya is also the systemd service's home, which holds the models.
+    if [ -d "$STAGE/share/ollaya/skills" ]; then
+        $SUDO mkdir -p "$PREFIX/share/ollaya"
+        $SUDO rm -rf "$PREFIX/share/ollaya/skills"
+        $SUDO mv "$STAGE/share/ollaya/skills" "$PREFIX/share/ollaya/skills"
+    fi
     # Remove GPU libraries from an earlier install, so they never outlive the binary they match
     # (unless they are byte for byte the ones this release ships).
     if ! $CUDA_KEEP; then
