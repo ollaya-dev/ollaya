@@ -24,13 +24,16 @@ TypeSafe's closed Jev model created the decision-model category. Ollaya serves o
 
 ## Which models can I run?
 
-The Laya family from Convai Innovations: `laya` (a router), `laya:en`, `laya:multilingual` and `laya:typed-decisions`, each also as `-fp16` and `-fp32`. `laya` sends English text to `laya:en` and other languages, Turkish for example, to `laya:multilingual`. See [Models](/search).
+Four families of open decision models. See [Models](/search).
 
-More open decision model families are planned.
+- **`laya`** from Convai Innovations: `laya` (a router), `laya:en`, `laya:multilingual` and `laya:typed-decisions`, each also as `-fp16` and `-fp32`. `laya` sends English text to `laya:en` and other languages, Turkish for example, to `laya:multilingual`. It is the fastest.
+- **`decider`** from Mapika: `decider:2b` and `decider:0.8b`, built on Qwen3.5. It is the most accurate, and the slowest.
+- **`nli`** from Moritz Laurer: zero-shot NLI classifiers on DeBERTa-v3-large and ModernBERT-large. It is the most accurate encoder.
+- **`gliclass`** from Knowledgator: an instruction-following zero-shot classifier that scores every option in one pass.
 
 ## Where do the weights come from?
 
-From the model authors' own Hugging Face repositories, pinned to a commit. Every file is checked against its sha256 when it is pulled. Ollaya never re-hosts weights: its registry only serves small manifests and derived files, such as the ONNX graphs, which reference the weights by URL.
+From the model authors' own Hugging Face repositories, pinned to a commit. Every file is checked against its sha256 when it is pulled. Ollaya never re-hosts weights: its registry only serves small manifests and derived files, such as the ONNX graphs, which reference the weights by URL. The same derived files are published on Hugging Face under [ollaya-dev](https://huggingface.co/ollaya-dev).
 
 ## Are the answers the same as the original model's?
 
@@ -81,4 +84,4 @@ For an install without root (in `~/.local`), delete `~/.local/bin/ollaya`, `~/.l
 
 ## What is the license?
 
-Ollaya is Apache-2.0. Models carry their own licenses; the Laya family is Apache-2.0 too.
+Ollaya is Apache-2.0. Models carry their own licenses: `laya`, `decider`, `gliclass` and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` is MIT.

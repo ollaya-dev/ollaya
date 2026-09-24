@@ -1,9 +1,10 @@
-import { COPYRIGHT_YEAR, GITHUB_URL } from '../site'
+import { COPYRIGHT_YEAR, GITHUB_URL, HF_URL } from '../site'
 
 const links = [
   { href: '/download', label: 'Download' },
   { href: '/docs', label: 'Docs' },
   { href: GITHUB_URL, label: 'GitHub' },
+  { href: HF_URL, label: 'Hugging Face' },
   { href: '/search', label: 'Models' },
 ]
 

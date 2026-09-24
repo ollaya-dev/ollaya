@@ -7,6 +7,8 @@ export const SITE_DESCRIPTION =
 export const GITHUB_URL = 'https://github.com/ollaya-dev/ollaya'
 export const RELEASES_URL = `${GITHUB_URL}/releases`
 export const ISSUES_URL = `${GITHUB_URL}/issues`
+/** Derived files (ONNX graphs, configs) of every model, mirrored on Hugging Face. No weights. */
+export const HF_URL = 'https://huggingface.co/ollaya-dev'
 /** Planned features, tracked on GitHub. */
 export const MCP_ISSUE_URL = `${GITHUB_URL}/issues/1`
 export const SKILL_ISSUE_URL = `${GITHUB_URL}/issues/2`
