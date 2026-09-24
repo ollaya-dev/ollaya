@@ -24,8 +24,34 @@ impl Engine for OnnxModel {
     }
 }
 
+/// Padded tokens per `session.run`. Rows are independent, so splitting a request only bounds
+/// peak memory: 64 rows of 512 tokens fit comfortably even for large encoders on the GPU.
+pub const TOKEN_BUDGET: usize = 32_768;
+
+/// Split `lens` (row lengths, in order) into consecutive batches whose padded size
+/// (rows × longest row) stays within `budget`, and at most `max_rows` rows each.
+pub fn batches(lens: &[usize], budget: usize, max_rows: usize) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let (mut start, mut longest) = (0, 0);
+    for (i, &len) in lens.iter().enumerate() {
+        let next_longest = longest.max(len);
+        let rows = i - start + 1;
+        if rows > 1 && (rows * next_longest > budget || rows > max_rows) {
+            out.push(start..i);
+            start = i;
+            longest = len;
+        } else {
+            longest = next_longest;
+        }
+    }
+    if start < lens.len() {
+        out.push(start..lens.len());
+    }
+    out
+}
+
 /// Layouts this build can run.
-pub const LAYOUTS: &[&str] = &["laya-markers-v1"];
+pub const LAYOUTS: &[&str] = &["laya-markers-v1", "gliclass-uni-v1", "nli-pairs-v1"];
 
 /// The layout a `decision` layer declares.
 pub fn layout_of(decision: &Path) -> Result<String, Error> {
@@ -47,9 +73,36 @@ pub fn load(
 ) -> Result<Box<dyn Engine>, Error> {
     match layout_of(&files.decision)?.as_str() {
         "laya-markers-v1" => Ok(Box::new(OnnxModel::load_files(files, device, threads)?)),
+        "gliclass-uni-v1" => Ok(Box::new(crate::gliclass::GliclassModel::load_files(
+            files, device, threads,
+        )?)),
+        "nli-pairs-v1" => Ok(Box::new(crate::nli::NliModel::load_files(
+            files, device, threads,
+        )?)),
         other => Err(Error::Model(format!(
             "this version of ollaya cannot run layout {other:?} (supported: {}); upgrade ollaya",
             LAYOUTS.join(", ")
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::batches;
+
+    #[test]
+    fn batches_respect_the_token_budget() {
+        // 512-token rows, budget 2048 -> 4 rows per batch.
+        assert_eq!(
+            batches(&[512; 10], 2048, usize::MAX),
+            vec![0..4, 4..8, 8..10]
+        );
+        // A longer row later on shrinks its batch; a single row over budget still runs alone.
+        assert_eq!(
+            batches(&[100, 100, 900, 5000, 10], 2000, usize::MAX),
+            vec![0..2, 2..3, 3..4, 4..5]
+        );
+        assert_eq!(batches(&[10; 5], 1_000_000, 2), vec![0..2, 2..4, 4..5]);
+        assert!(batches(&[], 10, 10).is_empty());
     }
 }

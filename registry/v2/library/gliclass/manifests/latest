@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+  "config": {
+    "mediaType": "application/vnd.ollaya.config.v1+json",
+    "digest": "sha256:fda4be7545ddeae02419d018c757dc6fe6a5ae55fa500a9501f0d5aa204b6d06",
+    "size": 405,
+    "urls": [
+      "https://ollaya.cobanov.dev/blobs/sha256-fda4be7545ddeae02419d018c757dc6fe6a5ae55fa500a9501f0d5aa204b6d06"
+    ]
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.ollaya.graph.onnx",
+      "digest": "sha256:4e3b560979faf451ee3cdfd9e9f6e0e32efbd4e50992ef89fd085a6fffdd27a5",
+      "size": 5065943,
+      "urls": [
+        "https://ollaya.cobanov.dev/blobs/sha256-4e3b560979faf451ee3cdfd9e9f6e0e32efbd4e50992ef89fd085a6fffdd27a5"
+      ],
+      "annotations": {
+        "org.ollaya.precision": "fp32"
+      }
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:4b5d4d9cbc202e7c13fc858ee845d2fed5074f0baae5824c848f462268feb825",
+      "size": 1754746792,
+      "urls": [
+        "https://huggingface.co/knowledgator/gliclass-instruct-large-v1.0/resolve/825e5478c1bf4bffbf297690517097ccbdb2e006/model.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.tokenizer",
+      "digest": "sha256:d05acaafc9edfc327f2b7c03576100925d7f69c3085b27a62288958246510677",
+      "size": 8649676,
+      "urls": [
+        "https://huggingface.co/knowledgator/gliclass-instruct-large-v1.0/resolve/825e5478c1bf4bffbf297690517097ccbdb2e006/tokenizer.json"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.decision",
+      "digest": "sha256:8737da38a0f0b40deb45192d4e8983b12dd6bc28826f138d8eb48db4e5a69d96",
+      "size": 1200,
+      "urls": [
+        "https://ollaya.cobanov.dev/blobs/sha256-8737da38a0f0b40deb45192d4e8983b12dd6bc28826f138d8eb48db4e5a69d96"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.calibration",
+      "digest": "sha256:316915b3e458dcd3df2154562613132542e20244103338f6a150b712e9185e10",
+      "size": 84,
+      "urls": [
+        "https://ollaya.cobanov.dev/blobs/sha256-316915b3e458dcd3df2154562613132542e20244103338f6a150b712e9185e10"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.license",
+      "digest": "sha256:a3ff2777dec390f8804685d639a09b58e528bb2f6d20e853402e91e70e5951c9",
+      "size": 10334,
+      "urls": [
+        "https://ollaya.cobanov.dev/blobs/sha256-a3ff2777dec390f8804685d639a09b58e528bb2f6d20e853402e91e70e5951c9"
+      ]
+    }
+  ]
+}

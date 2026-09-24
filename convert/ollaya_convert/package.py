@@ -114,10 +114,63 @@ def graph_bytes(export_dir, checkpoint, prefix, weights_oid):
     return model.SerializeToString(), stats
 
 
+def graph_from_wl(wl_dir, oids):
+    """A weightless graph from `families/`, its external-data locations renamed from upstream file
+    names to the blob names (`sha256-<oid>`) the weights have in the store."""
+    model = onnx.load(os.path.join(wl_dir, "model.onnx"), load_external_data=False)
+    n = 0
+    for t in model.graph.initializer:
+        for kv in t.external_data:
+            if kv.key == "location":
+                kv.value = "sha256-" + oids[kv.value]
+                n += 1
+    return model.SerializeToString(), {"external": n, "inline": len(model.graph.initializer) - n}
+
+
+def package_wl(spec, tag, v, blobs):
+    """One tag of a model converted under `families/` (fp32 graph; runs fp32 on every device)."""
+    repo, commit = v["repo"], v["commit"]
+    oids, weights = {}, []
+    for location, path in v["weights"].items():
+        d = upstream(MEDIA["weights"], repo, commit, path)
+        oid = d["digest"].split(":", 1)[1]
+        local = os.path.join(v["wl_dir"], location)
+        with open(local, "rb") as f:  # the local copy must be the pinned upstream file
+            if hashlib.file_digest(f, "sha256").hexdigest() != oid:
+                raise SystemExit("%s does not match %s@%s:%s" % (local, repo, commit, path))
+        oids[location] = oid
+        weights.append(d)
+    data, stats = graph_from_wl(v["wl_dir"], oids)
+    print("  %s:%s fp32 graph %.1f MB %s" % (spec["model"], tag, len(data) / 2**20, stats))
+    graph = blobs.put(MEDIA["graph"], data, {"org.ollaya.precision": "fp32"})
+    tokenizer = upstream(MEDIA["tokenizer"], repo, commit, v["tokenizer"])
+    decision_bytes = open(os.path.join(v["wl_dir"], "decision.json"), "rb").read()
+    decision = blobs.put(MEDIA["decision"], decision_bytes)
+    calibration = blobs.put(MEDIA["calibration"], open(os.path.join(v["wl_dir"], "calibration.json"), "rb").read())
+    dj = json.loads(decision_bytes)
+    ctx = dj.get("max_len") or dj.get("max_length") or v["context_length"]
+    license_id = v.get("license") or spec["license"]
+    lic = blobs.put(MEDIA["license"], (v.get("license_text") or spec["license_text"]).encode())
+    config = blobs.put(MEDIA["config"], json.dumps({
+        "model_format": "onnx", "family": spec["family"], "parameter_size": v["parameter_size"],
+        "context_length": ctx, "languages": v["languages"], "description": v["description"],
+        "source": "huggingface.co/%s@%s" % (repo, commit), "license": license_id,
+        "release_date": hf_commit_date(repo, commit),
+    }, indent=2).encode())
+    return config, [graph] + weights + [tokenizer, decision, calibration, lic]
+
+
 def package_model(spec, blobs):
     ns, model = spec["namespace"], spec["model"]
     lic = blobs.put(MEDIA["license"], spec["license_text"].encode())
     for tag, v in spec["tags"].items():
+        if v.get("kind") == "wl":
+            config, layers = package_wl(spec, tag, v, blobs)
+            write_manifest(ns, model, tag, config, layers)
+            for alias, target in spec.get("aliases", {}).items():
+                if target == tag:
+                    write_manifest(ns, model, alias, config, layers)
+            continue
         repo, commit = v["repo"], v["commit"]
         weights = upstream(MEDIA["weights"], repo, commit, v["weights"])
         tokenizer = upstream(MEDIA["tokenizer"], repo, commit, v["tokenizer"])

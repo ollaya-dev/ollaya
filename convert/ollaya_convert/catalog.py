@@ -36,6 +36,29 @@ def _laya(sub, description, params, ctx, languages):
     }
 
 
+def _wl(slug, repo, commit, description, params, ctx, languages, license=None, license_text=None):
+    """A model converted under `families/`, whose weightless graph (`out/<slug>-wl`) already
+    references the upstream checkpoint by its file name."""
+    return {
+        "kind": "wl",
+        "repo": repo,
+        "commit": commit,
+        "wl_dir": os.path.join(OUT, slug + "-wl"),
+        "weights": {"model.safetensors": "model.safetensors"},  # graph location -> upstream path
+        "tokenizer": "tokenizer.json",
+        "parameter_size": params,
+        "context_length": ctx,
+        "languages": languages,
+        "description": description,
+        "license": license,
+        "license_text": license_text,
+    }
+
+
+LICENSE_MIT_NLI = ("DeBERTa-v3-large zero-shot v2.0 by Moritz Laurer "
+                   "(https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0), MIT License.\n"
+                   "Note from the model card: part of the training data carries non-commercial licenses.\n")
+
 CATALOG = {
     "laya": {
         "namespace": "library",
@@ -62,5 +85,47 @@ CATALOG = {
                            "routes": {"english": "laya:en", "multilingual": "laya:multilingual"}},
             },
         },
+    },
+    "nli": {
+        "namespace": "library",
+        "model": "nli",
+        "family": "nli",
+        "author": "Moritz Laurer",
+        "license": "MIT",
+        "license_text": LICENSE_MIT_NLI,
+        "tags": {
+            "deberta-v3-large": _wl(
+                "deberta-v3-large-zeroshot-v2.0", "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
+                "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
+                "Zero-shot NLI classifier (DeBERTa-v3-large): each option is a hypothesis scored for entailment.",
+                "435M", 512, ["en"]),
+            "modernbert-large": _wl(
+                "modernbert-large-zeroshot-v2.0", "MoritzLaurer/ModernBERT-large-zeroshot-v2.0",
+                "a51e07b524299e309dd2b88d48b0cfa2bd9ec598",
+                "Zero-shot NLI classifier (ModernBERT-large, Apache-2.0): faster, slightly less accurate.",
+                "396M", 512, ["en"], license="Apache-2.0",
+                license_text="ModernBERT-large zero-shot v2.0 by Moritz Laurer "
+                             "(https://huggingface.co/MoritzLaurer/ModernBERT-large-zeroshot-v2.0)\n"
+                             "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE),
+        },
+        "aliases": {"latest": "deberta-v3-large"},
+    },
+    "gliclass": {
+        "namespace": "library",
+        "model": "gliclass",
+        "family": "gliclass",
+        "author": "Knowledgator",
+        "license": "Apache-2.0",
+        "license_text": "GLiClass instruct large v1.0 by Knowledgator "
+                        "(https://huggingface.co/knowledgator/gliclass-instruct-large-v1.0)\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        "tags": {
+            "large": _wl(
+                "gliclass-instruct-large", "knowledgator/gliclass-instruct-large-v1.0",
+                "825e5478c1bf4bffbf297690517097ccbdb2e006",
+                "Instruction-following zero-shot classifier: all options scored in one pass.",
+                "439M", 1024, ["en"]),
+        },
+        "aliases": {"latest": "large"},
     },
 }

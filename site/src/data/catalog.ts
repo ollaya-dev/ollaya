@@ -51,6 +51,33 @@ const overlays: Record<string, ModelOverlay> = {
       },
     },
   },
+  nli: {
+    title: 'NLI zero-shot',
+    description:
+      'Zero-shot classifiers by Moritz Laurer: every option becomes a hypothesis scored for entailment. The most accurate open model on typed decisions in our tests.',
+    publisher: { name: 'Moritz Laurer', url: 'https://huggingface.co/MoritzLaurer' },
+    capabilities: ['zero-shot'],
+    keywords: ['nli', 'entailment', 'zero-shot', 'deberta', 'modernbert', 'classification', 'classifier', 'typesafe', 'jev'],
+    rank: 2,
+    tags: {
+      latest: { summary: 'Same as nli:deberta-v3-large.' },
+      'deberta-v3-large': { summary: 'DeBERTa-v3-large, MIT. Best accuracy in our tests (0.548 on typed decisions).' },
+      'modernbert-large': { summary: 'ModernBERT-large, Apache-2.0. Faster, slightly less accurate (0.515).' },
+    },
+  },
+  gliclass: {
+    title: 'GLiClass',
+    description:
+      'Instruction-following zero-shot classifier by Knowledgator: all options of a question are scored in one pass, so cost barely grows with the number of options.',
+    publisher: { name: 'Knowledgator', url: 'https://huggingface.co/knowledgator' },
+    capabilities: ['zero-shot'],
+    keywords: ['gliclass', 'zero-shot', 'classification', 'classifier', 'labels', 'typesafe', 'jev'],
+    rank: 3,
+    tags: {
+      latest: { summary: 'Same as gliclass:large.' },
+      large: { summary: 'GLiClass instruct large v1.0 (DeBERTa-v3-large backbone), Apache-2.0.' },
+    },
+  },
 }
 
 /**

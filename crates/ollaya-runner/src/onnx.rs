@@ -118,6 +118,18 @@ fn with_cuda(
     ))
 }
 
+/// A model's `tokenizer.json`, with any truncation or padding it ships switched off: layouts
+/// place every token themselves, and Python's tokenizer calls (the references) ignore those
+/// settings too. Some upstream files bake in truncation (e.g. 512) that would silently cut states.
+pub fn load_tokenizer(path: &Path) -> Result<tokenizers::Tokenizer, Error> {
+    let mut tok = tokenizers::Tokenizer::from_file(path)
+        .map_err(|e| Error::Model(format!("{}: {e}", path.display())))?;
+    tok.with_truncation(None)
+        .map_err(|e| Error::Model(format!("{}: {e}", path.display())))?;
+    tok.with_padding(None);
+    Ok(tok)
+}
+
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, Error> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| Error::Model(format!("{}: {e}", path.display())))?;
@@ -168,8 +180,7 @@ impl OnnxModel {
             Some(path) => Calibration::from_file(&read_json::<CalibrationFile>(path)?),
             None => Calibration::default(),
         };
-        let tokenizer = tokenizers::Tokenizer::from_file(&files.tokenizer)
-            .map_err(|e| Error::Model(format!("{}: {e}", files.tokenizer.display())))?;
+        let tokenizer = load_tokenizer(&files.tokenizer)?;
 
         let session = session(&files.graph, device, intra_threads)?;
 
@@ -214,6 +225,26 @@ impl OnnxModel {
 
     pub fn run_encoded(&self, encoding: &Encoding, questions: &Questions) -> Result<Output, Error> {
         let encoded = &encoding.questions;
+        let qtypes: Vec<i64> = questions.values().map(|q| q.qtype.index() as i64).collect();
+        let lens: Vec<usize> = encoded.iter().map(|e| e.ids.len()).collect();
+        let mut outputs = Vec::with_capacity(encoded.len());
+        for range in crate::engine::batches(&lens, crate::engine::TOKEN_BUDGET, usize::MAX) {
+            outputs.extend(self.run_batch(&encoded[range.clone()], &qtypes[range])?);
+        }
+        Ok(Output {
+            questions: outputs,
+            input_tokens: lens.iter().sum(),
+            state_tokens: encoding.state_tokens,
+            state_truncated: encoded.iter().any(|e| e.state_truncated),
+        })
+    }
+
+    /// One forward pass over `encoded` (one row per question), padded to its longest row.
+    fn run_batch(
+        &self,
+        encoded: &[ollaya_decision::Encoded],
+        qtypes: &[i64],
+    ) -> Result<Vec<QuestionOutput>, Error> {
         let n = encoded.len();
         let seq = encoded.iter().map(|e| e.ids.len()).max().unwrap_or(0);
         let k = encoded
@@ -228,8 +259,7 @@ impl OnnxModel {
         let mut attention = Array2::<i64>::zeros((n, seq));
         let mut marker_pos = Array2::<i64>::zeros((n, k));
         let mut marker_mask = Array2::<bool>::from_elem((n, k), false);
-        let mut qtype = Vec::with_capacity(n);
-        for (r, (e, q)) in encoded.iter().zip(questions.values()).enumerate() {
+        for (r, e) in encoded.iter().enumerate() {
             for (c, &id) in e.ids.iter().enumerate() {
                 input_ids[[r, c]] = i64::from(id);
                 attention[[r, c]] = 1;
@@ -238,9 +268,7 @@ impl OnnxModel {
                 marker_pos[[r, c]] = m as i64;
                 marker_mask[[r, c]] = true;
             }
-            qtype.push(q.qtype.index() as i64);
         }
-        let input_tokens = encoded.iter().map(|e| e.ids.len()).sum();
 
         let mut session = self.session.lock().expect("session mutex poisoned");
         let outputs = session.run(ort::inputs![
@@ -248,24 +276,17 @@ impl OnnxModel {
             "attention_mask" => Tensor::from_array(attention)?,
             "marker_pos" => Tensor::from_array(marker_pos)?,
             "marker_mask" => Tensor::from_array(marker_mask)?,
-            "qtype" => Tensor::from_array(([n], qtype))?,
+            "qtype" => Tensor::from_array(([n], qtypes.to_vec()))?,
         ])?;
         let logits = outputs["logits"].try_extract_array::<f32>()?;
         let act = outputs["act_logits"].try_extract_array::<f32>()?;
-
-        let questions = encoded
+        Ok(encoded
             .iter()
             .enumerate()
             .map(|(r, e)| QuestionOutput {
                 logits: (0..e.markers.len()).map(|c| logits[[r, c]]).collect(),
                 act_logits: Some(act.slice(ndarray::s![r, ..]).to_vec()),
             })
-            .collect();
-        Ok(Output {
-            questions,
-            input_tokens,
-            state_tokens: encoding.state_tokens,
-            state_truncated: encoded.iter().any(|e| e.state_truncated),
-        })
+            .collect())
     }
 }
