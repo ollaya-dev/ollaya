@@ -321,7 +321,18 @@ main() {
     fi
     case ":${PATH:-}:" in
         *":$BINDIR:"*) ;;
-        *) warn "$BINDIR is not on your PATH. Add it, for example: echo 'export PATH=\"$BINDIR:\$PATH\"' >>~/.profile" ;;
+        *)
+            # The file the user's login shell reads, so the hint works when pasted as is.
+            case ${SHELL:-} in
+                */zsh) rc="${HOME:-}/.zshrc" ;;
+                */bash) if [ "$OS" = Darwin ]; then rc="${HOME:-}/.bash_profile"; else rc="${HOME:-}/.bashrc"; fi ;;
+                *) rc="${HOME:-}/.profile" ;;
+            esac
+            case ${SHELL:-} in
+                */fish) warn "$BINDIR is not on your PATH. Add it: fish_add_path $BINDIR" ;;
+                *) warn "$BINDIR is not on your PATH. Add it: echo 'export PATH=\"$BINDIR:\$PATH\"' >>$rc" ;;
+            esac
+            ;;
     esac
     found=$(command -v ollaya 2>/dev/null || :)
     if [ -n "$found" ] && [ "$found" != "$BINDIR/ollaya" ]; then
@@ -422,8 +433,8 @@ EOF
         status "The Ollaya API is available at http://127.0.0.1:$PORT (systemd service: ollaya)"
         status "Get started:  ollaya run laya"
     else
-        status "Start the server:  ollaya serve"
-        status "Then, in another terminal:  ollaya run laya"
+        # The CLI starts the server in the background when none is running.
+        status "Get started:  ollaya run laya"
     fi
 }
 
