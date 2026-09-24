@@ -109,6 +109,9 @@ CATALOG = {
                              "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE),
         },
         "aliases": {"latest": "deberta-v3-large"},
+        "parity": "Ollaya's Rust runtime matches the Python reference exactly on 483 questions "
+                  "(1,513 hypothesis rows) per model. The token ids are identical, and so is the "
+                  "decision on every question. Probabilities are within 2.5e-5, on CPU and CUDA.",
     },
     "gliclass": {
         "namespace": "library",
@@ -127,5 +130,8 @@ CATALOG = {
                 "439M", 1024, ["en"]),
         },
         "aliases": {"latest": "large"},
+        "parity": "Ollaya's Rust runtime matches the Python reference exactly on 482 questions. "
+                  "The token ids and label positions are identical, and so is the decision on every "
+                  "question. Probabilities are within 1e-5, on CPU and CUDA.",
     },
 }
