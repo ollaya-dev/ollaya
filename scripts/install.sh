@@ -339,6 +339,25 @@ main() {
         warn "another ollaya at $found comes first on your PATH"
     fi
 
+    # A server that the CLI started in the background keeps running the old binary after an
+    # upgrade. Stop this user's one; the next ollaya command starts the new version. (The systemd
+    # service, which runs as another user, is restarted below.)
+    if available pgrep; then
+        old=$(pgrep -u "$(id -u)" -f "^$BINDIR/ollaya serve\$" 2>/dev/null || :)
+        if [ -n "$old" ]; then
+            for pid in $old; do kill "$pid" 2>/dev/null || :; done
+            # It finishes open requests and stops its runners: up to 5 s.
+            i=0
+            for pid in $old; do
+                while [ $i -lt 10 ] && kill -0 "$pid" 2>/dev/null; do
+                    i=$((i + 1))
+                    sleep 1
+                done
+            done
+            status "Stopped the running Ollaya server; the next ollaya command starts version $VERSION"
+        fi
+    fi
+
     # --- systemd service -------------------------------------------------------------------
 
     systemd_unit() {
