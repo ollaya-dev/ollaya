@@ -9,7 +9,9 @@
 #   ollaya-linux-amd64-cuda.tar.zst  lib/ollaya/cuda_v13/ (ORT CUDA provider + NVIDIA CUDA/cuDNN
 #                                    libraries) + share/doc/ollaya/cuda_v13/ (notices, NVIDIA licenses)
 #   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
-#   sha256sum.txt                    over every archive in --out
+#   ollaya-linux-amd64-cuda.sha256   sha256 of every library in the CUDA archive (FILES.sha256),
+#                                    which install.sh uses to skip an unchanged CUDA download
+#   sha256sum.txt                    over every archive in --out, and the file above
 #
 # Options:
 #   --platform P  linux-amd64 | linux-arm64 | darwin-arm64 (default: this host)
@@ -84,7 +86,7 @@ write_checksums() {
         export LC_ALL
         : >sha256sum.txt.tmp
         for f in *; do
-            case $f in *.tar.zst | *.tgz) [ -f "$f" ] || continue ;; *) continue ;; esac
+            case $f in *.tar.zst | *.tgz | *-cuda.sha256) [ -f "$f" ] || continue ;; *) continue ;; esac
             printf '%s  %s\n' "$(sha256_of "$f")" "$f" >>sha256sum.txt.tmp
         done
         [ -s sha256sum.txt.tmp ] || { rm -f sha256sum.txt.tmp; die "no archives in $dir"; }
@@ -355,6 +357,18 @@ stage_cuda() {
         [ -f "$lib/$f" ] || die "$f not found in the NVIDIA wheels"
     done
     ls "$lib"/libnvrtc-builtins.so.13.* >/dev/null 2>&1 || die "libnvrtc-builtins not found"
+    # FILES.sha256 fingerprints the libraries themselves (the archive's own checksum changes with
+    # every release's timestamps). install.sh compares it with the installed copy and skips the
+    # ~1 GB download when nothing changed.
+    (
+        cd "$lib"
+        LC_ALL=C
+        export LC_ALL
+        for f in *; do
+            [ "$f" = FILES.sha256 ] || printf '%s  %s\n' "$(sha256_of "$f")" "$f"
+        done
+    ) >"$WORK/FILES.sha256"
+    mv "$WORK/FILES.sha256" "$lib/FILES.sha256"
 
     cp "$CACHE/onnxruntime-$ORT_VERSION/ThirdPartyNotices.txt" "$doc/onnxruntime-ThirdPartyNotices.txt"
     {
@@ -431,5 +445,8 @@ if [ -n "$STAGE" ]; then
 fi
 
 [ "$BASE" = 0 ] || archive "ollaya-$PLATFORM" bin share
-[ "$CUDA" = 0 ] || archive "ollaya-$PLATFORM-cuda" lib share
+if [ "$CUDA" = 1 ]; then
+    archive "ollaya-$PLATFORM-cuda" lib share
+    cp "$TREES/ollaya-$PLATFORM-cuda/lib/ollaya/cuda_v13/FILES.sha256" "$OUT/ollaya-$PLATFORM-cuda.sha256"
+fi
 write_checksums "$OUT"

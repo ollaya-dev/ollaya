@@ -187,6 +187,16 @@ main() {
     download "$BASE_URL/sha256sum.txt" "$TMP/sha256sum.txt" ||
         error "could not download $BASE_URL/sha256sum.txt (is $VERSION a published release?)"
 
+    # cuda_intact DIR: every library listed in DIR/FILES.sha256 is there with that checksum.
+    cuda_intact() {
+        (
+            cd "$1" || exit 1
+            while read -r sum file; do
+                [ -f "$file" ] && [ "$(sha256 "$file")" = "$sum" ] || exit 1
+            done <FILES.sha256
+        )
+    }
+
     # fetch_verified FILE: download FILE from the release and check it against sha256sum.txt.
     fetch_verified() {
         want=$(awk -v f="$1" '$2 == f || $2 == "*" f { print $1; exit }' "$TMP/sha256sum.txt")
@@ -269,10 +279,23 @@ main() {
     fi
     fetch_verified "$BASE_ARCHIVE"
     CUDA_ARCHIVE=
+    CUDA_KEEP=false
     if $WANT_CUDA; then
-        CUDA_ARCHIVE=ollaya-$PLATFORM-cuda.tar.zst
-        status "Downloading the NVIDIA CUDA libraries (about 1 GB)"
-        fetch_verified "$CUDA_ARCHIVE"
+        # The release lists the sha256 of every CUDA library (ollaya-<platform>-cuda.sha256, also
+        # installed as FILES.sha256). When the installed libraries match it, keep them instead of
+        # downloading the same ~1 GB again. Releases before 0.4.0 have no such file.
+        CUDA_DIR=$PREFIX/lib/ollaya/cuda_v13
+        CUDA_FILES=ollaya-$PLATFORM-cuda.sha256
+        if [ -f "$CUDA_DIR/FILES.sha256" ] && grep -q " $CUDA_FILES\$" "$TMP/sha256sum.txt" &&
+            (fetch_verified "$CUDA_FILES") >/dev/null 2>&1 && cmp -s "$TMP/$CUDA_FILES" "$CUDA_DIR/FILES.sha256" &&
+            cuda_intact "$CUDA_DIR"; then
+            CUDA_KEEP=true
+            status "The NVIDIA CUDA libraries are unchanged; keeping the installed copy"
+        else
+            CUDA_ARCHIVE=ollaya-$PLATFORM-cuda.tar.zst
+            status "Downloading the NVIDIA CUDA libraries (about 1 GB)"
+            fetch_verified "$CUDA_ARCHIVE"
+        fi
     fi
 
     # --- install ---------------------------------------------------------------------------
@@ -300,13 +323,20 @@ main() {
     $SUDO mkdir -p "$BINDIR" "$PREFIX/share/doc"
     $SUDO chmod 0755 "$STAGE/bin/ollaya"
     $SUDO mv -f "$STAGE/bin/ollaya" "$BINDIR/ollaya"
+    # Kept CUDA libraries keep their notices too (the base archive replaces share/doc/ollaya).
+    if $CUDA_KEEP && [ -d "$PREFIX/share/doc/ollaya/cuda_v13" ] && [ ! -e "$STAGE/share/doc/ollaya/cuda_v13" ]; then
+        $SUDO mv "$PREFIX/share/doc/ollaya/cuda_v13" "$STAGE/share/doc/ollaya/cuda_v13"
+    fi
     $SUDO rm -rf "$PREFIX/share/doc/ollaya"
     $SUDO mv "$STAGE/share/doc/ollaya" "$PREFIX/share/doc/ollaya"
-    # Remove GPU libraries from an earlier install, so they never outlive the binary they match.
-    $SUDO rm -rf "$PREFIX/lib/ollaya"
-    if [ -d "$STAGE/lib/ollaya" ]; then
-        $SUDO mkdir -p "$PREFIX/lib"
-        $SUDO mv "$STAGE/lib/ollaya" "$PREFIX/lib/ollaya"
+    # Remove GPU libraries from an earlier install, so they never outlive the binary they match
+    # (unless they are byte for byte the ones this release ships).
+    if ! $CUDA_KEEP; then
+        $SUDO rm -rf "$PREFIX/lib/ollaya"
+        if [ -d "$STAGE/lib/ollaya" ]; then
+            $SUDO mkdir -p "$PREFIX/lib"
+            $SUDO mv "$STAGE/lib/ollaya" "$PREFIX/lib/ollaya"
+        fi
     fi
     $SUDO rm -rf "$STAGE"
     STAGE=
@@ -443,7 +473,7 @@ EOF
     # --- summary ---------------------------------------------------------------------------
 
     status "Installed Ollaya $VERSION: $BINDIR/ollaya"
-    if [ -n "$CUDA_ARCHIVE" ]; then
+    if [ -n "$CUDA_ARCHIVE" ] || $CUDA_KEEP; then
         status "NVIDIA GPU support: $PREFIX/lib/ollaya/cuda_v13${CUDA_DRIVER:+ (driver supports CUDA $CUDA_DRIVER)}"
     elif [ "$NVIDIA_STATE" = none ] && [ "$OS" = Linux ]; then
         status "No NVIDIA GPU found; Ollaya will run on the CPU"

@@ -22,6 +22,7 @@ Each release on GitHub (`ollaya-dev/ollaya`, set with `OLLAYA_REPO`) carries:
 |---|---|---|
 | `ollaya-linux-amd64.tar.zst` | `bin/ollaya`, `share/doc/ollaya/` | 7.7 MiB* |
 | `ollaya-linux-amd64-cuda.tar.zst` | `lib/ollaya/cuda_v13/` (20 libraries), `share/doc/ollaya/cuda_v13/` | 1092 MiB (2069 MiB unpacked) |
+| `ollaya-linux-amd64-cuda.sha256` | The sha256 of every library in `lib/ollaya/cuda_v13/`, also installed there as `FILES.sha256` | 2 KiB |
 | `ollaya-linux-arm64.tar.zst` | `bin/ollaya`, `share/doc/ollaya/` (CPU only) | |
 | `ollaya-darwin-arm64.tar.zst` | `bin/ollaya`, `share/doc/ollaya/` (CPU and CoreML) | |
 | `ollaya-darwin-arm64.tgz` | The same as the darwin `.tar.zst`. Stock macOS has no `zstd`, so `install.sh` falls back to it | |
@@ -41,6 +42,14 @@ Notes on the archives:
 `share/doc/ollaya/` holds `LICENSE`, `THIRD_PARTY_NOTICES` and `onnxruntime-ThirdPartyNotices.txt`.
 The CUDA archive adds `share/doc/ollaya/cuda_v13/`, with its own `THIRD_PARTY_NOTICES` and
 `licenses/`, the license text from each NVIDIA wheel.
+
+### Upgrades keep unchanged CUDA libraries
+
+The CUDA archive's own sha256 changes with every release (its entries carry the release's
+timestamp), but its libraries usually don't. So `install.sh` compares the release's
+`ollaya-linux-amd64-cuda.sha256` with the installed `FILES.sha256`, checks every installed library
+against it, and keeps the installed copy when all of them match. Otherwise, and for releases
+before 0.4.0, which have no such file, it downloads the archive as before.
 
 ### What `lib/ollaya/cuda_v13` contains
 
