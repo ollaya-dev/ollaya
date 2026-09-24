@@ -18,12 +18,13 @@ Ollaya is a single binary: the CLI, the server and the model runners. If you hav
 | `ollaya ps` | List models loaded in memory |
 | `ollaya show MODEL` | Show a model's details, capabilities and license |
 | `ollaya stop MODEL` | Unload a running model |
+| `ollaya stop` | Stop the server that the CLI started |
 | `ollaya rm MODEL…` | Remove one or more models |
 | `ollaya cp SOURCE DESTINATION` | Copy a model under a new name |
 | `ollaya create NAME [-f Modelfile]` | Create a model from a [Modelfile](/docs/modelfile) |
 | `ollaya -v` | Print the server's (and the client's) version |
 
-Every command except `serve` talks to the server at `OLLAYA_HOST`. When nothing answers there and the address is local, the CLI starts `ollaya serve` in the background, logging to `~/.ollaya/logs/server.log`.
+Every command except `serve` talks to the server at `OLLAYA_HOST`. When nothing answers there and the address is local, the CLI (except `ollaya stop` without a model) starts `ollaya serve` in the background, logging to `~/.ollaya/logs/server.log`.
 
 ## Model names
 
@@ -81,6 +82,8 @@ Starts the server that the CLI and your applications talk to. It serves the nati
 ollaya serve
 ```
 
+You rarely need it: the other commands start the server in the background when it is not running. If a server already runs at `OLLAYA_HOST`, `ollaya serve` says so and exits; stop that one with `ollaya stop` first to run the server in the foreground.
+
 It is configured with environment variables:
 
 | Variable | Default | Effect |
@@ -130,7 +133,9 @@ Prints a model's architecture, parameters, context length, precisions, languages
 
 ## ollaya stop
 
-Unloads a running model once its in-flight requests finish, instead of waiting for the keep-alive to run out.
+`ollaya stop MODEL` unloads a running model once its in-flight requests finish, instead of waiting for the keep-alive to run out.
+
+`ollaya stop` without a model stops the server at `OLLAYA_HOST`, which unloads every model. It stops only a server that you started, with `ollaya serve` or by running another command. It never stops another user's server, such as the Linux systemd service; stop that with `sudo systemctl stop ollaya`.
 
 ## ollaya rm and ollaya cp
 

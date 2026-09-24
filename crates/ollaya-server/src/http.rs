@@ -969,9 +969,13 @@ pub async fn shutdown_signal() {
 
 /// `ollaya serve`: bind `OLLAYA_HOST`, serve until Ctrl-C or SIGTERM, stop every runner.
 pub async fn serve(config: ServerConfig) -> Result<(), ServeError> {
-    let host = config.host.clone();
+    let listeners = Listeners::bind(&config.host).await?;
+    serve_bound(config, listeners).await
+}
+
+/// [`serve`] on sockets the caller has already bound with [`Listeners::bind`].
+pub async fn serve_bound(config: ServerConfig, listeners: Listeners) -> Result<(), ServeError> {
     let state = build(config, RunnerLaunch::current()?)?;
-    let listeners = Listeners::bind(&host).await?;
     let local = listeners
         .local_addrs()
         .iter()

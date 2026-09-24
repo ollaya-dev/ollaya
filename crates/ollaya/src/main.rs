@@ -73,8 +73,8 @@ enum Command {
     },
     /// Copy a model
     Cp { source: String, destination: String },
-    /// Stop a running model
-    Stop { model: String },
+    /// Stop a running model, or without one the server (which unloads every model)
+    Stop { model: Option<String> },
     /// Create a model from a Modelfile
     Create {
         name: String,
@@ -165,8 +165,10 @@ fn main() -> Result<()> {
         Command::Serve => {
             logging("info");
             let config = ollaya_server::config::ServerConfig::from_env()?;
-            rt.block_on(ollaya_server::http::serve(config))?;
+            rt.block_on(daemon::serve(config))?;
         }
+        // Without a model, `stop` must not start a server just to stop it.
+        Command::Stop { model: None } => rt.block_on(daemon::stop_server())?,
         Command::Run(args) => run::run(&rt, args)?,
         command => rt.block_on(client_command(command))?,
     }
@@ -199,9 +201,12 @@ async fn client_command(command: Command) -> Result<()> {
             source,
             destination,
         } => commands::cp(&client, &source, &destination).await,
-        Command::Stop { model } => commands::stop(&client, &model).await,
+        Command::Stop { model: Some(model) } => commands::stop(&client, &model).await,
         Command::Create { name, file } => commands::create(&client, &name, &file).await,
-        Command::Serve | Command::Run(_) | Command::Runner { .. } => {
+        Command::Serve
+        | Command::Run(_)
+        | Command::Runner { .. }
+        | Command::Stop { model: None } => {
             unreachable!("handled in main")
         }
     }
@@ -287,7 +292,11 @@ mod tests {
         ));
         assert!(matches!(
             parse(&["stop", "laya"]).command,
-            Some(Command::Stop { .. })
+            Some(Command::Stop { model: Some(m) }) if m == "laya"
+        ));
+        assert!(matches!(
+            parse(&["stop"]).command,
+            Some(Command::Stop { model: None })
         ));
         assert!(matches!(
             parse(&["show", "laya", "--license"]).command,
