@@ -36,14 +36,14 @@ def _laya(sub, description, params, ctx, languages):
     }
 
 
-def _wl(slug, repo, commit, description, params, ctx, languages, license=None, license_text=None):
+def _wl(slug, repo, commit, description, params, ctx, languages, license=None, license_text=None, wl_dir=None):
     """A model converted under `families/`, whose weightless graph (`out/<slug>-wl`) already
     references the upstream checkpoint by its file name."""
     return {
         "kind": "wl",
         "repo": repo,
         "commit": commit,
-        "wl_dir": os.path.join(OUT, slug + "-wl"),
+        "wl_dir": wl_dir or os.path.join(OUT, slug + "-wl"),
         "weights": {"model.safetensors": "model.safetensors"},  # graph location -> upstream path
         "tokenizer": "tokenizer.json",
         "parameter_size": params,
@@ -133,5 +133,27 @@ CATALOG = {
         "parity": "Ollaya's Rust runtime matches the Python reference exactly on 482 questions. "
                   "The token ids and label positions are identical, and so is the decision on every "
                   "question. Probabilities are within 1e-5, on CPU and CUDA.",
+    },
+    "decider": {
+        "namespace": "library",
+        "model": "decider",
+        "family": "decider",
+        "author": "Mapika",
+        "license": "Apache-2.0",
+        "license_text": "decider by Mapika (https://huggingface.co/Mapika/decider-2b)\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        "tags": {
+            "2b": _wl("decider-2b", "Mapika/decider-2b", "9839cc9d908be16c5988c0d041034b5fdf82c7a2",
+                      "Decoder decision model (Qwen3.5-2B base): reads option-letter logits at an answer slot. "
+                      "Highest accuracy of the open models Ollaya ships.",
+                      "1.9B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-2b")),
+            "0.8b": _wl("decider-0.8b", "Mapika/decider-0.8b", "a0a01d6f8135298f400a8c856b355793012ae971",
+                        "Smaller decider (Qwen3.5-0.8B base): faster, less accurate.",
+                        "0.75B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-0.8b")),
+        },
+        "aliases": {"latest": "2b"},
+        "parity": "Ollaya's Rust runtime matches the Python reference exactly on 479 questions (902 rows) "
+                  "per model. The token ids and answer-slot positions are identical, and so is the "
+                  "decision on every question. Probabilities are within 6.3e-6, on CPU and CUDA.",
     },
 }

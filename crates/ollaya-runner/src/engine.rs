@@ -51,7 +51,12 @@ pub fn batches(lens: &[usize], budget: usize, max_rows: usize) -> Vec<std::ops::
 }
 
 /// Layouts this build can run.
-pub const LAYOUTS: &[&str] = &["laya-markers-v1", "gliclass-uni-v1", "nli-pairs-v1"];
+pub const LAYOUTS: &[&str] = &[
+    "laya-markers-v1",
+    "gliclass-uni-v1",
+    "nli-pairs-v1",
+    "decider-slots-v1",
+];
 
 /// The layout a `decision` layer declares.
 pub fn layout_of(decision: &Path) -> Result<String, Error> {
@@ -77,6 +82,9 @@ pub fn load(
             files, device, threads,
         )?)),
         "nli-pairs-v1" => Ok(Box::new(crate::nli::NliModel::load_files(
+            files, device, threads,
+        )?)),
+        "decider-slots-v1" => Ok(Box::new(crate::decider::DeciderModel::load_files(
             files, device, threads,
         )?)),
         other => Err(Error::Model(format!(

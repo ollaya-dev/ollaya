@@ -17,7 +17,7 @@ use ollaya_decision::{
     Calibration, CalibrationFile, LayaLayout, Questions, SpecialTokens, TokenEncoder,
 };
 use ort::session::Session;
-use ort::session::builder::GraphOptimizationLevel;
+use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
 use ort::value::Tensor;
 use serde::Deserialize;
 use serde_json::Value;
@@ -83,6 +83,17 @@ pub fn session(
     device: Device,
     intra_threads: Option<usize>,
 ) -> Result<Session, Error> {
+    session_with(graph, device, intra_threads, Ok)
+}
+
+/// [`session`], with `configure` applied to the builder just before the graph loads: session
+/// options that one family's graphs need.
+pub fn session_with(
+    graph: &Path,
+    device: Device,
+    intra_threads: Option<usize>,
+    configure: impl FnOnce(SessionBuilder) -> Result<SessionBuilder, Error>,
+) -> Result<Session, Error> {
     let mut builder =
         Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
     if let Some(n) = intra_threads {
@@ -91,7 +102,7 @@ pub fn session(
     if let Device::Cuda(id) = device {
         builder = with_cuda(builder, id)?;
     }
-    Ok(builder.commit_from_file(graph)?)
+    Ok(configure(builder)?.commit_from_file(graph)?)
 }
 
 #[cfg(feature = "cuda")]

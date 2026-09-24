@@ -58,11 +58,25 @@ const overlays: Record<string, ModelOverlay> = {
     publisher: { name: 'Moritz Laurer', url: 'https://huggingface.co/MoritzLaurer' },
     capabilities: ['zero-shot'],
     keywords: ['nli', 'entailment', 'zero-shot', 'deberta', 'modernbert', 'classification', 'classifier', 'typesafe', 'jev'],
-    rank: 2,
+    rank: 3,
     tags: {
       latest: { summary: 'Same as nli:deberta-v3-large.' },
       'deberta-v3-large': { summary: 'DeBERTa-v3-large, MIT. Best accuracy in our tests (0.548 on typed decisions).' },
       'modernbert-large': { summary: 'ModernBERT-large, Apache-2.0. Faster, slightly less accurate (0.515).' },
+    },
+  },
+  decider: {
+    title: 'decider',
+    description:
+      'Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass. The most accurate open decision model Ollaya ships.',
+    publisher: { name: 'Mapika', url: 'https://huggingface.co/Mapika' },
+    capabilities: ['decision', 'long-context'],
+    keywords: ['decider', 'decision', 'qwen', 'llm', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 2,
+    tags: {
+      latest: { summary: 'Same as decider:2b.' },
+      '2b': { summary: 'Qwen3.5-2B base, 0.591 on typed decisions: the most accurate model here.' },
+      '0.8b': { summary: 'Qwen3.5-0.8B base, 0.506 on typed decisions: smaller and faster.' },
     },
   },
   gliclass: {
@@ -72,7 +86,7 @@ const overlays: Record<string, ModelOverlay> = {
     publisher: { name: 'Knowledgator', url: 'https://huggingface.co/knowledgator' },
     capabilities: ['zero-shot'],
     keywords: ['gliclass', 'zero-shot', 'classification', 'classifier', 'labels', 'typesafe', 'jev'],
-    rank: 3,
+    rank: 4,
     tags: {
       latest: { summary: 'Same as gliclass:large.' },
       large: { summary: 'GLiClass instruct large v1.0 (DeBERTa-v3-large backbone), Apache-2.0.' },

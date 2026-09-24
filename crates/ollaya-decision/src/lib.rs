@@ -7,6 +7,7 @@
 
 pub mod answer;
 pub mod calibration;
+pub mod decider;
 pub mod gliclass;
 pub mod layout;
 pub mod nli;
