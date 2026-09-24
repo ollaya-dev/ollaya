@@ -1520,7 +1520,7 @@ These are the variables that change API behaviour.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `OLLAYA_HOST` | `127.0.0.1:11435` | Server bind address; the client's target. `http://` is assumed if no scheme is given. A missing port means `11435` for `http` and `443` for `https`; an empty host means `127.0.0.1`. A path is kept as a prefix. |
+| `OLLAYA_HOST` | `127.0.0.1:11435` | Server bind address; the client's target. `http://` is assumed if no scheme is given. A missing port means `11435` for `http` and `443` for `https`; an empty host means `127.0.0.1`. A path is kept as a prefix. With `127.0.0.1` or `localhost` the server also listens on `[::1]` at the same port, because Windows programs reach a WSL server at `localhost` over IPv6 first. |
 | `OLLAYA_API_KEY` | unset | Require `Authorization: Bearer <key>` ([§14](#14-security)); the client sends it |
 | `OLLAYA_ORIGINS` | unset | Extra allowed browser origins |
 | `OLLAYA_KEEP_ALIVE` | `5m` | Default `keep_alive` ([§6](#6-keep_alive)) |

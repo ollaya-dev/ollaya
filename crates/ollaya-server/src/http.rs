@@ -8,10 +8,11 @@
 use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::future::{Future, IntoFuture};
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::Poll;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, Bytes};
@@ -24,13 +25,14 @@ use axum::{Json, Router};
 use futures_util::StreamExt;
 use indexmap::IndexMap;
 use ollaya_api::error::{Loc, ValidationIssue, body_loc};
+use ollaya_api::host::Host;
 use ollaya_api::{
     DecideResponse, DoneReason, ErrorBody, ErrorCode, Extra, KeepAlive, ModelList,
     ProgressResponse, PsResponse, Question, Questions, TagsResponse, Usage, VersionResponse,
     validate,
 };
 use ollaya_registry::{ModelName, Store};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::config::{ServerConfig, VERSION};
@@ -842,15 +844,88 @@ pub fn build(config: ServerConfig, runner: RunnerLaunch) -> Result<Arc<AppState>
     Ok(AppState::new(ollaya, config))
 }
 
+/// The daemon's sockets: the bound address, plus `[::1]` next to a `127.0.0.1` or `localhost`
+/// host (see [`Listeners::bind`]).
+pub struct Listeners(Vec<TcpListener>);
+
+impl Listeners {
+    /// Binds `host`. A loopback host (`127.0.0.1`, `localhost`) also gets `[::1]` on the same
+    /// port when the system has IPv6. Windows resolves `localhost` to `::1` first, and WSL only
+    /// forwards it to a Linux process that listens there; without it, every new connection from a
+    /// Windows program to `localhost:11435` waits about 200 ms for the fallback to IPv4.
+    pub async fn bind(host: &Host) -> std::io::Result<Listeners> {
+        if !(host.host.eq_ignore_ascii_case("localhost") || host.host == "127.0.0.1") {
+            return Ok(Listeners(vec![TcpListener::bind(host.bind_addr()).await?]));
+        }
+        let v4 = TcpListener::bind(("127.0.0.1", host.port)).await?;
+        let port = v4.local_addr()?.port();
+        let mut all = vec![v4];
+        match TcpListener::bind(("::1", port)).await {
+            Ok(v6) => all.push(v6),
+            Err(e) => tracing::debug!("not listening on [::1]:{port}: {e}"),
+        }
+        Ok(Listeners(all))
+    }
+
+    pub fn local_addrs(&self) -> Vec<SocketAddr> {
+        self.0.iter().filter_map(|l| l.local_addr().ok()).collect()
+    }
+}
+
+impl From<TcpListener> for Listeners {
+    fn from(listener: TcpListener) -> Listeners {
+        Listeners(vec![listener])
+    }
+}
+
+impl axum::serve::Listener for Listeners {
+    type Io = TcpStream;
+    type Addr = SocketAddr;
+
+    async fn accept(&mut self) -> (TcpStream, SocketAddr) {
+        loop {
+            let accepted = std::future::poll_fn(|cx| {
+                for listener in &self.0 {
+                    if let Poll::Ready(r) = listener.poll_accept(cx) {
+                        return Poll::Ready(r);
+                    }
+                }
+                Poll::Pending
+            })
+            .await;
+            match accepted {
+                Ok(conn) => return conn,
+                // The peer gave up before we accepted: nothing to do.
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        std::io::ErrorKind::ConnectionRefused
+                            | std::io::ErrorKind::ConnectionAborted
+                            | std::io::ErrorKind::ConnectionReset
+                    ) => {}
+                // Out of file descriptors and the like, as axum handles it: wait for some to close.
+                Err(e) => {
+                    tracing::error!("accept error: {e}");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+    }
+
+    fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.0[0].local_addr()
+    }
+}
+
 /// Serve until `shutdown` resolves, then give open connections 5 s and stop every runner.
 pub async fn serve_on(
-    listener: TcpListener,
+    listeners: impl Into<Listeners>,
     state: Arc<AppState>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
     let scheduler = state.ollaya.scheduler.clone();
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-    let server = axum::serve(listener, router(state))
+    let server = axum::serve(listeners.into(), router(state))
         .with_graceful_shutdown(async {
             let _ = stop_rx.await;
         })
@@ -894,10 +969,15 @@ pub async fn shutdown_signal() {
 
 /// `ollaya serve`: bind `OLLAYA_HOST`, serve until Ctrl-C or SIGTERM, stop every runner.
 pub async fn serve(config: ServerConfig) -> Result<(), ServeError> {
-    let addr = config.host.bind_addr();
+    let host = config.host.clone();
     let state = build(config, RunnerLaunch::current()?)?;
-    let listener = TcpListener::bind(&addr).await?;
-    let local = listener.local_addr()?;
+    let listeners = Listeners::bind(&host).await?;
+    let local = listeners
+        .local_addrs()
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
     if !state.loopback && state.config.api_key.is_none() {
         tracing::warn!(
             "listening on {local}, which is reachable from other machines, without OLLAYA_API_KEY: \
@@ -906,13 +986,35 @@ pub async fn serve(config: ServerConfig) -> Result<(), ServeError> {
     }
     tracing::info!(address = %local, version = VERSION, models = %state.config.models.display(),
         "Ollaya is running");
-    serve_on(listener, state, shutdown_signal()).await?;
+    serve_on(listeners, state, shutdown_signal()).await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn loopback_hosts_listen_on_both_loopbacks() {
+        let has_v6 = TcpListener::bind("[::1]:0").await.is_ok();
+        for name in ["127.0.0.1:0", "localhost:0"] {
+            let listeners = Listeners::bind(&Host::parse(name).unwrap()).await.unwrap();
+            let addrs = listeners.local_addrs();
+            assert!(
+                addrs[0].ip().is_loopback() && addrs[0].is_ipv4(),
+                "{name}: {addrs:?}"
+            );
+            if has_v6 {
+                assert_eq!(addrs.len(), 2, "{name}: {addrs:?}");
+                assert!(addrs[1].is_ipv6() && addrs[1].ip().is_loopback());
+                assert_eq!(addrs[0].port(), addrs[1].port());
+            }
+        }
+        let listeners = Listeners::bind(&Host::parse("0.0.0.0:0").unwrap())
+            .await
+            .unwrap();
+        assert_eq!(listeners.local_addrs().len(), 1);
+    }
 
     #[test]
     fn globs() {

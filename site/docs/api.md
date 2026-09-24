@@ -434,7 +434,7 @@ The server binds to `127.0.0.1:11435` and, like Ollama, trusts local callers. Bi
 
 | Variable | Default | Effect |
 |---|---|---|
-| `OLLAYA_HOST` | `127.0.0.1:11435` | Bind address; the client's target |
+| `OLLAYA_HOST` | `127.0.0.1:11435` | Bind address; the client's target. A loopback address also listens on `[::1]`, so Windows programs reach a server in WSL at `localhost` without delay |
 | `OLLAYA_API_KEY` | unset | Require `Authorization: Bearer <key>` |
 | `OLLAYA_ORIGINS` | unset | Extra allowed browser origins |
 | `OLLAYA_KEEP_ALIVE` | `5m` | Default `keep_alive` |
