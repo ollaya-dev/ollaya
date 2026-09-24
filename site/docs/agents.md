@@ -82,7 +82,7 @@ CLI or HTTP.
 Install it into a project (or add `-g` for every project):
 
 ```shell
-npx skills add ollaya-dev/ollaya
+npx skills add ollaya-dev/ollaya --skill ollaya-decisions
 ```
 
 It also ships with every release, in `share/ollaya/skills/ollaya-decisions/` next to the binary

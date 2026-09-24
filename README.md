@@ -53,7 +53,7 @@ churn_risk        no           ██████████░░░░░░ 
 - **For agents.** `ollaya mcp` serves the models to Claude Code, Claude Desktop, Cursor and other
   MCP clients (`claude mcp add ollaya -- ollaya mcp`), and the
   [`ollaya-decisions` skill](skills/ollaya-decisions/SKILL.md) teaches agents when and how to use
-  them (`npx skills add ollaya-dev/ollaya`).
+  them (`npx skills add ollaya-dev/ollaya --skill ollaya-decisions`).
 - **Routers.** `laya` detects the script and language of each request, then answers with
   `laya:en` or `laya:multilingual`.
 - **Modelfiles.** You can bake a question set into your own model:
