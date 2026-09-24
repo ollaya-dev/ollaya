@@ -33,12 +33,15 @@ export function LogoMark({ class: cls = 'size-8', label }: { class?: string; lab
   )
 }
 
-/** Mark + lowercase wordmark. */
+/**
+ * Mark + lowercase wordmark. The wordmark is the flex baseline and the mark is centred on its
+ * 28px line, so the header can baseline-align the nav links with the wordmark.
+ */
 export function Logo() {
   return (
-    <span class="inline-flex items-center gap-2 text-fg">
-      <LogoMark class="size-7" />
-      <span class="text-lg font-medium tracking-tight">ollaya</span>
+    <span class="flex items-baseline gap-2 text-fg">
+      <LogoMark class="size-7 self-center" />
+      <span class="text-lg leading-7 font-medium tracking-tight">ollaya</span>
     </span>
   )
 }

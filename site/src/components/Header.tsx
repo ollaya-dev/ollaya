@@ -101,11 +101,11 @@ export function Header({ active, hideSearch }: { active?: NavKey; hideSearch?: b
   return (
     <header class="sticky top-0 z-40 bg-canvas">
       <nav aria-label="Main" class="flex h-16 w-full items-center gap-4 px-4 md:gap-6 md:px-6">
-        <div class="flex items-center gap-6 lg:flex-1 lg:basis-0">
-          <a href="/" class="rounded-md" aria-label="Ollaya home">
+        <div class="flex items-baseline gap-6 lg:flex-1 lg:basis-0">
+          <a href="/" class="flex rounded-md" aria-label="Ollaya home">
             <Logo />
           </a>
-          <ul class="hidden items-center gap-6 text-sm md:flex">
+          <ul class="hidden items-baseline gap-6 text-sm md:flex">
             {links.map((l) => (
               <li>
                 <a
