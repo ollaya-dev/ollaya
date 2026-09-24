@@ -1,6 +1,21 @@
-# ollaya
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="site/public/static/logo-white.svg">
+    <img src="site/public/static/logo.svg" alt="" width="88">
+  </picture>
+</p>
 
-**Run open decision models locally, the way Ollama runs LLMs.**
+<h1 align="center">ollaya</h1>
+
+<p align="center"><strong>Run open decision models locally, the way Ollama runs LLMs.</strong></p>
+
+<p align="center">
+  <a href="https://ollaya.cobanov.dev">Website</a> ·
+  <a href="https://ollaya.cobanov.dev/search">Models</a> ·
+  <a href="https://ollaya.cobanov.dev/docs">Docs</a> ·
+  <a href="https://github.com/ollaya-dev/ollaya/releases">Releases</a> ·
+  <a href="https://huggingface.co/ollaya-dev">Hugging Face</a>
+</p>
 
 A decision model reads a *state* (a message, an email, a ticket, any JSON) plus typed questions
 (`choice`, `score`, `noul`) and returns calibrated probabilities in a single forward pass, in
@@ -55,12 +70,16 @@ churn_risk        no           ██████████░░░░░░ 
 | Model | What it is |
 |---|---|
 | `laya` | Router: picks `laya:en` or `laya:multilingual` by language |
-| `laya:en` | English decision model (ModernBERT-large, 421M) |
+| `laya:en` | English decision model (ModernBERT-large, 421M). The fastest: 8–10 ms for five questions on an RTX 4090 |
 | `laya:multilingual` | 100+ languages (mmBERT-base, 322M) |
 | `laya:typed-decisions` | Fine-tuned on the typed-decisions workflows |
+| `decider`, `decider:0.8b` | Mapika's Qwen3.5 decoders, 2B and 0.8B. The most accurate: 0.591 on typed-decisions |
+| `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
+| `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
 
-Browse them at [ollaya.cobanov.dev/search](https://ollaya.cobanov.dev/search). Tags ending in
-`-fp32` or `-fp16` pin the precision.
+Browse them at [ollaya.cobanov.dev/search](https://ollaya.cobanov.dev/search). Laya tags ending in
+`-fp32` or `-fp16` pin the precision. The derived files of every model are also published at
+[huggingface.co/ollaya-dev](https://huggingface.co/ollaya-dev).
 
 ## Install
 
@@ -101,5 +120,6 @@ generates golden fixtures, and packages the result into `registry/`. See the mod
 
 ## License
 
-Apache-2.0. Each model keeps its own license: the Laya family is Apache-2.0, by Convai
-Innovations.
+Apache-2.0. Each model keeps its own license: `laya` (Convai Innovations), `decider` (Mapika),
+`gliclass` (Knowledgator) and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large`
+(Moritz Laurer) is MIT.
