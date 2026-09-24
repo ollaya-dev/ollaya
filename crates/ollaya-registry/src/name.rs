@@ -10,7 +10,15 @@ use crate::Error;
 pub const DEFAULT_NAMESPACE: &str = "library";
 pub const DEFAULT_TAG: &str = "latest";
 /// The registry that serves the public model library. Overridable with `OLLAYA_REGISTRY`.
-pub const DEFAULT_REGISTRY: &str = "ollaya.cobanov.dev";
+pub const DEFAULT_REGISTRY: &str = "ollaya.dev";
+/// Hosts that served the public library before [`DEFAULT_REGISTRY`]. They still serve it, and
+/// models pulled from them are moved under the current host (see `Store::migrate_host`).
+pub const LEGACY_REGISTRIES: &[&str] = &["ollaya.cobanov.dev"];
+
+/// Whether `OLLAYA_REGISTRY` leaves the default registry in place.
+pub fn is_default_registry() -> bool {
+    default_registry() == DEFAULT_REGISTRY
+}
 
 pub fn default_registry() -> String {
     std::env::var("OLLAYA_REGISTRY")

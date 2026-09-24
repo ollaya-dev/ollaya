@@ -1,6 +1,6 @@
 """Package exported models into Ollaya's static registry.
 
-    uv run python -m ollaya_convert.package laya [--origin https://ollaya.cobanov.dev]
+    uv run python -m ollaya_convert.package laya [--origin https://ollaya.dev]
 
 Writes, under `registry/` at the repository root (copied into the website at build time):
 
@@ -212,7 +212,7 @@ def package_model(spec, blobs):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("models", nargs="+", choices=sorted(CATALOG))
-    ap.add_argument("--origin", default=os.environ.get("SITE_ORIGIN", "https://ollaya.cobanov.dev"),
+    ap.add_argument("--origin", default=os.environ.get("SITE_ORIGIN", "https://ollaya.dev"),
                     help="public origin that serves registry/ (the website)")
     a = ap.parse_args()
     blobs = Blobs(a.origin)

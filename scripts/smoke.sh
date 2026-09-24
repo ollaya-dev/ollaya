@@ -5,7 +5,7 @@
 #   bash scripts/smoke.sh [model ...]        (default: laya nli gliclass decider:0.8b)
 #
 # Settings (environment):
-#   OLLAYA_SITE=https://ollaya.cobanov.dev   where install.sh comes from
+#   OLLAYA_SITE=https://ollaya.dev   where install.sh comes from
 #   SMOKE_SKIP_INSTALL=1                     test the ollaya already on PATH
 #   SMOKE_N=30                               requests per latency measurement
 #
@@ -13,7 +13,7 @@
 # Leaves the daemon running and the models pulled. Exits non-zero if any check failed.
 set -u
 
-SITE=${OLLAYA_SITE:-https://ollaya.cobanov.dev}
+SITE=${OLLAYA_SITE:-https://ollaya.dev}
 N=${SMOKE_N:-30}
 API=http://127.0.0.1:11435
 if [ $# -gt 0 ]; then MODELS=("$@"); else MODELS=(laya nli gliclass decider:0.8b); fi

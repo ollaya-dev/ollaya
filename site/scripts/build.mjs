@@ -18,7 +18,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
-const DEFAULT_ORIGIN = 'https://ollaya.cobanov.dev'
+const DEFAULT_ORIGIN = 'https://ollaya.dev'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const finalDist = join(root, 'dist')

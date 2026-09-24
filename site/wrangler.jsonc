@@ -14,14 +14,14 @@
     "html_handling": "auto-trailing-slash"
   },
 
-  // Custom domain — the zone (cobanov.dev) must be in the same Cloudflare account.
-  // Wrangler creates the DNS record and certificate on deploy.
+  // Custom domains — each zone (ollaya.dev, cobanov.dev) must be in the same Cloudflare account.
+  // Wrangler creates the DNS records and certificates on deploy.
   // The public origin used inside the pages is set at build time: SITE_ORIGIN=https://… npm run build
   "routes": [
+    { "pattern": "ollaya.dev", "custom_domain": true },
+    { "pattern": "www.ollaya.dev", "custom_domain": true },
+    // The first host. Ollaya 0.3.1 and older use it as their default registry: keep it.
     { "pattern": "ollaya.cobanov.dev", "custom_domain": true }
-    // Later, to serve ollaya.dev (zone ollaya.dev added to the account), rebuild with
-    // SITE_ORIGIN=https://ollaya.dev and add:
-    // , { "pattern": "ollaya.dev", "custom_domain": true }
   ],
 
   // Keep the *.workers.dev URL for smoke tests; set to false once the custom domain is live.

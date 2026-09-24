@@ -1,10 +1,10 @@
 #!/bin/sh
 # Install Ollaya on Linux or macOS:
 #
-#   curl -fsSL https://ollaya.cobanov.dev/install.sh | sh
+#   curl -fsSL https://ollaya.dev/install.sh | sh
 #
 # Settings, passed as environment variables to the shell that runs the script
-# (curl -fsSL https://ollaya.cobanov.dev/install.sh | OLLAYA_VERSION=0.1.0 sh):
+# (curl -fsSL https://ollaya.dev/install.sh | OLLAYA_VERSION=0.1.0 sh):
 #   OLLAYA_VERSION      version to install, such as 0.1.0 (default: the latest release)
 #   OLLAYA_REPO         GitHub repository to download releases from (default: ollaya-dev/ollaya)
 #   OLLAYA_INSTALL_DIR  install prefix, an absolute path; the binary goes to $OLLAYA_INSTALL_DIR/bin

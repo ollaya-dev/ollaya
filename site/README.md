@@ -109,17 +109,14 @@ The site is built for **Cloudflare Workers static assets**, with no `main` scrip
 ## Domain
 
 The public origin is set **at build time** with the `SITE_ORIGIN` environment variable
-(default `https://ollaya.cobanov.dev`). It is used for canonical and OpenGraph URLs, the install
+(default `https://ollaya.dev`). It is used for canonical and OpenGraph URLs, the install
 command, `robots.txt` and `sitemap.xml`; docs use the `{{SITE_ORIGIN}}` placeholder. No host name
 is hard-coded anywhere else.
 
-To move to `ollaya.dev`:
-
-1. Add the `ollaya.dev` zone to the same Cloudflare account.
-2. In `wrangler.jsonc`, add `{ "pattern": "ollaya.dev", "custom_domain": true }` to `routes`
-   (keep the old entry while you redirect, or remove it).
-3. Re-package the registry for the new origin, then `SITE_ORIGIN=https://ollaya.dev npm run deploy`.
-   The runtime's default registry host (`OLLAYA_REGISTRY`) lives in the Rust code and changes with it.
+The same Worker also answers on `www.ollaya.dev` and on `ollaya.cobanov.dev`, the site's first
+host. Keep `ollaya.cobanov.dev`: Ollaya 0.3.1 and older use it as their default registry, and it
+serves the same manifests, whose blob URLs point at `ollaya.dev`. Pages there carry a canonical
+link to `ollaya.dev`.
 
 ## Static registry (`/v2/` and `/blobs/`)
 
@@ -148,6 +145,6 @@ npm run deploy         # optionally: SITE_ORIGIN=https://… npm run deploy (reg
 ```
 
 This is an assets-only Worker, which is free: static asset requests are not billed and there is no
-script to invoke. The custom domain `ollaya.cobanov.dev` requires the `cobanov.dev` zone in the same
+script to invoke. Each custom domain requires its zone (`ollaya.dev`, `cobanov.dev`) in the same
 Cloudflare account, with no existing DNS record for that host; Wrangler creates the DNS record and
 certificate on the first deploy. The `*.workers.dev` URL also stays available (`workers_dev: true`).

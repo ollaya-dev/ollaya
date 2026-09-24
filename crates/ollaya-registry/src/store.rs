@@ -189,6 +189,40 @@ impl Store {
         Ok(true)
     }
 
+    /// Moves the models pulled from registry host `from` to host `to`, so that models pulled
+    /// before the public library moved keep their short names. A model that already exists under
+    /// `to` is kept and its old copy is dropped. Returns how many manifests moved.
+    pub fn migrate_host(&self, from: &str, to: &str) -> Result<usize, Error> {
+        let manifests = self.root.join("manifests");
+        let (from, to) = (manifests.join(from), manifests.join(to));
+        let mut moved = 0;
+        for ns in read_dirs(&from)? {
+            for model in read_dirs(&ns)? {
+                for tag in std::fs::read_dir(&model)? {
+                    let tag = tag?.path();
+                    if !tag.is_file() {
+                        continue;
+                    }
+                    let dest = to
+                        .join(file_name(&ns))
+                        .join(file_name(&model))
+                        .join(file_name(&tag));
+                    if dest.exists() {
+                        std::fs::remove_file(&tag)?;
+                    } else {
+                        std::fs::create_dir_all(dest.parent().expect("dest has a parent"))?;
+                        std::fs::rename(&tag, &dest)?;
+                        moved += 1;
+                    }
+                }
+                let _ = std::fs::remove_dir(&model);
+            }
+            let _ = std::fs::remove_dir(&ns);
+        }
+        let _ = std::fs::remove_dir(&from);
+        Ok(moved)
+    }
+
     pub fn copy(&self, src: &ModelName, dst: &ModelName) -> Result<(), Error> {
         let bytes =
             std::fs::read(self.manifest_path(src)).map_err(|_| Error::NotFound(src.to_string()))?;
@@ -284,6 +318,33 @@ mod tests {
             }],
         };
         serde_json::to_vec(&m).unwrap()
+    }
+
+    #[test]
+    fn migrate_host_keeps_short_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let old = |m: &str| ModelName::parse(&format!("old.example/library/{m}")).unwrap();
+        let new = |m: &str| ModelName::parse(&format!("new.example/library/{m}")).unwrap();
+        store
+            .write_manifest(&old("laya:en"), &manifest(&store, b"en"))
+            .unwrap();
+        store
+            .write_manifest(&old("laya:latest"), &manifest(&store, b"old"))
+            .unwrap();
+        store
+            .write_manifest(&new("laya:latest"), &manifest(&store, b"newer"))
+            .unwrap();
+
+        assert_eq!(store.migrate_host("old.example", "new.example").unwrap(), 1);
+        let names: Vec<_> = store.list().unwrap().into_iter().map(|e| e.name).collect();
+        assert_eq!(names, vec![new("laya:en"), new("laya:latest")]);
+        // The model that already existed under the new host is the one kept.
+        let kept = store.read_manifest(&new("laya:latest")).unwrap().unwrap();
+        assert_eq!(kept.manifest.layers[0].size, 5);
+        assert!(!dir.path().join("manifests/old.example").exists());
+        // Nothing left to move.
+        assert_eq!(store.migrate_host("old.example", "new.example").unwrap(), 0);
     }
 
     #[test]

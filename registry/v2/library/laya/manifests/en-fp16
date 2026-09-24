@@ -6,7 +6,7 @@
     "digest": "sha256:90932d7af15db68b44e284c8eedbaa62acf35fb4c991c8112dfa1ff0be5f45c1",
     "size": 385,
     "urls": [
-      "https://ollaya.cobanov.dev/blobs/sha256-90932d7af15db68b44e284c8eedbaa62acf35fb4c991c8112dfa1ff0be5f45c1"
+      "https://ollaya.dev/blobs/sha256-90932d7af15db68b44e284c8eedbaa62acf35fb4c991c8112dfa1ff0be5f45c1"
     ]
   },
   "layers": [
@@ -15,7 +15,7 @@
       "digest": "sha256:c54880e1ab520b5f99ef8417ed2a1f7ef19414e90e87681d1497b39147f8f97a",
       "size": 3722668,
       "urls": [
-        "https://ollaya.cobanov.dev/blobs/sha256-c54880e1ab520b5f99ef8417ed2a1f7ef19414e90e87681d1497b39147f8f97a"
+        "https://ollaya.dev/blobs/sha256-c54880e1ab520b5f99ef8417ed2a1f7ef19414e90e87681d1497b39147f8f97a"
       ],
       "annotations": {
         "org.ollaya.precision": "fp32"
@@ -26,7 +26,7 @@
       "digest": "sha256:32b6a61761499a64d8f20406ed1baa5fe6f0e860a65717c03f804b15bc958886",
       "size": 3708204,
       "urls": [
-        "https://ollaya.cobanov.dev/blobs/sha256-32b6a61761499a64d8f20406ed1baa5fe6f0e860a65717c03f804b15bc958886"
+        "https://ollaya.dev/blobs/sha256-32b6a61761499a64d8f20406ed1baa5fe6f0e860a65717c03f804b15bc958886"
       ],
       "annotations": {
         "org.ollaya.precision": "fp16"
@@ -53,7 +53,7 @@
       "digest": "sha256:b5bc5074b1b4a1e6e79a019ebfae09c44fc7c77eee4b91638e7cd76829291b3c",
       "size": 478,
       "urls": [
-        "https://ollaya.cobanov.dev/blobs/sha256-b5bc5074b1b4a1e6e79a019ebfae09c44fc7c77eee4b91638e7cd76829291b3c"
+        "https://ollaya.dev/blobs/sha256-b5bc5074b1b4a1e6e79a019ebfae09c44fc7c77eee4b91638e7cd76829291b3c"
       ]
     },
     {
@@ -61,7 +61,7 @@
       "digest": "sha256:a7af5a5fafb5b418420a63511194038faed0aade75af68d210144e67fd792426",
       "size": 352,
       "urls": [
-        "https://ollaya.cobanov.dev/blobs/sha256-a7af5a5fafb5b418420a63511194038faed0aade75af68d210144e67fd792426"
+        "https://ollaya.dev/blobs/sha256-a7af5a5fafb5b418420a63511194038faed0aade75af68d210144e67fd792426"
       ]
     },
     {
@@ -69,7 +69,7 @@
       "digest": "sha256:ec56c3e69fab09b41de6f1c80fdcc13b83ec1eef1f72d3022baaafde3d9307e9",
       "size": 10297,
       "urls": [
-        "https://ollaya.cobanov.dev/blobs/sha256-ec56c3e69fab09b41de6f1c80fdcc13b83ec1eef1f72d3022baaafde3d9307e9"
+        "https://ollaya.dev/blobs/sha256-ec56c3e69fab09b41de6f1c80fdcc13b83ec1eef1f72d3022baaafde3d9307e9"
       ]
     },
     {
@@ -77,7 +77,7 @@
       "digest": "sha256:a1d447ba672f270b2157732fd55a0a594243d0b0d2a5ff6ec709861ebc1bcb3e",
       "size": 21,
       "urls": [
-        "https://ollaya.cobanov.dev/blobs/sha256-a1d447ba672f270b2157732fd55a0a594243d0b0d2a5ff6ec709861ebc1bcb3e"
+        "https://ollaya.dev/blobs/sha256-a1d447ba672f270b2157732fd55a0a594243d0b0d2a5ff6ec709861ebc1bcb3e"
       ]
     }
   ]

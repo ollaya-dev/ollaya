@@ -6,7 +6,7 @@ daemon that spawns GPU runners.
 | File | Role |
 |---|---|
 | `scripts/package.sh` | Builds the release archives from a cargo target directory |
-| `scripts/install.sh` | The `curl -fsSL https://ollaya.cobanov.dev/install.sh \| sh` installer (the site serves this file) |
+| `scripts/install.sh` | The `curl -fsSL https://ollaya.dev/install.sh \| sh` installer (the site serves this file) |
 | `packaging/ollaya.service` | The systemd unit. `install.sh` embeds a copy, and CI checks that the two match |
 | `packaging/cuda-requirements.{in,txt}` | Pinned, hash-locked NVIDIA wheels that the CUDA libraries come from |
 | `packaging/docker-healthcheck.sh` | The image's `HEALTHCHECK` |
@@ -196,8 +196,8 @@ standing in for `bin/ollaya`. The runner was then run under `env -i`, on an RTX 
 ## install.sh
 
 ```sh
-curl -fsSL https://ollaya.cobanov.dev/install.sh | sh
-curl -fsSL https://ollaya.cobanov.dev/install.sh | OLLAYA_VERSION=0.1.0 sh
+curl -fsSL https://ollaya.dev/install.sh | sh
+curl -fsSL https://ollaya.dev/install.sh | OLLAYA_VERSION=0.1.0 sh
 ```
 
 | Variable | Effect |
@@ -366,7 +366,7 @@ volumes:
    - **`manifest`** runs after `release` and `image` succeed. It tags the multi-arch index with
      `docker buildx imagetools create`.
 5. **Check.**
-   - `curl -fsSL https://ollaya.cobanov.dev/install.sh | OLLAYA_VERSION=0.1.0 sh`
+   - `curl -fsSL https://ollaya.dev/install.sh | OLLAYA_VERSION=0.1.0 sh`
    - `docker run --rm ghcr.io/ollaya-dev/ollaya:0.1.0 --version`
    - The `/download` page.
 6. **Roll back.** Mark the previous release as latest, or delete the bad one; `install.sh` follows

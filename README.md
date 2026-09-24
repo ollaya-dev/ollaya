@@ -10,9 +10,9 @@
 <p align="center"><strong>Run open decision models locally, the way Ollama runs LLMs.</strong></p>
 
 <p align="center">
-  <a href="https://ollaya.cobanov.dev">Website</a> ·
-  <a href="https://ollaya.cobanov.dev/search">Models</a> ·
-  <a href="https://ollaya.cobanov.dev/docs">Docs</a> ·
+  <a href="https://ollaya.dev">Website</a> ·
+  <a href="https://ollaya.dev/search">Models</a> ·
+  <a href="https://ollaya.dev/docs">Docs</a> ·
   <a href="https://github.com/ollaya-dev/ollaya/releases">Releases</a> ·
   <a href="https://huggingface.co/ollaya-dev">Hugging Face</a>
 </p>
@@ -24,7 +24,7 @@ local daemon, and speaks TypeSafe's `/v1/systemone` wire format, so existing Jev
 changing one environment variable.
 
 ```sh
-curl -fsSL https://ollaya.cobanov.dev/install.sh | sh
+curl -fsSL https://ollaya.dev/install.sh | sh
 ollaya run laya --preset triage "I was charged twice this month and want a refund."
 ```
 
@@ -77,14 +77,14 @@ churn_risk        no           ██████████░░░░░░ 
 | `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
 | `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
 
-Browse them at [ollaya.cobanov.dev/search](https://ollaya.cobanov.dev/search). Laya tags ending in
+Browse them at [ollaya.dev/search](https://ollaya.dev/search). Laya tags ending in
 `-fp32` or `-fp16` pin the precision. The derived files of every model are also published at
 [huggingface.co/ollaya-dev](https://huggingface.co/ollaya-dev).
 
 ## Install
 
 - **Linux** (x86_64 or arm64, glibc ≥ 2.38, e.g. Ubuntu 24.04+):
-  `curl -fsSL https://ollaya.cobanov.dev/install.sh | sh`. When an NVIDIA GPU is present
+  `curl -fsSL https://ollaya.dev/install.sh | sh`. When an NVIDIA GPU is present
   (driver R580+), the installer adds the CUDA runtime.
 - **macOS** (Apple silicon): the same command.
 - **Docker:** `docker run -d --gpus=all -p 11435:11435 ghcr.io/ollaya-dev/ollaya:cuda`, or

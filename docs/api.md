@@ -103,7 +103,7 @@ Any other path returns `404 NOT_FOUND`. A known path with the wrong method retur
 
 | Part | Rule | Default |
 |---|---|---|
-| `host` | Registry host, optionally with `http://` or `https://` (development registries) | `OLLAYA_REGISTRY`, else `ollaya.cobanov.dev` |
+| `host` | Registry host, optionally with `http://` or `https://` (development registries) | `OLLAYA_REGISTRY`, else `ollaya.dev` |
 | `namespace` | 1–80 chars, `[A-Za-z0-9_][A-Za-z0-9_.-]*` | `library` |
 | `model` | 1–80 chars, `[A-Za-z0-9_][A-Za-z0-9_.-]*` | — |
 | `tag` | 1–80 chars, `[A-Za-z0-9_][A-Za-z0-9_.-]*` | `latest` |
@@ -890,7 +890,7 @@ Only the layers this host needs are downloaded (the precision variant chosen at 
 
 **Errors before the stream starts are ordinary HTTP errors.** The server fetches the manifest
 before sending the response head. So a name that does not parse (`422`), a model that is not in the
-registry (`404 MODEL_NOT_FOUND`: `model "laya:xl" not found in registry ollaya.cobanov.dev`) and an
+registry (`404 MODEL_NOT_FOUND`: `model "laya:xl" not found in registry ollaya.dev`) and an
 unreachable registry (`502 REGISTRY_ERROR`) have real status codes, and `curl --fail` works. Ollama
 instead streams these as error lines after `200`. Status codes matter to scripts, and Ollama
 clients handle both forms.
@@ -1529,7 +1529,7 @@ These are the variables that change API behaviour.
 | `OLLAYA_MAX_QUEUE` | `512` | Queue bound before `503 QUEUE_FULL` |
 | `OLLAYA_LOAD_TIMEOUT` | `5m` | Load deadline before `500 MODEL_LOAD_FAILED` |
 | `OLLAYA_MODELS` | `~/.ollaya/models` | Model store |
-| `OLLAYA_REGISTRY` | `ollaya.cobanov.dev` | Default registry host in names |
+| `OLLAYA_REGISTRY` | `ollaya.dev` | Default registry host in names |
 
 ## 16. Verification checklist
 

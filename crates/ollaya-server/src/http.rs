@@ -831,6 +831,16 @@ impl RunnerLaunch {
 /// The store, scheduler and service for `config`.
 pub fn build(config: ServerConfig, runner: RunnerLaunch) -> Result<Arc<AppState>, ServeError> {
     let store = Store::open(&config.models).map_err(Error::from)?;
+    if ollaya_registry::name::is_default_registry() {
+        for legacy in ollaya_registry::name::LEGACY_REGISTRIES {
+            let to = ollaya_registry::name::DEFAULT_REGISTRY;
+            match store.migrate_host(legacy, to) {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("moved {n} manifests pulled from {legacy} to {to}"),
+                Err(e) => tracing::warn!("could not move the models pulled from {legacy}: {e}"),
+            }
+        }
+    }
     let scheduler = Scheduler::new(SchedulerConfig {
         keep_alive: config.keep_alive,
         max_loaded: config.max_loaded,
