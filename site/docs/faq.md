@@ -38,7 +38,7 @@ Ollaya runs Laya as ONNX. Across 2,383 questions per checkpoint (`en`, `multilin
 
 ## How fast is it?
 
-A decision is a single forward pass. On an RTX 4090 at fp16, a request with five questions takes 9–16 ms: `laya:multilingual` at the low end, `laya:en` at the high end.
+A decision is a single forward pass. Measured end to end through the HTTP API on an RTX 4090, the median request with five questions takes 8 ms with `laya:multilingual` and 10 ms with `laya:en` (fp16), 15 ms with `gliclass` and 20 ms with `nli` (fp32). A single question takes 8–11 ms on any of them.
 
 ## Do I need a GPU?
 

@@ -188,7 +188,7 @@ function Fast() {
       id="fast"
       title="Fast"
       lead="Decisions in tens of milliseconds."
-      body="A decision model answers in a single forward pass, with no token-by-token generation. On an RTX 4090 at fp16, a request with five questions takes 9–16 ms."
+      body="A decision model answers in a single forward pass, with no token-by-token generation. Measured through the full HTTP API on an RTX 4090, a five-question request to Laya takes 8–10 ms."
     >
       <figure>
         <figcaption class="text-sm font-medium text-fg">
