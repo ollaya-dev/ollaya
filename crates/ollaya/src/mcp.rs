@@ -18,7 +18,9 @@ use rmcp::model::{
     RequestMetaObject, Resource, ResourceContents, ServerCapabilities, ServerConfig,
 };
 use rmcp::service::RequestContext;
-use rmcp::{ErrorData, Peer, RoleServer, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
+use rmcp::{
+    ErrorData, Peer, RoleServer, ServerHandler, ServiceExt, tool, tool_handler, tool_router,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -93,9 +95,14 @@ noul, the probability that the statement is true. The response is exactly TypeSa
 /v1/systemone response.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
-    async fn decide(&self, Parameters(p): Parameters<DecideParams>) -> Result<CallToolResult, ErrorData> {
+    async fn decide(
+        &self,
+        Parameters(p): Parameters<DecideParams>,
+    ) -> Result<CallToolResult, ErrorData> {
         let questions = match (p.questions, p.preset.as_deref()) {
-            (Some(_), Some(_)) => return Ok(tool_error("give either `questions` or `preset`, not both")),
+            (Some(_), Some(_)) => {
+                return Ok(tool_error("give either `questions` or `preset`, not both"));
+            }
             (Some(q), None) => Some(q),
             (None, Some(name)) => match presets::get(name) {
                 Some(q) => Some(q),
@@ -110,7 +117,11 @@ noul, the probability that the statement is true. The response is exactly TypeSa
         };
         let questions = match questions.map(serde_json::from_value).transpose() {
             Ok(q) => q,
-            Err(e) => return Ok(tool_error(&format!("`questions` is not a question set: {e}"))),
+            Err(e) => {
+                return Ok(tool_error(&format!(
+                    "`questions` is not a question set: {e}"
+                )));
+            }
         };
         let request = SystemOneRequest {
             model: p.model.unwrap_or_else(|| "laya".to_owned()),
@@ -144,7 +155,10 @@ noul, the probability that the statement is true. The response is exactly TypeSa
         description = "Show a model's details: family, parameters, context length, languages, capabilities, license and built-in questions.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
-    async fn show_model(&self, Parameters(p): Parameters<ModelParams>) -> Result<CallToolResult, ErrorData> {
+    async fn show_model(
+        &self,
+        Parameters(p): Parameters<ModelParams>,
+    ) -> Result<CallToolResult, ErrorData> {
         let client = connect().await?;
         match client.show(&p.model).await {
             Ok(show) => Ok(structured(&show)),
@@ -156,7 +170,12 @@ noul, the probability that the statement is true. The response is exactly TypeSa
     #[tool(
         name = "pull_model",
         description = "Download a model from the Ollaya library (for example \"laya\" or \"decider\"), verifying every file. Reports download progress. Models are also pulled on first use by `decide`.",
-        annotations(read_only_hint = false, destructive_hint = false, idempotent_hint = true, open_world_hint = true)
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
     )]
     async fn pull_model(
         &self,
@@ -186,25 +205,34 @@ noul, the probability that the statement is true. The response is exactly TypeSa
                 layers.insert(digest.clone(), (line.completed.unwrap_or(0), total));
             }
             if let Some(token) = &token {
-                let (done, total) = layers.values().fold((0, 0), |(d, t), (c, n)| (d + c, t + n));
-                let mut progress =
-                    ProgressNotificationParam::new(token.clone(), done as f64).with_message(line.status.clone());
+                let (done, total) = layers
+                    .values()
+                    .fold((0, 0), |(d, t), (c, n)| (d + c, t + n));
+                let mut progress = ProgressNotificationParam::new(token.clone(), done as f64)
+                    .with_message(line.status.clone());
                 if total > 0 {
                     progress = progress.with_total(total as f64);
                 }
                 let _ = peer.notify_progress(progress).await;
             }
         }
-        Ok(structured(&json!({ "model": p.model, "status": "success" })))
+        Ok(structured(
+            &json!({ "model": p.model, "status": "success" }),
+        ))
     }
 }
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for OllayaMcp {
     fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().enable_resources().build())
-            .with_server_info(Implementation::new("ollaya", env!("CARGO_PKG_VERSION")))
-            .with_instructions(INSTRUCTIONS)
+        ServerConfig::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .build(),
+        )
+        .with_server_info(Implementation::new("ollaya", env!("CARGO_PKG_VERSION")))
+        .with_instructions(INSTRUCTIONS)
     }
 
     async fn list_resources(
@@ -214,7 +242,9 @@ impl ServerHandler for OllayaMcp {
     ) -> Result<ListResourcesResult, ErrorData> {
         let mut resources = vec![
             Resource::new(MODELS_URI, "models")
-                .with_description("The decision models installed on this machine (like `ollaya list`).")
+                .with_description(
+                    "The decision models installed on this machine (like `ollaya list`).",
+                )
                 .with_mime_type("application/json"),
         ];
         for name in presets::NAMES {
@@ -239,16 +269,20 @@ impl ServerHandler for OllayaMcp {
                 .tags()
                 .await
                 .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
-            serde_json::to_value(tags).map_err(|e| ErrorData::internal_error(e.to_string(), None))?
+            serde_json::to_value(tags)
+                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
         } else if let Some(q) = uri.strip_prefix(PRESETS_URI).and_then(presets::get) {
             q
         } else {
-            return Err(ErrorData::resource_not_found(format!("no resource {uri}"), None));
+            return Err(ErrorData::resource_not_found(
+                format!("no resource {uri}"),
+                None,
+            ));
         };
         let text = serde_json::to_string_pretty(&value).unwrap_or_default();
-        Ok(ReadResourceResponse::Complete(ReadResourceResult::new(vec![
-            ResourceContents::text(text, uri).with_mime_type("application/json"),
-        ])))
+        Ok(ReadResourceResponse::Complete(ReadResourceResult::new(
+            vec![ResourceContents::text(text, uri).with_mime_type("application/json")],
+        )))
     }
 }
 
@@ -281,7 +315,9 @@ pub async fn serve_stdio() -> anyhow::Result<()> {
 /// `ollaya mcp --http ADDR`: serve streamable HTTP at http://ADDR/mcp until Ctrl-C.
 pub async fn serve_http(addr: &str) -> anyhow::Result<()> {
     use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-    use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
+    use rmcp::transport::streamable_http_server::{
+        StreamableHttpServerConfig, StreamableHttpService,
+    };
 
     let service: StreamableHttpService<OllayaMcp, LocalSessionManager> = StreamableHttpService::new(
         || Ok(OllayaMcp::new()),
