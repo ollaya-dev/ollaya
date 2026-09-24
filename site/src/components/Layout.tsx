@@ -1,6 +1,6 @@
 import type { Child } from 'hono/jsx'
 import { asset } from '../lib/assets'
-import { SITE_DESCRIPTION, SITE_NAME, TAGLINE } from '../site'
+import { ANALYTICS, SITE_DESCRIPTION, SITE_NAME, TAGLINE } from '../site'
 import { Footer } from './Footer'
 import { Header, type NavKey } from './Header'
 
@@ -13,6 +13,8 @@ export interface PageMeta {
   /** Hide the navbar search box (the /search page has its own). */
   hideNavSearch?: boolean
   noindex?: boolean
+  /** Social card under /static (default og.png), e.g. "og/laya.png" for a model's pages. */
+  ogImage?: string
 }
 
 export interface LayoutProps {
@@ -28,7 +30,7 @@ export function Layout({ origin, path, meta, children }: LayoutProps) {
   const canonical = `${origin}${path}`
   const title = meta.title ? `${meta.title} · ${SITE_NAME}` : `${SITE_NAME} — ${TAGLINE.replace(/\.$/, '')}`
   const description = meta.description ?? SITE_DESCRIPTION
-  const ogImage = `${origin}${asset('og.png')}`
+  const ogImage = `${origin}${asset(meta.ogImage ?? 'og.png')}`
 
   return (
     <html lang="en">
@@ -49,9 +51,13 @@ export function Layout({ origin, path, meta, children }: LayoutProps) {
         <meta property="og:image" content={ogImage} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:image:alt" content="Ollaya — run decision models locally" />
+        <meta property="og:image:alt" content={meta.ogImage && meta.title ? `${meta.title} on Ollaya` : 'Ollaya — run decision models locally'} />
         <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content={ogImage} />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        {ANALYTICS.key ? (
+          <script async src={ANALYTICS.src} data-key={ANALYTICS.key} data-collector={ANALYTICS.collector}></script>
+        ) : null}
         <link rel="stylesheet" href={asset('app.css')} />
         <script src={asset('app.js')} defer></script>
       </head>

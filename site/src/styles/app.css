@@ -31,6 +31,14 @@
   --color-size-bg: #ddf4ff;
   --color-size-fg: #2563eb;
   --color-term: #fafafa;
+  /* Syntax highlighting (src/lib/highlight.ts). */
+  --color-tok-comment: #6e7781;
+  --color-tok-string: #116329;
+  --color-tok-number: #8250df;
+  --color-tok-keyword: #cf222e;
+  --color-tok-key: #0550ae;
+  --color-tok-fn: #953800;
+  --color-tok-punct: #6e7781;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -56,6 +64,13 @@
     --color-size-bg: rgb(59 130 246 / 0.16);
     --color-size-fg: #93c5fd;
     --color-term: #111111;
+    --color-tok-comment: #7d8590;
+    --color-tok-string: #7ee2a8;
+    --color-tok-number: #d2a8ff;
+    --color-tok-keyword: #ff8b8b;
+    --color-tok-key: #79c0ff;
+    --color-tok-fn: #ffc36b;
+    --color-tok-punct: #8b949e;
   }
 }
 
@@ -236,5 +251,76 @@
   }
   .prose img {
     max-width: 100%;
+  }
+}
+
+/* Syntax highlighting: token classes emitted by src/lib/highlight.ts at build time. */
+@layer components {
+  .tok-comment {
+    color: var(--color-tok-comment);
+    font-style: italic;
+  }
+  .tok-string {
+    color: var(--color-tok-string);
+  }
+  .tok-number,
+  .tok-literal {
+    color: var(--color-tok-number);
+  }
+  .tok-keyword {
+    color: var(--color-tok-keyword);
+  }
+  .tok-key,
+  .tok-var,
+  .tok-flag {
+    color: var(--color-tok-key);
+  }
+  .tok-fn,
+  .tok-cmd {
+    color: var(--color-tok-fn);
+  }
+  .tok-punct {
+    color: var(--color-tok-punct);
+  }
+}
+
+/* Hero terminal: a soft lift off the page, bars that fill, rows that appear in turn. */
+@layer components {
+  .term-glow {
+    box-shadow:
+      0 1px 0 0 rgb(255 255 255 / 0.04) inset,
+      0 24px 64px -24px rgb(0 0 0 / 0.25);
+  }
+  .term-bar {
+    background: linear-gradient(90deg, var(--color-tok-key), var(--color-tok-string));
+  }
+  @media (prefers-color-scheme: dark) {
+    .term-glow {
+      box-shadow:
+        0 1px 0 0 rgb(255 255 255 / 0.06) inset,
+        0 0 90px -30px rgb(121 192 255 / 0.16);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .term-row {
+      animation: term-in 0.4s ease-out both;
+      animation-delay: calc(0.35s + var(--row, 0) * 0.09s);
+    }
+    .term-cursor {
+      animation: term-blink 1.1s steps(1) infinite;
+    }
+  }
+}
+
+@keyframes term-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@keyframes term-blink {
+  50% {
+    opacity: 0;
   }
 }

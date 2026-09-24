@@ -139,7 +139,7 @@ The timer starts when a request finishes, and the latest request's value wins. F
 
 ## Decide
 
-```
+```http
 POST /api/decide
 ```
 
@@ -257,7 +257,7 @@ Routing costs microseconds. Branch on `route`, never on `reason`, whose wording 
 
 ## List local models
 
-```
+```http
 GET /api/tags
 ```
 
@@ -287,7 +287,7 @@ The models on this machine, newest first. Each entry has `name`, `model` (the sa
 
 ## Show model details
 
-```
+```http
 POST /api/show
 ```
 
@@ -311,7 +311,7 @@ A router is shown as itself, not resolved to a target.
 
 ## List running models
 
-```
+```http
 GET /api/ps
 ```
 
@@ -319,7 +319,7 @@ The loaded models, sorted by name. Routers never appear; their loaded targets do
 
 ## Pull a model
 
-```
+```http
 POST /api/pull
 ```
 
@@ -344,7 +344,7 @@ A model only appears in `/api/tags` after `writing manifest`. For a router there
 
 ## Delete a model
 
-```
+```http
 DELETE /api/delete
 ```
 
@@ -356,7 +356,7 @@ Removes the name, and the blobs no other model uses. A loaded model unloads once
 
 ## Copy a model
 
-```
+```http
 POST /api/copy
 ```
 
@@ -368,7 +368,7 @@ Copies a model to a new name, overwriting an existing destination. The response 
 
 ## Create a model
 
-```
+```http
 POST /api/create
 ```
 
@@ -405,7 +405,7 @@ The stream reports `using existing layer sha256:…` for each inherited layer, `
 
 ## Version
 
-```
+```http
 GET /api/version
 ```
 

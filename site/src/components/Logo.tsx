@@ -42,6 +42,12 @@ export function Logo() {
     <span class="flex items-baseline gap-2 text-fg">
       <LogoMark class="size-7 self-center" />
       <span class="text-lg leading-7 font-medium tracking-tight">ollaya</span>
+      <span
+        class="self-center rounded-full border border-line-strong px-1.5 py-px text-[10px] leading-4 font-medium tracking-wide text-muted uppercase"
+        title="Ollaya is new: expect rough edges, and please report what breaks on GitHub"
+      >
+        beta
+      </span>
     </span>
   )
 }

@@ -1,4 +1,5 @@
 import type { Child } from 'hono/jsx'
+import { highlight } from '../lib/highlight'
 import { Icon } from './Icon'
 
 export const btnPrimary =
@@ -48,12 +49,17 @@ export function CopyButton({ class: cls = 'absolute top-2 right-2' }: { class?: 
   )
 }
 
+/** Highlighted code; `lang` is a Markdown fence name (shell, json, python, javascript, dockerfile). */
+export function Code({ code, lang }: { code: string; lang?: string }) {
+  return <code class={lang ? `language-${lang}` : undefined} dangerouslySetInnerHTML={{ __html: highlight(code, lang) }} />
+}
+
 /** A single code block with a copy button. */
-export function CodeBlock({ code, class: cls = '' }: { code: string; class?: string }) {
+export function CodeBlock({ code, lang = 'shell', class: cls = '' }: { code: string; lang?: string; class?: string }) {
   return (
     <div class={`relative ${cls}`} data-copy-scope>
       <pre class="overflow-x-auto rounded-lg bg-code py-4 pr-12 pl-4 font-mono text-[13px] leading-relaxed text-fg">
-        <code>{code}</code>
+        <Code code={code} lang={lang} />
       </pre>
       <CopyButton />
     </div>
@@ -64,6 +70,8 @@ export interface CodeTab {
   key: string
   label: string
   code: string
+  /** Fence name for highlighting; defaults to the key (cli and curl are shell). */
+  lang?: string
 }
 
 /** Tabbed code box (CLI | cURL | Python | JavaScript, Linux | macOS | Docker, …). */
@@ -102,7 +110,7 @@ export function CodeTabs({ id, label, tabs, selected }: { id: string; label: str
           class="bg-code focus-visible:outline-offset-[-2px]"
         >
           <pre class="overflow-x-auto p-4 font-mono text-[13px] leading-relaxed text-fg">
-            <code>{t.code}</code>
+            <Code code={t.code} lang={t.lang ?? t.key} />
           </pre>
         </div>
       ))}

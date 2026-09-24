@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "checklist-design": {
+      "source": "checklist-design/skills",
+      "sourceType": "github",
+      "skillPath": "skills/checklist-design/SKILL.md",
+      "computedHash": "bdc483ed88370fcfdc2036965ab06ce4f5e0bef24991cd53e32f59c201b9e63d"
+    }
+  }
+}

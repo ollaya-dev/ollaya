@@ -21,3 +21,14 @@ export const LOCAL_PORT = 11435
 export const LOCAL_API = `http://localhost:${LOCAL_PORT}`
 
 export const COPYRIGHT_YEAR = 2026
+
+/**
+ * Visit counting with Open Analytics (open source, cookieless, no personal data), self-hosted at
+ * oa.cobanov.run. `key` is the site's public tracking key (oa_pk_…); empty leaves the script out.
+ * Its host must also be allowed in public/_headers (script-src and connect-src).
+ */
+export const ANALYTICS = {
+  src: 'https://oa-c.cobanov.run/oa.js',
+  collector: 'https://oa-c.cobanov.run',
+  key: '',
+}

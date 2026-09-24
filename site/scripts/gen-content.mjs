@@ -10,6 +10,7 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Marked } from 'marked'
+import { highlight } from '../src/lib/highlight.ts'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const outDir = join(root, 'src', 'generated')
@@ -65,7 +66,7 @@ function createRenderer({ demote = 0 } = {}) {
       code({ text, lang }) {
         const language = (lang || '').trim().split(/\s+/)[0]
         const cls = language ? ` class="language-${escapeHtml(language)}"` : ''
-        return `<div class="codeblock relative" data-copy-scope><pre><code${cls}>${escapeHtml(text)}</code></pre>${copyButton}</div>\n`
+        return `<div class="codeblock relative" data-copy-scope><pre><code${cls}>${highlight(text, language)}</code></pre>${copyButton}</div>\n`
       },
       table(token) {
         // Default rendering, wrapped for horizontal scrolling on narrow screens.

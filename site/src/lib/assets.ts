@@ -10,3 +10,8 @@ export function asset(path: string): string {
   const v = versions[path]
   return v ? `/static/${path}?v=${v}` : `/static/${path}`
 }
+
+/** Whether dist/static has `path` (e.g. "og/laya.png"). */
+export function hasAsset(path: string): boolean {
+  return path in versions
+}

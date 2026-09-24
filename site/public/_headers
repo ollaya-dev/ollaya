@@ -6,7 +6,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://oa-c.cobanov.run; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://oa-c.cobanov.run; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 # Files under /static/ are referenced with a ?v=<content-hash> query, so they can be cached forever.
 /static/*

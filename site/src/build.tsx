@@ -18,7 +18,7 @@ import type { Child } from 'hono/jsx'
 import { Layout, type PageMeta } from './components/Layout'
 import { catalog, fullName, searchIndex } from './data/catalog'
 import { docPages } from './generated/content'
-import { setAssetVersions } from './lib/assets'
+import { hasAsset, setAssetVersions } from './lib/assets'
 import { DocsIndex, DocView, withOrigin } from './pages/docs'
 import { DownloadPage } from './pages/download'
 import { HomePage } from './pages/home'
@@ -88,10 +88,12 @@ function pages(origin: string): Page[] {
   ]
 
   for (const model of catalog) {
+    const card = `og/${model.name}.png`
+    const ogImage = hasAsset(card) ? card : undefined
     list.push(
       {
         url: `/library/${model.name}`,
-        meta: { title: model.name, description: model.description, nav: 'models' },
+        meta: { title: model.name, description: model.description, nav: 'models', ogImage },
         render: () => <ModelPage model={model} />,
       },
       {
@@ -100,6 +102,7 @@ function pages(origin: string): Page[] {
           title: `${model.name} tags`,
           description: `All tags of ${model.name}, including fp16 and fp32 precision variants.`,
           nav: 'models',
+          ogImage,
         },
         render: () => <TagsPage model={model} />,
       },
@@ -109,6 +112,7 @@ function pages(origin: string): Page[] {
           title: fullName(model, tag),
           description: `${fullName(model, tag)} — ${tag.summary}`,
           nav: 'models' as const,
+          ogImage,
         },
         render: () => <TagPage model={model} tag={tag} />,
         // Target of the Cloudflare _redirects rewrite for colon URLs (see the header comment).

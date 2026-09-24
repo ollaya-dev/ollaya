@@ -25,7 +25,7 @@ changing one environment variable.
 
 ```sh
 curl -fsSL https://ollaya.dev/install.sh | sh
-ollaya run laya --preset triage "I was charged twice this month and want a refund."
+ollaya run laya --preset triage "I was charged twice for my subscription this month and want a refund."
 ```
 
 ```

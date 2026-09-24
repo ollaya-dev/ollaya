@@ -1,7 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { Icon, type IconName } from '../components/Icon'
 import { LogoMark } from '../components/Logo'
-import { btnPrimary, CodeBlock, textLink } from '../components/ui'
+import { btnPrimary, Code, CodeBlock, textLink } from '../components/ui'
 import { catalog, comingNext, featuredTags, fullName } from '../data/catalog'
 import { GITHUB_URL, LOCAL_API } from '../site'
 
@@ -79,69 +79,83 @@ function Hero() {
   )
 }
 
-// Real output of the command shown (laya routed to laya:en; the triage preset's five questions).
-const MOCK_STATE = 'I was charged twice for my subscription this month and want a refund.'
+// Real output of the command shown, run on an RTX 4090 (fp16): laya routed the English text to
+// laya:en, which answered the triage preset's five questions in 8.9 ms (`--verbose` timings).
+const MOCK_COMMAND = 'ollaya run laya --preset triage \\\n  "I was charged twice this month and want a refund."'
 const mockRows = [
-  { q: 'intent', a: 'refund', p: 1.0, w: 'w-full' },
-  { q: 'is_urgent', a: 'no', p: 0.88, w: 'w-[88%]' },
-  { q: 'frustration', a: '1.76 / 3', note: 'clearly annoyed', p: 0.36, w: 'w-[36%]' },
-  { q: 'refund_requested', a: 'yes', p: 0.9, w: 'w-[90%]' },
-  { q: 'churn_risk', a: 'no', p: 0.61, w: 'w-[61%]' },
+  { q: 'intent', a: 'refund', p: 1.0 },
+  { q: 'is_urgent', a: 'no', p: 0.87 },
+  { q: 'frustration', a: '1.59 / 3', note: 'clearly annoyed', p: 0.36 },
+  { q: 'refund_requested', a: 'yes', p: 0.88 },
+  { q: 'churn_risk', a: 'no', p: 0.89 },
 ]
+
+function Prompt() {
+  return (
+    <span class="select-none" aria-hidden="true">
+      <span class="text-tok-key">~</span> <span class="text-tok-string">❯</span>{' '}
+    </span>
+  )
+}
 
 function TerminalMock() {
   return (
-    // The caption sits outside the flow on wide screens, so the hero text centres on the terminal
-    // window itself rather than on window + caption.
     <figure class="relative min-w-0">
-      <div class="overflow-hidden rounded-xl border border-line bg-term shadow-2xl shadow-black/5">
-        <div class="flex items-center gap-1.5 border-b border-line px-4 py-3" aria-hidden="true">
-          <span class="size-2.5 rounded-full bg-line-strong"></span>
-          <span class="size-2.5 rounded-full bg-line-strong"></span>
-          <span class="size-2.5 rounded-full bg-line-strong"></span>
+      <div class="term-glow overflow-hidden rounded-2xl border border-line bg-term">
+        <div class="relative flex items-center border-b border-line px-4 py-3" aria-hidden="true">
+          <span class="flex gap-2">
+            <span class="size-3 rounded-full bg-[#ff5f57]"></span>
+            <span class="size-3 rounded-full bg-[#febc2e]"></span>
+            <span class="size-3 rounded-full bg-[#28c840]"></span>
+          </span>
+          <span class="absolute inset-x-0 text-center text-xs text-muted">ollaya — zsh</span>
         </div>
-        <div class="p-4 font-mono text-[13px] leading-6 text-fg sm:p-5">
-          <p class="break-words">
-            <span class="text-muted select-none">$ </span>ollaya run laya --preset triage "{MOCK_STATE}"
-          </p>
-          <table class="mt-4 w-full border-collapse text-left">
+        <div class="px-4 pt-4 pb-5 font-mono text-[12.5px] leading-6 text-fg sm:px-5 sm:text-[13px]">
+          <pre class="whitespace-pre-wrap break-words">
+            <Prompt />
+            <Code code={MOCK_COMMAND} lang="shell" />
+          </pre>
+          <table class="mt-3 w-full border-collapse text-left">
             <caption class="sr-only">Answers returned by the model</caption>
             <thead class="sr-only">
               <tr>
-                <th scope="col" class="pr-4 pb-1 font-normal">Question</th>
-                <th scope="col" class="pr-4 pb-1 font-normal">Answer</th>
-                <th scope="col" class="pb-1 font-normal">
-                  <span class="hidden sm:inline">Probability</span>
-                  <span class="sm:hidden">P</span>
-                </th>
+                <th scope="col">Question</th>
+                <th scope="col">Answer</th>
+                <th scope="col">Probability</th>
               </tr>
             </thead>
             <tbody>
-              {mockRows.map((r) => (
-                <tr>
-                  <td class="py-0.5 pr-4 text-muted">{r.q}</td>
-                  <td class="py-0.5 pr-4 whitespace-nowrap">
+              {mockRows.map((r, i) => (
+                <tr class="term-row" style={`--row:${i}`}>
+                  <td class="py-[3px] pr-3 text-muted">{r.q}</td>
+                  <td class="py-[3px] pr-3 font-semibold whitespace-nowrap">
                     {r.a}
-                    {r.note ? <span class="hidden text-muted sm:inline">{`  ${r.note}`}</span> : null}
+                    {r.note ? <span class="hidden font-normal text-muted sm:inline">{`  ${r.note}`}</span> : null}
                   </td>
-                  <td class="py-0.5">
-                    <span class="flex items-center gap-2.5">
-                      <span class="hidden h-1.5 w-12 overflow-hidden rounded-full bg-fill-strong min-[380px]:block sm:w-20" aria-hidden="true">
-                        <span class={`block h-full rounded-full bg-bar ${r.w}`}></span>
+                  <td class="w-0 py-[3px]">
+                    <span class="flex items-center justify-end gap-3">
+                      <span
+                        class="hidden h-1.5 w-14 overflow-hidden rounded-full bg-fill-strong min-[400px]:block sm:w-20"
+                        aria-hidden="true"
+                      >
+                        <span class="term-bar block h-full rounded-full" style={`width:${Math.round(r.p * 100)}%`}></span>
                       </span>
-                      <span class="tabular-nums">{r.p.toFixed(2)}</span>
+                      <span class="text-body tabular-nums">{r.p.toFixed(2)}</span>
                     </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p class="mt-4 text-muted">
-            <span class="select-none">$ </span>
-            <span class="inline-block h-4 w-2 translate-y-0.5 bg-fg/70" aria-hidden="true"></span>
+          <p class="term-row mt-3" style="--row:5">
+            <Prompt />
+            <span class="term-cursor inline-block h-[1.1em] w-[0.55em] translate-y-[0.2em] bg-fg/80" aria-hidden="true"></span>
           </p>
         </div>
       </div>
+      <figcaption class="mt-3 text-center text-xs text-muted">
+        Real output. Routed to <span class="font-mono">laya:en</span>, answered in 8.9 ms on an RTX 4090.
+      </figcaption>
     </figure>
   )
 }
@@ -300,7 +314,7 @@ function Compatible() {
         </div>
         <div>
           <p class="mb-2 text-[13px] font-medium text-muted">Response</p>
-          <CodeBlock code={compatResponse} />
+          <CodeBlock code={compatResponse} lang="json" />
         </div>
       </div>
       <p class="mt-6 text-sm">
