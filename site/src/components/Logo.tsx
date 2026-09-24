@@ -40,13 +40,17 @@ export function LogoMark({ class: cls = 'size-8', label }: { class?: string; lab
 export function Logo() {
   return (
     <span class="flex items-baseline gap-2 text-fg">
-      <LogoMark class="size-7 self-center" />
-      <span class="text-lg leading-7 font-medium tracking-tight">ollaya</span>
-      <span
-        class="self-center rounded-full border border-line-strong px-1.5 py-px text-[10px] leading-4 font-medium tracking-wide text-muted uppercase"
-        title="Ollaya is new: expect rough edges, and please report what breaks on GitHub"
-      >
-        beta
+      {/* The owl sits 5px inside its 28px box; pull it out so its edge lines up with the page. */}
+      <LogoMark class="-ml-[5px] size-7 self-center" />
+      <span class="text-lg leading-7 font-medium tracking-tight">
+        ollaya
+        {/* vertical-align: middle centres the badge on the wordmark's x-height, whatever the font. */}
+        <span
+          class="ml-2 inline-block rounded-full border border-line-strong px-[7px] align-middle text-[11px] leading-[17px] font-medium tracking-normal text-muted"
+          title="Ollaya is new: expect rough edges, and please report what breaks on GitHub"
+        >
+          Beta
+        </span>
       </span>
     </span>
   )

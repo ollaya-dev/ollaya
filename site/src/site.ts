@@ -30,5 +30,5 @@ export const COPYRIGHT_YEAR = 2026
 export const ANALYTICS = {
   src: 'https://oa-c.cobanov.run/oa.js',
   collector: 'https://oa-c.cobanov.run',
-  key: '',
+  key: 'oa_pk_V20O3SgpVMTojY7jWQ0x1i_QtXXneyRW',
 }

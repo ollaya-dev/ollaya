@@ -10,8 +10,8 @@ const links = [
 
 export function Footer() {
   return (
-    <footer class="mt-24 px-4 py-8 md:px-6">
-      <div class="flex flex-col-reverse gap-4 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
+    <footer class="mt-24 border-t border-line">
+      <div class="mx-auto flex max-w-6xl flex-col-reverse gap-4 px-4 py-8 text-xs text-muted sm:flex-row sm:items-center sm:justify-between md:px-6">
         <p>© {COPYRIGHT_YEAR} Ollaya</p>
         <nav aria-label="Footer">
           <ul class="flex flex-wrap gap-x-5 gap-y-2">

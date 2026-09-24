@@ -55,7 +55,7 @@ function DocsShell({ current, title, children }: { current?: string; title: stri
             <NavList current={current} />
           </nav>
         </details>
-        <nav aria-label="Documentation" class="sticky top-24 hidden md:block">
+        <nav aria-label="Documentation" class="sticky top-24 -mx-3 hidden md:block">
           <p class="px-3 pb-2 text-[13px] font-medium text-muted">Documentation</p>
           <NavList current={current} />
         </nav>

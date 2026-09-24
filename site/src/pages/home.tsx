@@ -18,7 +18,7 @@ export function HomePage() {
       <Hero />
       <div class="mx-auto mt-24 max-w-6xl px-4 md:mt-36 md:px-6 lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-16">
         <nav aria-label="Sections" class="hidden lg:block">
-          <ul class="sticky top-28 space-y-2.5 text-sm" data-scrollspy>
+          <ul class="sticky top-28 -ml-3.5 space-y-2.5 text-sm" data-scrollspy>
             {sections.map((s) => (
               <li>
                 <a
@@ -81,7 +81,8 @@ function Hero() {
 
 // Real output of the command shown, run on an RTX 4090 (fp16): laya routed the English text to
 // laya:en, which answered the triage preset's five questions in 8.9 ms (`--verbose` timings).
-const MOCK_COMMAND = 'ollaya run laya --preset triage \\\n  "I was charged twice this month and want a refund."'
+// Two lines: the second hangs under the first, and keeps that indent when it wraps on a phone.
+const MOCK_COMMAND = ['ollaya run laya --preset triage \\', '"I was charged twice this month and want a refund."']
 const mockRows = [
   { q: 'intent', a: 'refund', p: 1.0 },
   { q: 'is_urgent', a: 'no', p: 0.87 },
@@ -90,19 +91,24 @@ const mockRows = [
   { q: 'churn_risk', a: 'no', p: 0.89 },
 ]
 
-function Prompt() {
+/** One command line: the prompt in its own column, so continuation lines hang under the command. */
+function PromptLine({ children }: { children?: Child }) {
   return (
-    <span class="select-none" aria-hidden="true">
-      <span class="text-tok-key">~</span> <span class="text-tok-string">❯</span>{' '}
-    </span>
+    <div class="flex gap-[1ch]">
+      <span class="text-muted select-none" aria-hidden="true">
+        $
+      </span>
+      <div class="min-w-0">{children}</div>
+    </div>
   )
 }
 
 function TerminalMock() {
   return (
+    // On wide screens the caption is taken out of the flow, so the hero text centres on the window.
     <figure class="relative min-w-0">
-      <div class="term-glow overflow-hidden rounded-2xl border border-line bg-term">
-        <div class="relative flex items-center border-b border-line px-4 py-3" aria-hidden="true">
+      <div class="term-glow overflow-hidden rounded-xl border border-line bg-term">
+        <div class="relative flex h-10 items-center border-b border-line px-4 sm:px-5" aria-hidden="true">
           <span class="flex gap-2">
             <span class="size-3 rounded-full bg-[#ff5f57]"></span>
             <span class="size-3 rounded-full bg-[#febc2e]"></span>
@@ -110,12 +116,16 @@ function TerminalMock() {
           </span>
           <span class="absolute inset-x-0 text-center text-xs text-muted">ollaya — zsh</span>
         </div>
-        <div class="px-4 pt-4 pb-5 font-mono text-[12.5px] leading-6 text-fg sm:px-5 sm:text-[13px]">
-          <pre class="whitespace-pre-wrap break-words">
-            <Prompt />
-            <Code code={MOCK_COMMAND} lang="shell" />
-          </pre>
-          <table class="mt-3 w-full border-collapse text-left">
+        <div class="p-4 font-mono text-[12.5px] leading-6 text-fg sm:p-5 sm:text-[13px]">
+          <PromptLine>
+            <pre class="whitespace-pre-wrap">
+              <Code code={MOCK_COMMAND[0]!} lang="shell" />
+            </pre>
+            <pre class="pl-[2ch] whitespace-pre-wrap">
+              <Code code={MOCK_COMMAND[1]!} lang="shell" />
+            </pre>
+          </PromptLine>
+          <table class="mt-4 w-full border-collapse text-left">
             <caption class="sr-only">Answers returned by the model</caption>
             <thead class="sr-only">
               <tr>
@@ -127,34 +137,35 @@ function TerminalMock() {
             <tbody>
               {mockRows.map((r, i) => (
                 <tr class="term-row" style={`--row:${i}`}>
-                  <td class="py-[3px] pr-3 text-muted">{r.q}</td>
-                  <td class="py-[3px] pr-3 font-semibold whitespace-nowrap">
+                  <td class="w-[18ch] py-0.5 pr-4 align-middle text-muted">{r.q}</td>
+                  <td class="py-0.5 pr-4 align-middle font-medium whitespace-nowrap">
                     {r.a}
                     {r.note ? <span class="hidden font-normal text-muted sm:inline">{`  ${r.note}`}</span> : null}
                   </td>
-                  <td class="w-0 py-[3px]">
+                  <td class="w-0 py-0.5 align-middle">
                     <span class="flex items-center justify-end gap-3">
                       <span
-                        class="hidden h-1.5 w-14 overflow-hidden rounded-full bg-fill-strong min-[400px]:block sm:w-20"
+                        class="hidden h-1.5 w-16 overflow-hidden rounded-full bg-fill-strong min-[420px]:block sm:w-20"
                         aria-hidden="true"
                       >
                         <span class="term-bar block h-full rounded-full" style={`width:${Math.round(r.p * 100)}%`}></span>
                       </span>
-                      <span class="text-body tabular-nums">{r.p.toFixed(2)}</span>
+                      <span class="tabular-nums">{r.p.toFixed(2)}</span>
                     </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p class="term-row mt-3" style="--row:5">
-            <Prompt />
-            <span class="term-cursor inline-block h-[1.1em] w-[0.55em] translate-y-[0.2em] bg-fg/80" aria-hidden="true"></span>
-          </p>
+          <div class="term-row mt-4" style="--row:5">
+            <PromptLine>
+              <span class="term-cursor inline-block h-[1.15em] w-[1ch] translate-y-[0.2em] bg-fg/80" aria-hidden="true"></span>
+            </PromptLine>
+          </div>
         </div>
       </div>
-      <figcaption class="mt-3 text-center text-xs text-muted">
-        Real output. Routed to <span class="font-mono">laya:en</span>, answered in 8.9 ms on an RTX 4090.
+      <figcaption class="mt-3 text-center text-xs text-muted lg:absolute lg:inset-x-0 lg:top-full">
+        Real output: routed to <span class="font-mono">laya:en</span>, answered in 8.9 ms on an RTX 4090.
       </figcaption>
     </figure>
   )
@@ -187,56 +198,94 @@ function Section({
   )
 }
 
+// Median end-to-end latency of a five-question request through the HTTP API, on an RTX 4090 (fp16 for
+// laya, fp32 for the others). Jev: the hosted API's median request in third-party benchmarks.
 const latency = [
-  { label: 'Laya multilingual', from: 32.8, to: 32.8, text: '32.8 ms', ours: true },
-  { label: 'Laya', from: 39.5, to: 39.5, text: '39.5 ms', ours: true },
-  { label: 'TypeSafe Jev (p50)', from: 236, to: 276, text: '236–276 ms', ours: false },
+  { label: 'laya:multilingual', ms: 8.1, text: '8.1 ms' },
+  { label: 'laya:en', ms: 9.6, text: '9.6 ms' },
+  { label: 'gliclass', ms: 14.7, text: '14.7 ms' },
+  { label: 'nli', ms: 20.4, text: '20.4 ms' },
+  { label: 'decider:0.8b', ms: 155, text: '155 ms' },
+  { label: 'decider:2b', ms: 190, text: '190 ms' },
 ]
-const LATENCY_MAX = 276
+const JEV = { label: 'TypeSafe Jev', note: 'hosted API', from: 236, to: 276, text: '236–276 ms' }
+const LATENCY_SCALE = 300
+const AXIS = [0, 100, 200, 300]
 
-const pct = (n: number) => `${((n / LATENCY_MAX) * 100).toFixed(1)}%`
+const pct = (n: number) => `${((n / LATENCY_SCALE) * 100).toFixed(2)}%`
+
+function Stat({ value, unit, label, detail, muted }: { value: string; unit: string; label: string; detail: string; muted?: boolean }) {
+  return (
+    <div class="px-6 py-7 sm:px-8">
+      <p
+        class={`text-5xl font-semibold tracking-tight whitespace-nowrap tabular-nums sm:text-[2.75rem] lg:text-6xl ${muted ? 'text-muted' : 'text-fg'}`}
+      >
+        {value}
+        <span class="ml-1.5 text-2xl font-medium tracking-normal lg:text-3xl">{unit}</span>
+      </p>
+      <p class="mt-3 text-sm font-medium text-fg">{label}</p>
+      <p class="mt-0.5 text-sm text-muted">{detail}</p>
+    </div>
+  )
+}
 
 function Fast() {
   return (
     <Section
       id="fast"
       title="Fast"
-      lead="Decisions in tens of milliseconds."
-      body="A decision model answers in a single forward pass, with no token-by-token generation. Measured through the full HTTP API on an RTX 4090, a five-question request to Laya takes 8–10 ms."
+      lead="Decisions in milliseconds."
+      body="A decision model answers in a single forward pass, with no token-by-token generation. On your own GPU, a five-question request to Laya takes about 10 ms, end to end through the HTTP API."
     >
-      <figure>
+      <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-2">
+        <Stat value="8–10" unit="ms" label="Laya on Ollaya" detail="RTX 4090, five questions, end to end" />
+        <div class="border-t border-line sm:border-t-0 sm:border-l">
+          <Stat value="236–276" unit="ms" label="TypeSafe Jev" detail="Hosted API, median request" muted />
+        </div>
+      </div>
+
+      <figure class="mt-14">
         <figcaption class="text-sm font-medium text-fg">
-          Latency for one question <span class="font-normal text-muted">· lower is better</span>
+          Every model, one scale <span class="font-normal text-muted">· median latency, lower is better</span>
         </figcaption>
-        <ul class="mt-5 space-y-5" role="list">
-          {latency.map((r) => (
-            <li
-              class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 sm:grid-cols-[10rem_minmax(0,1fr)_6.5rem]"
-              title={`${r.label}: ${r.text}`}
-            >
-              <span class={`text-sm ${r.ours ? 'font-medium text-fg' : 'text-body'}`}>{r.label}</span>
-              <span class="text-right text-sm text-fg tabular-nums sm:order-last">{r.text}</span>
-              <span class="col-span-2 flex h-2.5 sm:col-span-1" aria-hidden="true">
-                <span
-                  class={`h-full rounded-r-[4px] ${r.ours ? 'bg-bar' : 'bg-bar-muted'}`}
-                  style={`width:${pct(r.from)}`}
-                ></span>
-                {r.to > r.from ? (
-                  <span
-                    class="ml-[2px] h-full rounded-r-[4px] bg-bar-muted opacity-50"
-                    style={`width:calc(${pct(r.to - r.from)} - 2px)`}
-                  ></span>
-                ) : null}
+        <div class="mt-6 grid grid-cols-[8.25rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[9.5rem_minmax(0,1fr)] sm:gap-x-4">
+          <ul class="contents" role="list">
+            {latency.map((r) => (
+              <li class="contents">
+                <span class="flex h-9 items-center font-mono text-xs text-fg sm:text-[13px]">{r.label}</span>
+                <span class="relative flex h-9 items-center">
+                  <span class="lat-bar h-2.5 min-w-1 rounded-full" style={`width:${pct(r.ms)}`}></span>
+                  <span class="ml-2.5 text-[13px] font-medium whitespace-nowrap text-fg tabular-nums">{r.text}</span>
+                </span>
+              </li>
+            ))}
+            <li class="contents">
+              <span class="flex h-9 flex-col justify-center text-[13px] leading-tight">
+                <span class="text-body">{JEV.label}</span>
+                <span class="text-xs text-muted">{JEV.note}</span>
+              </span>
+              <span class="relative flex h-9 items-center">
+                <span class="h-2.5 rounded-l-full bg-bar-muted" style={`width:${pct(JEV.from)}`}></span>
+                <span class="h-2.5 rounded-r-full bg-bar-muted opacity-50" style={`width:${pct(JEV.to - JEV.from)}`}></span>
+                <span class="ml-2.5 text-[13px] whitespace-nowrap text-body tabular-nums">{JEV.text}</span>
               </span>
             </li>
-          ))}
-        </ul>
-        <p class="mt-6 max-w-2xl text-[13px] leading-relaxed text-muted">
-          Laya figures are from the{' '}
-          <a href="https://huggingface.co/convaiinnovations/laya" class={textLink}>
-            Laya model card
-          </a>
-          , measured on an NVIDIA Tesla T4. Jev p50 range from third-party benchmarks (
+          </ul>
+          <span></span>
+          <span class="relative mt-2 h-5 border-t border-line text-[11px] text-muted tabular-nums" aria-hidden="true">
+            {AXIS.map((t) => (
+              <span
+                class={`absolute top-1.5 whitespace-nowrap ${t === 0 ? '' : t === LATENCY_SCALE ? '-translate-x-full' : '-translate-x-1/2'}`}
+                style={`left:${pct(t)}`}
+              >
+                {t === LATENCY_SCALE ? `${t} ms` : t}
+              </span>
+            ))}
+          </span>
+        </div>
+        <p class="mt-8 max-w-2xl text-[13px] leading-relaxed text-muted">
+          Ollaya: median of a five-question request through the HTTP API on an NVIDIA RTX 4090 (laya in fp16, the
+          others in fp32). Jev: median request latency of the hosted API in third-party benchmarks (
           <a href="https://github.com/AbdelStark/jev-benchmarks" class={textLink}>
             AbdelStark/jev-benchmarks
           </a>
@@ -244,7 +293,7 @@ function Fast() {
           <a href="https://github.com/nibzard/decision-model-benchmark" class={textLink}>
             nibzard/decision-model-benchmark
           </a>
-          ). Setups differ, so treat this as an order-of-magnitude comparison.
+          ), which includes the network. Setups differ, so read it as an order-of-magnitude comparison.
         </p>
       </figure>
     </Section>
@@ -308,13 +357,13 @@ function Compatible() {
       }
     >
       <div class="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <div>
+        <div class="flex flex-col">
           <p class="mb-2 text-[13px] font-medium text-muted">Request</p>
-          <CodeBlock code={compatRequest} />
+          <CodeBlock code={compatRequest} class="flex-1" />
         </div>
-        <div>
+        <div class="flex flex-col">
           <p class="mb-2 text-[13px] font-medium text-muted">Response</p>
-          <CodeBlock code={compatResponse} lang="json" />
+          <CodeBlock code={compatResponse} lang="json" class="flex-1" />
         </div>
       </div>
       <p class="mt-6 text-sm">

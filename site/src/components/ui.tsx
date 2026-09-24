@@ -58,7 +58,7 @@ export function Code({ code, lang }: { code: string; lang?: string }) {
 export function CodeBlock({ code, lang = 'shell', class: cls = '' }: { code: string; lang?: string; class?: string }) {
   return (
     <div class={`relative ${cls}`} data-copy-scope>
-      <pre class="overflow-x-auto rounded-lg bg-code py-4 pr-12 pl-4 font-mono text-[13px] leading-relaxed text-fg">
+      <pre class="h-full overflow-x-auto rounded-lg bg-code py-4 pr-12 pl-4 font-mono text-[13px] leading-relaxed text-fg">
         <Code code={code} lang={lang} />
       </pre>
       <CopyButton />
