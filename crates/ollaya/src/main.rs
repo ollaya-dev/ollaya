@@ -6,6 +6,7 @@
 
 mod commands;
 mod daemon;
+mod mcp;
 mod modelfile;
 mod presets;
 mod render;
@@ -75,6 +76,12 @@ enum Command {
     Cp { source: String, destination: String },
     /// Stop a running model, or without one the server (which unloads every model)
     Stop { model: Option<String> },
+    /// Serve the local models to AI agents over the Model Context Protocol
+    Mcp {
+        /// Serve streamable HTTP at ADDR/mcp instead of stdio (default address 127.0.0.1:11436)
+        #[arg(long, value_name = "ADDR", num_args = 0..=1, default_missing_value = "127.0.0.1:11436")]
+        http: Option<String>,
+    },
     /// Create a model from a Modelfile
     Create {
         name: String,
@@ -167,6 +174,14 @@ fn main() -> Result<()> {
             let config = ollaya_server::config::ServerConfig::from_env()?;
             rt.block_on(daemon::serve(config))?;
         }
+        Command::Mcp { http } => {
+            // stdout is the MCP channel over stdio: logs go to stderr, and only warnings.
+            logging("warn");
+            match http {
+                Some(addr) => rt.block_on(mcp::serve_http(&addr))?,
+                None => rt.block_on(mcp::serve_stdio())?,
+            }
+        }
         // Without a model, `stop` must not start a server just to stop it.
         Command::Stop { model: None } => rt.block_on(daemon::stop_server())?,
         Command::Run(args) => run::run(&rt, args)?,
@@ -206,6 +221,7 @@ async fn client_command(command: Command) -> Result<()> {
         Command::Serve
         | Command::Run(_)
         | Command::Runner { .. }
+        | Command::Mcp { .. }
         | Command::Stop { model: None } => {
             unreachable!("handled in main")
         }

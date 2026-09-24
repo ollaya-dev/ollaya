@@ -18,20 +18,26 @@ coreml = ["ollaya-runner/coreml"]
 
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
 chrono.workspace = true
 clap.workspace = true
 dirs.workspace = true
+futures-util.workspace = true
 indexmap.workspace = true
 indicatif.workspace = true
 ollaya-api.workspace = true
 ollaya-decision.workspace = true
 ollaya-runner.workspace = true
 ollaya-server.workspace = true
+rmcp.workspace = true
 rustyline.workspace = true
+schemars = "1"
+serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+rmcp = { workspace = true, features = ["client", "transport-child-process"] }
 tempfile.workspace = true
