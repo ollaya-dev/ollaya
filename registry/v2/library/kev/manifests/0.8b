@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+  "config": {
+    "mediaType": "application/vnd.ollaya.config.v1+json",
+    "digest": "sha256:e2f5fcbe677b02cb6cf977b073654b4cccf950216bd98ed17e4ee76ea0c2260c",
+    "size": 438,
+    "urls": [
+      "https://ollaya.dev/blobs/sha256-e2f5fcbe677b02cb6cf977b073654b4cccf950216bd98ed17e4ee76ea0c2260c"
+    ]
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.ollaya.graph.onnx",
+      "digest": "sha256:0c03d6d8441f06601c8d9012ad2c8b6b167aa2ba944c65dc6c6dfabd979480d8",
+      "size": 10387780,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-0c03d6d8441f06601c8d9012ad2c8b6b167aa2ba944c65dc6c6dfabd979480d8"
+      ],
+      "annotations": {
+        "org.ollaya.precision": "fp32"
+      }
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:c2b1e5a17d9c1e27685d92ed9b382911ebb99955ecd89052d1721241adfbab6c",
+      "size": 1746942600,
+      "urls": [
+        "https://huggingface.co/Qwen/Qwen3.5-0.8B-Base/resolve/dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68/model.safetensors-00001-of-00001.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:c81d5716f0af7622d8d2b97013c333d48263ca01113f9a7cf4526e96f6ac0b26",
+      "size": 43338624,
+      "urls": [
+        "https://huggingface.co/jaredpalmer/kev-0.8b/resolve/54f4f8777356cd5bbbb6c6919c657f26e6f2f6d8/adapter_model.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:39f4343ccccc65e583bbfff0de0e11bfedb849fcfaaf94b50ac4f2b73bc79c65",
+      "size": 2103103,
+      "urls": [
+        "https://huggingface.co/jaredpalmer/kev-0.8b/resolve/54f4f8777356cd5bbbb6c6919c657f26e6f2f6d8/head.pt"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.tokenizer",
+      "digest": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+      "size": 19989325,
+      "urls": [
+        "https://huggingface.co/jaredpalmer/kev-0.8b/resolve/54f4f8777356cd5bbbb6c6919c657f26e6f2f6d8/tokenizer.json"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.decision",
+      "digest": "sha256:c023343ebfe5f9c19f320127f049ad15f67fe53fc8112ec09bc1521af399ae08",
+      "size": 2807,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-c023343ebfe5f9c19f320127f049ad15f67fe53fc8112ec09bc1521af399ae08"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.calibration",
+      "digest": "sha256:a51c52e256dbf07582753cd6ecb6eff404f4080e499315c0b31e723c473e5191",
+      "size": 252,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-a51c52e256dbf07582753cd6ecb6eff404f4080e499315c0b31e723c473e5191"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.license",
+      "digest": "sha256:8292f5d72c8eec5ef25407a65d68a22345f2ba599704051a9bafcba3ecbeed17",
+      "size": 10459,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-8292f5d72c8eec5ef25407a65d68a22345f2ba599704051a9bafcba3ecbeed17"
+      ]
+    }
+  ]
+}

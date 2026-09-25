@@ -44,8 +44,8 @@ ollaya run {model}
 ## What is in this repository
 
 This repository holds only the files Ollaya derives, with no weights. Each graph is an ONNX export of the
-original model whose weights **reference the author's own `model.safetensors` by byte offset**,
-so `ollaya pull` downloads the weights from the upstream repository, unmodified and pinned to a
+original model whose weights **reference the authors' own weight files by byte offset**,
+so `ollaya pull` downloads the weights from the upstream repositories, unmodified and pinned to a
 commit, and verifies their sha256.
 
 | Tag | Upstream | Files |
@@ -53,7 +53,7 @@ commit, and verifies their sha256.
 {rows}
 
 {graphs_note} Each tag also has `decision.json` (sequence layout, special tokens) and
-`calibration.json` (temperatures).
+`calibration.json` (temperatures).{questions_note}
 
 ## Parity
 
@@ -86,7 +86,7 @@ def main():
     if os.path.exists(stage):
         shutil.rmtree(stage)
     os.makedirs(stage)
-    rows, base_models, any_fp16 = [], [], False
+    rows, base_models, any_fp16, any_questions = [], [], False, False
     for tag in spec["tags"]:
         with open(os.path.join(REGISTRY, "v2", ns, model, "manifests", tag)) as f:
             manifest = json.load(f)
@@ -96,15 +96,23 @@ def main():
             blob = os.path.join(REGISTRY, "blobs", "sha256-" + layer["digest"].split(":", 1)[1])
             kind = layer["mediaType"].rsplit(".", 1)[-1]
             name = {"onnx": "model-%s.onnx" % layer.get("annotations", {}).get("org.ollaya.precision", "fp32"),
-                    "decision": "decision.json", "calibration": "calibration.json"}.get(kind)
+                    "decision": "decision.json", "calibration": "calibration.json",
+                    "questions": "questions.json"}.get(kind)
             if name and os.path.exists(blob):
                 shutil.copy(blob, os.path.join(stage, tag, name))
                 names.append(name)
                 any_fp16 = any_fp16 or name == "model-fp16.onnx"
+                any_questions = any_questions or name == "questions.json"
         v = spec["tags"][tag]
-        if v["repo"] not in base_models:
-            base_models.append(v["repo"])
-        upstream = "[%s@%s](https://huggingface.co/%s/tree/%s)" % (v["repo"], v["commit"][:7], v["repo"], v["commit"])
+        # The tag's own repo, then any other repo its weights come from (a LoRA's base model).
+        sources = [(v["repo"], v["commit"])]
+        for source in (v["weights"].values() if isinstance(v.get("weights"), dict) else []):
+            if isinstance(source, tuple) and source[:2] not in sources:
+                sources.append(source[:2])
+        for repo, _ in sources:
+            if repo not in base_models:
+                base_models.append(repo)
+        upstream = ", ".join("[%s@%s](https://huggingface.co/%s/tree/%s)" % (r, c[:7], r, c) for r, c in sources)
         rows.append("| `%s:%s` | %s | %s |" % (model, tag, upstream, ", ".join("`%s/%s`" % (tag, n) for n in names)))
     by = spec.get("author", "")
     base_model = base_models[0]
@@ -115,6 +123,8 @@ def main():
         by=(" by " + by) if by else "", rows="\n".join(rows),
         graphs_note=("Each tag has an fp32 graph (CPU) and an fp16 graph (GPU)." if any_fp16
                      else "Each tag has an fp32 graph, used on CPU and GPU."),
+        questions_note=(" `questions.json` holds the built-in questions: the model answers those and no "
+                        "others, so requests leave `questions` out." if any_questions else ""),
         parity=spec.get("parity", LAYA_PARITY),
         license_text_note="Same as the upstream model (%s). Ollaya itself is Apache-2.0." % spec["license"],
     )

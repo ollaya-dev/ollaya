@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+  "config": {
+    "mediaType": "application/vnd.ollaya.config.v1+json",
+    "digest": "sha256:39a60d2a4319ed7a20b676eba5bc3a12392798f584a7ccf12f2357111b0324c0",
+    "size": 441,
+    "urls": [
+      "https://ollaya.dev/blobs/sha256-39a60d2a4319ed7a20b676eba5bc3a12392798f584a7ccf12f2357111b0324c0"
+    ]
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.ollaya.graph.onnx",
+      "digest": "sha256:3e0f89fc275e2bb0d459248abaa0d97ed50f360e4e3a5f0c5b1b29af0765d312",
+      "size": 5426737,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-3e0f89fc275e2bb0d459248abaa0d97ed50f360e4e3a5f0c5b1b29af0765d312"
+      ],
+      "annotations": {
+        "org.ollaya.precision": "fp32"
+      }
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:4f3ce47ebd968cddb67de08d8764f8ede7c410a7d1fb9e08145a4c7a2f2e5c0f",
+      "size": 1503300328,
+      "urls": [
+        "https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B/resolve/fada3b2f655b89601929198343c94cd2f64d93cc/model.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.tokenizer",
+      "digest": "sha256:aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "size": 11422654,
+      "urls": [
+        "https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B/resolve/fada3b2f655b89601929198343c94cd2f64d93cc/tokenizer.json"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.decision",
+      "digest": "sha256:e497e9618887caedd5c3c45106dee4478eba252496f8303037fa6bdf8aec7ae8",
+      "size": 4938,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-e497e9618887caedd5c3c45106dee4478eba252496f8303037fa6bdf8aec7ae8"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.calibration",
+      "digest": "sha256:9dfafcb76d5f885b590b01dba639c861e17270ba094e38ba83a2de2a9ac0f907",
+      "size": 137,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-9dfafcb76d5f885b590b01dba639c861e17270ba094e38ba83a2de2a9ac0f907"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.questions",
+      "digest": "sha256:b7ed6e0fac05095ada9799393ef79cbd72879a5a3ddb2d9ded68806941deb328",
+      "size": 820,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-b7ed6e0fac05095ada9799393ef79cbd72879a5a3ddb2d9ded68806941deb328"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.license",
+      "digest": "sha256:7f6e36215718a294463dbe515d36a58fb8d53dbd979fdc2bc4ef67cbe92ac63c",
+      "size": 10324,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-7f6e36215718a294463dbe515d36a58fb8d53dbd979fdc2bc4ef67cbe92ac63c"
+      ]
+    }
+  ]
+}

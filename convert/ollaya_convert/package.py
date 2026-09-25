@@ -35,6 +35,7 @@ MEDIA = {
     "calibration": "application/vnd.ollaya.calibration",
     "router": "application/vnd.ollaya.router",
     "params": "application/vnd.ollaya.params",
+    "questions": "application/vnd.ollaya.questions",
     "license": "application/vnd.ollaya.license",
 }
 HF = "https://huggingface.co"
@@ -131,13 +132,14 @@ def package_wl(spec, tag, v, blobs):
     """One tag of a model converted under `families/` (fp32 graph; runs fp32 on every device)."""
     repo, commit = v["repo"], v["commit"]
     oids, weights = {}, []
-    for location, path in v["weights"].items():
-        d = upstream(MEDIA["weights"], repo, commit, path)
+    for location, source in v["weights"].items():
+        w_repo, w_commit, path = source if isinstance(source, tuple) else (repo, commit, source)
+        d = upstream(MEDIA["weights"], w_repo, w_commit, path)
         oid = d["digest"].split(":", 1)[1]
         local = os.path.join(v["wl_dir"], location)
         with open(local, "rb") as f:  # the local copy must be the pinned upstream file
             if hashlib.file_digest(f, "sha256").hexdigest() != oid:
-                raise SystemExit("%s does not match %s@%s:%s" % (local, repo, commit, path))
+                raise SystemExit("%s does not match %s@%s:%s" % (local, w_repo, w_commit, path))
         oids[location] = oid
         weights.append(d)
     data, stats = graph_from_wl(v["wl_dir"], oids)
@@ -148,6 +150,9 @@ def package_wl(spec, tag, v, blobs):
     decision = blobs.put(MEDIA["decision"], decision_bytes)
     calibration = blobs.put(MEDIA["calibration"], open(os.path.join(v["wl_dir"], "calibration.json"), "rb").read())
     dj = json.loads(decision_bytes)
+    # A fixed-preset model ships its questions as the built-in set (what a Modelfile's QUESTIONS writes).
+    questions = [blobs.put(MEDIA["questions"], json.dumps(dj["questions"], indent=2).encode())] \
+        if dj.get("preset_only") else []
     ctx = dj.get("max_len") or dj.get("max_length") or v["context_length"]
     license_id = v.get("license") or spec["license"]
     lic = blobs.put(MEDIA["license"], (v.get("license_text") or spec["license_text"]).encode())
@@ -157,7 +162,7 @@ def package_wl(spec, tag, v, blobs):
         "source": "huggingface.co/%s@%s" % (repo, commit), "license": license_id,
         "release_date": hf_commit_date(repo, commit),
     }, indent=2).encode())
-    return config, [graph] + weights + [tokenizer, decision, calibration, lic]
+    return config, [graph] + weights + [tokenizer, decision, calibration] + questions + [lic]
 
 
 def package_model(spec, blobs):
