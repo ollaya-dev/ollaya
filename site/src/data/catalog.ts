@@ -28,11 +28,28 @@ interface ModelOverlay {
   rank?: number
   /** The state in the usage examples, when the default triage message does not suit the model. */
   exampleState?: string
+  /**
+   * Measured numbers for the default tag, shown on /search so models compare at a glance. Only
+   * numbers published on the model's own page: typed-decisions accuracy (argmax against the
+   * majority label on all 400 states) and the median five-question request, end to end through
+   * the HTTP API, on an RTX 4090.
+   */
+  stats?: ModelStats
   tags?: Record<string, TagOverlay>
+}
+
+export interface ModelStats {
+  /** The tag the numbers are for, e.g. "laya:en". */
+  tag: string
+  accuracy?: number
+  latencyMs: number
+  /** What the latency covers when it isn't five questions, e.g. "its four built-in questions". */
+  latencyNote?: string
 }
 
 const overlays: Record<string, ModelOverlay> = {
   laya: {
+    stats: { tag: 'laya:en', accuracy: 0.361, latencyMs: 9.6 },
     title: 'Laya',
     description:
       'Open decision models from Convai Innovations. Typed, calibrated answers to choice, score and yes/no questions in a single forward pass, in English and 100+ languages.',
@@ -54,6 +71,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   nli: {
+    stats: { tag: 'nli:deberta-v3-large', accuracy: 0.548, latencyMs: 20.4 },
     title: 'NLI zero-shot',
     description:
       'Zero-shot classifiers by Moritz Laurer: every option becomes a hypothesis scored for entailment. The most accurate encoder model on typed decisions in our tests.',
@@ -68,6 +86,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   decider: {
+    stats: { tag: 'decider:2b', accuracy: 0.591, latencyMs: 190 },
     title: 'decider',
     description:
       'Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass. The most accurate open decision model Ollaya ships.',
@@ -82,6 +101,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   kev: {
+    stats: { tag: 'kev:0.8b', accuracy: 0.447, latencyMs: 185 },
     title: 'Kev',
     description:
       "Decision models by Jared Palmer: a LoRA on a Qwen3.5 base plus a pointer head that scores every option at its own span, in one forward pass per question. Calibrated with Kev's own temperature.",
@@ -95,6 +115,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   qwen3guard: {
+    stats: { tag: 'qwen3guard:0.6b', latencyMs: 37, latencyNote: 'its four built-in questions' },
     title: 'Qwen3Guard',
     description:
       'Safety guard by the Qwen team: is a text safe, controversial or unsafe, and which unsafe category? It answers its own built-in questions, in 119 languages, in one forward pass.',
@@ -109,6 +130,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   von: {
+    stats: { tag: 'von:1.1', accuracy: 0.447, latencyMs: 23 },
     title: 'Von',
     description:
       'Decision model by Victor Hugo Panisa on ModernBERT-large: every option is scored at its own marker, all options of a question in one pass, with an input-conditioned calibration. 8k-token context.',
@@ -122,6 +144,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   gliclass: {
+    stats: { tag: 'gliclass:large', accuracy: 0.477, latencyMs: 14.7 },
     title: 'GLiClass',
     description:
       'Instruction-following zero-shot classifier by Knowledgator: all options of a question are scored in one pass, so cost barely grows with the number of options.',
@@ -207,6 +230,7 @@ export interface Model {
   keywords: string[]
   /** The state in the usage examples, if not the default triage message. */
   exampleState: string | null
+  stats: ModelStats | null
   tags: Tag[]
 }
 
@@ -315,6 +339,7 @@ function buildModel(m: RegistryModel): Model {
     rank: overlay?.rank ?? 100,
     keywords: overlay?.keywords ?? [],
     exampleState: overlay?.exampleState ?? null,
+    stats: overlay?.stats ?? null,
     tags,
   }
 }

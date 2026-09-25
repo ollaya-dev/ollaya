@@ -1,7 +1,7 @@
 import { Icon } from '../components/Icon'
 import { CapBadge, SizeBadge } from '../components/ui'
 import { Updated } from '../components/Updated'
-import { capabilityFilters, catalog, comingNext, haystack, type Model } from '../data/catalog'
+import { capabilityFilters, catalog, comingNext, haystack, type Model, type ModelStats } from '../data/catalog'
 
 /**
  * /search: every model is rendered into the static page (so it works without JavaScript).
@@ -80,6 +80,15 @@ export function SearchPage() {
             <ModelRow model={m} />
           ))}
         </ul>
+        <p class="mt-4 text-[13px] text-muted">
+          Numbers are for each model's default tag. Typed-decisions accuracy is the argmax against
+          the majority label on all 400 typed-decisions states; the labels have low annotator
+          agreement, so compare models with each other rather than reading the numbers as absolutes.
+          Latency is the median five-question request with a short state, end to end through the
+          HTTP API on an RTX 4090 (qwen3guard: its four built-in questions). Larger models are more
+          accurate and slower; see each model's page for how speed grows with the length of the
+          state.
+        </p>
         <div class="border-t border-line py-12 text-center" data-results-empty hidden>
           <p class="text-fg">
             No models found<span data-results-query></span>.
@@ -103,6 +112,23 @@ export function SearchPage() {
         </aside>
       ) : null}
     </div>
+  )
+}
+
+/** The default tag's measured numbers; the note under the list says how they were measured. */
+function Stats({ stats }: { stats: ModelStats }) {
+  const ms = stats.latencyMs < 100 ? stats.latencyMs.toFixed(1).replace(/\.0$/, '') : String(Math.round(stats.latencyMs))
+  return (
+    <>
+      {stats.accuracy !== undefined ? (
+        <span title={`Typed-decisions accuracy of ${stats.tag}`}>
+          <span class="tabular-nums text-fg">{stats.accuracy.toFixed(3)}</span> typed-decisions
+        </span>
+      ) : null}
+      <span title={`Median request to ${stats.tag} on an RTX 4090${stats.latencyNote ? `, ${stats.latencyNote}` : ''}`}>
+        <span class="tabular-nums text-fg">{ms} ms</span> on RTX 4090
+      </span>
+    </>
   )
 }
 
@@ -131,6 +157,7 @@ export function ModelRow({ model }: { model: Model }) {
             {model.tags.length} Tags
           </span>
           {model.updated ? <Updated iso={model.updated} /> : null}
+          {model.stats ? <Stats stats={model.stats} /> : null}
         </p>
       </a>
     </li>
