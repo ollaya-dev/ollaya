@@ -10,6 +10,7 @@ const sections = [
   { id: 'compatible', label: 'Drop-in compatible' },
   { id: 'models', label: 'Open models' },
   { id: 'private', label: 'Your data stays yours' },
+  { id: 'platforms', label: 'Platforms' },
 ]
 
 export function HomePage() {
@@ -36,6 +37,7 @@ export function HomePage() {
           <Compatible />
           <OpenModels />
           <Private />
+          <Platforms />
         </div>
       </div>
       <Closer />
@@ -114,7 +116,7 @@ function TerminalMock() {
             <span class="size-3 rounded-full bg-[#febc2e]"></span>
             <span class="size-3 rounded-full bg-[#28c840]"></span>
           </span>
-          <span class="absolute inset-x-0 text-center text-xs text-muted">ollaya — zsh</span>
+          <span class="absolute inset-x-0 text-center text-xs text-muted">ollaya · zsh</span>
         </div>
         <div class="p-4 font-mono text-[12.5px] leading-6 text-fg sm:p-5 sm:text-[13px]">
           <PromptLine>
@@ -375,7 +377,7 @@ function Compatible() {
   )
 }
 
-/** One row per model, or — while the registry holds a single family — one row per featured tag. */
+/** One row per model, or one row per featured tag while the registry holds a single family. */
 function modelRows(): { href: string; name: string; summary: string; meta: string }[] {
   if (catalog.length === 1) {
     const m = catalog[0]!
@@ -427,7 +429,7 @@ function OpenModels() {
         </a>
         {comingNext.length ? (
           <p class="max-w-md text-[13px] text-muted sm:text-right">
-            Planned: more open decision models — {comingNext.join(', ')}.
+            More open decision models are planned: {comingNext.join(', ')}.
           </p>
         ) : null}
       </div>
@@ -479,6 +481,123 @@ function Private() {
   )
 }
 
+type Support = { ok: boolean; text?: string; note?: string }
+
+// What each release ships (see /download and the release assets). GPU means a provider the runner
+// registers; today that is CUDA only, so Apple, AMD and Intel GPUs fall back to the CPU.
+const platforms: { name: string; detail: string; app: Support; cli: Support; gpu: Support }[] = [
+  {
+    name: 'macOS',
+    detail: 'Apple silicon',
+    app: { ok: true, text: 'Menu bar app', note: '.dmg' },
+    cli: { ok: true, text: 'Install script' },
+    gpu: { ok: false, text: 'CPU only' },
+  },
+  {
+    name: 'Windows',
+    detail: '10 and 11, x64',
+    app: { ok: true, text: 'Desktop app', note: '.exe or .msi' },
+    cli: { ok: true, text: 'PowerShell script' },
+    gpu: { ok: false, text: 'CPU only', note: 'NVIDIA via WSL 2' },
+  },
+  {
+    name: 'Linux',
+    detail: 'x86-64',
+    app: { ok: true, text: 'Desktop app', note: 'AppImage, .deb, .rpm' },
+    cli: { ok: true, text: 'Install script', note: 'systemd service' },
+    gpu: { ok: true, text: 'NVIDIA, CUDA 13' },
+  },
+  {
+    name: 'Linux',
+    detail: 'ARM64',
+    app: { ok: false },
+    cli: { ok: true, text: 'Install script', note: 'systemd service' },
+    gpu: { ok: false, text: 'CPU only' },
+  },
+  {
+    name: 'WSL 2',
+    detail: 'Linux on Windows',
+    app: { ok: false },
+    cli: { ok: true, text: 'Install script', note: 'Same as Linux' },
+    gpu: { ok: true, text: 'NVIDIA, CUDA 13' },
+  },
+  {
+    name: 'Docker',
+    detail: 'amd64 and arm64',
+    app: { ok: false },
+    cli: { ok: true, text: 'Image on GHCR' },
+    gpu: { ok: true, text: 'NVIDIA, CUDA 13', note: ':cuda image, amd64' },
+  },
+]
+
+const platformColumns = ['Desktop app', 'Command line', 'GPU'] as const
+
+/** A table from md up; below that each row stacks into labelled lines. */
+function SupportCell({ label, s }: { label: string; s: Support }) {
+  return (
+    <td class="flex gap-4 pt-2.5 md:table-cell md:px-4 md:py-5 xl:px-6 md:align-top">
+      <span class="w-28 shrink-0 text-[13px] leading-6 text-muted md:hidden">{label}</span>
+      <span class="flex gap-2.5">
+        <Icon name={s.ok ? 'check' : 'minus'} class={`mt-1 size-4 shrink-0 ${s.ok ? 'text-fg' : 'text-faint'}`} />
+        <span class="text-[15px] leading-6">
+          {s.text ? <span class={s.ok ? 'text-body' : 'text-muted'}>{s.text}</span> : <span class="sr-only">Not available</span>}
+          {s.note && <span class="block text-[13px] leading-5 text-muted">{s.note}</span>}
+        </span>
+      </span>
+    </td>
+  )
+}
+
+function Platforms() {
+  return (
+    <Section
+      id="platforms"
+      title="Platforms"
+      lead="Runs where you work."
+      body="A desktop app and a command line for macOS, Windows and Linux, and a Docker image for servers. Every model runs on the CPU; an NVIDIA GPU on Linux, in WSL 2 or in Docker takes a request down to milliseconds."
+    >
+      <div class="overflow-hidden rounded-2xl border border-line">
+        <table class="block w-full border-collapse md:table md:table-fixed">
+          <thead class="hidden border-b border-line bg-subtle md:table-header-group">
+            <tr>
+              <th scope="col" class="w-[20%] px-6 py-3 text-left md:px-4 xl:px-6 text-[13px] font-medium text-muted">
+                Platform
+              </th>
+              {platformColumns.map((c) => (
+                <th scope="col" class="px-6 py-3 text-left text-[13px] md:px-4 xl:px-6 font-medium text-muted">
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody class="block divide-y divide-line md:table-row-group">
+            {platforms.map((p) => (
+              <tr class="block px-5 py-5 md:table-row md:p-0">
+                <th scope="row" class="block pb-1 text-left font-normal md:table-cell md:px-4 md:py-5 xl:px-6 md:align-top">
+                  <span class="block text-[15px] leading-6 font-medium text-fg">{p.name}</span>
+                  <span class="block text-[13px] leading-5 text-muted">{p.detail}</span>
+                </th>
+                <SupportCell label={platformColumns[0]} s={p.app} />
+                <SupportCell label={platformColumns[1]} s={p.cli} />
+                <SupportCell label={platformColumns[2]} s={p.gpu} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <a href="/download" class="inline-flex items-center gap-1.5 text-sm font-medium text-fg underline-offset-4 hover:underline">
+          Install for your platform <Icon name="arrowRight" class="size-4" />
+        </a>
+        <p class="max-w-md text-[13px] text-muted sm:text-right">
+          NVIDIA GPUs need driver R580 or newer; the installers fetch the CUDA libraries only when they find one. On
+          Apple, AMD and Intel GPUs, models run on the CPU.
+        </p>
+      </div>
+    </Section>
+  )
+}
+
 function Closer() {
   return (
     <section class="mx-auto mt-24 max-w-6xl px-4 text-center md:mt-36 md:px-6" aria-labelledby="closer-title">
@@ -496,7 +615,7 @@ function Closer() {
         </a>
       </div>
       <p class="mt-4 text-[13px] text-muted">
-        Linux, macOS and Docker · Apache-2.0 ·{' '}
+        macOS, Windows, Linux and Docker · Apache-2.0 ·{' '}
         <a href={GITHUB_URL} class={textLink}>
           GitHub
         </a>
