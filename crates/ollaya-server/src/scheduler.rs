@@ -30,10 +30,12 @@ pub struct SchedulerConfig {
     /// `auto`, `cpu`, `cuda` or `cuda:<n>`, passed to runners.
     pub device: String,
     pub load_timeout: Duration,
-    /// The executable to spawn as `<exe> runner ...` (normally the running binary).
+    /// The executable to spawn as `<exe> runner ...`: the running binary, or on Windows with a GPU
+    /// pack, its copy inside the pack (see [`crate::launch`]).
     pub exe: PathBuf,
-    /// `argv[0]` for runners. ONNX Runtime loads its GPU provider libraries from the directory of
-    /// `argv[0]`, so GPU runners get `<cuda dir>/ollaya` (absolute; the file need not exist).
+    /// `argv[0]` for runners. On Linux, ONNX Runtime loads its GPU provider libraries from the
+    /// directory of `argv[0]`, so GPU runners get `<cuda dir>/ollaya` (absolute; the file need
+    /// not exist).
     pub arg0: Option<PathBuf>,
     /// Extra environment for runner processes (e.g. the GPU library path).
     pub env: Vec<(String, String)>,

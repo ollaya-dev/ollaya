@@ -175,21 +175,14 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
     ))
 }
 
-/// ONNX Runtime loads its CUDA provider from the directory of `argv[0]`; the daemon points
-/// `argv[0]` at the CUDA runtime pack. Check before asking ORT, for a clear message.
+/// ONNX Runtime loads its CUDA provider from its runtime path (see [`ort_runtime_dir`]), which
+/// the daemon points at the CUDA runtime pack. Check before asking ORT, for a clear message.
 fn cuda_providers_present() -> Result<(), String> {
     if !cfg!(feature = "cuda") {
         return Err("this build of ollaya has no CUDA support".into());
     }
-    let arg0 = std::env::args_os()
-        .next()
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    let dir = arg0
-        .parent()
-        .filter(|d| d.is_absolute())
-        .ok_or("argv[0] is not an absolute path")?;
-    if dir.join("libonnxruntime_providers_shared.so").is_file() {
+    let dir = ort_runtime_dir()?;
+    if dir.join(PROVIDERS_SHARED).is_file() {
         Ok(())
     } else {
         Err(format!(
@@ -221,6 +214,37 @@ fn after_gpu_warm_up(warmed: &Result<(), Error>, device: DeviceRequest) -> After
         Err(e) if is_cuda_failure(e) => AfterWarmUp::Fail,
         _ => AfterWarmUp::KeepGpu,
     }
+}
+
+#[cfg(windows)]
+const PROVIDERS_SHARED: &str = "onnxruntime_providers_shared.dll";
+#[cfg(not(windows))]
+const PROVIDERS_SHARED: &str = "libonnxruntime_providers_shared.so";
+
+/// The directory ONNX Runtime loads its provider libraries from (`Env::GetRuntimePath`). On
+/// Windows that is the executable's own directory (`GetModuleFileNameW`); the daemon starts GPU
+/// runners from a copy of the executable inside the pack.
+#[cfg(windows)]
+fn ort_runtime_dir() -> Result<PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("cannot locate ollaya.exe: {e}"))?;
+    exe.parent()
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("{} has no parent directory", exe.display()))
+}
+
+/// The directory ONNX Runtime loads its provider libraries from (`Env::GetRuntimePath`). With ORT
+/// linked into the executable, glibc's `dladdr` reports `argv[0]` for it, so that is the
+/// directory of `argv[0]`, which the daemon sets for GPU runners.
+#[cfg(not(windows))]
+fn ort_runtime_dir() -> Result<PathBuf, String> {
+    let arg0 = std::env::args_os()
+        .next()
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    arg0.parent()
+        .filter(|d| d.is_absolute())
+        .map(PathBuf::from)
+        .ok_or_else(|| "argv[0] is not an absolute path".into())
 }
 
 /// Run one small request before announcing readiness. The first run on a device pays one-off

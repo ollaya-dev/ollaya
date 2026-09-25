@@ -9,8 +9,9 @@ rust-version.workspace = true
 
 [features]
 default = []
-# pyke publishes one Linux CUDA build, with CUDA 13 + TensorRT + NV TensorRT RTX providers; asking
-# for exactly that feature set selects it. Only the CUDA provider is registered at runtime.
+# pyke publishes one CUDA build per platform: CUDA 13 + TensorRT + NV TensorRT RTX providers on
+# Linux, the same plus DirectML on Windows. Asking for these features selects it. Only the CUDA
+# provider is registered at runtime.
 cuda = ["ort/cuda", "ort/tensorrt", "ort/nvrtx"]
 # Links pyke's macOS build (which includes the Core ML provider). Models run on the CPU provider
 # until the Core ML path is measured against CPU and verified for parity.

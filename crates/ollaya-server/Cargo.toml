@@ -11,6 +11,7 @@ rust-version.workspace = true
 axum.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
+hex.workspace = true
 indexmap.workspace = true
 ollaya-api.workspace = true
 ollaya-decision.workspace = true
@@ -19,6 +20,8 @@ ollaya-registry.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# Names the runner copy inside a Windows GPU pack after the executable's hash (launch.rs).
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true

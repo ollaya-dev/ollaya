@@ -9,7 +9,6 @@ use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::future::{Future, IntoFuture};
 use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
@@ -812,21 +811,7 @@ pub enum ServeError {
 }
 
 /// How runner processes are started (see [`crate::launch`]).
-#[derive(Debug, Clone)]
-pub struct RunnerLaunch {
-    pub exe: PathBuf,
-    pub arg0: Option<PathBuf>,
-    pub env: Vec<(String, String)>,
-}
-
-impl RunnerLaunch {
-    /// Runners are this executable's hidden `runner` subcommand.
-    pub fn current() -> std::io::Result<Self> {
-        let exe = std::env::current_exe()?;
-        let (arg0, env) = crate::launch::runner_launch(&exe);
-        Ok(RunnerLaunch { exe, arg0, env })
-    }
-}
+pub use crate::launch::RunnerLaunch;
 
 /// The store, scheduler and service for `config`.
 pub fn build(config: ServerConfig, runner: RunnerLaunch) -> Result<Arc<AppState>, ServeError> {
