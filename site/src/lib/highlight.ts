@@ -36,6 +36,8 @@ export function highlight(code: string, lang: string | undefined): string {
     case 'console':
     case 'cli':
     case 'curl':
+    case 'powershell':
+    case 'ps1':
       return shell(code)
     case 'python':
     case 'py':

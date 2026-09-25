@@ -110,6 +110,8 @@ const installText = await readFile(installer, 'utf8').catch(() => {
 })
 if (!installText.startsWith('#!/bin/sh')) throw new Error(`${installer} does not start with #!/bin/sh`)
 await writeFile(join(dist, 'install.sh'), installText)
+// The Windows CLI installer: `irm <origin>/install.ps1 | iex` serves ../scripts/install.ps1 unchanged.
+await writeFile(join(dist, 'install.ps1'), await readFile(join(root, '..', 'scripts', 'install.ps1')))
 
 // The static model registry (../registry, written by convert/ollaya_convert/package.py): manifests
 // under /v2/ and derived blobs under /blobs/. Manifests carry absolute blob URLs, so they must

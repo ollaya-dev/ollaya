@@ -1,9 +1,9 @@
 import type { Child } from 'hono/jsx'
 import { Icon } from '../components/Icon'
-import { CodeBlock, textLink } from '../components/ui'
-import { DOCKER_IMAGE, LOCAL_PORT, RELEASES_URL } from '../site'
+import { btnPrimary, CodeBlock, textLink } from '../components/ui'
+import { DOCKER_IMAGE, LATEST_DOWNLOAD, LOCAL_PORT, RELEASES_URL } from '../site'
 
-type Os = 'linux' | 'macos' | 'docker'
+type Os = 'macos' | 'windows' | 'linux' | 'docker'
 
 function Panel({ id, selected, children }: { id: Os; selected: Os; children: Child }) {
   return (
@@ -38,13 +38,34 @@ function Note({ children }: { children: Child }) {
   return <p class="mt-3 text-[13px] text-muted">{children}</p>
 }
 
+/** The desktop app: a download button and what the app does. */
+function DesktopApp({ file, label, extra }: { file: string; label: string; extra?: Child }) {
+  return (
+    <Step title="Desktop app">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <a href={`${LATEST_DOWNLOAD}/${file}`} class={btnPrimary}>
+          <Icon name="download" class="size-4" />
+          {label}
+        </a>
+        {extra}
+      </div>
+      <Note>
+        Start and stop the server, download models and try them, in one window. Your code talks to the same local API;
+        for the <code class="font-mono">ollaya</code> command, install the command line too.
+      </Note>
+    </Step>
+  )
+}
+
 /** /download — Linux is selected by default; app.js switches to macOS for Mac visitors. */
 export function DownloadPage({ origin }: { origin: string }) {
   const selected: Os = 'linux'
   const install = `curl -fsSL ${origin}/install.sh | sh`
+  const installWindows = `irm ${origin}/install.ps1 | iex`
   const tabs: { id: Os; label: string }[] = [
-    { id: 'linux', label: 'Linux' },
     { id: 'macos', label: 'macOS' },
+    { id: 'windows', label: 'Windows' },
+    { id: 'linux', label: 'Linux' },
     { id: 'docker', label: 'Docker' },
   ]
   const volume = '-v ollaya:/home/ollaya/.ollaya'
@@ -58,7 +79,7 @@ export function DownloadPage({ origin }: { origin: string }) {
   return (
     <div class="mx-auto max-w-2xl px-4 pt-12 md:px-6 md:pt-20">
       <h1 class="text-center text-4xl font-medium tracking-tight text-fg md:text-5xl">Download Ollaya</h1>
-      <p class="mt-4 text-center text-lg text-body">One binary for Linux and macOS, or a Docker image.</p>
+      <p class="mt-4 text-center text-lg text-body">A desktop app and a command line for macOS, Windows and Linux, or a Docker image.</p>
 
       <div class="mt-10">
         <div role="tablist" aria-label="Platform" data-os-tabs class="mx-auto flex w-fit gap-1 rounded-full border border-line p-1">
@@ -82,7 +103,7 @@ export function DownloadPage({ origin }: { origin: string }) {
 
         <div class="mt-10">
           <Panel id="linux" selected={selected}>
-            <Step title="Install with one command">
+            <Step title="Command line">
               <CodeBlock code={install} />
               <Note>
                 {script} detects your CPU and NVIDIA GPU, downloads the release from{' '}
@@ -100,13 +121,46 @@ export function DownloadPage({ origin }: { origin: string }) {
               items={[
                 'x86-64 or ARM64 with glibc 2.38 or newer: Ubuntu 24.04, Debian 13, Fedora 39, RHEL 10 or newer.',
                 'Runs on the CPU. An NVIDIA GPU is optional: driver R580 or newer (CUDA 13), on x86-64.',
-                'Windows: use WSL 2 with the Linux installer. A native Windows build is planned.',
+              ]}
+            />
+            <DesktopApp
+              file="Ollaya-linux-x86_64.AppImage"
+              label="Download the AppImage"
+              extra={
+                <a href={`${LATEST_DOWNLOAD}/Ollaya-linux-amd64.deb`} class={`text-sm ${textLink}`}>
+                  or the .deb
+                </a>
+              }
+            />
+          </Panel>
+
+          <Panel id="windows" selected={selected}>
+            <DesktopApp file="Ollaya-windows-x64-setup.exe" label="Download for Windows" />
+            <Step title="Command line">
+              <CodeBlock code={installWindows} lang="powershell" />
+              <Note>
+                In PowerShell. It installs <code class="font-mono">ollaya</code> for your user, with no administrator
+                rights, and puts it on your <code class="font-mono">PATH</code>. The archive is checked against the
+                release's sha256.
+              </Note>
+            </Step>
+            <Step title="Run a model">
+              <CodeBlock code="ollaya run laya" />
+            </Step>
+            <Requirements
+              items={[
+                'Windows 10 or 11 on a 64-bit x86 PC. Models run on the CPU.',
+                <>
+                  For an NVIDIA GPU, use WSL 2 with the Linux installer. The server in WSL answers Windows programs at{' '}
+                  <code class="font-mono">localhost:{LOCAL_PORT}</code>.
+                </>,
               ]}
             />
           </Panel>
 
           <Panel id="macos" selected={selected}>
-            <Step title="Install with one command">
+            <DesktopApp file="Ollaya-macos-arm64.dmg" label="Download for macOS" />
+            <Step title="Command line">
               <CodeBlock code={install} />
               <Note>
                 {script} downloads the release from{' '}

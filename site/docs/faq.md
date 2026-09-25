@@ -12,7 +12,7 @@ A model that reads a *state* — text, an email, a ticket, a JSON object — plu
 
 ## How do I install it?
 
-`curl -fsSL {{SITE_ORIGIN}}/install.sh | sh` on Linux and macOS, or the Docker image `ghcr.io/ollaya-dev/ollaya`. See [Download](/download).
+The [desktop app](/download) for macOS, Windows and Linux; `curl -fsSL {{SITE_ORIGIN}}/install.sh | sh` for the command line on Linux and macOS, `irm {{SITE_ORIGIN}}/install.ps1 | iex` on Windows; or the Docker image `ghcr.io/ollaya-dev/ollaya`. See [Download](/download).
 
 ## How is Ollaya related to Ollama?
 
@@ -52,7 +52,8 @@ No. Ollaya runs on the CPU, and on Linux x86-64 uses an NVIDIA GPU with driver R
 - **Linux** x86-64 and ARM64 with glibc 2.38 or newer: Ubuntu 24.04, Debian 13, Fedora 39, RHEL 10 or newer.
 - **macOS** on Apple silicon.
 - **Docker:** `ghcr.io/ollaya-dev/ollaya` for linux/amd64 and linux/arm64, and `:cuda` for NVIDIA GPUs. Use it on older Linux distributions too.
-- **Windows:** use WSL 2 with the Linux installer. A native Windows build is planned.
+- **Windows** 10 and 11 on 64-bit x86 PCs, on the CPU: the desktop app, or `irm {{SITE_ORIGIN}}/install.ps1 | iex` for the command line. For an NVIDIA GPU, use WSL 2 with the Linux installer.
+- **The desktop app** runs on all three: see [Download](/download).
 
 ## Does my data leave my machine?
 

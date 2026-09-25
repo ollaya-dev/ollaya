@@ -125,12 +125,17 @@ jobs:
           npx tauri build --config "$TAURI_EXTRA"
       - name: Collect installers
         shell: bash
+        # Stable names, so the website can link releases/latest/download/<name>.
         run: |
           mkdir -p out
           b=desktop/src-tauri/target/release/bundle
-          for f in "$b"/dmg/*.dmg "$b"/nsis/*.exe "$b"/msi/*.msi "$b"/appimage/*.AppImage "$b"/deb/*.deb "$b"/rpm/*.rpm; do
-            [ -f "$f" ] && cp "$f" out/
-          done
+          take() { for f in $1; do [ -f "$f" ] && cp "$f" "out/$2"; done; }
+          take "$b/dmg/*.dmg" Ollaya-macos-arm64.dmg
+          take "$b/nsis/*-setup.exe" Ollaya-windows-x64-setup.exe
+          take "$b/msi/*.msi" Ollaya-windows-x64.msi
+          take "$b/appimage/*.AppImage" Ollaya-linux-x86_64.AppImage
+          take "$b/deb/*.deb" Ollaya-linux-amd64.deb
+          take "$b/rpm/*.rpm" Ollaya-linux-x86_64.rpm
           ls -l out
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

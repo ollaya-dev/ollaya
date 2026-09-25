@@ -91,6 +91,10 @@ Browse them at [ollaya.dev/search](https://ollaya.dev/search). Laya tags ending 
   `curl -fsSL https://ollaya.dev/install.sh | sh`. When an NVIDIA GPU is present
   (driver R580+), the installer adds the CUDA runtime.
 - **macOS** (Apple silicon): the same command.
+- **Windows** (x64, CPU): `irm https://ollaya.dev/install.ps1 | iex` in PowerShell. For an NVIDIA GPU,
+  use WSL 2 with the Linux command.
+- **Desktop app** for macOS, Windows and Linux: start and stop the server, download models and run
+  them in one window. Get it from [ollaya.dev/download](https://ollaya.dev/download).
 - **Docker:** `docker run -d --gpus=all -p 11435:11435 ghcr.io/ollaya-dev/ollaya:cuda`, or
   `ghcr.io/ollaya-dev/ollaya` for CPU only.
 

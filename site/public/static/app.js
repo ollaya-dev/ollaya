@@ -252,10 +252,12 @@
         }
       })
     })
-    // Download page: preselect macOS for Mac visitors.
-    if (list.hasAttribute('data-os-tabs') && /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent)) {
-      const mac = tabs.find((t) => t.id === 'os-tab-macos')
-      if (mac) select(mac, false)
+    // Download page: preselect the visitor's platform (Linux is the default).
+    if (list.hasAttribute('data-os-tabs')) {
+      const ua = navigator.userAgent
+      const os = /iPhone|iPad/.test(ua) ? null : /Macintosh|Mac OS X/.test(ua) ? 'macos' : /Windows/.test(ua) ? 'windows' : null
+      const tab = os && tabs.find((t) => t.id === `os-tab-${os}`)
+      if (tab) select(tab, false)
     }
   })
 

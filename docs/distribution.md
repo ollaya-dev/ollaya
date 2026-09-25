@@ -276,6 +276,68 @@ PATH=/tmp/fakebin:$PATH OLLAYA_DOWNLOAD_BASE=http://127.0.0.1:8000 \
   OLLAYA_INSTALL_DIR=/tmp/ollaya-test sh scripts/install.sh
 ```
 
+## Windows
+
+`ollaya-windows-amd64.zip` holds `bin/ollaya.exe` (with any DLLs ONNX Runtime needs next to it)
+and `share/`. It runs on the CPU; pyke's Windows build also carries the DirectML provider, which
+is not enabled yet.
+
+- **Install:** `scripts/install.ps1`, served at `/install.ps1` (`irm https://ollaya.dev/install.ps1 | iex`).
+  It checks the zip against `sha256sum.txt`, unpacks it into `%LOCALAPPDATA%\Programs\Ollaya`, and
+  adds `bin` to the user's `PATH`. No administrator rights.
+- **Processes:** the CLI starts the server detached and without a console window, and the server
+  starts runners with `CREATE_NO_WINDOW`. `ollaya stop` checks with `tasklist` that the PID file's
+  process is `ollaya.exe`, then ends it and its runners with `taskkill /T /F`. A detached process
+  has no console to receive Ctrl-C, so that stop is not graceful.
+- **CI:** `ci.yml` runs clippy and the tests on `windows-latest`; `release.yml` builds the zip there.
+
+## Desktop app
+
+`desktop/` is a Tauri 2 app: a Rust backend over `ollaya-api` and a plain TypeScript page. It is a
+separate Cargo workspace, so the engine's builds and CI never pull in the webview stack
+(WebKitGTK on Linux).
+
+- **The engine inside:** `desktop.yml` builds `ollaya` for the target and copies it to
+  `desktop/src-tauri/binaries/ollaya-<target triple>`, which Tauri bundles next to the app
+  (`externalBin`). The app runs `ollaya serve` from there, and `ollaya stop` for the server it
+  started when it quits.
+- **Installers:** `Ollaya-macos-arm64.dmg`, `Ollaya-windows-x64-setup.exe` (NSIS, per-user),
+  `Ollaya-windows-x64.msi`, `Ollaya-linux-x86_64.AppImage` and `Ollaya-linux-amd64.deb`. The names are
+  stable, so the website links `releases/latest/download/<name>`. A `v*` tag attaches them to its
+  release.
+- **Developing:** `cd desktop && npm ci`, copy a built `ollaya` into `src-tauri/binaries/` under its
+  triple name, then `npx tauri dev`. `npm run preview` builds the page against a fake backend for
+  design work in a browser.
+
+### Signing the desktop app
+
+**macOS.** The app is signed with a "Developer ID Application" certificate and notarized by Apple,
+so Gatekeeper opens it without a warning. `desktop.yml` does both when these repository secrets
+exist:
+
+| Secret | Value |
+|---|---|
+| `APPLE_CERTIFICATE` | The certificate and its private key exported from Keychain Access as a `.p12`, base64-encoded |
+| `APPLE_CERTIFICATE_PASSWORD` | The password chosen for that export |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: <name> (<team id>)`, as `security find-identity -v -p codesigning` prints it |
+| `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_P8` | An App Store Connect API key (Users and Access → Integrations → Keys, role Developer): issuer ID, key ID and the `.p8` file's contents |
+
+Without them the build is unsigned, and macOS asks users to right-click → Open the first time.
+
+**Windows.** Without a signature, SmartScreen warns on first run. Options, cheapest first:
+
+- **SignPath Foundation:** free code signing for open-source projects, applied from GitHub
+  Actions after an approval of the project.
+- **Certum Open Source Code Signing:** a certificate for individual open-source developers, about
+  €50–70 a year, with a cloud key.
+- **Azure Artifact Signing** (formerly Trusted Signing): about $10 a month, after an identity check;
+  eligibility depends on the country.
+- **A regular OV certificate** from a CA (Sectigo, SSL.com and others), a few hundred dollars a year,
+  with a cloud key for CI.
+
+Any of them plugs into Tauri's `bundle.windows.signCommand`. Even signed, a new publisher builds
+SmartScreen reputation over its first downloads.
+
 ## Docker
 
 ```sh

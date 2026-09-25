@@ -54,6 +54,40 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  desktop:
+    name: Desktop app (typecheck, clippy)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - name: Linux webview dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Page (typecheck and build)
+        working-directory: desktop
+        run: npm ci && npm run ui
+      - name: Rust
+        working-directory: desktop/src-tauri
+        run: |
+          # Tauri checks that the bundled engine exists; a placeholder is enough for clippy.
+          mkdir -p binaries && touch binaries/ollaya-x86_64-unknown-linux-gnu
+          cargo fmt --check
+          cargo clippy --all-targets --locked -- -D warnings
+
   site:
     name: Site build
     runs-on: ubuntu-latest
