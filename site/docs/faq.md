@@ -8,7 +8,7 @@ order: 7
 
 ## What is a decision model?
 
-A model that reads a *state* — text, an email, a ticket, a JSON object — plus typed questions, and returns a typed answer with calibrated probabilities for each question in a single forward pass. It never generates text. That makes it fast, and its output easy to act on: route the ticket, block the message, escalate when the probability is above a threshold.
+A model that reads a *state* (text, an email, a ticket, a JSON object) plus typed questions, and returns a typed answer with calibrated probabilities for each question in a single forward pass. It never generates text. That makes it fast, and its output easy to act on: route the ticket, block the message, escalate when the probability is above a threshold.
 
 ## How do I install it?
 
@@ -16,7 +16,7 @@ The [desktop app](/download) for macOS, Windows and Linux; `curl -fsSL {{SITE_OR
 
 ## How is Ollaya related to Ollama?
 
-Ollaya borrows Ollama's experience — one binary, `pull`, `run`, `serve`, Modelfiles, a local REST API with the same conventions — and applies it to decision models instead of generative language models. It is an independent project, not affiliated with Ollama.
+Ollaya borrows Ollama's experience (one binary, `pull`, `run`, `serve`, Modelfiles, a local REST API with the same conventions) and applies it to decision models instead of generative language models. It is an independent project, not affiliated with Ollama.
 
 ## How is it related to TypeSafe?
 
@@ -41,6 +41,10 @@ From the model authors' own Hugging Face repositories, pinned to a commit. Every
 ## Are the answers the same as the original model's?
 
 Ollaya runs Laya as ONNX. Across 2,383 questions per checkpoint (`en`, `multilingual` and `typed-decisions`), the ONNX export chose the same answer as the PyTorch fp32 reference 100% of the time, with a maximum probability difference of 1.1 × 10⁻⁴. On a CUDA GPU the fp16 graph runs by default; it can differ from fp32 on near-ties. Pin a `-fp32` tag to match the reference.
+
+## How do the models compare with Jev?
+
+It depends on the model. The small encoders, such as `laya`, are the fastest but fall well below Jev on harder questions; `decider` is more accurate and slower. For an independent comparison of open decision models with Jev, on accuracy and calibration, see the [Decision Index](https://huggingface.co/spaces/multimodalart/jev-decision-index). If you have labelled data for a fixed task, a model fine-tuned on it usually beats any general one.
 
 ## How fast is it?
 
@@ -68,7 +72,7 @@ It sits next to Ollama's default port, 11434, so both can run side by side.
 
 ## How are the probabilities calibrated?
 
-With temperature scaling per question type and number of options, shipped with each model. Laya's expected calibration error is 0.081 after temperature fitting, against 0.246 for Jev. For thresholds you rely on, refit the temperatures on your own labelled data and bake them in with a [Modelfile](/docs/modelfile#calibration).
+With temperature scaling per question type and number of options, shipped with each model. For thresholds you rely on, refit the temperatures on your own labelled data and bake them in with a [Modelfile](/docs/modelfile#calibration).
 
 ## Is there an MCP server or an agent skill?
 

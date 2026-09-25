@@ -223,7 +223,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
 }
 
 function languagesLabel(langs: string[]): string {
-  if (!langs.length) return '—'
+  if (!langs.length) return '–'
   return langs.map((l) => LANGUAGE_NAMES[l] ?? l).join(', ')
 }
 
@@ -363,14 +363,14 @@ export function formatBytes(n: number): string {
   return `${n} B`
 }
 
-/** Download size; routers show "—" because pulling one pulls its targets. */
+/** Download size; routers show "–" because pulling one pulls its targets. */
 export function sizeLabel(tag: Tag): string {
-  return tag.kind === 'router' ? '—' : formatBytes(tag.sizeBytes)
+  return tag.kind === 'router' ? '–' : formatBytes(tag.sizeBytes)
 }
 
 export function precisionLabel(tag: Tag): string {
   if (tag.precision === 'auto') return 'fp16 on GPU · fp32 on CPU'
-  return tag.precision ?? '—'
+  return tag.precision ?? '–'
 }
 
 function shortDigest(d: string): string {
@@ -431,7 +431,7 @@ export function layersFor(model: Model, tag: Tag): Layer[] {
 
 export type SortKey = 'popular' | 'newest'
 
-/** Lower-case, NFKD-normalized — app.js normalizes queries the same way. */
+/** Lower-case, NFKD-normalized; app.js normalizes queries the same way. */
 export const normalize = (s: string): string => s.toLowerCase().normalize('NFKD')
 
 /** Everything a query can match for a model. */

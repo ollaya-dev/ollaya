@@ -55,7 +55,7 @@ Every error, on every endpoint, has this body:
 |---|---|
 | `error` | Human-readable message. Don't parse it; the one frozen message is `model "<name>" not found, try pulling it first`, as in Ollama. |
 | `code` | Machine-readable code. Branch on this. |
-| `detail` | Only for `INVALID_REQUEST`, `TOO_MANY_OPTIONS` and `INPUT_TOO_LONG`: every validation issue, in TypeSafe's (FastAPI's) `ValidationError` shape — `loc`, `msg`, `type` and sometimes `ctx`. |
+| `detail` | Only for `INVALID_REQUEST`, `TOO_MANY_OPTIONS` and `INPUT_TOO_LONG`: every validation issue, in TypeSafe's (FastAPI's) `ValidationError` shape: `loc`, `msg`, `type` and sometimes `ctx`. |
 
 | Code | HTTP | When | Retry |
 |---|---|---|---|
@@ -352,7 +352,7 @@ DELETE /api/delete
 {"model": "triage"}
 ```
 
-Removes the name, and the blobs no other model uses. A loaded model unloads once its requests finish; deleting a router keeps its targets. The response is `200` with an empty body, and `404 MODEL_NOT_FOUND` when the name doesn't exist — after a timeout, treat that as success.
+Removes the name, and the blobs no other model uses. A loaded model unloads once its requests finish; deleting a router keeps its targets. The response is `200` with an empty body, and `404 MODEL_NOT_FOUND` when the name doesn't exist; after a timeout, treat that as success.
 
 ## Copy a model
 

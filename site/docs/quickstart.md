@@ -6,7 +6,7 @@ order: 1
 
 # Quickstart
 
-Ollaya runs open decision models on your own machine. You give a model a **state** — a message, an email, a ticket, a JSON object — plus a few **typed questions**, and it returns typed answers with calibrated probabilities in a single forward pass.
+Ollaya runs open decision models on your own machine. You give a model a **state** (a message, an email, a ticket, a JSON object) plus a few **typed questions**, and it returns typed answers with calibrated probabilities in a single forward pass.
 
 ## 1. Install
 

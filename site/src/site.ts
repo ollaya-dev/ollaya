@@ -1,8 +1,8 @@
-/** Site-wide constants. The public host is NOT here on purpose — see SITE_ORIGIN in scripts/build.mjs. */
+/** Site-wide constants. The public host is NOT here on purpose; see SITE_ORIGIN in scripts/build.mjs. */
 export const SITE_NAME = 'Ollaya'
 export const TAGLINE = 'Run decision models locally.'
 export const SITE_DESCRIPTION =
-  'Ollaya downloads and serves open decision models on your own machine. Typed, calibrated answers in milliseconds — private and open source.'
+  'Ollaya downloads and serves open decision models on your own machine. Typed, calibrated answers in milliseconds, private and open source.'
 
 export const GITHUB_URL = 'https://github.com/ollaya-dev/ollaya'
 export const RELEASES_URL = `${GITHUB_URL}/releases`

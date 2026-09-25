@@ -47,8 +47,8 @@ through the matching type in `ollaya-api`, and request examples pass boundary va
 | `DELETE` | `/api/delete` | Remove a local model | no |
 | `POST` | `/api/copy` | Copy a local model to a new name | no |
 | `POST` | `/api/create` | Create a model from another one (Modelfile) | yes (default) |
-| `POST` | `/api/push` | Reserved: `501 NOT_IMPLEMENTED` | — |
-| `HEAD`, `POST` | `/api/blobs/:digest` | Reserved: `501 NOT_IMPLEMENTED` | — |
+| `POST` | `/api/push` | Reserved: `501 NOT_IMPLEMENTED` | – |
+| `HEAD`, `POST` | `/api/blobs/:digest` | Reserved: `501 NOT_IMPLEMENTED` | – |
 | `POST` | `/v1/systemone` | TypeSafe System One, wire-identical | no |
 | `POST` | `/v1/decisions` | Alias of `/v1/systemone` | no |
 | `GET` | `/v1/models` | TypeSafe model list: the local models | no |
@@ -105,7 +105,7 @@ Any other path returns `404 NOT_FOUND`. A known path with the wrong method retur
 |---|---|---|
 | `host` | Registry host, optionally with `http://` or `https://` (development registries) | `OLLAYA_REGISTRY`, else `ollaya.dev` |
 | `namespace` | 1–80 chars, `[A-Za-z0-9_][A-Za-z0-9_.-]*` | `library` |
-| `model` | 1–80 chars, `[A-Za-z0-9_][A-Za-z0-9_.-]*` | — |
+| `model` | 1–80 chars, `[A-Za-z0-9_][A-Za-z0-9_.-]*` | – |
 | `tag` | 1–80 chars, `[A-Za-z0-9_][A-Za-z0-9_.-]*` | `latest` |
 
 **Normalization.** Names are trimmed and compared case-insensitively. The **canonical name** is the
@@ -244,20 +244,20 @@ TypeSafe SDK users therefore see the same text from Ollaya as from TypeSafe.
 
 | `type` | Meaning | `ctx` |
 |---|---|---|
-| `missing` | Required field absent (`msg`: `Field required`) | — |
-| `string_type`, `bool_type`, `dict_type`, `list_type`, `float_type` | Wrong JSON type | — |
-| `state_type` | `state` is not a string, object or array | — |
-| `json_type` | `instructions` or a criterion is not a string, object, array (or `null` where allowed) | — |
+| `missing` | Required field absent (`msg`: `Field required`) | – |
+| `string_type`, `bool_type`, `dict_type`, `list_type`, `float_type` | Wrong JSON type | – |
+| `state_type` | `state` is not a string, object or array | – |
+| `json_type` | `instructions` or a criterion is not a string, object, array (or `null` where allowed) | – |
 | `union_tag_not_found` | Question without a string `type` | `{"discriminator": "'type'"}` |
 | `union_tag_invalid` | Unknown question `type` | `{"discriminator": "'type'", "tag": "<given>", "expected_tags": "'choice', 'score', 'noul'"}` |
 | `too_short`, `too_long` | Count outside a limit | `{"field_type": "List" \| "Dictionary", "min_length" \| "max_length": n, "actual_length": n}` |
 | `string_too_short` | Empty string where a name is required | `{"min_length": 1}` |
-| `model_name` | `model` / `source` / `destination` / `from` does not parse ([§3](#3-model-names-and-resolution)) | — |
-| `keep_alive` | `keep_alive` does not parse ([§6](#6-keep_alive)) | — |
+| `model_name` | `model` / `source` / `destination` / `from` does not parse ([§3](#3-model-names-and-resolution)) | – |
+| `keep_alive` | `keep_alive` does not parse ([§6](#6-keep_alive)) | – |
 | `enum` | Unknown value in a closed set, e.g. `extras` | `{"expected": "'laya'"}` |
-| `stream_unsupported` | `"stream": true` on `/api/decide` | — |
-| `parameter` | Unknown or invalid `/api/create` parameter | — |
-| `calibration` | `/api/create` calibration key that is not `<type>:<bucket>` | — |
+| `stream_unsupported` | `"stream": true` on `/api/decide` | – |
+| `parameter` | Unknown or invalid `/api/create` parameter | – |
+| `calibration` | `/api/create` calibration key that is not `<type>:<bucket>` | – |
 | `too_many_options` | Code `TOO_MANY_OPTIONS` | `{"options": n, "model": "<canonical>"}` |
 | `input_too_long` | Code `INPUT_TOO_LONG` | `{"max_tokens": 65536, "tokens": n}` |
 
@@ -466,8 +466,8 @@ The same endpoint loads and unloads models, as Ollama's `/api/generate` does: a 
 
 | Field | Type | Required | Default | Rules |
 |---|---|---|---|---|
-| `model` | string | yes | — | [§3](#3-model-names-and-resolution) |
-| `state` | string \| object \| array | no | — | As in [§5.1](#51-request-body-shared-by-the-decision-endpoints). Absent or `null`: a load or unload request. |
+| `model` | string | yes | – | [§3](#3-model-names-and-resolution) |
+| `state` | string \| object \| array | no | – | As in [§5.1](#51-request-body-shared-by-the-decision-endpoints). Absent or `null`: a load or unload request. |
 | `questions` | object | with `state`, unless the model has embedded questions | the model's embedded questions | [§5.2](#52-question-schema). Not allowed without `state` (`missing` issue on `state`). |
 | `keep_alive` | string \| number | no | `OLLAYA_KEEP_ALIVE` (`5m`) | [§6](#6-keep_alive) |
 | `extras` | array of string | no | `[]` | Closed set: `"laya"`. Each value adds a same-named object to every answer. Unknown values are `enum` issues. |
@@ -858,7 +858,7 @@ it routes to**, because a router cannot answer without them.
 
 | Request field | Type | Required | Default | Rules |
 |---|---|---|---|---|
-| `model` | string | yes | — | [§3](#3-model-names-and-resolution) |
+| `model` | string | yes | – | [§3](#3-model-names-and-resolution) |
 | `insecure` | boolean | no | `false` | Accepted for Ollama compatibility; has no effect. A development registry is addressed with an explicit `http://` host in the name (`http://127.0.0.1:8123/library/laya:en`). |
 | `stream` | boolean | no | `true` | `false`: one response when done |
 
@@ -996,8 +996,8 @@ it names, and sends their contents as JSON.
 
 | Request field | Type | Required | Default | Rules |
 |---|---|---|---|---|
-| `model` | string | yes | — | Name to create ([§3](#3-model-names-and-resolution)) |
-| `from` | string | yes | — | Local base model, possibly a router. It must exist (`404`); it is never pulled. |
+| `model` | string | yes | – | Name to create ([§3](#3-model-names-and-resolution)) |
+| `from` | string | yes | – | Local base model, possibly a router. It must exist (`404`); it is never pulled. |
 | `questions` | object | no | inherited | Validated as in [§5.2](#52-question-schema) (1–256 questions); becomes the embedded schema |
 | `calibration` | object | no | inherited | `temperature`: array of up to 3 numbers (choice, score, noul). `temperature_by_options`: object of `"<type>:<2\|3-5\|6-10\|11+>"` → number. |
 | `parameters` | object | no | inherited | Closed set: `precision` (`"fp16"` or `"fp32"`) pins one graph. Other keys are `parameter` issues. |

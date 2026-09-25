@@ -1,6 +1,6 @@
 ---
 name: ollaya-decisions
-description: Make typed, calibrated decisions about text or JSON with local decision models served by Ollaya — classify (choice), rate (score) or check a yes/no statement (noul) in milliseconds, with probabilities you can threshold. Use it to triage tickets and emails, route requests, moderate posts, screen prompts for jailbreaks or injections, or any step where the agent needs a quick judgement it can act on, instead of reasoning it out in text. Works through the Ollaya MCP server (the `decide` tool), the `ollaya` CLI, or the local HTTP API.
+description: Make typed, calibrated decisions about text or JSON with local decision models served by Ollaya: classify (choice), rate (score) or check a yes/no statement (noul) in milliseconds, with probabilities you can threshold. Use it to triage tickets and emails, route requests, moderate posts, screen prompts for jailbreaks or injections, or any step where the agent needs a quick judgement it can act on, instead of reasoning it out in text. Works through the Ollaya MCP server (the `decide` tool), the `ollaya` CLI, or the local HTTP API.
 license: Apache-2.0
 metadata:
   homepage: https://ollaya.dev

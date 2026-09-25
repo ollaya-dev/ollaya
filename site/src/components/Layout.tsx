@@ -28,7 +28,7 @@ export interface LayoutProps {
 
 export function Layout({ origin, path, meta, children }: LayoutProps) {
   const canonical = `${origin}${path}`
-  const title = meta.title ? `${meta.title} · ${SITE_NAME}` : `${SITE_NAME} — ${TAGLINE.replace(/\.$/, '')}`
+  const title = meta.title ? `${meta.title} · ${SITE_NAME}` : `${SITE_NAME} · ${TAGLINE.replace(/\.$/, '')}`
   const description = meta.description ?? SITE_DESCRIPTION
   const ogImage = `${origin}${asset(meta.ogImage ?? 'og.png')}`
 
@@ -45,13 +45,13 @@ export function Layout({ origin, path, meta, children }: LayoutProps) {
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
         <meta property="og:site_name" content={SITE_NAME} />
         <meta property="og:type" content="website" />
-        <meta property="og:title" content={meta.title ?? `${SITE_NAME} — ${TAGLINE}`} />
+        <meta property="og:title" content={meta.title ?? `${SITE_NAME} · ${TAGLINE}`} />
         <meta property="og:description" content={description} />
         <meta property="og:url" content={canonical} />
         <meta property="og:image" content={ogImage} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:image:alt" content={meta.ogImage && meta.title ? `${meta.title} on Ollaya` : 'Ollaya — run decision models locally'} />
+        <meta property="og:image:alt" content={meta.ogImage && meta.title ? `${meta.title} on Ollaya` : 'Ollaya: run decision models locally'} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content={ogImage} />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

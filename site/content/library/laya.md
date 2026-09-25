@@ -1,10 +1,10 @@
-Laya is a family of open **decision models** by [Convai Innovations](https://huggingface.co/convaiinnovations), released under the Apache-2.0 license. A decision model reads a *state* — a message, an email, a support ticket, a JSON object — together with a set of typed questions, and returns a typed answer with calibrated probabilities for every question in a single forward pass. It never generates text.
+Laya is a family of open **decision models** by [Convai Innovations](https://huggingface.co/convaiinnovations), released under the Apache-2.0 license. A decision model reads a *state* (a message, an email, a support ticket, a JSON object) together with a set of typed questions, and returns a typed answer with calibrated probabilities for every question in a single forward pass. It never generates text.
 
 ## Models
 
 | Tag | Backbone | Params | Context | Languages | Best for |
 |---|---|---|---|---|---|
-| `laya:latest` | router | — | 512 / 1024 | auto | Sends English text to `en` and everything else to `multilingual` |
+| `laya:latest` | router | – | 512 / 1024 | auto | Sends English text to `en` and everything else to `multilingual` |
 | `laya:en` | ModernBERT-large | 421M | 512 | English | Guardrails, email triage |
 | `laya:multilingual` | mmBERT-base | 322M | 1024 | 100+ | Non-English and mixed-language input; up to ~2.2× faster on batched calls |
 | `laya:typed-decisions` | ModernBERT-large | 421M | 1024 | English | Typed-decisions workflows (fine-tuned) |
@@ -97,8 +97,8 @@ Figures published on the Laya model card, measured on an NVIDIA Tesla T4:
 | | Latency, 1 question | Latency, 10 questions (batched) | Calibration error (ECE) |
 |---|---|---|---|
 | Laya (English) | 39.5 ms | 158.6 ms | 0.081 after temperature fitting |
-| Laya multilingual | 32.8 ms | 72.3 ms | — |
-| TypeSafe Jev | 236–276 ms p50 (third-party) | — | 0.246 |
+| Laya multilingual | 32.8 ms | 72.3 ms | – |
+| TypeSafe Jev | 236–276 ms p50 (third-party) | – | 0.246 |
 
 On batched calls `laya:multilingual` is up to ~2.2× faster than `laya:en`; for a single question the two are close. `laya:typed-decisions` reaches 0.766 accuracy on typed-decisions, against 0.727 published for Jev 1.13. Jev latencies come from [AbdelStark/jev-benchmarks](https://github.com/AbdelStark/jev-benchmarks) and [nibzard/decision-model-benchmark](https://github.com/nibzard/decision-model-benchmark); setups differ.
 
@@ -114,4 +114,4 @@ Ollaya runs Laya as ONNX. Across 2,383 questions per checkpoint (`en`, `multilin
 
 ## Weights and license
 
-Apache-2.0. Laya is developed by Convai Innovations — see the [model card on Hugging Face](https://huggingface.co/convaiinnovations/laya). Ollaya downloads the weights from that repository, pinned to a commit and checked against sha256; it never re-hosts them.
+Apache-2.0. Laya is developed by Convai Innovations; see the [model card on Hugging Face](https://huggingface.co/convaiinnovations/laya). Ollaya downloads the weights from that repository, pinned to a commit and checked against sha256; it never re-hosts them.

@@ -1,5 +1,5 @@
 /**
- * Ollaya's mark: a minimal line-art owl (original artwork). Monochrome — inherits currentColor,
+ * Ollaya's mark: a minimal line-art owl (original artwork). Monochrome: inherits currentColor,
  * so it works on light and dark backgrounds, from 16px favicons to the large closer section.
  * Keep in sync with public/favicon.svg and public/static/logo.svg.
  */

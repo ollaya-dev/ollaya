@@ -9,7 +9,7 @@
  *
  * Tag URLs contain a colon. Cloudflare's asset server percent-encodes it (307 to
  * /library/laya%3Aen), so each tag page is also written to library/<model>/tags/<tag>.html and
- * public/_redirects rewrites /library/<model>:<tag> to it with status 200 — the address bar keeps
+ * public/_redirects rewrites /library/<model>:<tag> to it with status 200; the address bar keeps
  * the colon. Other static hosts serve the colon file directly.
  *
  * The /v2/ prefix is reserved for the static model registry; nothing here may write under it.
@@ -110,7 +110,7 @@ function pages(origin: string): Page[] {
         url: `/library/${fullName(model, tag)}`,
         meta: {
           title: fullName(model, tag),
-          description: `${fullName(model, tag)} — ${tag.summary}`,
+          description: `${fullName(model, tag)}: ${tag.summary}`,
           nav: 'models' as const,
           ogImage,
         },

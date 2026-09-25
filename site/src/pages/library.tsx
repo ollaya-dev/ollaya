@@ -15,7 +15,7 @@ import { usageTabs } from '../data/examples'
 import { readmes } from '../generated/content'
 
 // Pages: /library/<model>, /library/<model>/tags and /library/<model>:<tag>.
-// (/library itself redirects to /search — see public/_redirects and LibraryRedirect below.)
+// (/library itself redirects to /search; see public/_redirects and LibraryRedirect below.)
 
 // ---------------------------------------------------------------------------------------------
 
@@ -331,7 +331,7 @@ export function TagPage({ model, tag }: { model: Model; tag: Tag }) {
                   <a href={`/library/${fullName(model, t)}`} class={`font-medium ${textLink}`}>
                     {fullName(model, t)}
                   </a>{' '}
-                  <span class="text-muted">— {t.summary}</span>
+                  <span class="text-muted">· {t.summary}</span>
                 </li>
               ) : null
             })}

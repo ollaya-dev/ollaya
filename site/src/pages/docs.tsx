@@ -70,8 +70,8 @@ export function DocsIndex() {
     <DocsShell title="Overview">
       <h1 class="text-[30px] leading-tight font-medium tracking-tight text-fg">Documentation</h1>
       <p class="mt-3 text-lg text-body">
-        Ollaya downloads and serves open decision models locally. A decision model reads a state — text, an email, a
-        ticket, JSON — plus typed questions, and returns typed answers with calibrated probabilities in a single
+        Ollaya downloads and serves open decision models locally. A decision model reads a state (text, an email, a
+        ticket, JSON) plus typed questions, and returns typed answers with calibrated probabilities in a single
         forward pass. It never generates text.
       </p>
       <ul class="mt-10 grid gap-4 sm:grid-cols-2" role="list">

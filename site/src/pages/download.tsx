@@ -58,7 +58,7 @@ function DesktopApp({ file, label, extra, note }: { file: string; label: string;
   )
 }
 
-/** /download — Linux is selected by default; app.js switches to macOS for Mac visitors. */
+/** /download: Linux is selected by default; app.js switches to macOS for Mac visitors. */
 export function DownloadPage({ origin }: { origin: string }) {
   const selected: Os = 'linux'
   const install = `curl -fsSL ${origin}/install.sh | sh`

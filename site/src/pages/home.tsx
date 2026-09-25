@@ -456,7 +456,7 @@ const pillars: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'adjustments',
     title: 'Calibrated',
-    text: 'Probabilities you can put thresholds on. Laya’s calibration error (ECE) is 0.081 after temperature fitting, vs 0.246 for Jev.',
+    text: 'Probabilities you can put thresholds on. Each model ships its own calibration, and a Modelfile refits it on your labelled data.',
   },
 ]
 

@@ -52,7 +52,7 @@ That is the same as `ollaya_decision::serialize_state`.
 
 ```
 {"candidate": {"id": <candidate id>, "description": <candidate description>},
- "type": <type>, "instructions": <instructions as given — a JSON value, not stringified>,
+ "type": <type>, "instructions": <instructions as given: a JSON value, not stringified>,
  "criteria": <the question's criteria as given, after the list→object mapping>}   # omitted if null/absent
 ```
 

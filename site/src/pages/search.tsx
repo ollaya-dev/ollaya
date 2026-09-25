@@ -4,7 +4,7 @@ import { Updated } from '../components/Updated'
 import { capabilityFilters, catalog, comingNext, haystack, type Model } from '../data/catalog'
 
 /**
- * /search — every model is rendered into the static page (so it works without JavaScript).
+ * /search: every model is rendered into the static page (so it works without JavaScript).
  * public/static/app.js filters and sorts the rows in place using their data-* attributes and
  * keeps ?q=&c=&o= in the URL with history.replaceState.
  */

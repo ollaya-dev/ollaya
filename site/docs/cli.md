@@ -1,7 +1,7 @@
 ---
 title: CLI reference
 nav: CLI
-description: Every ollaya command and flag — run, pull, serve, list, ps, show, stop, rm, cp, create and mcp.
+description: Every ollaya command and flag: run, pull, serve, list, ps, show, stop, rm, cp, create and mcp.
 order: 2
 ---
 
