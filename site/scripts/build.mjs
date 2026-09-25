@@ -158,10 +158,12 @@ if (await stat(registry).catch(() => null)) {
     }
   }
   if (missing.size) {
-    throw new Error(
+    const message =
       `${missing.size} blob(s) the manifests point to are not in ../registry/blobs (derived files are not in git), ` +
-        `e.g. ${[...missing][0]}. Download the published ones with: node scripts/fetch-blobs.mjs`,
-    )
+      `e.g. ${[...missing][0]}. Download the published ones with: node scripts/fetch-blobs.mjs`
+    // CI builds the pages to check them and never deploys, so it may go without the blobs.
+    if (process.env.OLLAYA_ALLOW_MISSING_BLOBS !== '1') throw new Error(message)
+    console.warn(`warning: ${message}`)
   }
   registryFiles = manifestDirs.length + (await walk(join(dist, 'blobs')).catch(() => [])).length
 }

@@ -105,6 +105,9 @@ jobs:
           cache-dependency-path: site/package-lock.json
       - run: npm ci
       - run: npm run build
+        env:
+          # The derived registry blobs aren't in git; deploys check them (scripts/fetch-blobs.mjs).
+          OLLAYA_ALLOW_MISSING_BLOBS: '1'
 
   packaging:
     name: Packaging scripts
