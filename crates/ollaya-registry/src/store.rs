@@ -277,9 +277,13 @@ fn file_name(p: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// `$HOME` when set (as on every Unix, and in tests), else the platform's home directory
+/// (`%USERPROFILE%` on Windows).
 fn dirs_home() -> PathBuf {
     std::env::var_os("HOME")
+        .filter(|h| !h.is_empty())
         .map(PathBuf::from)
+        .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."))
 }
 

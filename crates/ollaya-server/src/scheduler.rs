@@ -350,6 +350,10 @@ impl Scheduler {
         if let Some(arg0) = &self.config.arg0 {
             cmd.arg0(arg0);
         }
+        // A runner is a console program; from a server without a console (the desktop app's, or
+        // one the CLI started), Windows would open a window for each one.
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         cmd.envs(self.config.env.iter().map(|(k, v)| (k, v)))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())

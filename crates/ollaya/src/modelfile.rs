@@ -91,10 +91,7 @@ enum Source {
 
 fn resolve(base: &Path, p: &str) -> PathBuf {
     let p = match p.strip_prefix("~/") {
-        Some(rest) => std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_default()
-            .join(rest),
+        Some(rest) => dirs::home_dir().unwrap_or_default().join(rest),
         None => PathBuf::from(p),
     };
     if p.is_absolute() { p } else { base.join(p) }

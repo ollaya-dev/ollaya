@@ -68,6 +68,12 @@ fn start_server() -> Result<PathBuf> {
     // Its own process group: Ctrl-C in this terminal must not stop the daemon.
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    // No console window, and not tied to this one.
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(
+        &mut cmd,
+        DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+    );
     cmd.spawn().context("starting `ollaya serve`")?;
     Ok(path)
 }
@@ -199,12 +205,28 @@ fn is_ollaya_serve(pid: u32) -> bool {
     exe.rsplit('/').next() == Some("ollaya") && args.next() == Some("serve")
 }
 
-#[cfg(not(unix))]
+/// Whether process `pid` is `ollaya.exe`, from `tasklist` (which has no command lines).
+#[cfg(windows)]
+fn is_ollaya_serve(pid: u32) -> bool {
+    let Ok(out) = std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+        .output()
+    else {
+        return false;
+    };
+    // "ollaya.exe","1234","Console","1","12,345 K"
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .any(|l| l.to_ascii_lowercase().starts_with("\"ollaya.exe\","))
+}
+
+#[cfg(not(any(unix, windows)))]
 fn is_ollaya_serve(_pid: u32) -> bool {
     false
 }
 
 /// Ask `pid` to shut down gracefully (SIGTERM), as systemd and Ctrl-C do.
+#[cfg(unix)]
 fn terminate(pid: u32) -> Result<()> {
     let status = std::process::Command::new("kill")
         .args(["-TERM", &pid.to_string()])
@@ -215,6 +237,34 @@ fn terminate(pid: u32) -> Result<()> {
     }
     Ok(())
 }
+
+/// End `pid` and its runners. A detached process on Windows has no console to receive Ctrl-C,
+/// so this is not graceful: requests in flight fail.
+#[cfg(windows)]
+fn terminate(pid: u32) -> Result<()> {
+    let status = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .context("running taskkill")?;
+    if !status.success() {
+        bail!("could not stop Ollaya (process {pid})");
+    }
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn terminate(pid: u32) -> Result<()> {
+    bail!("cannot stop Ollaya (process {pid}) on this platform")
+}
+
+// Process creation flags (winbase.h).
+#[cfg(windows)]
+const DETACHED_PROCESS: u32 = 0x0000_0008;
+#[cfg(windows)]
+const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[cfg(all(test, unix))]
 mod tests {

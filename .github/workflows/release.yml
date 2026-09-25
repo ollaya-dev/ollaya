@@ -41,6 +41,11 @@ jobs:
             runner: macos-latest
             features: ollaya-runner/coreml
             package-args: ''
+          # CPU; the DirectML provider is part of pyke's Windows build but not enabled yet.
+          - platform: windows-amd64
+            runner: windows-latest
+            features: ''
+            package-args: ''
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,6 +69,7 @@ jobs:
           cache-directories: |
             ~/.cache/ort.pyke.io
             ~/Library/Caches/ort.pyke.io
+            ~\AppData\Local\ort.pyke.io
       - name: Install zstd
         if: runner.os == 'macOS'
         run: command -v zstd >/dev/null || brew install zstd
@@ -92,6 +98,7 @@ jobs:
           path: |
             dist/*.tar.zst
             dist/*.tgz
+            dist/*.zip
             dist/*-cuda.sha256
           if-no-files-found: error
           compression-level: 0

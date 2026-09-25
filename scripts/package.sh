@@ -9,6 +9,7 @@
 #   ollaya-linux-amd64-cuda.tar.zst  lib/ollaya/cuda_v13/ (ORT CUDA provider + NVIDIA CUDA/cuDNN
 #                                    libraries) + share/doc/ollaya/cuda_v13/ (notices, NVIDIA licenses)
 #   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
+#   ollaya-windows-amd64.zip         bin/ollaya.exe (with its DLLs), share/
 #   ollaya-linux-amd64-cuda.sha256   sha256 of every library in the CUDA archive (FILES.sha256),
 #                                    which install.sh uses to skip an unchanged CUDA download
 #   sha256sum.txt                    over every archive in --out, and the file above
@@ -86,7 +87,7 @@ write_checksums() {
         export LC_ALL
         : >sha256sum.txt.tmp
         for f in *; do
-            case $f in *.tar.zst | *.tgz | *-cuda.sha256) [ -f "$f" ] || continue ;; *) continue ;; esac
+            case $f in *.tar.zst | *.tgz | *.zip | *-cuda.sha256) [ -f "$f" ] || continue ;; *) continue ;; esac
             printf '%s  %s\n' "$(sha256_of "$f")" "$f" >>sha256sum.txt.tmp
         done
         [ -s sha256sum.txt.tmp ] || { rm -f sha256sum.txt.tmp; die "no archives in $dir"; }
@@ -137,6 +138,7 @@ if [ -z "$PLATFORM" ]; then
         Linux-x86_64) PLATFORM=linux-amd64 ;;
         Linux-aarch64 | Linux-arm64) PLATFORM=linux-arm64 ;;
         Darwin-arm64) PLATFORM=darwin-arm64 ;;
+        MINGW*-x86_64 | MSYS*-x86_64) PLATFORM=windows-amd64 ;;
         *) die "unsupported host $(uname -s)-$(uname -m); pass --platform" ;;
     esac
 fi
@@ -144,13 +146,16 @@ case $PLATFORM in
     linux-amd64) TRIPLE=x86_64-unknown-linux-gnu DEFAULT_FEATURES=ollaya-runner/cuda ;;
     linux-arm64) TRIPLE=aarch64-unknown-linux-gnu DEFAULT_FEATURES= ;;
     darwin-arm64) TRIPLE=aarch64-apple-darwin DEFAULT_FEATURES=ollaya-runner/coreml ;;
+    windows-amd64) TRIPLE=x86_64-pc-windows-msvc DEFAULT_FEATURES= ;;
     *) die "unknown platform: $PLATFORM" ;;
 esac
 FEATURES=${OLLAYA_CARGO_FEATURES-$DEFAULT_FEATURES}
 [ "$CUDA" = 0 ] || [ "$PLATFORM" = linux-amd64 ] || die "--cuda is only supported for linux-amd64"
 [ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || die "--no-base without --cuda leaves nothing to do"
 
-BIN=${OLLAYA_BIN:-$TARGET_DIR/ollaya}
+EXE=
+[ "$PLATFORM" != windows-amd64 ] || EXE=.exe
+BIN=${OLLAYA_BIN:-$TARGET_DIR/ollaya$EXE}
 CARGO_PACKAGE=${OLLAYA_CARGO_PACKAGE:-ollaya}
 CACHE=${OLLAYA_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ollaya-package}
 ZSTD_LEVEL=${ZSTD_LEVEL:-19}
@@ -159,7 +164,7 @@ if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
 fi
 
 for tool in curl tar; do have "$tool" || die "missing tool: $tool"; done
-if [ -z "$STAGE" ]; then have zstd || die "missing tool: zstd"; fi
+if [ -z "$STAGE" ] && [ "${PLATFORM%%-*}" != windows ]; then have zstd || die "missing tool: zstd"; fi
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/ollaya-package.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
@@ -256,6 +261,7 @@ stage_base() {
         kind=$(file -bL "$BIN")
         case "$PLATFORM:$kind" in
             linux-amd64:*ELF*x86-64* | linux-arm64:*ELF*aarch64* | darwin-arm64:*Mach-O*arm64*) ;;
+            windows-amd64:*PE32+*x86-64*) ;;
             *) die "$BIN is not a $PLATFORM executable: $kind" ;;
         esac
     fi
@@ -268,8 +274,12 @@ stage_base() {
             say "$BIN needs ${glibc:-an unknown glibc} (install.sh enforces the floor)"
         fi
     fi
-    cp "$BIN" "$root/bin/ollaya"
-    chmod 0755 "$root/bin/ollaya"
+    cp "$BIN" "$root/bin/ollaya$EXE"
+    chmod 0755 "$root/bin/ollaya$EXE"
+    # Windows: the DLLs ONNX Runtime needs (DirectML) sit next to the executable (copy-dylibs).
+    if [ -n "$EXE" ]; then
+        for dll in "$TARGET_DIR"/*.dll; do [ ! -f "$dll" ] || cp "$dll" "$root/bin/"; done
+    fi
     cp "$ROOT/LICENSE" "$root/share/doc/ollaya/LICENSE"
     # The agent skill (skills/ollaya-decisions), for agents on machines without the repository.
     mkdir -p "$root/share/ollaya/skills"
@@ -281,7 +291,7 @@ stage_base() {
         printf 'Ollaya is licensed under the Apache License 2.0 (see LICENSE). bin/ollaya also\n'
         printf 'contains the third-party software below.\n\n'
         printf '1. '
-        ort_notice "Statically linked into bin/ollaya."
+        ort_notice "Linked into bin/ollaya$EXE."
         printf '\n2. Rust crates compiled into bin/ollaya\n\n'
         rust_notices
     } >"$root/share/doc/ollaya/THIRD_PARTY_NOTICES"
@@ -425,6 +435,14 @@ archive() {
     name=$1
     shift
     src=$TREES/$name
+    if [ "${PLATFORM%%-*}" = windows ]; then
+        # A .zip: what Windows opens without extra tools. 7-Zip is on GitHub's Windows runners.
+        have 7z || die "missing tool: 7z"
+        (cd "$src" && 7z a -tzip -mx=9 -bd -bso0 "$OUT/$name.zip.part" "$@") || die "7z failed"
+        mv "$OUT/$name.zip.part" "$OUT/$name.zip"
+        say "Built $name.zip ($(human_size "$OUT/$name.zip"))"
+        return
+    fi
     tar_create "$src" "$@" | zstd -q -T0 -"$ZSTD_LEVEL" -o "$OUT/$name.tar.zst.part" -f
     # POSIX sh has no pipefail: read the archive back so a failed tar can't ship a truncated one.
     zstd -dc "$OUT/$name.tar.zst.part" | tar -tf - >"$WORK/listing"
