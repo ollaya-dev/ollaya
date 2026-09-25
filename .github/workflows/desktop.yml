@@ -129,7 +129,7 @@ jobs:
         run: |
           mkdir -p out
           b=desktop/src-tauri/target/release/bundle
-          take() { for f in $1; do [ -f "$f" ] && cp "$f" "out/$2"; done; }
+          take() { for f in $1; do if [ -f "$f" ]; then cp "$f" "out/$2"; fi; done; }
           take "$b/dmg/*.dmg" Ollaya-macos-arm64.dmg
           take "$b/nsis/*-setup.exe" Ollaya-windows-x64-setup.exe
           take "$b/msi/*.msi" Ollaya-windows-x64.msi
