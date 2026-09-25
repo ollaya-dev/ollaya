@@ -209,4 +209,25 @@ CATALOG = {
                   "296 built-in questions). The token ids are identical, and so is the decision on every "
                   "question. Probabilities are within 1.4e-5, on CPU and CUDA.",
     },
+    "von": {
+        "namespace": "library",
+        "model": "von",
+        "family": "von",
+        "author": "Victor Hugo Panisa",
+        "license": "Apache-2.0",
+        "license_text": "Von by Victor Hugo Panisa (https://huggingface.co/wfzyx/von)\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        "tags": {
+            # Von 1.1. The weights exist only in option_marker.pt, a torch.save zip whose tensors are
+            # stored uncompressed: the graph reads them in place by byte offset, nothing is unpickled.
+            "1.1": _wl("von", "wfzyx/von", "d8bb5e0745d8ee1fb65d536d6d4892d54d5a93fd",
+                       "Von 1.1 (ModernBERT-large): every option is scored at its own [MASK] marker, "
+                       "all options of a question in one pass.",
+                       "395M", 8192, ["en"], weights={"option_marker.pt": "option_marker.pt"}),
+        },
+        "aliases": {"latest": "1.1"},
+        "parity": "Ollaya's Rust runtime matches the Python reference on 485 questions (653 rows). The token "
+                  "ids and marker positions are identical, and so is the decision on every question. "
+                  "Probabilities are within 3.1e-5, on CPU and CUDA.",
+    },
 }
