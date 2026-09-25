@@ -65,6 +65,7 @@ pub const LAYOUTS: &[&str] = &[
     "kev-pointer-v1",
     "qwen3guard-gen-v1",
     "von-option-marker-v1",
+    "decision-endpoint-v1",
 ];
 
 /// The layout a `decision` layer declares.
@@ -103,6 +104,9 @@ pub fn load(
             files, device, threads,
         )?)),
         "von-option-marker-v1" => Ok(Box::new(crate::von::VonModel::load_files(
+            files, device, threads,
+        )?)),
+        "decision-endpoint-v1" => Ok(Box::new(crate::decision::DecisionModel::load_files(
             files, device, threads,
         )?)),
         other => Err(Error::Model(format!(

@@ -8,6 +8,7 @@
 pub mod answer;
 pub mod calibration;
 pub mod decider;
+pub mod decision;
 pub mod gliclass;
 pub mod kev;
 pub mod layout;

@@ -4,6 +4,7 @@
 //! rendering happen in `ollaya-decision`, so engines stay small and interchangeable.
 
 pub mod decider;
+pub mod decision;
 pub mod engine;
 pub mod gliclass;
 pub mod kev;

@@ -15,36 +15,68 @@ use serde_json::{Number, Value};
 /// `json.dumps(value, ensure_ascii=ensure_ascii)` with the default separators.
 pub fn dumps(value: &Value, ensure_ascii: bool) -> String {
     let mut out = String::new();
-    write_value(&mut out, value, ensure_ascii);
+    let style = Style {
+        ascii: ensure_ascii,
+        sort_keys: false,
+        item_sep: ", ",
+        key_sep: ": ",
+    };
+    write_value(&mut out, value, &style);
     out
 }
 
-fn write_value(out: &mut String, value: &Value, ascii: bool) {
+/// `json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))`: compact, with
+/// object keys in code point order (the order Python sorts `str` keys in).
+pub fn dumps_canonical(value: &Value) -> String {
+    let mut out = String::new();
+    let style = Style {
+        ascii: false,
+        sort_keys: true,
+        item_sep: ",",
+        key_sep: ":",
+    };
+    write_value(&mut out, value, &style);
+    out
+}
+
+struct Style {
+    ascii: bool,
+    sort_keys: bool,
+    item_sep: &'static str,
+    key_sep: &'static str,
+}
+
+fn write_value(out: &mut String, value: &Value, style: &Style) {
     match value {
         Value::Null => out.push_str("null"),
         Value::Bool(true) => out.push_str("true"),
         Value::Bool(false) => out.push_str("false"),
         Value::Number(n) => write_number(out, n),
-        Value::String(s) => write_str(out, s, ascii),
+        Value::String(s) => write_str(out, s, style.ascii),
         Value::Array(items) => {
             out.push('[');
             for (i, item) in items.iter().enumerate() {
                 if i > 0 {
-                    out.push_str(", ");
+                    out.push_str(style.item_sep);
                 }
-                write_value(out, item, ascii);
+                write_value(out, item, style);
             }
             out.push(']');
         }
         Value::Object(map) => {
+            let mut entries: Vec<(&String, &Value)> = map.iter().collect();
+            if style.sort_keys {
+                // UTF-8 byte order is code point order, which is how Python compares `str`.
+                entries.sort_by(|a, b| a.0.cmp(b.0));
+            }
             out.push('{');
-            for (i, (k, v)) in map.iter().enumerate() {
+            for (i, (k, v)) in entries.into_iter().enumerate() {
                 if i > 0 {
-                    out.push_str(", ");
+                    out.push_str(style.item_sep);
                 }
-                write_str(out, k, ascii);
-                out.push_str(": ");
-                write_value(out, v, ascii);
+                write_str(out, k, style.ascii);
+                out.push_str(style.key_sep);
+                write_value(out, v, style);
             }
             out.push('}');
         }
@@ -196,5 +228,18 @@ mod tests {
         );
         assert_eq!(dumps(&json!({}), false), "{}");
         assert_eq!(dumps(&json!([]), false), "[]");
+    }
+
+    #[test]
+    fn canonical_matches_python() {
+        // json.dumps(v, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        let v = json!({"key": "b", "description": {"z": [1, 2.5, null], "é": "x\n", "A": true, "a": 1e-5}});
+        assert_eq!(
+            dumps_canonical(&v),
+            r#"{"description":{"A":true,"a":1e-05,"z":[1,2.5,null],"é":"x\n"},"key":"b"}"#
+        );
+        assert_eq!(dumps_canonical(&json!("a\"b")), r#""a\"b""#);
+        assert_eq!(dumps_canonical(&json!(null)), "null");
+        assert_eq!(dumps_canonical(&json!({})), "{}");
     }
 }
