@@ -8,6 +8,7 @@ pub mod decision;
 pub mod engine;
 pub mod gliclass;
 pub mod kev;
+pub mod llama;
 #[cfg(feature = "mlx")]
 pub mod mlx;
 pub mod net;

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use ollaya_decision::{Calibration, CalibrationFile};
-use ollaya_registry::manifest::{ANNOTATION_PRECISION, media};
+use ollaya_registry::manifest::{ANNOTATION_PRECISION, ANNOTATION_QUANTIZATION, media};
 use ollaya_registry::{Entry, ModelConfig, ModelName, Router, Store};
 use serde_json::Value;
 
@@ -22,13 +22,39 @@ pub struct RunnerFiles {
     pub weights: Option<PathBuf>,
 }
 
+/// Files of a GGUF model, run by a llama.cpp runner.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LlamaFiles {
+    pub gguf: PathBuf,
+    pub decision: PathBuf,
+    /// The GGUF's type (`Q4_0`), from the layer's annotation.
+    pub quantization: String,
+}
+
+/// What loads a model: an ONNX Runtime runner, or a llama.cpp one.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EngineFiles {
+    Onnx(RunnerFiles),
+    Llama(LlamaFiles),
+}
+
+impl EngineFiles {
+    /// The engine's name, as `ollaya show` prints it.
+    pub fn engine(&self) -> &'static str {
+        match self {
+            EngineFiles::Onnx(_) => "onnxruntime",
+            EngineFiles::Llama(_) => "llama.cpp",
+        }
+    }
+}
+
 /// A model that answers requests itself.
 #[derive(Debug, Clone)]
 pub struct Loadable {
     pub name: ModelName,
     /// Manifest digest: runners are keyed by content, so two tags of one model share a runner.
     pub digest: String,
-    pub files: RunnerFiles,
+    pub files: EngineFiles,
     pub calibration: Calibration,
     pub config: ModelConfig,
     /// A question schema baked in with a Modelfile, used when a request brings none.
@@ -79,7 +105,7 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
             questions,
         });
     }
-    if !matches!(config.model_format.as_str(), "" | "onnx") {
+    if !matches!(config.model_format.as_str(), "" | "onnx" | "gguf") {
         return Err(Error::Unsupported(format!(
             "{name} is a {} model, which this build of ollaya cannot run",
             config.model_format
@@ -91,6 +117,31 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
             .ok_or_else(|| Error::Corrupt(format!("{name}: manifest has no {media_type} layer")))?;
         Ok(store.blob_path(&d.digest)?)
     };
+    let calibration = match manifest.layer(media::CALIBRATION) {
+        Some(d) => Calibration::from_file(&store.read_blob_json::<CalibrationFile>(d)?),
+        None => Calibration::default(),
+    };
+    if config.model_format == "gguf" {
+        let quantization = manifest
+            .layer(media::GGUF)
+            .and_then(|d| d.annotations.get(ANNOTATION_QUANTIZATION))
+            .cloned()
+            .unwrap_or_default();
+        let files = EngineFiles::Llama(LlamaFiles {
+            gguf: blob(media::GGUF)?,
+            decision: blob(media::DECISION)?,
+            quantization,
+        });
+        return Ok(Resolved::Model(Box::new(Loadable {
+            name,
+            digest,
+            files,
+            calibration,
+            config,
+            questions,
+            size: manifest.total_size(),
+        })));
+    }
     let mut files = RunnerFiles {
         graph_fp32: None,
         graph_fp16: None,
@@ -124,14 +175,10 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
     if files.graph_fp32.is_none() && files.graph_fp16.is_none() {
         return Err(Error::Corrupt(format!("{name}: manifest has no graph")));
     }
-    let calibration = match manifest.layer(media::CALIBRATION) {
-        Some(d) => Calibration::from_file(&store.read_blob_json::<CalibrationFile>(d)?),
-        None => Calibration::default(),
-    };
     Ok(Resolved::Model(Box::new(Loadable {
         name,
         digest,
-        files,
+        files: EngineFiles::Onnx(files),
         calibration,
         config,
         questions,
@@ -186,7 +233,10 @@ mod tests {
             .write_manifest(&name, &serde_json::to_vec(&manifest).unwrap())
             .unwrap();
         match resolve(&store, &name).unwrap() {
-            Resolved::Model(m) => m.files,
+            Resolved::Model(m) => match m.files {
+                EngineFiles::Onnx(f) => f,
+                EngineFiles::Llama(_) => panic!("not an ONNX model"),
+            },
             Resolved::Router { .. } => panic!("not a router"),
         }
     }

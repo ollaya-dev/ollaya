@@ -24,6 +24,9 @@ pub enum Error {
     Stalled(String),
     #[error("corrupt data: {0}")]
     Corrupt(String),
+    /// This client cannot run the model; found from its config, before any layer downloads.
+    #[error("{0}")]
+    Unsupported(String),
     #[error(transparent)]
     Http(#[from] reqwest::Error),
     #[error(transparent)]

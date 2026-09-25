@@ -17,6 +17,14 @@ pub trait Engine: Send + Sync {
     /// Answer every question about `state`, returning one logit per option per question.
     fn run(&self, state: &Value, questions: &Questions) -> Result<Output, Error>;
 
+    /// Answer a request whose questions are the JSON the daemon sent. Engines whose layouts
+    /// validate the definitions themselves (llama.cpp's `winnow-v1`, `llm-logits-v1`) override
+    /// it; the rest parse the typed questions first.
+    fn run_json(&self, state: &Value, questions: &Value) -> Result<Output, Error> {
+        let questions = ollaya_decision::parse_questions(questions)?;
+        self.run(state, &questions)
+    }
+
     /// The only questions a fixed-preset model answers (its built-in set); `None` for models
     /// that answer any typed question.
     fn preset(&self) -> Option<&Questions> {

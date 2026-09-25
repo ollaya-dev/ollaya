@@ -98,7 +98,7 @@ pub struct ModelInfo {
 
 impl Ollaya {
     pub fn new(store: Store, scheduler: Arc<Scheduler>) -> Result<Arc<Self>, Error> {
-        let puller = Puller::new(store.clone())?;
+        let puller = Puller::new(store.clone())?.with_check(scheduler.run_check());
         Ok(Arc::new(Ollaya {
             store,
             puller,

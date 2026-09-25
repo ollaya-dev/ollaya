@@ -8,7 +8,7 @@ use ollaya_api::{
     Answer, DecideAnswer, DecideResponse, DoneReason, LayaExtra, LocalModel, ModelDetails,
     ModelMetadata, RouterInfo, Routing, RunningModel, ShowResponse, Usage,
 };
-use ollaya_registry::manifest::{ANNOTATION_PRECISION, Manifest};
+use ollaya_registry::manifest::{ANNOTATION_PRECISION, ANNOTATION_QUANTIZATION, Manifest};
 use ollaya_registry::{Entry, ModelName, Store, media};
 use serde_json::{Value, json};
 
@@ -51,7 +51,14 @@ fn precision_label(p: &str) -> String {
 }
 
 /// Precisions a model carries, GPU preference first: `F16/F32`, `F32`, ...; `""` for a router.
+/// A GGUF model: its quantization (`Q4_0`).
 fn quantization(store: &Store, manifest: &Manifest) -> String {
+    if let Some(q) = manifest
+        .layer(media::GGUF)
+        .and_then(|g| g.annotations.get(ANNOTATION_QUANTIZATION))
+    {
+        return q.to_ascii_uppercase();
+    }
     if let Some(p) = pinned_precision(store, manifest) {
         return precision_label(&p);
     }
@@ -158,14 +165,18 @@ pub fn show(store: &Store, info: &ModelInfo) -> ShowResponse {
     let (questions_json, router, capabilities) = match &info.resolved {
         Resolved::Model(m) => {
             let d = decision(store, manifest).unwrap_or(Value::Null);
-            for (key, field) in [
-                ("encoder", "encoder"),
-                ("layout", "layout"),
-                ("context_length", "max_len"),
-                ("head_max_len", "head_max_len"),
+            model_info.insert("general.engine".into(), json!(m.files.engine()));
+            for (key, value) in [
+                ("encoder", &d["encoder"]),
+                ("layout", &d["layout"]),
+                ("context_length", &d["max_len"]),
+                ("context_length", &d["llama"]["n_ctx"]),
+                ("head_max_len", &d["head_max_len"]),
+                ("quantization", &d["gguf"]["quantization"]),
+                ("gguf", &d["gguf"]["url"]),
             ] {
-                if !d[field].is_null() {
-                    model_info.insert(format!("{family}.{key}"), d[field].clone());
+                if !value.is_null() {
+                    model_info.insert(format!("{family}.{key}"), value.clone());
                 }
             }
             (m.questions.clone(), None, capabilities(&d))
@@ -262,7 +273,7 @@ pub fn running_model(store: &Store, r: &RunningInfo) -> RunningModel {
         Some(e) => {
             let c = config(store, &e.manifest);
             let ctx = decision(store, &e.manifest)
-                .and_then(|d| d["max_len"].as_u64())
+                .and_then(|d| d["max_len"].as_u64().or(d["llama"]["n_ctx"].as_u64()))
                 .or_else(|| c["context_length"].as_u64())
                 .unwrap_or(0);
             (details(store, &e.manifest), ctx)
@@ -271,7 +282,7 @@ pub fn running_model(store: &Store, r: &RunningInfo) -> RunningModel {
     };
     details.quantization_level = precision_label(&r.precision);
     // Apple silicon's GPU shares memory with the CPU: all of it counts, as Ollama reports it.
-    let on_gpu = r.device.starts_with("cuda") || r.device == "metal";
+    let on_gpu = r.device != "cpu";
     RunningModel {
         name: r.name.clone(),
         model: r.name.clone(),

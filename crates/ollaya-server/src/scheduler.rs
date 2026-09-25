@@ -17,8 +17,11 @@ use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
+use ollaya_decision::{llm_logits, winnow};
+use ollaya_registry::pull::RunCheck;
+
 use crate::Error;
-use crate::models::Loadable;
+use crate::models::{EngineFiles, Loadable};
 
 /// How long a model stays loaded after its last request (the API's `keep_alive`).
 pub use ollaya_api::KeepAlive;
@@ -39,7 +42,13 @@ pub struct SchedulerConfig {
     pub arg0: Option<PathBuf>,
     /// Extra environment for runner processes (e.g. the GPU library path).
     pub env: Vec<(String, String)>,
+    /// llama.cpp's libraries, which GGUF models run on (`launch::llama_dir`); `None` when this
+    /// install has none.
+    pub llama_dir: Option<PathBuf>,
 }
+
+/// The GGUF layouts this build's runner can run (`ollaya_runner::llama::LAYOUTS`).
+pub const LLAMA_LAYOUTS: &[&str] = &[llm_logits::LAYOUT, winnow::LAYOUT];
 
 #[derive(Debug, Deserialize)]
 struct Hello {
@@ -178,6 +187,27 @@ impl Scheduler {
 
     pub fn default_keep_alive(&self) -> KeepAlive {
         self.config.keep_alive
+    }
+
+    /// Whether this install can run a model with `config`, judged before a pull downloads it.
+    pub fn run_check(&self) -> RunCheck {
+        let llama = self.config.llama_dir.is_some();
+        Arc::new(move |name, c| match c.model_format.as_str() {
+            "" | "onnx" | "router" => Ok(()),
+            "gguf" => match c.layout.as_deref() {
+                Some(l) if !LLAMA_LAYOUTS.contains(&l) => Err(format!(
+                    "{name} uses the {l} layout, which this version of ollaya cannot run; upgrade ollaya"
+                )),
+                _ if !llama => Err(format!(
+                    "{name} runs on llama.cpp, and this installation of ollaya has no llama.cpp \
+                     libraries (lib/ollaya/llama); nothing was downloaded"
+                )),
+                _ => Ok(()),
+            },
+            other => Err(format!(
+                "{name} is a {other} model, which this version of ollaya cannot run; upgrade ollaya"
+            )),
+        })
     }
 
     /// Lease a runner for `model`, loading it if needed. Returns the lease and the load time.
@@ -338,24 +368,41 @@ impl Scheduler {
     }
 
     async fn spawn(&self, model: &Loadable) -> Result<Runner, Error> {
-        let f = &model.files;
         let mut cmd = Command::new(&self.config.exe);
-        cmd.arg("runner")
-            .arg("--tokenizer")
-            .arg(&f.tokenizer)
-            .arg("--decision")
-            .arg(&f.decision)
-            .arg("--device")
-            .arg(&self.config.device);
-        if let Some(g) = &f.graph_fp32 {
-            cmd.arg("--graph-fp32").arg(g);
+        cmd.arg("runner");
+        match &model.files {
+            EngineFiles::Onnx(f) => {
+                cmd.arg("--tokenizer")
+                    .arg(&f.tokenizer)
+                    .arg("--decision")
+                    .arg(&f.decision);
+                if let Some(g) = &f.graph_fp32 {
+                    cmd.arg("--graph-fp32").arg(g);
+                }
+                if let Some(g) = &f.graph_fp16 {
+                    cmd.arg("--graph-fp16").arg(g);
+                }
+                if let (Some(arch), Some(weights)) = (&f.arch, &f.weights) {
+                    cmd.arg("--arch").arg(arch).arg("--weights").arg(weights);
+                }
+            }
+            EngineFiles::Llama(f) => {
+                let dir = self.config.llama_dir.as_ref().ok_or_else(|| {
+                    Error::Unsupported(format!(
+                        "{} runs on llama.cpp, and this installation of ollaya has no llama.cpp \
+                         libraries (lib/ollaya/llama); reinstall ollaya",
+                        model.name
+                    ))
+                })?;
+                cmd.arg("--gguf")
+                    .arg(&f.gguf)
+                    .arg("--decision")
+                    .arg(&f.decision)
+                    .arg("--llama-dir")
+                    .arg(dir);
+            }
         }
-        if let Some(g) = &f.graph_fp16 {
-            cmd.arg("--graph-fp16").arg(g);
-        }
-        if let (Some(arch), Some(weights)) = (&f.arch, &f.weights) {
-            cmd.arg("--arch").arg(arch).arg("--weights").arg(weights);
-        }
+        cmd.arg("--device").arg(&self.config.device);
         #[cfg(unix)]
         if let Some(arg0) = &self.config.arg0 {
             cmd.arg0(arg0);

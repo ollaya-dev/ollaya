@@ -89,6 +89,10 @@ enum Command {
         #[arg(short = 'f', long = "file", default_value = "Modelfile")]
         file: PathBuf,
     },
+    /// Internal: the llama.cpp build this installation loads for GGUF models, and the devices it
+    /// finds (JSON).
+    #[command(hide = true)]
+    LlamaDevices,
     /// Internal: serve one loaded model for the daemon.
     #[command(hide = true)]
     Runner {
@@ -97,7 +101,13 @@ enum Command {
         #[arg(long)]
         graph_fp16: Option<PathBuf>,
         #[arg(long)]
-        tokenizer: PathBuf,
+        tokenizer: Option<PathBuf>,
+        /// A GGUF model (llama.cpp) instead of an ONNX graph
+        #[arg(long)]
+        gguf: Option<PathBuf>,
+        /// llama.cpp's libraries, for a GGUF model
+        #[arg(long)]
+        llama_dir: Option<PathBuf>,
         #[arg(long)]
         decision: PathBuf,
         /// The arch layer, for the MLX engine
@@ -161,6 +171,8 @@ fn main() -> Result<()> {
             graph_fp32,
             graph_fp16,
             tokenizer,
+            gguf,
+            llama_dir,
             decision,
             arch,
             weights,
@@ -173,6 +185,8 @@ fn main() -> Result<()> {
                     graph_fp32,
                     graph_fp16,
                     tokenizer,
+                    gguf,
+                    llama_dir,
                     decision,
                     arch,
                     weights,
@@ -180,6 +194,23 @@ fn main() -> Result<()> {
                     threads,
                 },
             ))?;
+        }
+        Command::LlamaDevices => {
+            logging("warn");
+            // Found the way the daemon finds them: the libraries next to this executable (or in
+            // $OLLAYA_LIBRARY_PATH), the CUDA backend in the CUDA pack.
+            let exe = std::env::current_exe()?;
+            let dir = ollaya_server::launch::llama_dir(&exe).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "this installation of ollaya has no llama.cpp libraries (lib/ollaya/llama)"
+                )
+            })?;
+            let cuda = ollaya_server::launch::cuda_dir(&exe)
+                .map(|d| d.join(ollaya_runner::llama::CUDA_BACKEND))
+                .filter(|p| p.is_file());
+            let found =
+                ollaya_runner::llama::probe(&ollaya_runner::llama::Libraries { dir, cuda })?;
+            println!("{}", serde_json::to_string_pretty(&found)?);
         }
         Command::Serve => {
             logging("info");
@@ -233,6 +264,7 @@ async fn client_command(command: Command) -> Result<()> {
         Command::Serve
         | Command::Run(_)
         | Command::Runner { .. }
+        | Command::LlamaDevices
         | Command::Mcp { .. }
         | Command::Stop { model: None } => {
             unreachable!("handled in main")

@@ -190,6 +190,7 @@ pub fn error_body(e: &Error, pulling: bool) -> ErrorBody {
             }
             R::NotFound(n) => ErrorBody::model_not_found(n),
             R::DigestMismatch { expected, .. } => ErrorBody::digest_mismatch(expected),
+            R::Unsupported(m) => ErrorBody::new(ErrorCode::UnsupportedModel, m.clone()),
             R::Stalled(_) | R::Http(_) => ErrorBody::new(ErrorCode::RegistryError, r.to_string()),
             _ if pulling => ErrorBody::new(ErrorCode::RegistryError, r.to_string()),
             _ => ErrorBody::new(ErrorCode::StorageError, r.to_string()),
@@ -834,6 +835,7 @@ pub fn build(config: ServerConfig, runner: RunnerLaunch) -> Result<Arc<AppState>
         exe: runner.exe,
         arg0: runner.arg0,
         env: runner.env,
+        llama_dir: runner.llama_dir,
     });
     let ollaya = Ollaya::new(store, scheduler)?;
     Ok(AppState::new(ollaya, config))

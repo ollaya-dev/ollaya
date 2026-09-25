@@ -29,9 +29,13 @@ pub mod media {
     /// The network the MLX engine builds from the weights layer: hyperparameters and tensor
     /// names, derived from the author's config (`crates/ollaya-runner/src/mlx/arch.rs`).
     pub const ARCH: &str = "application/vnd.ollaya.arch";
+    /// A GGUF file (weights, tokenizer and chat template) that llama.cpp loads. It comes unmodified
+    /// from the author's repository; `org.ollaya.quantization` names its type (`Q4_0`, `Q8_0`).
+    pub const GGUF: &str = "application/vnd.ollaya.weights.gguf";
 }
 
 pub const ANNOTATION_PRECISION: &str = "org.ollaya.precision";
+pub const ANNOTATION_QUANTIZATION: &str = "org.ollaya.quantization";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,6 +80,14 @@ pub struct ModelConfig {
     /// When the upstream checkpoint was published (YYYY-MM-DD), for `/v1/models`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_date: Option<String>,
+    /// The engine that runs the model: `onnx` (the default) or `llama` (llama.cpp).
+    /// A client checks it before downloading anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
+    /// The sequence layout (`decision.json`'s), so a client can refuse a layout it cannot run
+    /// before downloading anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<String>,
 }
 
 impl Manifest {

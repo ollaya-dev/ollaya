@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 use crate::Error;
-use crate::manifest::{Descriptor, Manifest, media};
+use crate::manifest::{Descriptor, Manifest, ModelConfig, media};
 use crate::name::ModelName;
 use crate::store::{Store, digest_hex, sha256_hex};
 
@@ -50,10 +50,15 @@ impl Progress {
     }
 }
 
+/// Whether this client can run a model, judged from its config blob: `Err` says why not. A pull
+/// runs it before downloading any layer, so nothing large is fetched for a model that cannot run.
+pub type RunCheck = Arc<dyn Fn(&ModelName, &ModelConfig) -> Result<(), String> + Send + Sync>;
+
 #[derive(Clone)]
 pub struct Puller {
     http: reqwest::Client,
     store: Store,
+    check: Option<RunCheck>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -70,7 +75,17 @@ impl Puller {
             .connect_timeout(Duration::from_secs(20))
             .read_timeout(Duration::from_secs(60))
             .build()?;
-        Ok(Puller { http, store })
+        Ok(Puller {
+            http,
+            store,
+            check: None,
+        })
+    }
+
+    /// Refuse, before downloading its layers, any model `check` rejects.
+    pub fn with_check(mut self, check: RunCheck) -> Self {
+        self.check = Some(check);
+        self
     }
 
     pub fn store(&self) -> &Store {
@@ -110,6 +125,15 @@ impl Puller {
     ) -> Result<Manifest, Error> {
         progress(Progress::status("pulling manifest"));
         let (manifest, bytes) = self.fetch_manifest(name).await?;
+        if let Some(check) = &self.check {
+            // The config is small: fetch it first and ask whether the model can run here.
+            let c = &manifest.config;
+            if !self.store.has_blob(c) {
+                self.download(name, c, progress).await?;
+            }
+            let config: ModelConfig = self.store.read_blob_json(c)?;
+            check(name, &config).map_err(Error::Unsupported)?;
+        }
         for d in manifest.blobs() {
             if self.store.has_blob(d) {
                 progress(Progress {

@@ -197,6 +197,7 @@ pub fn summary(s: &ShowResponse) -> String {
         ("context length", info(".context_length")),
         ("precision", Some(d.quantization_level.clone())),
         ("format", Some(d.format.clone())),
+        ("engine", info("general.engine")),
         ("languages", info("general.languages")),
         ("derived from", Some(d.parent_model.clone())),
     ] {

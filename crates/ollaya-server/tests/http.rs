@@ -251,6 +251,7 @@ impl Daemon {
             exe: std::env::current_exe().unwrap(),
             arg0: None,
             env: vec![],
+            llama_dir: None,
         };
         let state = build(config.clone(), runner).unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

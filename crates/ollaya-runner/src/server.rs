@@ -6,13 +6,13 @@
 //!
 //! Protocol (JSON over HTTP on 127.0.0.1, port chosen by the OS):
 //! * On startup, after the model is loaded, the runner prints one JSON line to stdout:
-//!   `{"port":<u16>,"device":"cuda:0"|"cpu"|"metal","precision":"fp16"|"fp32","engine":"onnx"|"mlx"}`.
+//!   `{"port":<u16>,"device":"cuda:0"|"cpu"|"metal","precision":"fp16"|"fp32"|"<GGUF type>","engine":"onnx"|"mlx"|"llama"}`.
 //! * `GET /health` -> the same object plus `"status":"ok"`.
 //! * `POST /decide` `{state, questions}` ->
 //!   `{questions:[{logits, act_logits}], input_tokens, state_tokens, state_truncated}`.
 //!   Errors are `{"error":{"code","message"}}` with status 400 (bad request) or 500.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use axum::extract::State;
@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::engine::{self, Engine};
+use crate::llama::{Libraries, LlamaModel, Target};
 use crate::onnx::{Device, ModelFiles};
 use crate::{Error, QuestionOutput};
 
@@ -62,7 +63,12 @@ pub struct RunnerConfig {
     pub graph_fp32: Option<PathBuf>,
     /// fp16 graph: preferred on GPU.
     pub graph_fp16: Option<PathBuf>,
-    pub tokenizer: PathBuf,
+    /// The tokenizer of an ONNX model.
+    pub tokenizer: Option<PathBuf>,
+    /// A GGUF model, which runs on llama.cpp instead of ONNX Runtime.
+    pub gguf: Option<PathBuf>,
+    /// Where llama.cpp's libraries are (`lib/ollaya/llama`), for a GGUF model.
+    pub llama_dir: Option<PathBuf>,
     pub decision: PathBuf,
     /// The `arch` layer, for MLX.
     pub arch: Option<PathBuf>,
@@ -75,8 +81,8 @@ pub struct RunnerConfig {
 #[derive(Debug, Clone, Serialize)]
 pub struct Loaded {
     pub device: String,
-    pub precision: &'static str,
-    /// `onnx` (ONNX Runtime) or `mlx`.
+    pub precision: String,
+    /// `onnx` (ONNX Runtime), `mlx` or `llama` (llama.cpp).
     pub engine: &'static str,
 }
 
@@ -98,11 +104,70 @@ struct AppState {
     loaded: Loaded,
 }
 
+/// Load a GGUF model on llama.cpp.
+fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Loaded), Error> {
+    let dir = config
+        .llama_dir
+        .clone()
+        .ok_or_else(|| Error::Model("a GGUF model needs --llama-dir".into()))?;
+    // The CUDA backend sits in the CUDA pack, where the daemon points argv[0] (as for ORT).
+    let cuda = std::env::args_os()
+        .next()
+        .map(PathBuf::from)
+        .and_then(|a| {
+            a.parent()
+                .filter(|d| d.is_absolute())
+                .map(|d| d.join(crate::llama::CUDA_BACKEND))
+        })
+        .filter(|p| p.is_file());
+    let target = match config.device {
+        DeviceRequest::Auto => Target::Auto,
+        DeviceRequest::Cpu => Target::Cpu,
+        DeviceRequest::Cuda(id) => Target::Device(format!("CUDA{id}")),
+        // llama.cpp's own Metal backend (not MLX): ggml names the Apple GPU `MTL0`.
+        DeviceRequest::Metal => Target::Device("MTL0".into()),
+    };
+    let libs = Libraries { dir, cuda };
+    let mut model = LlamaModel::load(gguf, &config.decision, &libs, &target, config.threads)?;
+    // As on the ONNX GPU path: the first evaluation pays one-off costs (kernels, graphs,
+    // buffers), and a GPU that fails it moves an `auto` model to the CPU. (`run` warms up models
+    // on the CPU.)
+    if model.device != "cpu"
+        && let Err(e) = warm_up(&model)
+    {
+        if config.device != DeviceRequest::Auto {
+            return Err(Error::Model(format!(
+                "{} failed its first request: {e}",
+                model.device
+            )));
+        }
+        tracing::warn!(
+            "{} failed its first request, using the CPU: {e}",
+            model.device
+        );
+        drop(model);
+        model = LlamaModel::load(gguf, &config.decision, &libs, &Target::Cpu, config.threads)?;
+    }
+    let loaded = Loaded {
+        device: model.device.clone(),
+        precision: model.precision.clone(),
+        engine: "llama",
+    };
+    Ok((Box::new(model), loaded))
+}
+
 /// Load the model on the best available device.
 pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
+    if let Some(gguf) = &config.gguf {
+        return load_llama(config, gguf);
+    }
+    let tokenizer = config
+        .tokenizer
+        .clone()
+        .ok_or_else(|| Error::Model("no tokenizer given".into()))?;
     let files = |graph: &PathBuf| ModelFiles {
         graph: graph.clone(),
-        tokenizer: config.tokenizer.clone(),
+        tokenizer: tokenizer.clone(),
         decision: config.decision.clone(),
         calibration: None,
         arch: config.arch.clone(),
@@ -127,7 +192,7 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
                         model,
                         Loaded {
                             device: "metal".into(),
-                            precision: "fp32",
+                            precision: "fp32".into(),
                             engine: "mlx",
                         },
                     ));
@@ -185,7 +250,7 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
                                     model,
                                     Loaded {
                                         device: format!("cuda:{id}"),
-                                        precision,
+                                        precision: precision.into(),
                                         engine: "onnx",
                                     },
                                 ));
@@ -215,7 +280,7 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
         model,
         Loaded {
             device: "cpu".into(),
-            precision,
+            precision: precision.into(),
             engine: "onnx",
         },
     ))
@@ -384,8 +449,7 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<Value> {
 
 async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) -> Response {
     let result = tokio::task::spawn_blocking(move || -> Result<Value, Error> {
-        let questions = ollaya_decision::parse_questions(&req.questions)?;
-        let out = s.model.run(&req.state, &questions)?;
+        let out = s.model.run_json(&req.state, &req.questions)?;
         let questions: Vec<QuestionLogits> = out
             .questions
             .into_iter()

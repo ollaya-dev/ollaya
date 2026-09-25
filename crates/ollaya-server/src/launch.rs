@@ -40,13 +40,19 @@ pub struct RunnerLaunch {
     pub arg0: Option<PathBuf>,
     /// Extra environment for runner processes (the GPU library path on Linux).
     pub env: Vec<(String, String)>,
+    /// llama.cpp's libraries, for GGUF models (see [`llama_dir`]).
+    pub llama_dir: Option<PathBuf>,
 }
 
 impl RunnerLaunch {
     /// Runners are this executable's hidden `runner` subcommand, set up for the CUDA runtime pack
     /// when this install has one.
     pub fn current() -> std::io::Result<Self> {
-        Ok(runner_launch(&std::env::current_exe()?))
+        let exe = std::env::current_exe()?;
+        Ok(RunnerLaunch {
+            llama_dir: llama_dir(&exe),
+            ..runner_launch(&exe)
+        })
     }
 
     fn plain(exe: &Path) -> Self {
@@ -54,6 +60,7 @@ impl RunnerLaunch {
             exe: exe.to_path_buf(),
             arg0: None,
             env: Vec::new(),
+            llama_dir: None,
         }
     }
 }
@@ -88,6 +95,34 @@ fn resolve(d: &Path) -> PathBuf {
     }
 }
 
+/// The llama.cpp library that GGUF runners load, by platform (`scripts/llama-cpp.sh`).
+pub const LIBLLAMA: &str = if cfg!(windows) {
+    "llama.dll"
+} else if cfg!(target_os = "macos") {
+    "libllama.0.dylib"
+} else {
+    "libllama.so.0"
+};
+
+/// Directory holding llama.cpp's libraries (`lib/ollaya/llama`), if this install has them.
+///
+/// First match wins: `$OLLAYA_LIBRARY_PATH/llama` (development, and the desktop app, which
+/// bundles them as resources), then `<exe dir>/../lib/ollaya/llama` (the tarball, zip and
+/// Docker layouts). The CUDA backend is not here: it is in the CUDA pack, next to the CUDA
+/// libraries it needs, where a GPU runner's `argv[0]` points.
+pub fn llama_dir(exe: &Path) -> Option<PathBuf> {
+    let exe_dir = exe.parent()?;
+    let candidates = [
+        std::env::var_os("OLLAYA_LIBRARY_PATH").map(|p| PathBuf::from(p).join("llama")),
+        Some(exe_dir.join("../lib/ollaya/llama")),
+    ];
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|d| d.join(LIBLLAMA).is_file())
+        .map(|d| resolve(&d))
+}
+
 /// How to start runners for the executable `exe`.
 pub fn runner_launch(exe: &Path) -> RunnerLaunch {
     match cuda_dir(exe) {
@@ -116,6 +151,7 @@ fn gpu_launch(exe: &Path, dir: &Path) -> std::io::Result<RunnerLaunch> {
         exe: exe.to_path_buf(),
         arg0: Some(dir.join("ollaya")),
         env: vec![("LD_LIBRARY_PATH".into(), ld)],
+        llama_dir: None,
     })
 }
 

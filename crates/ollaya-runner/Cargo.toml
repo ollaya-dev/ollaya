@@ -26,6 +26,7 @@ ollaya-decision.workspace = true
 ollaya-mlx = { workspace = true, optional = true }
 tokio.workspace = true
 tracing.workspace = true
+libloading.workspace = true
 ndarray.workspace = true
 ort = { workspace = true, features = ["download-binaries", "copy-dylibs", "tls-rustls"] }
 serde.workspace = true

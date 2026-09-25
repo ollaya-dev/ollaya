@@ -160,3 +160,39 @@ async fn unknown_model_is_not_found() {
         .unwrap_err();
     assert!(matches!(err, Error::NotFound(_)), "{err}");
 }
+
+#[tokio::test]
+async fn a_model_this_client_cannot_run_downloads_nothing_but_its_config() {
+    let remote = tempfile::tempdir().unwrap();
+    let base = serve(remote.path()).await;
+    let weights = pseudo_random(1 << 20);
+    publish(remote.path(), &base, "latest", &weights, None);
+
+    let local = tempfile::tempdir().unwrap();
+    let store = Store::open(local.path()).unwrap();
+    let check: ollaya_registry::pull::RunCheck = std::sync::Arc::new(|_, c| {
+        if c.model_format == "onnx" {
+            Err(format!("no {} engine here", c.model_format))
+        } else {
+            Ok(())
+        }
+    });
+    let puller = Puller::new(store.clone()).unwrap().with_check(check);
+    let name = ModelName::parse(&format!("{base}/library/test")).unwrap();
+    let err = puller.pull(&name, &|_| {}).await.unwrap_err();
+    assert!(
+        matches!(&err, Error::Unsupported(m) if m == "no onnx engine here"),
+        "{err}"
+    );
+    let weights_blob = store
+        .blob_path(&format!("sha256:{}", sha256_hex(&weights)))
+        .unwrap();
+    assert!(!weights_blob.exists());
+    assert!(store.read_manifest(&name).unwrap().is_none());
+
+    // A check that accepts the model pulls it as before.
+    let accept: ollaya_registry::pull::RunCheck = std::sync::Arc::new(|_, _| Ok(()));
+    let puller = Puller::new(store.clone()).unwrap().with_check(accept);
+    puller.pull(&name, &|_| {}).await.unwrap();
+    assert!(weights_blob.exists());
+}
