@@ -5,7 +5,7 @@
 //! reached, the least recently used idle runner is unloaded first. Killing a runner process
 //! returns all of its memory, including GPU memory.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -14,7 +14,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
 use crate::Error;
@@ -365,7 +365,30 @@ impl Scheduler {
             .spawn()
             .map_err(|e| Error::LoadFailed(format!("spawn {}: {e}", self.config.exe.display())))?;
         let stdout = child.stdout.take().expect("stdout is piped");
-        let mut stderr = child.stderr.take().expect("stderr is piped");
+        let stderr = child.stderr.take().expect("stderr is piped");
+
+        // Drain the runner's stderr into our log from the start, so it never blocks on a full
+        // pipe: a runner that logs more than the pipe holds before it announces itself (4 KiB on
+        // Windows, for example with OLLAYA_LOG=info,ort=info) would otherwise hang until the load
+        // times out. The last lines explain a failed load.
+        let tail = Arc::new(Mutex::new(VecDeque::<String>::new()));
+        let name = model.name.to_string();
+        let drain = tokio::spawn({
+            let tail = tail.clone();
+            async move {
+                let mut lines = BufReader::new(stderr).lines();
+                while let Ok(Some(l)) = lines.next_line().await {
+                    tracing::debug!(runner = %name, "{l}");
+                    if !l.trim().is_empty() {
+                        let mut tail = tail.lock().unwrap();
+                        if tail.len() == STDERR_TAIL {
+                            tail.pop_front();
+                        }
+                        tail.push_back(l);
+                    }
+                }
+            }
+        });
 
         let mut line = String::new();
         let read = tokio::time::timeout(
@@ -379,27 +402,21 @@ impl Scheduler {
         };
         let Some(hello) = hello else {
             let _ = child.kill().await;
-            let mut err = String::new();
-            let _ =
-                tokio::time::timeout(Duration::from_secs(1), stderr.read_to_string(&mut err)).await;
+            let _ = tokio::time::timeout(Duration::from_secs(1), drain).await;
             let reason = if read.is_err() {
                 "timed out loading".to_owned()
             } else {
-                last_lines(&err, 5)
+                let tail = tail.lock().unwrap();
+                tail.iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" | ")
             };
             return Err(Error::LoadFailed(format!(
                 "{} failed to load: {reason}",
                 model.name
             )));
         };
-        // Keep draining the runner's stderr into our log so it never blocks on a full pipe.
-        let name = model.name.to_string();
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(l)) = lines.next_line().await {
-                tracing::debug!(runner = %name, "{l}");
-            }
-        });
         Ok(Runner {
             name: model.name.to_string(),
             digest: model.digest.clone(),
@@ -421,7 +438,5 @@ impl Scheduler {
     }
 }
 
-fn last_lines(s: &str, n: usize) -> String {
-    let lines: Vec<&str> = s.lines().filter(|l| !l.trim().is_empty()).collect();
-    lines[lines.len().saturating_sub(n)..].join(" | ")
-}
+/// Non-empty stderr lines of a runner kept to explain a failed load.
+const STDERR_TAIL: usize = 5;

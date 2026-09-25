@@ -51,6 +51,10 @@ mod fake_runner {
             eprintln!("fake runner: cannot load this model");
             std::process::exit(1);
         }
+        // Log more than any pipe buffer holds before announcing, as a verbose runner does.
+        for i in 0..fake["stderr_lines"].as_u64().unwrap_or(0) {
+            eprintln!("fake runner: loading, log line {i} {}", "x".repeat(100));
+        }
         tokio::time::sleep(std::time::Duration::from_millis(
             fake["load_ms"].as_u64().unwrap_or(0),
         ))
@@ -636,10 +640,19 @@ async fn model_specific_errors() {
             let store = Store::open(dir).unwrap();
             add_model(&store, "small:latest", &["en"], json!({"max_options": 100}));
             add_model(&store, "broken:latest", &["en"], json!({"fail_load": true}));
+            add_model(
+                &store,
+                "chatty:latest",
+                &["en"],
+                json!({"stderr_lines": 10_000}),
+            );
         },
-        |_| {},
+        |c| c.load_timeout = Duration::from_secs(30),
     )
     .await;
+    // About 1 MB of stderr before the runner announces itself: the load must not stall on a
+    // full pipe.
+    d.client.load("chatty", None).await.unwrap();
     let options: serde_json::Map<String, Value> =
         (0..120).map(|i| (format!("o{i}"), Value::Null)).collect();
     let (status, _, body) = post_raw(
