@@ -26,18 +26,23 @@ const indent = (text: string, pad: string) =>
     .map((line, i) => (i === 0 ? line : pad + line))
     .join('\n')
 
-/** CLI / cURL / Python / JavaScript snippets for a model reference such as "laya" or "laya:en". */
-export function usageTabs(ref: string, state: string = TRIAGE_STATE): CodeTab[] {
-  const body = { model: ref, state, questions: triageQuestions }
+/**
+ * CLI / cURL / Python / JavaScript snippets for a model reference such as "laya" or "laya:en".
+ * A model with built-in questions (`builtin`) is asked about the state alone.
+ */
+export function usageTabs(ref: string, state: string = TRIAGE_STATE, builtin = false): CodeTab[] {
+  const body = builtin ? { model: ref, state } : { model: ref, state, questions: triageQuestions }
   const json2 = JSON.stringify(body, null, 2)
   const json4 = JSON.stringify(body, null, 4)
   const jsBody = JSON.stringify(body, null, 2).replace(/^(\s*)"([a-z_]+)":/gm, '$1$2:')
+  const pyRead = builtin ? 'print(answers)' : 'print(answers["department"]["choice"], answers["refund"]["noul"])'
+  const jsRead = builtin ? 'console.log(answers);' : 'console.log(answers.department.choice, answers.refund.noul);'
 
   return [
     {
       key: 'cli',
       label: 'CLI',
-      code: `ollaya run ${ref} --preset triage "${state}"`,
+      code: builtin ? `ollaya run ${ref} "${state}"` : `ollaya run ${ref} --preset triage "${state}"`,
     },
     {
       key: 'curl',
@@ -57,7 +62,7 @@ response = requests.post(
     json=${indent(json4, '    ')},
 )
 answers = response.json()["answers"]
-print(answers["department"]["choice"], answers["refund"]["noul"])`,
+${pyRead}`,
     },
     {
       key: 'javascript',
@@ -68,7 +73,7 @@ print(answers["department"]["choice"], answers["refund"]["noul"])`,
   body: JSON.stringify(${indent(jsBody, '  ')}),
 });
 const { answers } = await response.json();
-console.log(answers.department.choice, answers.refund.noul);`,
+${jsRead}`,
     },
   ]
 }

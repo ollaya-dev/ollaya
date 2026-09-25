@@ -110,10 +110,11 @@ function ModelHeader({ model, tag, crumb }: { model: Model; tag?: Tag; crumb?: s
   )
 }
 
-function Usage({ refName }: { refName: string }) {
+function Usage({ refName, model, tag }: { refName: string; model: Model; tag: Tag | undefined }) {
+  const tabs = usageTabs(refName, model.exampleState ?? undefined, tag?.builtinQuestions ?? false)
   return (
     <section class="mt-8" aria-label="Usage">
-      <CodeTabs id="usage" label="Usage examples" tabs={usageTabs(refName)} />
+      <CodeTabs id="usage" label="Usage examples" tabs={tabs} />
     </section>
   )
 }
@@ -200,7 +201,7 @@ export function ModelPage({ model }: { model: Model }) {
   return (
     <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
       <ModelHeader model={model} />
-      <Usage refName={model.name} />
+      <Usage refName={model.name} model={model} tag={getTag(model, 'latest') ?? model.tags[0]} />
       <ModelsTable model={model} />
       {readme ? (
         <section class="mt-12 border-t border-line pt-10" aria-labelledby="readme-title">
@@ -283,7 +284,7 @@ export function TagPage({ model, tag }: { model: Model; tag: Tag }) {
   return (
     <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
       <ModelHeader model={model} tag={tag} crumb={tag.name} />
-      <Usage refName={tag.name === 'latest' ? model.name : ref} />
+      <Usage refName={tag.name === 'latest' ? model.name : ref} model={model} tag={tag} />
 
       <section class="mt-10" aria-labelledby="details-title">
         <h2 id="details-title" class="text-base font-semibold text-fg">
