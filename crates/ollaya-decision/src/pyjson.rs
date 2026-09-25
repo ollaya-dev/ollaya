@@ -95,6 +95,12 @@ fn write_number(out: &mut String, n: &Number) {
 
 /// Python's `repr(float)`, which is also what `json.dumps` writes for floats.
 pub fn float_repr(x: f64) -> String {
+    float_repr_upto(x, 16)
+}
+
+/// [`float_repr`], positional up to `max_decpt` integer digits. Python uses 16; nlohmann::json,
+/// whose `dump()` Winnow's server renders with, uses 15 (`digits10` of a double).
+pub fn float_repr_upto(x: f64, max_decpt: i32) -> String {
     if x.is_nan() {
         return "NaN".into();
     }
@@ -125,7 +131,7 @@ pub fn float_repr(x: f64) -> String {
     if x < 0.0 {
         out.push('-');
     }
-    if decpt <= -4 || decpt > 16 {
+    if decpt <= -4 || decpt > max_decpt {
         out.push_str(&digits[..1]);
         if digits.len() > 1 {
             out.push('.');
@@ -148,7 +154,8 @@ pub fn float_repr(x: f64) -> String {
     out
 }
 
-fn write_str(out: &mut String, s: &str, ascii: bool) {
+/// A string literal as `json.dumps` writes it; `ascii` is `ensure_ascii`.
+pub fn write_str(out: &mut String, s: &str, ascii: bool) {
     out.push('"');
     for c in s.chars() {
         match c {

@@ -25,6 +25,10 @@ pub struct CalibrationFile {
     /// kind it replaces the fixed temperatures, which stay as the fallback otherwise.
     #[serde(default)]
     pub temperature_map: Option<Value>,
+    /// `[min, max]` the fixed temperatures are clamped to, when a model's fitted temperatures lie
+    /// outside [`TEMP_MIN`]..[`TEMP_MAX`] (the raw label logits of instruct LLMs need 6 to 40).
+    #[serde(default)]
+    pub temperature_range: Option<[f64; 2]>,
 }
 
 /// Temperatures as they are applied: clamped, with neutral fallbacks for invalid entries.
@@ -133,9 +137,23 @@ impl TemperatureMap {
 }
 
 pub fn clamp_temperature(t: &Value) -> f64 {
+    clamp_temperature_in(t, [TEMP_MIN, TEMP_MAX])
+}
+
+pub fn clamp_temperature_in(t: &Value, [lo, hi]: [f64; 2]) -> f64 {
     match t.as_f64() {
-        Some(t) if t.is_finite() => t.clamp(TEMP_MIN, TEMP_MAX),
+        Some(t) if t.is_finite() => t.clamp(lo, hi),
         _ => 1.0,
+    }
+}
+
+impl CalibrationFile {
+    /// The clamp range: the file's own, when it is a valid range, else the default.
+    pub fn range(&self) -> [f64; 2] {
+        match self.temperature_range {
+            Some([lo, hi]) if lo.is_finite() && hi.is_finite() && 0.0 < lo && lo <= hi => [lo, hi],
+            _ => [TEMP_MIN, TEMP_MAX],
+        }
     }
 }
 
@@ -152,14 +170,15 @@ pub fn bucket(qtype: QType, k: usize) -> String {
 
 impl Calibration {
     pub fn from_file(file: &CalibrationFile) -> Self {
+        let range = file.range();
         let mut by_type = [1.0; 3];
         for (slot, t) in by_type.iter_mut().zip(&file.temperature) {
-            *slot = clamp_temperature(t);
+            *slot = clamp_temperature_in(t, range);
         }
         let by_options = file
             .temperature_by_options
             .iter()
-            .map(|(k, v)| (k.clone(), clamp_temperature(v)))
+            .map(|(k, v)| (k.clone(), clamp_temperature_in(v, range)))
             .collect();
         Calibration {
             by_type,
@@ -297,5 +316,21 @@ mod tests {
             cal.probabilities(QType::Score, &[0.0, 2.0], 1),
             cal.probabilities(QType::Score, &[0.0, 2.0], 9999)
         );
+    }
+
+    fn load(v: Value) -> Calibration {
+        Calibration::from_file(&serde_json::from_value(v).unwrap())
+    }
+
+    #[test]
+    fn a_file_may_widen_the_clamp_range() {
+        let t = json!([6.08, 15.1, 40.0]);
+        let laya = load(json!({"temperature": t}));
+        assert_eq!(laya.temperature(QType::Choice, 4), TEMP_MAX);
+        let llm = load(json!({"temperature": t, "temperature_range": [0.5, 50.0]}));
+        assert_eq!(llm.temperature(QType::Choice, 4), 6.08);
+        assert_eq!(llm.temperature(QType::Noul, 2), 40.0);
+        let bad = load(json!({"temperature": t, "temperature_range": [10.0, 1.0]}));
+        assert_eq!(bad.temperature(QType::Score, 3), TEMP_MAX);
     }
 }

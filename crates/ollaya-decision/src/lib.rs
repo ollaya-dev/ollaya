@@ -12,6 +12,7 @@ pub mod decision;
 pub mod gliclass;
 pub mod kev;
 pub mod layout;
+pub mod llm_logits;
 pub mod nli;
 mod printable;
 pub mod pyjson;
@@ -19,6 +20,7 @@ pub mod pyrepr;
 pub mod question;
 pub mod qwen3guard;
 pub mod von;
+pub mod winnow;
 
 pub use answer::Answer;
 pub use calibration::{Calibration, CalibrationFile, TemperatureMap};
