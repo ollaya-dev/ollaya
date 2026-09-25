@@ -51,6 +51,8 @@ const state = {
   pulling: new Map<string, Pulling>(),
   pullError: '',
   presets: [] as Preset[],
+  /** Per installed version: the ids of its built-in questions, or null when it takes questions. */
+  builtin: new Map<string, string[] | null>(),
   runModel: '',
   preset: 'triage',
   input: '',
@@ -74,6 +76,38 @@ const tagSummary = (m: LibraryModel, tag: string) =>
   m.tags.find((t) => t.name === tag)?.summary || (tag.endsWith(':latest') ? `The default version: ollaya run ${m.name}` : '')
 const installedTags = (m: LibraryModel) => mainTags(m).filter((t) => state.installed.has(t))
 const selectedModel = () => state.library.find((m) => m.name === state.selected)
+
+/** `builtinOf` requests, one per version. */
+const asking = new Map<string, Promise<string[] | null>>()
+
+/**
+ * The ids of the questions `model` asks by itself (qwen3guard: safety, category, …), or null when
+ * every request brings questions. Such a model rejects a preset or custom questions.
+ */
+function builtinOf(model: string): Promise<string[] | null> {
+  let p = asking.get(model)
+  if (!p) {
+    p = backend
+      .builtinQuestions(model)
+      .then(
+        (q) => (q ? Object.keys(q) : null),
+        () => (asking.delete(model), null), // unknown for now: ask again on the next run
+      )
+      .then((ids) => {
+        state.builtin.set(model, ids)
+        render()
+        return ids
+      })
+    asking.set(model, p)
+  }
+  return p
+}
+
+/** Forget what a version asks, once it is downloaded again or removed. */
+function forget(tag: string) {
+  asking.delete(tag)
+  state.builtin.delete(tag)
+}
 
 // --- actions --------------------------------------------------------------------------------------
 
@@ -121,6 +155,7 @@ async function pull(tag: string) {
     state.pullError = String(e)
   }
   state.pulling.delete(tag)
+  forget(tag)
   await refreshInstalled()
   render()
 }
@@ -131,6 +166,7 @@ async function remove(tag: string) {
   } catch (e) {
     state.pullError = String(e)
   }
+  forget(tag)
   await refreshInstalled()
   if (state.runModel === tag) state.runModel = ''
   render()
@@ -143,8 +179,10 @@ async function run() {
   state.runError = ''
   render()
   try {
-    state.result =
-      state.preset === 'custom'
+    // A model with built-in questions gets the state alone.
+    state.result = (await builtinOf(model))
+      ? await backend.decide(model, state.input, null, null)
+      : state.preset === 'custom'
         ? await backend.decide(model, state.input, null, state.customQuestions)
         : await backend.decide(model, state.input, state.preset, null)
   } catch (e) {
@@ -335,6 +373,10 @@ function versionRow(m: LibraryModel, tag: string, i: number, running: boolean): 
 function runPanel(m: LibraryModel): HTMLElement {
   const tags = installedTags(m)
   if (!tags.includes(state.runModel)) state.runModel = tags[0] ?? ''
+  // A model with built-in questions takes no preset or custom questions. Until the server says
+  // which kind this version is, neither the inputs nor the note show.
+  const own = state.builtin.get(state.runModel)
+  if (own === undefined && state.runModel) void builtinOf(state.runModel)
   const selectCls = 'h-8 rounded-lg border border-line-strong bg-canvas px-2.5 text-[13px] text-fg'
   const textarea = h('textarea', {
     class: 'mt-3 block h-28 w-full resize-y rounded-xl border border-line-strong bg-canvas px-3.5 py-3 text-sm leading-relaxed text-fg placeholder:text-faint focus:border-fg focus:outline-none',
@@ -360,19 +402,23 @@ function runPanel(m: LibraryModel): HTMLElement {
       'div',
       { class: 'mt-3 flex flex-wrap items-center gap-2' },
       labelled('Model', h('select', { class: selectCls, onChange: (e) => ((state.runModel = (e.target as HTMLSelectElement).value), render()) }, ...tags.map((t) => option(t, t, t === state.runModel)))),
-      labelled(
-        'Questions',
-        h(
-          'select',
-          { class: selectCls, onChange: (e) => ((state.preset = (e.target as HTMLSelectElement).value), render()) },
-          ...state.presets.map((p) => option(p.name, `${p.name} preset`, p.name === state.preset)),
-          option('custom', 'Custom JSON', state.preset === 'custom'),
-        ),
-      ),
+      own
+        ? h('p', { class: 'text-[13px] text-muted' }, 'This model asks its own questions: ', h('span', { class: 'font-mono text-xs text-body' }, own.join(', ')))
+        : own === null
+          ? labelled(
+              'Questions',
+              h(
+                'select',
+                { class: selectCls, onChange: (e) => ((state.preset = (e.target as HTMLSelectElement).value), render()) },
+                ...state.presets.map((p) => option(p.name, `${p.name} preset`, p.name === state.preset)),
+                option('custom', 'Custom JSON', state.preset === 'custom'),
+              ),
+            )
+          : null,
     ),
     textarea,
   )
-  if (state.preset === 'custom') {
+  if (own === null && state.preset === 'custom') {
     const q = h('textarea', {
       class: 'mt-2 block h-40 w-full resize-y rounded-xl border border-line-strong bg-code px-3.5 py-3 font-mono text-xs leading-relaxed text-fg focus:border-fg focus:outline-none',
       spellcheck: 'false',

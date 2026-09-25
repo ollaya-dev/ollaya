@@ -35,9 +35,12 @@ export interface PullProgress {
   error: string | null
 }
 
+/** A question schema: question id → its definition. */
+export type Questions = Record<string, { type: string }>
+
 export interface Preset {
   name: string
-  questions: Record<string, { type: string }>
+  questions: Questions
 }
 
 export interface Answer {
@@ -76,6 +79,9 @@ export interface Backend {
   pull(model: string): Promise<void>
   remove(model: string): Promise<void>
   presets(): Promise<Preset[]>
+  /** The questions a model asks by itself, or null when requests must bring them. */
+  builtinQuestions(model: string): Promise<Questions | null>
+  /** With neither `preset` nor `questions`, the model answers its built-in questions. */
   decide(model: string, state: string, preset: string | null, questions: string | null): Promise<DecideResponse>
   onPullProgress(handler: (p: PullProgress) => void): void
 }
@@ -93,6 +99,7 @@ function tauri(): Backend {
     pull: (model) => invoke('pull', { model }),
     remove: (model) => invoke('remove', { model }),
     presets: () => invoke('preset_list'),
+    builtinQuestions: (model) => invoke('builtin_questions', { model }),
     decide: (model, state, preset, questions) => invoke('decide', { model, state, preset, questions }),
     onPullProgress: (handler) => {
       void t.event.listen<PullProgress>('pull-progress', (e) => handler(e.payload))

@@ -325,8 +325,37 @@ fn preset_list() -> Vec<Preset> {
         .collect()
 }
 
-/// Answer `questions` (JSON text) or a preset about `state`, which is sent as JSON when it is a
-/// JSON object or array and as text otherwise (as `ollaya run` does).
+/// The questions `model` asks by itself (`/api/show`'s `questions`, from the manifest's questions
+/// layer), or `None` when every request must bring its own. A model such as qwen3guard answers
+/// only these, so the Run panel sends it the state alone.
+#[tauri::command]
+async fn builtin_questions(model: String) -> Result<Option<Questions>, String> {
+    let show = client()?.show(&model).await.map_err(|e| e.to_string())?;
+    Ok(show.questions)
+}
+
+/// The questions to send: a preset, the JSON text of the Custom box, or neither, which leaves
+/// them out so the model answers its built-in questions (as `ollaya run` without flags).
+fn request_questions(
+    preset: Option<&str>,
+    questions: Option<&str>,
+) -> Result<Option<Questions>, String> {
+    match (preset, questions) {
+        (Some(name), _) => presets::get(name)
+            .map(serde_json::from_value)
+            .ok_or_else(|| format!("unknown preset {name:?}"))?
+            .map(Some)
+            .map_err(|e| e.to_string()),
+        (None, Some(text)) => serde_json::from_str(text)
+            .map(Some)
+            .map_err(|e| format!("the questions are not valid: {e}")),
+        (None, None) => Ok(None),
+    }
+}
+
+/// Answer `questions` (JSON text), a preset, or with neither the model's built-in questions,
+/// about `state`, which is sent as JSON when it is a JSON object or array and as text otherwise
+/// (as `ollaya run` does).
 #[tauri::command]
 async fn decide(
     model: String,
@@ -334,23 +363,14 @@ async fn decide(
     preset: Option<String>,
     questions: Option<String>,
 ) -> Result<DecideResponse, String> {
-    let questions: Questions = match (preset.as_deref(), questions.as_deref()) {
-        (Some(name), _) => presets::get(name)
-            .map(serde_json::from_value)
-            .ok_or_else(|| format!("unknown preset {name:?}"))?
-            .map_err(|e| e.to_string())?,
-        (None, Some(text)) => {
-            serde_json::from_str(text).map_err(|e| format!("the questions are not valid: {e}"))?
-        }
-        (None, None) => return Err("choose a preset or write questions".into()),
-    };
+    let questions = request_questions(preset.as_deref(), questions.as_deref())?;
     let trimmed = state.trim();
     let state = match serde_json::from_str::<Value>(trimmed) {
         Ok(v @ (Value::Object(_) | Value::Array(_))) if trimmed.starts_with(['{', '[']) => v,
         _ => Value::String(state),
     };
     client()?
-        .decide(&DecideRequest::new(model, state, Some(questions)))
+        .decide(&DecideRequest::new(model, state, questions))
         .await
         .map_err(|e| e.to_string())
 }
@@ -387,6 +407,7 @@ pub fn run() {
             pull,
             remove,
             preset_list,
+            builtin_questions,
             decide
         ])
         .build(tauri::generate_context!())
@@ -402,4 +423,26 @@ pub fn run() {
             let _ = ollaya_command().arg("stop").status();
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn questions_come_from_a_preset_the_custom_box_or_the_model() {
+        let triage = request_questions(Some("triage"), None).unwrap().unwrap();
+        assert_eq!(triage.keys().next().map(String::as_str), Some("intent"));
+        let custom = r#"{"ok": {"type": "noul", "instructions": "Is it fine?"}}"#;
+        let custom = request_questions(None, Some(custom)).unwrap().unwrap();
+        assert_eq!(custom.keys().collect::<Vec<_>>(), ["ok"]);
+        assert!(request_questions(Some("nope"), None).is_err());
+        assert!(request_questions(None, Some("{")).is_err());
+
+        // Neither: the request leaves `questions` out, and the model asks its built-in ones.
+        assert!(request_questions(None, None).unwrap().is_none());
+        let body = DecideRequest::new("qwen3guard", Value::String("Hi".into()), None);
+        let body = serde_json::to_value(body).unwrap();
+        assert!(body.get("questions").is_none());
+    }
 }
