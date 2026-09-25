@@ -2,7 +2,7 @@
 //! `ollaya_convert.families.von.goldens` (upstream von 1.1 run in float64, one unpadded row at a
 //! time; see "Why the goldens are fp64" in `docs/families/von.md`).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_von -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]
+//!     cargo run --release -p ollaya-runner --example parity_von -- <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency]
 //!
 //! Every case is encoded first, before anything runs through the graph:
 //! * the rendered state text, and its token count (the temperature map's input), must match;
@@ -98,12 +98,15 @@ struct Case {
 }
 
 fn main() -> Result<()> {
+    // SAFETY: first thing in main, before any thread starts (MLX reads its settings once).
+    unsafe { ollaya_runner::prepare_process() };
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        bail!("usage: parity_von <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]");
+        bail!("usage: parity_von <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
+        Some("metal") => Device::Metal,
         _ => Device::Cpu,
     };
     let latency = args.iter().any(|a| a == "--latency");

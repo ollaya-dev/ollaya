@@ -5,18 +5,16 @@
 //! only past the graph's row limit. Rows and their readout come from `ollaya_decision::nli`.
 
 use std::path::Path;
-use std::sync::Mutex;
 
-use ndarray::{Array2, Ix2};
+use ndarray::Array2;
 use ollaya_decision::nli::{NliLayout, Pairs};
 use ollaya_decision::{Calibration, CalibrationFile, Questions, TokenEncoder, serialize_state};
-use ort::session::Session;
-use ort::value::Tensor;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::engine::Engine;
-use crate::onnx::{Device, ModelFiles, load_tokenizer, session};
+use crate::net::{Batch, Head, Net};
+use crate::onnx::{Device, ModelFiles, load_tokenizer};
 use crate::{Error, Output, QuestionOutput};
 
 /// Rows per `session.run`: the export's row axis is 1..4096.
@@ -44,7 +42,7 @@ pub struct NliEncoding {
 }
 
 pub struct NliModel {
-    session: Mutex<Session>,
+    net: Net,
     tokenizer: Tokenizer,
     pub layout: NliLayout,
     pub calibration: Calibration,
@@ -102,19 +100,22 @@ impl NliModel {
         };
         let tokenizer = load_tokenizer(&files.tokenizer)?;
 
-        let session = session(&files.graph, device, intra_threads)?;
-        let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
-        if inputs.len() != INPUTS.len()
-            || !INPUTS.iter().all(|n| inputs.contains(n))
-            || !session.outputs().iter().any(|o| o.name() == OUTPUT)
-        {
-            return Err(Error::Model(format!(
-                "graph inputs {inputs:?} do not match contract P ({INPUTS:?} -> {OUTPUT:?})"
-            )));
+        let net = crate::net::load(files, device, intra_threads, Head::SequenceClassification)?;
+        if let Some(session) = net.session() {
+            let session = session.lock().expect("session mutex poisoned");
+            let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
+            if inputs.len() != INPUTS.len()
+                || !INPUTS.iter().all(|n| inputs.contains(n))
+                || !session.outputs().iter().any(|o| o.name() == OUTPUT)
+            {
+                return Err(Error::Model(format!(
+                    "graph inputs {inputs:?} do not match contract P ({INPUTS:?} -> {OUTPUT:?})"
+                )));
+            }
         }
 
         Ok(NliModel {
-            session: Mutex::new(session),
+            net,
             tokenizer: Tokenizer(tokenizer),
             layout: config.nli,
             calibration,
@@ -154,7 +155,6 @@ impl NliModel {
         let pad = i64::from(self.layout.special_tokens.pad);
 
         let mut scores = Vec::with_capacity(rows.len());
-        let mut session = self.session.lock().expect("session mutex poisoned");
         let lens: Vec<usize> = rows.iter().map(|r| r.len()).collect();
         for range in crate::engine::batches(&lens, crate::engine::TOKEN_BUDGET, MAX_ROWS) {
             let chunk = &rows[range];
@@ -172,14 +172,18 @@ impl NliModel {
                     attention[[r, c]] = 1;
                 }
             }
-            let outputs = session.run(ort::inputs![
-                "input_ids" => Tensor::from_array(input_ids)?,
-                "attention_mask" => Tensor::from_array(attention)?,
-            ])?;
-            let out = outputs[OUTPUT]
-                .try_extract_array::<f32>()?
-                .into_dimensionality::<Ix2>()
-                .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?;
+            let out = self
+                .net
+                .run(
+                    Batch {
+                        input_ids,
+                        attention,
+                        markers: None,
+                        qtype: None,
+                    },
+                    &[OUTPUT],
+                )?
+                .remove(0);
             if out.nrows() != chunk.len() || out.ncols() < width {
                 return Err(Error::Model(format!(
                     "{OUTPUT} has shape {:?} for {} rows; the classes need {width} columns",

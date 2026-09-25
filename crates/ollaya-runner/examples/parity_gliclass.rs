@@ -1,7 +1,7 @@
 //! Compare the `gliclass-uni-v1` engine against goldens from the Python reference
 //! (`ollaya_convert.families.gliclass.goldens`).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_gliclass -- <model-dir> <goldens.jsonl> [cpu|cuda]
+//!     cargo run --release -p ollaya-runner --example parity_gliclass -- <model-dir> <goldens.jsonl> [cpu|cuda|metal]
 //!
 //! Per question:
 //! * the upstream call (labels, prompt, mode) and input text must match exactly;
@@ -52,12 +52,15 @@ fn p99(v: &mut [f64]) -> f64 {
 }
 
 fn main() -> Result<()> {
+    // SAFETY: first thing in main, before any thread starts (MLX reads its settings once).
+    unsafe { ollaya_runner::prepare_process() };
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        bail!("usage: parity_gliclass <model-dir> <goldens.jsonl> [cpu|cuda]");
+        bail!("usage: parity_gliclass <model-dir> <goldens.jsonl> [cpu|cuda|metal]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
+        Some("metal") => Device::Metal,
         _ => Device::Cpu,
     };
     let dir = PathBuf::from(&args[1]);

@@ -1,7 +1,7 @@
 //! Compare the `nli-pairs-v1` runtime against golden fixtures from
 //! `ollaya_convert.families.nli.goldens` (the fp32 PyTorch reference, one unpadded pair at a time).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_nli -- <model-dir> <goldens.jsonl> [cpu|cuda]
+//!     cargo run --release -p ollaya-runner --example parity_nli -- <model-dir> <goldens.jsonl> [cpu|cuda|metal]
 //!
 //! Per case:
 //! * the premise, and which questions are rejected (400), must match;
@@ -40,12 +40,15 @@ fn max_diff(a: &[f32], b: &[f64]) -> f64 {
 }
 
 fn main() -> Result<()> {
+    // SAFETY: first thing in main, before any thread starts (MLX reads its settings once).
+    unsafe { ollaya_runner::prepare_process() };
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        bail!("usage: parity_nli <model-dir> <goldens.jsonl> [cpu|cuda]");
+        bail!("usage: parity_nli <model-dir> <goldens.jsonl> [cpu|cuda|metal]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
+        Some("metal") => Device::Metal,
         _ => Device::Cpu,
     };
     let model = NliModel::load(&PathBuf::from(&args[1]), device, None)?;

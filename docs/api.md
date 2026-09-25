@@ -1525,7 +1525,7 @@ These are the variables that change API behaviour.
 | `OLLAYA_ORIGINS` | unset | Extra allowed browser origins |
 | `OLLAYA_KEEP_ALIVE` | `5m` | Default `keep_alive` ([§6](#6-keep_alive)) |
 | `OLLAYA_MAX_LOADED_MODELS` | `3` | Loaded-model limit |
-| `OLLAYA_DEVICE` | `auto` | Runner device: `auto` (CUDA if available, else CPU), `cpu`, `cuda`, `cuda:<n>` |
+| `OLLAYA_DEVICE` | `auto` | Runner device: `auto` (MLX on the Apple GPU for models with an arch layer in builds with the `mlx` feature, else CUDA if available, else CPU), `cpu`, `cuda`, `cuda:<n>`, `metal` |
 | `OLLAYA_MAX_QUEUE` | `512` | Queue bound before `503 QUEUE_FULL` |
 | `OLLAYA_LOAD_TIMEOUT` | `5m` | Load deadline before `500 MODEL_LOAD_FAILED` |
 | `OLLAYA_MODELS` | `~/.ollaya/models` | Model store |

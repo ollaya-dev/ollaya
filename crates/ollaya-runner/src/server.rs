@@ -6,7 +6,7 @@
 //!
 //! Protocol (JSON over HTTP on 127.0.0.1, port chosen by the OS):
 //! * On startup, after the model is loaded, the runner prints one JSON line to stdout:
-//!   `{"port":<u16>,"device":"cuda:0"|"cpu","precision":"fp16"|"fp32"}`.
+//!   `{"port":<u16>,"device":"cuda:0"|"cpu"|"metal","precision":"fp16"|"fp32","engine":"onnx"|"mlx"}`.
 //! * `GET /health` -> the same object plus `"status":"ok"`.
 //! * `POST /decide` `{state, questions}` ->
 //!   `{questions:[{logits, act_logits}], input_tokens, state_tokens, state_truncated}`.
@@ -27,12 +27,14 @@ use crate::engine::{self, Engine};
 use crate::onnx::{Device, ModelFiles};
 use crate::{Error, QuestionOutput};
 
-/// Which device to try. `Auto` prefers CUDA and falls back to CPU.
+/// Which device to try. `Auto` prefers MLX on the Metal GPU (builds with the `mlx` feature, models
+/// with an arch layer), then CUDA, then the CPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceRequest {
     Auto,
     Cpu,
     Cuda(i32),
+    Metal,
 }
 
 impl std::str::FromStr for DeviceRequest {
@@ -42,11 +44,14 @@ impl std::str::FromStr for DeviceRequest {
             "auto" => Ok(DeviceRequest::Auto),
             "cpu" => Ok(DeviceRequest::Cpu),
             "cuda" => Ok(DeviceRequest::Cuda(0)),
+            "metal" => Ok(DeviceRequest::Metal),
             s => s
                 .strip_prefix("cuda:")
                 .and_then(|n| n.parse().ok())
                 .map(DeviceRequest::Cuda)
-                .ok_or_else(|| format!("unknown device {s:?}; use auto, cpu, cuda or cuda:<n>")),
+                .ok_or_else(|| {
+                    format!("unknown device {s:?}; use auto, cpu, cuda, cuda:<n> or metal")
+                }),
         }
     }
 }
@@ -59,6 +64,10 @@ pub struct RunnerConfig {
     pub graph_fp16: Option<PathBuf>,
     pub tokenizer: PathBuf,
     pub decision: PathBuf,
+    /// The `arch` layer, for MLX.
+    pub arch: Option<PathBuf>,
+    /// The author's weights file, for MLX.
+    pub weights: Option<PathBuf>,
     pub device: DeviceRequest,
     pub threads: Option<usize>,
 }
@@ -67,6 +76,8 @@ pub struct RunnerConfig {
 pub struct Loaded {
     pub device: String,
     pub precision: &'static str,
+    /// `onnx` (ONNX Runtime) or `mlx`.
+    pub engine: &'static str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,9 +105,42 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
         tokenizer: config.tokenizer.clone(),
         decision: config.decision.clone(),
         calibration: None,
+        arch: config.arch.clone(),
+        weights: config.weights.clone(),
     };
+    if config.device == DeviceRequest::Metal
+        || (cfg!(feature = "mlx") && config.device == DeviceRequest::Auto)
+    {
+        let graph = config.graph_fp32.clone().unwrap_or_default();
+        match metal(config, &files(&graph)) {
+            // Warmed up here, as on CUDA: a failure on the first request moves `auto` on to the
+            // next device instead of failing every request.
+            Ok(model) => match warm_up(model.as_ref()) {
+                Err(e) if config.device == DeviceRequest::Auto => {
+                    tracing::warn!("MLX failed its first request, not using it: {e}");
+                }
+                warmed => {
+                    if let Err(e) = warmed {
+                        tracing::warn!("warm-up failed: {e}");
+                    }
+                    return Ok((
+                        model,
+                        Loaded {
+                            device: "metal".into(),
+                            precision: "fp32",
+                            engine: "mlx",
+                        },
+                    ));
+                }
+            },
+            Err(e) if config.device == DeviceRequest::Auto => {
+                tracing::info!("not using MLX: {e}");
+            }
+            Err(e) => return Err(e),
+        }
+    }
     let gpu = match config.device {
-        DeviceRequest::Cpu => None,
+        DeviceRequest::Cpu | DeviceRequest::Metal => None,
         DeviceRequest::Auto => Some(0),
         DeviceRequest::Cuda(id) => Some(id),
     };
@@ -142,6 +186,7 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
                                     Loaded {
                                         device: format!("cuda:{id}"),
                                         precision,
+                                        engine: "onnx",
                                     },
                                 ));
                             }
@@ -171,7 +216,24 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
         Loaded {
             device: "cpu".into(),
             precision,
+            engine: "onnx",
         },
+    ))
+}
+
+/// The model on the Metal GPU through MLX: it needs an arch layer, a layout MLX implements and
+/// the Metal library. Loading starts the MLX thread and its self-check.
+#[cfg(feature = "mlx")]
+fn metal(config: &RunnerConfig, files: &ModelFiles) -> Result<Box<dyn Engine>, Error> {
+    let layout = engine::layout_of(&config.decision)?;
+    crate::mlx::usable(config.arch.as_deref(), &layout).map_err(Error::Model)?;
+    engine::load(files, Device::Metal, config.threads)
+}
+
+#[cfg(not(feature = "mlx"))]
+fn metal(_config: &RunnerConfig, _files: &ModelFiles) -> Result<Box<dyn Engine>, Error> {
+    Err(Error::Model(
+        "this build of ollaya has no MLX support".into(),
     ))
 }
 
@@ -289,7 +351,12 @@ pub async fn run(config: RunnerConfig) -> Result<(), Error> {
         .local_addr()
         .map_err(|e| Error::Model(e.to_string()))?
         .port();
-    let hello = json!({"port": port, "device": loaded.device, "precision": loaded.precision});
+    let hello = json!({
+        "port": port,
+        "device": loaded.device,
+        "precision": loaded.precision,
+        "engine": loaded.engine,
+    });
     {
         use std::io::Write;
         let mut out = std::io::stdout().lock();
@@ -307,7 +374,12 @@ pub async fn run(config: RunnerConfig) -> Result<(), Error> {
 }
 
 async fn health(State(s): State<Arc<AppState>>) -> Json<Value> {
-    Json(json!({"status": "ok", "device": s.loaded.device, "precision": s.loaded.precision}))
+    Json(json!({
+        "status": "ok",
+        "device": s.loaded.device,
+        "precision": s.loaded.precision,
+        "engine": s.loaded.engine,
+    }))
 }
 
 async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) -> Response {
@@ -390,8 +462,22 @@ mod tests {
     use ollaya_decision::{Questions, parse_questions};
     use serde_json::{Value, json};
 
-    use super::warm_up;
+    use super::{DeviceRequest, warm_up};
     use crate::{Engine, Error, Output};
+
+    #[test]
+    fn devices_parse() {
+        for (s, want) in [
+            ("auto", DeviceRequest::Auto),
+            ("cpu", DeviceRequest::Cpu),
+            ("cuda", DeviceRequest::Cuda(0)),
+            ("cuda:2", DeviceRequest::Cuda(2)),
+            ("metal", DeviceRequest::Metal),
+        ] {
+            assert_eq!(s.parse::<DeviceRequest>(), Ok(want));
+        }
+        assert!("mps".parse::<DeviceRequest>().is_err());
+    }
 
     /// Records the question ids of every run.
     struct Recorder {

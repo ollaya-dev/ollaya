@@ -27,7 +27,7 @@ pub use ollaya_api::KeepAlive;
 pub struct SchedulerConfig {
     pub keep_alive: KeepAlive,
     pub max_loaded: usize,
-    /// `auto`, `cpu`, `cuda` or `cuda:<n>`, passed to runners.
+    /// `auto`, `cpu`, `cuda`, `cuda:<n>` or `metal`, passed to runners.
     pub device: String,
     pub load_timeout: Duration,
     /// The executable to spawn as `<exe> runner ...`: the running binary, or on Windows with a GPU
@@ -46,6 +46,9 @@ struct Hello {
     port: u16,
     device: String,
     precision: String,
+    /// `onnx` or `mlx`; runners before 0.6 do not send it.
+    #[serde(default)]
+    engine: String,
 }
 
 pub struct Runner {
@@ -53,6 +56,8 @@ pub struct Runner {
     pub digest: String,
     pub device: String,
     pub precision: String,
+    /// The runner's engine: `onnx` or `mlx`.
+    pub engine: String,
     pub size: u64,
     pub loaded_at: SystemTime,
     port: u16,
@@ -210,7 +215,7 @@ impl Scheduler {
             .unwrap()
             .insert(model.digest.clone(), runner.clone());
         tracing::info!(model = %model.name, device = %runner.device, precision = %runner.precision,
-            load_ms = started.elapsed().as_millis() as u64, "loaded model");
+            engine = %runner.engine, load_ms = started.elapsed().as_millis() as u64, "loaded model");
         Ok((Lease { runner, keep_alive }, started.elapsed()))
     }
 
@@ -348,6 +353,9 @@ impl Scheduler {
         if let Some(g) = &f.graph_fp16 {
             cmd.arg("--graph-fp16").arg(g);
         }
+        if let (Some(arch), Some(weights)) = (&f.arch, &f.weights) {
+            cmd.arg("--arch").arg(arch).arg("--weights").arg(weights);
+        }
         #[cfg(unix)]
         if let Some(arg0) = &self.config.arg0 {
             cmd.arg0(arg0);
@@ -422,6 +430,7 @@ impl Scheduler {
             digest: model.digest.clone(),
             device: hello.device,
             precision: hello.precision,
+            engine: hello.engine,
             size: model.size,
             loaded_at: SystemTime::now(),
             port: hello.port,

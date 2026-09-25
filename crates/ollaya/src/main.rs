@@ -100,7 +100,13 @@ enum Command {
         tokenizer: PathBuf,
         #[arg(long)]
         decision: PathBuf,
-        /// auto, cpu, cuda or cuda:<n>
+        /// The arch layer, for the MLX engine
+        #[arg(long)]
+        arch: Option<PathBuf>,
+        /// The weights file, for the MLX engine
+        #[arg(long)]
+        weights: Option<PathBuf>,
+        /// auto, cpu, cuda, cuda:<n> or metal
         #[arg(long, default_value = "auto")]
         device: ollaya_runner::server::DeviceRequest,
         #[arg(long)]
@@ -139,6 +145,8 @@ async fn version() {
 }
 
 fn main() -> Result<()> {
+    // SAFETY: the first statement of `main`; no other thread exists yet.
+    unsafe { ollaya_runner::prepare_process() };
     let cli = Cli::parse();
     let rt = tokio::runtime::Runtime::new()?;
     if cli.version {
@@ -154,6 +162,8 @@ fn main() -> Result<()> {
             graph_fp16,
             tokenizer,
             decision,
+            arch,
+            weights,
             device,
             threads,
         } => {
@@ -164,6 +174,8 @@ fn main() -> Result<()> {
                     graph_fp16,
                     tokenizer,
                     decision,
+                    arch,
+                    weights,
                     device,
                     threads,
                 },

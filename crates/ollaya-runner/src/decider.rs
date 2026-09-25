@@ -256,7 +256,7 @@ impl DeciderModel {
 /// it. The CPU provider plans these graphs correctly and keeps the defaults.
 pub(crate) fn configure(builder: SessionBuilder, device: Device) -> Result<SessionBuilder, Error> {
     match device {
-        Device::Cpu => Ok(builder),
+        Device::Cpu | Device::Metal => Ok(builder),
         Device::Cuda(_) => Ok(builder
             .with_parallel_execution(true)?
             .with_inter_threads(2)?),

@@ -7,10 +7,10 @@
 //! tokenizer.json                   HF tokenizers file
 //! decision.json                    layout, lengths, special tokens, tensor names
 //! calibration.json                 temperatures
+//! arch.json                        (optional) the network for the MLX engine; see crate::mlx
 //! ```
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use ndarray::Array2;
 use ollaya_decision::{
@@ -18,10 +18,10 @@ use ollaya_decision::{
 };
 use ort::session::Session;
 use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
-use ort::value::Tensor;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::net::{Batch, Head, Net};
 use crate::{Error, Output, QuestionOutput};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +29,8 @@ pub enum Device {
     Cpu,
     /// CUDA device ordinal.
     Cuda(i32),
+    /// The Apple GPU, through MLX (the `mlx` feature), not ONNX Runtime.
+    Metal,
 }
 
 /// The `decision` layer.
@@ -57,7 +59,7 @@ pub struct Encoding {
 }
 
 pub struct OnnxModel {
-    session: Mutex<Session>,
+    net: Net,
     tokenizer: Tokenizer,
     layout: LayaLayout,
     min_markers: usize,
@@ -94,6 +96,11 @@ pub fn session_with(
     intra_threads: Option<usize>,
     configure: impl FnOnce(SessionBuilder) -> Result<SessionBuilder, Error>,
 ) -> Result<Session, Error> {
+    if device == Device::Metal {
+        return Err(Error::Model(
+            "the Metal device runs on MLX, not ONNX Runtime".into(),
+        ));
+    }
     let mut builder =
         Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?;
     if let Some(n) = intra_threads {
@@ -155,16 +162,24 @@ pub struct ModelFiles {
     pub tokenizer: PathBuf,
     pub decision: PathBuf,
     pub calibration: Option<PathBuf>,
+    /// The `arch` layer: what the MLX engine builds its network from.
+    pub arch: Option<PathBuf>,
+    /// The author's weights file, for MLX. Unset: the file the arch layer names, next to it.
+    pub weights: Option<PathBuf>,
 }
 
 impl ModelFiles {
-    /// `model.onnx`, `tokenizer.json`, `decision.json`, `calibration.json` in one directory.
+    /// `model.onnx`, `tokenizer.json`, `decision.json`, `calibration.json` and, when present,
+    /// `arch.json` in one directory.
     pub fn dir(dir: &Path) -> Self {
+        let arch = dir.join("arch.json");
         ModelFiles {
             graph: dir.join("model.onnx"),
             tokenizer: dir.join("tokenizer.json"),
             decision: dir.join("decision.json"),
             calibration: Some(dir.join("calibration.json")),
+            arch: arch.is_file().then_some(arch),
+            weights: None,
         }
     }
 }
@@ -193,10 +208,10 @@ impl OnnxModel {
         };
         let tokenizer = load_tokenizer(&files.tokenizer)?;
 
-        let session = session(&files.graph, device, intra_threads)?;
+        let net = crate::net::load(files, device, intra_threads, Head::Laya)?;
 
         Ok(OnnxModel {
-            session: Mutex::new(session),
+            net,
             tokenizer: Tokenizer(tokenizer),
             layout: LayaLayout {
                 max_len: config.max_len,
@@ -281,16 +296,16 @@ impl OnnxModel {
             }
         }
 
-        let mut session = self.session.lock().expect("session mutex poisoned");
-        let outputs = session.run(ort::inputs![
-            "input_ids" => Tensor::from_array(input_ids)?,
-            "attention_mask" => Tensor::from_array(attention)?,
-            "marker_pos" => Tensor::from_array(marker_pos)?,
-            "marker_mask" => Tensor::from_array(marker_mask)?,
-            "qtype" => Tensor::from_array(([n], qtypes.to_vec()))?,
-        ])?;
-        let logits = outputs["logits"].try_extract_array::<f32>()?;
-        let act = outputs["act_logits"].try_extract_array::<f32>()?;
+        let [logits, act] = <[_; 2]>::try_from(self.net.run(
+            Batch {
+                input_ids,
+                attention,
+                markers: Some((marker_pos, marker_mask)),
+                qtype: Some(qtypes.to_vec()),
+            },
+            &["logits", "act_logits"],
+        )?)
+        .map_err(|_| Error::Model("expected two outputs".into()))?;
         Ok(encoded
             .iter()
             .enumerate()

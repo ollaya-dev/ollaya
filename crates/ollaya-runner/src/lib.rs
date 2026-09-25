@@ -7,6 +7,9 @@ pub mod decider;
 pub mod engine;
 pub mod gliclass;
 pub mod kev;
+#[cfg(feature = "mlx")]
+pub mod mlx;
+pub mod net;
 pub mod nli;
 pub mod onnx;
 pub mod qwen3guard;
@@ -15,6 +18,21 @@ pub mod von;
 
 pub use engine::Engine;
 pub use onnx::{Device, Encoding, ModelFiles, OnnxModel};
+
+/// Process-wide settings the engines rely on, set before the process starts any thread. With the
+/// `mlx` feature: `MLX_ENABLE_TF32=0`, which MLX reads once (see `ollaya_mlx::disable_tf32`);
+/// runner processes inherit it. Otherwise it does nothing.
+///
+/// # Safety
+///
+/// Changes the process environment: call it first thing in `main`, while only one thread runs.
+pub unsafe fn prepare_process() {
+    #[cfg(feature = "mlx")]
+    // SAFETY: the caller guarantees the process is single-threaded.
+    unsafe {
+        ollaya_mlx::disable_tf32()
+    };
+}
 
 /// Raw network output for one question.
 #[derive(Debug, Clone)]

@@ -16,6 +16,10 @@ pub struct RunnerFiles {
     pub graph_fp16: Option<PathBuf>,
     pub tokenizer: PathBuf,
     pub decision: PathBuf,
+    /// The arch layer (models the MLX engine can run).
+    pub arch: Option<PathBuf>,
+    /// The weights file, passed with an arch layer.
+    pub weights: Option<PathBuf>,
 }
 
 /// A model that answers requests itself.
@@ -92,7 +96,15 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
         graph_fp16: None,
         tokenizer: blob(media::TOKENIZER)?,
         decision: blob(media::DECISION)?,
+        arch: None,
+        weights: None,
     };
+    // MLX builds its network from one weights file; sharded weights stay on ONNX Runtime.
+    let weights: Vec<_> = manifest.layers_of(media::WEIGHTS).collect();
+    if let (Some(arch), [weights]) = (manifest.layer(media::ARCH), weights.as_slice()) {
+        files.arch = Some(store.blob_path(&arch.digest)?);
+        files.weights = Some(store.blob_path(&weights.digest)?);
+    }
     for g in manifest.layers_of(media::GRAPH_ONNX) {
         let path = store.blob_path(&g.digest)?;
         match g.annotations.get(ANNOTATION_PRECISION).map(String::as_str) {
@@ -125,4 +137,67 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
         questions,
         size: manifest.total_size(),
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use ollaya_registry::manifest::{Descriptor, MANIFEST_V2, Manifest};
+
+    use super::*;
+
+    fn blob(store: &Store, media_type: &str, bytes: &[u8]) -> Descriptor {
+        Descriptor {
+            media_type: media_type.into(),
+            digest: store.write_blob(bytes).unwrap(),
+            size: bytes.len() as u64,
+            urls: vec![],
+            annotations: Default::default(),
+        }
+    }
+
+    /// A model with one fp32 graph, `weights` weights files and, with `arch`, an arch layer.
+    fn resolve_with(weights: usize, arch: bool) -> RunnerFiles {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let config = br#"{"model_format": "onnx", "family": "laya"}"#;
+        let mut layers = vec![
+            blob(&store, media::GRAPH_ONNX, b"graph"),
+            blob(&store, media::TOKENIZER, b"{}"),
+            blob(&store, media::DECISION, br#"{"layout": "laya-markers-v1"}"#),
+        ];
+        for i in 0..weights {
+            layers.push(blob(
+                &store,
+                media::WEIGHTS,
+                format!("weights {i}").as_bytes(),
+            ));
+        }
+        if arch {
+            layers.push(blob(&store, media::ARCH, br#"{"schema": 1}"#));
+        }
+        let manifest = Manifest {
+            schema_version: 2,
+            media_type: MANIFEST_V2.into(),
+            config: blob(&store, media::CONFIG, config),
+            layers,
+        };
+        let name = ModelName::parse("laya:en").unwrap();
+        store
+            .write_manifest(&name, &serde_json::to_vec(&manifest).unwrap())
+            .unwrap();
+        match resolve(&store, &name).unwrap() {
+            Resolved::Model(m) => m.files,
+            Resolved::Router { .. } => panic!("not a router"),
+        }
+    }
+
+    #[test]
+    fn an_arch_layer_passes_the_weights_file_to_mlx() {
+        let files = resolve_with(1, true);
+        assert!(files.arch.is_some() && files.weights.is_some());
+        // Without an arch layer, or with sharded weights, the model stays on ONNX Runtime.
+        for files in [resolve_with(1, false), resolve_with(2, true)] {
+            assert!(files.arch.is_none() && files.weights.is_none());
+        }
+    }
 }

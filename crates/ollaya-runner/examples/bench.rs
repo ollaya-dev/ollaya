@@ -1,6 +1,6 @@
 //! Latency of full requests (tokenize + encode + forward), on real request shapes.
 //!
-//!     cargo run --release -p ollaya-runner --example bench -- <model-dir> <goldens.jsonl> [cpu|cuda] [threads]
+//!     cargo run --release -p ollaya-runner --example bench -- <model-dir> <goldens.jsonl> [cpu|cuda|metal] [threads]
 //!
 //! Workloads come from the fixture file: every case as sent (1-7 questions, mostly 5), and the
 //! same cases cut down to their first question.
@@ -44,12 +44,15 @@ fn measure(model: &OnnxModel, requests: &[(Value, Questions)], label: &str) -> R
 }
 
 fn main() -> Result<()> {
+    // SAFETY: first thing in main, before any thread starts (MLX reads its settings once).
+    unsafe { ollaya_runner::prepare_process() };
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        bail!("usage: bench <model-dir> <goldens.jsonl> [cpu|cuda] [threads]");
+        bail!("usage: bench <model-dir> <goldens.jsonl> [cpu|cuda|metal] [threads]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
+        Some("metal") => Device::Metal,
         _ => Device::Cpu,
     };
     let threads = args.get(4).and_then(|t| t.parse().ok());

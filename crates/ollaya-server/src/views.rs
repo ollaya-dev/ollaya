@@ -270,7 +270,8 @@ pub fn running_model(store: &Store, r: &RunningInfo) -> RunningModel {
         None => (ModelDetails::default(), 0),
     };
     details.quantization_level = precision_label(&r.precision);
-    let on_gpu = r.device.starts_with("cuda");
+    // Apple silicon's GPU shares memory with the CPU: all of it counts, as Ollama reports it.
+    let on_gpu = r.device.starts_with("cuda") || r.device == "metal";
     RunningModel {
         name: r.name.clone(),
         model: r.name.clone(),

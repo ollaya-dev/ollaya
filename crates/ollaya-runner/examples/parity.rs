@@ -1,6 +1,6 @@
 //! Compare the Rust runtime against golden fixtures produced by the `laya` Python package.
 //!
-//!     cargo run --release -p ollaya-runner --example parity -- <model-dir> <goldens.jsonl> [cpu|cuda]
+//!     cargo run --release -p ollaya-runner --example parity -- <model-dir> <goldens.jsonl> [cpu|cuda|metal]
 //!
 //! Per question:
 //! * encoder token ids and marker positions must match exactly;
@@ -28,12 +28,15 @@ fn argmax(p: &[f64]) -> usize {
 }
 
 fn main() -> Result<()> {
+    // SAFETY: first thing in main, before any thread starts (MLX reads its settings once).
+    unsafe { ollaya_runner::prepare_process() };
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        bail!("usage: parity <model-dir> <goldens.jsonl> [cpu|cuda]");
+        bail!("usage: parity <model-dir> <goldens.jsonl> [cpu|cuda|metal]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
+        Some("metal") => Device::Metal,
         _ => Device::Cpu,
     };
     let model = OnnxModel::load(&PathBuf::from(&args[1]), device, None)?;

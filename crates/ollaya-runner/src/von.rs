@@ -8,18 +8,16 @@
 //! `ollaya_decision::von`.
 
 use std::path::Path;
-use std::sync::Mutex;
 
-use ndarray::{Array2, Ix2};
+use ndarray::Array2;
 use ollaya_decision::von::{CharOffsetEncoder, Scoring, VonLayout};
 use ollaya_decision::{Calibration, CalibrationFile, Questions, TokenEncoder};
-use ort::session::Session;
-use ort::value::Tensor;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::engine::Engine;
-use crate::onnx::{Device, ModelFiles, load_tokenizer, session};
+use crate::net::{Batch, Head, Net};
+use crate::onnx::{Device, ModelFiles, load_tokenizer};
 use crate::{Error, Output, QuestionOutput};
 
 /// Rows per `session.run`: the export's row axis is 1..=1024.
@@ -64,7 +62,7 @@ pub struct VonEncoding {
 }
 
 pub struct VonModel {
-    session: Mutex<Session>,
+    net: Net,
     tokenizer: Tokenizer,
     min_markers: usize,
     pub layout: VonLayout,
@@ -132,19 +130,22 @@ impl VonModel {
         };
         let tokenizer = load_tokenizer(&files.tokenizer)?;
 
-        let session = session(&files.graph, device, intra_threads)?;
-        let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
-        if inputs.len() != INPUTS.len()
-            || !INPUTS.iter().all(|n| inputs.contains(n))
-            || !session.outputs().iter().any(|o| o.name() == OUTPUT)
-        {
-            return Err(Error::Model(format!(
-                "graph inputs {inputs:?} do not match contract M ({INPUTS:?} -> {OUTPUT:?})"
-            )));
+        let net = crate::net::load(files, device, intra_threads, Head::OptionMarker)?;
+        if let Some(session) = net.session() {
+            let session = session.lock().expect("session mutex poisoned");
+            let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
+            if inputs.len() != INPUTS.len()
+                || !INPUTS.iter().all(|n| inputs.contains(n))
+                || !session.outputs().iter().any(|o| o.name() == OUTPUT)
+            {
+                return Err(Error::Model(format!(
+                    "graph inputs {inputs:?} do not match contract M ({INPUTS:?} -> {OUTPUT:?})"
+                )));
+            }
         }
 
         Ok(VonModel {
-            session: Mutex::new(session),
+            net,
             tokenizer: Tokenizer(tokenizer),
             min_markers: config.min_markers.max(1),
             layout: config.von,
@@ -189,7 +190,6 @@ impl VonModel {
         let pad = i64::from(self.layout.special_tokens.pad);
 
         let mut logits = vec![Vec::new(); rows.len()];
-        let mut session = self.session.lock().expect("session mutex poisoned");
         for range in crate::engine::batches(&lens, TOKEN_BUDGET, MAX_ROWS) {
             let batch = &order[range.clone()];
             let seq = lens[range].iter().copied().max().unwrap_or(MIN_SEQ);
@@ -217,17 +217,18 @@ impl VonModel {
                 }
                 qtype.push(qt);
             }
-            let outputs = session.run(ort::inputs![
-                "input_ids" => Tensor::from_array(input_ids)?,
-                "attention_mask" => Tensor::from_array(attention)?,
-                "marker_pos" => Tensor::from_array(marker_pos)?,
-                "marker_mask" => Tensor::from_array(marker_mask)?,
-                "qtype" => Tensor::from_array(([n], qtype))?,
-            ])?;
-            let out = outputs[OUTPUT]
-                .try_extract_array::<f32>()?
-                .into_dimensionality::<Ix2>()
-                .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?;
+            let out = self
+                .net
+                .run(
+                    Batch {
+                        input_ids,
+                        attention,
+                        markers: Some((marker_pos, marker_mask)),
+                        qtype: Some(qtype),
+                    },
+                    &[OUTPUT],
+                )?
+                .remove(0);
             if out.nrows() != n || out.ncols() < k {
                 return Err(Error::Model(format!(
                     "{OUTPUT} has shape {:?} for {n} rows of up to {k} markers",

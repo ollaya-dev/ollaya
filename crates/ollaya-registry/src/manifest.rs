@@ -26,6 +26,9 @@ pub mod media {
     pub const PARAMS: &str = "application/vnd.ollaya.params";
     pub const LICENSE: &str = "application/vnd.ollaya.license";
     pub const README: &str = "application/vnd.ollaya.readme";
+    /// The network the MLX engine builds from the weights layer: hyperparameters and tensor
+    /// names, derived from the author's config (`crates/ollaya-runner/src/mlx/arch.rs`).
+    pub const ARCH: &str = "application/vnd.ollaya.arch";
 }
 
 pub const ANNOTATION_PRECISION: &str = "org.ollaya.precision";
