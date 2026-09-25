@@ -35,18 +35,22 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/ollaya"],
+    "externalBin": [
+      "binaries/ollaya"
+    ],
     "category": "DeveloperTool",
     "shortDescription": "Run decision models locally",
     "longDescription": "Ollaya downloads and serves open decision models on your own machine: typed, calibrated answers in milliseconds, private and open source.",
     "copyright": "© 2026 Ollaya",
     "publisher": "Ollaya",
     "homepage": "https://ollaya.dev",
-    "licenseFile": "../../LICENSE",
     "windows": {
       "nsis": {
         "installMode": "currentUser"
       }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
     }
   }
 }
