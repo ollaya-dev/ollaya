@@ -14,3 +14,6 @@ __pycache__/
 
 # Derived registry blobs are build outputs (package.py); manifests are tracked.
 /registry/blobs/
+
+# Agent worktrees (Claude Code)
+/.claude/worktrees/
