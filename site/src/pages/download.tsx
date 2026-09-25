@@ -1,7 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { Icon } from '../components/Icon'
 import { btnPrimary, CodeBlock, textLink } from '../components/ui'
-import { DOCKER_IMAGE, LATEST_DOWNLOAD, LOCAL_PORT, RELEASES_URL } from '../site'
+import { DOCKER_IMAGE, LATEST_DOWNLOAD, LOCAL_PORT, RELEASES_URL, WINDOWS_APP_SIGNED } from '../site'
 
 type Os = 'macos' | 'windows' | 'linux' | 'docker'
 
@@ -39,7 +39,7 @@ function Note({ children }: { children: Child }) {
 }
 
 /** The desktop app: a download button and what the app does. */
-function DesktopApp({ file, label, extra }: { file: string; label: string; extra?: Child }) {
+function DesktopApp({ file, label, extra, note }: { file: string; label: string; extra?: Child; note?: Child }) {
   return (
     <Step title="Desktop app">
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -53,6 +53,7 @@ function DesktopApp({ file, label, extra }: { file: string; label: string; extra
         Start and stop the server, download models and try them, in one window. Your code talks to the same local API;
         for the <code class="font-mono">ollaya</code> command, install the command line too.
       </Note>
+      {note && <Note>{note}</Note>}
     </Step>
   )
 }
@@ -135,7 +136,15 @@ export function DownloadPage({ origin }: { origin: string }) {
           </Panel>
 
           <Panel id="windows" selected={selected}>
-            <DesktopApp file="Ollaya-windows-x64-setup.exe" label="Download for Windows" />
+            <DesktopApp
+              file="Ollaya-windows-x64-setup.exe"
+              label="Download for Windows"
+              note={
+                WINDOWS_APP_SIGNED
+                  ? undefined
+                  : 'The Windows app is not code-signed yet. If SmartScreen stops the installer, choose More info, then Run anyway.'
+              }
+            />
             <Step title="Command line">
               <CodeBlock code={installWindows} lang="powershell" />
               <Note>

@@ -94,7 +94,8 @@ Browse them at [ollaya.dev/search](https://ollaya.dev/search). Laya tags ending 
 - **Windows** (x64, CPU): `irm https://ollaya.dev/install.ps1 | iex` in PowerShell. For an NVIDIA GPU,
   use WSL 2 with the Linux command.
 - **Desktop app** for macOS, Windows and Linux: start and stop the server, download models and run
-  them in one window. Get it from [ollaya.dev/download](https://ollaya.dev/download).
+  them in one window. On macOS it lives in the menu bar. Get it from
+  [ollaya.dev/download](https://ollaya.dev/download).
 - **Docker:** `docker run -d --gpus=all -p 11435:11435 ghcr.io/ollaya-dev/ollaya:cuda`, or
   `ghcr.io/ollaya-dev/ollaya` for CPU only.
 

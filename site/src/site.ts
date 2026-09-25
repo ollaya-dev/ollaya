@@ -8,6 +8,8 @@ export const GITHUB_URL = 'https://github.com/ollaya-dev/ollaya'
 export const RELEASES_URL = `${GITHUB_URL}/releases`
 /** The latest release's assets by name (the desktop installers have stable names). */
 export const LATEST_DOWNLOAD = `${RELEASES_URL}/latest/download`
+/** False until the Windows installer is code-signed: the download page then says how to get past SmartScreen. */
+export const WINDOWS_APP_SIGNED = false
 export const ISSUES_URL = `${GITHUB_URL}/issues`
 /** Derived files (ONNX graphs, configs) of every model, mirrored on Hugging Face. No weights. */
 export const HF_URL = 'https://huggingface.co/ollaya-dev'

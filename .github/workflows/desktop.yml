@@ -123,6 +123,20 @@ jobs:
           [ -n "$APPLE_CERTIFICATE" ] || unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
           [ -n "$APPLE_API_ISSUER" ] || unset APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_PATH
           npx tauri build --config "$TAURI_EXTRA"
+      - name: Notarize the disk image
+        # Tauri notarizes and staples the app inside; the .dmg around it needs its own ticket, or
+        # Gatekeeper calls a downloaded disk image "unnotarized".
+        if: runner.os == 'macOS' && env.APPLE_NOTARY == 'yes'
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          for dmg in desktop/src-tauri/target/release/bundle/dmg/*.dmg; do
+            xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" \
+              --issuer "$APPLE_API_ISSUER" --wait --timeout 30m
+            xcrun stapler staple "$dmg"
+            spctl -a -vv -t open --context context:primary-signature "$dmg"
+          done
       - name: Collect installers
         shell: bash
         # Stable names, so the website can link releases/latest/download/<name>.
