@@ -8,6 +8,12 @@ use crate::{Array, Dtype, Error, Result, check, init, sys};
 /// `MLX_ENABLE_TF32` must be `0` before MLX first reads it (once, then cached).
 const TF32_VAR: &str = "MLX_ENABLE_TF32";
 
+/// How much freed GPU memory MLX keeps for reuse. Its default is its whole memory limit (1.5
+/// times the GPU's recommended working set, at most 95% of RAM), so a runner that once saw a
+/// long batch would hold on to that memory. The GPU shares RAM with everything else on a Mac, so a runner keeps 1 GiB:
+/// enough for the buffers of the next batch, and it gives the rest back.
+pub const CACHE_LIMIT: usize = 1 << 30;
+
 /// What [`crate::Worker::start`] found.
 #[derive(Debug, Clone)]
 pub struct MetalInfo {
@@ -65,6 +71,12 @@ pub(crate) fn start(metallib: &Path) -> Result<MetalInfo> {
         "set the Metal library path",
     )?;
     crate::bind_gpu_stream();
+    let mut previous = 0;
+    // SAFETY: writes one usize.
+    check(
+        unsafe { sys::mlx_set_cache_limit(&mut previous, CACHE_LIMIT) },
+        "set the MLX cache limit",
+    )?;
 
     // Loads the library and runs two kernels: a broken or mismatched metallib fails here, with
     // MLX's own message, instead of on the first request.
