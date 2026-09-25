@@ -132,15 +132,36 @@ if (await stat(registry).catch(() => null)) {
     }
   }
   if (await stat(join(dist, 'v2')).catch(() => null)) await collect(join(dist, 'v2'))
+  // Every blob a manifest points at on this origin must be in the build, byte for byte: a deploy
+  // from a checkout without ../registry/blobs (gitignored) would otherwise break every pull.
+  const missing = new Set()
+  const checked = new Set()
   for (const m of manifestDirs) {
     const manifest = JSON.parse(await readFile(m, 'utf8'))
     for (const layer of [manifest.config, ...manifest.layers]) {
       for (const url of layer.urls ?? []) {
-        if (url.includes('/blobs/sha256-') && !url.startsWith(`${origin}/blobs/`)) {
+        if (!url.includes('/blobs/sha256-')) continue
+        if (!url.startsWith(`${origin}/blobs/`)) {
           throw new Error(`${relative(dist, m)}: blob URL ${url} is not under ${origin}; rerun package.py with SITE_ORIGIN=${origin}`)
         }
+        const name = url.slice(`${origin}/blobs/`.length)
+        if (checked.has(name)) continue
+        checked.add(name)
+        const body = await readFile(join(dist, 'blobs', name)).catch(() => null)
+        if (!body) {
+          missing.add(name)
+          continue
+        }
+        const digest = `sha256:${createHash('sha256').update(body).digest('hex')}`
+        if (digest !== layer.digest) throw new Error(`registry/blobs/${name} is ${digest}, but ${relative(dist, m)} expects ${layer.digest}`)
       }
     }
+  }
+  if (missing.size) {
+    throw new Error(
+      `${missing.size} blob(s) the manifests point to are not in ../registry/blobs (derived files are not in git), ` +
+        `e.g. ${[...missing][0]}. Download the published ones with: node scripts/fetch-blobs.mjs`,
+    )
   }
   registryFiles = manifestDirs.length + (await walk(join(dist, 'blobs')).catch(() => [])).length
 }
