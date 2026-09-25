@@ -16,10 +16,14 @@ cuda = ["ort/cuda", "ort/tensorrt", "ort/nvrtx"]
 # Links pyke's macOS build (which includes the Core ML provider). Models run on the CPU provider
 # until the Core ML path is measured against CPU and verified for parity.
 coreml = ["ort/coreml"]
+# The MLX engine on the Apple GPU (aarch64-apple-darwin only): builds MLX from source with CMake
+# and needs mlx.metallib at run time. See docs/decisions/0001-mlx-engine.md.
+mlx = ["dep:ollaya-mlx", "ollaya-mlx/build"]
 
 [dependencies]
 axum.workspace = true
 ollaya-decision.workspace = true
+ollaya-mlx = { workspace = true, optional = true }
 tokio.workspace = true
 tracing.workspace = true
 ndarray.workspace = true

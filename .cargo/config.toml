@@ -1,0 +1,5 @@
+[env]
+# MLX reads this once, at its first matmul. "0" keeps fp32 matmuls in true fp32 on GPUs with
+# neural accelerators (M5), which fp32 parity needs. It only matters to `mlx` builds: tests and
+# examples that cargo runs get it from here, and `ollaya` sets it itself at startup.
+MLX_ENABLE_TF32 = "0"

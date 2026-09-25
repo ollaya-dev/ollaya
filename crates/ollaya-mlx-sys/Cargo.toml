@@ -1,0 +1,20 @@
+[package]
+name = "ollaya-mlx-sys"
+description = "Raw bindings to Apple's mlx-c, with MLX built from pinned sources and linked statically"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+links = "mlx"
+build = "build.rs"
+
+[features]
+default = []
+# Build MLX and mlx-c (CMake, Xcode's Metal toolchain, aarch64-apple-darwin only), generate the
+# bindings and link. Without it the crate is empty, so `cargo build --workspace` never needs CMake.
+build = ["dep:bindgen", "dep:sha2"]
+
+[build-dependencies]
+bindgen = { version = "0.73.2", optional = true }
+sha2 = { workspace = true, optional = true }

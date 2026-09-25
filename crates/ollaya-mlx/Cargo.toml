@@ -1,0 +1,17 @@
+[package]
+name = "ollaya-mlx"
+description = "A small safe wrapper over mlx-c: arrays, the ops Ollaya's models use, and one MLX thread per runner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# Build and link MLX (see ollaya-mlx-sys). Without it the crate is empty.
+build = ["ollaya-mlx-sys/build"]
+
+[dependencies]
+ollaya-mlx-sys.workspace = true
+thiserror.workspace = true
