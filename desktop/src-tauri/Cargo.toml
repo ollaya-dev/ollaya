@@ -28,9 +28,30 @@ serde_json = { version = "1.0.151", features = ["preserve_order"] }
 tauri = { version = "2.11.6", features = [] }
 tokio = { version = "1.53.1", features = ["time", "process", "sync", "macros"] }
 
-# macOS: Ollaya lives in the menu bar.
+# macOS: Ollaya lives in the menu bar. objc2 dresses the native menu (header switch, subtitles,
+# section headers); the same versions tray-icon and muda already use.
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "2.11.6", features = ["tray-icon", "image-png"] }
+objc2 = "0.6.4"
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSGeometry"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "NSButton",
+    "NSCell",
+    "NSColor",
+    "NSControl",
+    "NSFont",
+    "NSFontDescriptor",
+    "NSMenu",
+    "NSMenuItem",
+    "NSResponder",
+    "NSStatusBarButton",
+    "NSStatusItem",
+    "NSSwitch",
+    "NSText",
+    "NSTextField",
+    "NSView",
+] }
 
 [profile.release]
 lto = "thin"
