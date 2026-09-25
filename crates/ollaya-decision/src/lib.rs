@@ -17,6 +17,7 @@ pub mod pyjson;
 pub mod pyrepr;
 pub mod question;
 pub mod qwen3guard;
+pub mod von;
 
 pub use answer::Answer;
 pub use calibration::{Calibration, CalibrationFile, TemperatureMap};

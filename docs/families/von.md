@@ -11,7 +11,17 @@ option gets a `[MASK]` token in one sequence and is scored from that token's hid
 - A zero-shot noul debias needs a second row.
 - The temperature depends on the input.
 
-The existing Laya export does not apply. This document is everything the Rust port needs.
+The existing Laya export does not apply. This document is the spec the Rust port implements.
+
+**Status: implemented, library entry prepared** as `von:1.1` (also `von:latest`), issue #5. The
+runtime is `ollaya_decision::von` (rows), `ollaya_decision::pyrepr` (Python `str()`),
+`ollaya_decision::calibration::TemperatureMap` (the input-conditioned temperature) and
+`ollaya_runner::von` (the engine). Measured parity and speed are in
+[Rust runtime parity](#rust-runtime-parity) and [Quality and speed](#quality-and-speed). CUDA
+passes the runtime parity gate. On the CPU one row of 653 is 1.2e-3 from its golden logit, over the
+1e-3 gate. That golden is itself 1.05e-3 from the exact value, while the runtime is within 4.4e-4
+of exact on all 651 rows checked ([details](#the-one-cpu-row-over-1e-3)); what to do about it is
+the owner's decision.
 
 | | |
 |---|---|
@@ -46,13 +56,18 @@ The existing Laya export does not apply. This document is everything the Rust po
   - 178 of 178 checkpoint tensors are external (114 of them through a Transpose).
   - Only 24 tiny constants stay inline (shape scalars, two 32-entry RoPE frequency tables).
   - No pickle is executed at runtime; ONNX Runtime only reads byte ranges.
-- **This goes beyond the current "only safetensors can be referenced" rule, so it is flagged
-  here.** The alternatives:
+- **This goes beyond the earlier "only safetensors can be referenced" rule.** The alternatives were:
   1. Accept offset references into torch-zip checkpoints.
   2. Ask the author to publish `option_marker.safetensors`.
   3. Leave von out.
 
-  Re-saving the weights ourselves would mean re-hosting them.
+  Re-saving the weights ourselves would mean re-hosting them. **Decision (owner, issue #5):
+  option 1.** The manifest's weights layer is the author's file, pinned and verified:
+  `https://huggingface.co/wfzyx/von/resolve/d8bb5e0745d8ee1fb65d536d6d4892d54d5a93fd/option_marker.pt`,
+  sha256 `52202f176080d1efe38ca62c45264894fc7e444d332f4af6bac86f4e3146e0f2` (the HF LFS oid),
+  1,581,316,050 bytes. `package.py` renames the graph's external-data location from
+  `option_marker.pt` to the blob name `sha256-52202f17…`, so the runner opens it straight from
+  the blob store, as for every other family.
 
 ## Request → rows
 
@@ -109,7 +124,9 @@ instructions become `json.dumps` there. Criterion values are raw JSON.
   - An object: `f"{what}{ex}".strip()`.
     - `what` is `str(item.get("what", ""))`.
     - `ex` is `" Examples: " + ", ".join(examples)` when `examples` is truthy, otherwise `""`.
-      `examples` is a list of strings. If it is a string, Python joins its characters.
+      `examples` is a list of strings. If it is a string, Python joins its characters; a dict
+      joins its keys. Where Python raises (a list with non-strings, a number, `true`), the Rust
+      port renders each non-string with `str()` instead (part of deviation 3).
   - Anything else: `str(item).strip()`. Strings are used as they are.
 - **noul.** Descriptions are in **row order `[true, false]`**:
   - `t = text(criteria.true)` if truthy, else `"Yes, condition holds true."`
@@ -190,10 +207,14 @@ Golden `von/over_max_len` covers this. It is an 11,900-token row cut to exactly 
 ### Row batching
 
 - One row per question, plus the empty-state row for zero-shot noul questions.
-- All rows of a request go in one batch:
-  - pad to the longest row with `[PAD]` (50283), `attention_mask` 0
+- All rows of a request are batched together:
+  - pad to the longest row with `[PAD]` (50283), `attention_mask` 0, and to at least 8 tokens
   - pad `marker_pos` with 0 and `marker_mask` with false to the widest row
   - `min_markers` is 1
+- The Rust runner sorts the rows by length and splits them into batches of at most 8192 padded
+  tokens and 1024 rows (see Limits, memory). In a spot check on the CPU provider (one request,
+  6 rows), batched and one-row-at-a-time runs gave the same logit errors against the goldens, at
+  1, 8 and the default number of threads.
 - `qtype` is fed as choice 0, score 1, noul 2. The graph ignores it.
 
 ## ONNX contract (M)
@@ -233,7 +254,7 @@ Per question, in Ollaya option order:
 p      = softmax(z)
 H_norm = (−Σ p·ln max(p, 1e-12)) / ln K        (0 when K = 1)
 T      = bias + entropy·H_norm + log_tokens·log10(state_tokens)/4 + n_options·K/8
-T      = clamp(T, lo, hi)                      # lo 0.3, hi 12.0 — NOT Laya's [0.5, 5] clamp
+T      = clamp(T, lo, hi)                      # lo 0.3, hi 12.0, NOT Laya's [0.5, 5] clamp
 probs  = softmax(z / max(T, 1e-4))
 ```
 
@@ -262,6 +283,13 @@ Upstream answer rendering, for reference:
   - list choice criteria
   - non-string criterion values
   - noul keys with other capitalisation
+  - non-string score `examples` (upstream's `", ".join` raises; the port uses `str()`)
+- A question whose instructions and options alone exceed 8192 tokens is rejected with a 400 that
+  names it.
+- Memory. The graph materialises full attention scores ([rows, 16 heads, seq, seq] in fp32), so
+  one 8192-token row needs about 25 GB of RAM on the CPU provider (measured: 24.8 GB peak RSS for
+  the parity run, dominated by `von/over_max_len`). The runner therefore runs at most 8192 padded
+  tokens per `session.run` (one full-length row alone).
 
 ## Measured parity
 
@@ -269,7 +297,9 @@ Upstream answer rendering, for reference:
 (`convert/out/logs/parity-von-wl.log`).
 
 The run covers 883 questions (1051 rows): all edge cases and 100 typed-decisions rows. The
-reference is fp32 on GPU with TF32 off. ONNX ran on the CPU EP.
+reference is fp32 on GPU with TF32 off. ONNX ran on the CPU EP. The reference's attention runs
+through PyTorch's CUDA SDPA memory-efficient kernel, which is less exact than the rest of its fp32
+path: see [the one CPU row over 1e-3](#the-one-cpu-row-over-1e-3).
 
 | Check | Result |
 |---|---|
@@ -284,6 +314,79 @@ reference is fp32 on GPU with TF32 off. ONNX ran on the CPU EP.
 - Goldens: `convert/out/goldens-von.jsonl` has 98 cases: every edge case, 20 typed-decisions
   rows, and `von/over_max_len`. Each case carries row text, ids, markers, row logits, option
   logits, T, probabilities, and upstream `answers` where upstream accepts the request.
+
+## Rust runtime parity
+
+`crates/ollaya-runner/examples/parity_von.rs` against `goldens-von.jsonl` (98 cases, 485
+questions, 653 rows). It checks the state text and its token count, every row's text, ids and
+marker positions, then the row and option logits (tolerance 1e-3), the decisions, the calibration
+on the reference's own logits (1e-6) and, where upstream accepts the request, von's `evaluate()`.
+
+```sh
+cargo run --release -p ollaya-runner --example parity_von -- convert/out/von-wl convert/out/goldens-von.jsonl cpu --latency
+cargo run --release -p ollaya-runner --features ollaya-runner/cuda --example parity_von -- convert/out/von-wl convert/out/goldens-von.jsonl cuda --latency
+```
+
+Results on choso-wsl (24 cores; RTX 4090, CUDA 13), `ort` 2.0.0-rc.13 with ONNX Runtime 1.28:
+
+| | CPU | CUDA |
+|---|---|---|
+| state text and token count, row texts, ids and markers identical | 98 cases, 653 / 653 rows | same |
+| max \|Δ row logit\| | **1.2e-3** (p99 1.8e-4); 1 row over 1e-3 | 9.5e-4 (p99 1.5e-4) |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| (input-conditioned T) | 3.1e-5 (p99 7.4e-6) | 2.5e-5 (p99 9.3e-6) |
+| calibration on the reference logits: T, probabilities | 1.0e-7, 1.1e-8 | same |
+| vs von `evaluate()` (368 questions, 4-decimal rounding) | 0 differ, max 8.0e-5 | 0 differ, max 7.4e-5 |
+| gate | fails on the logit tolerance | passes |
+
+### The one CPU row over 1e-3
+
+The row is `preset/router/conversation` `is_sensitive` (102 tokens): the runtime gives
+`[1.200809, -0.177873]`, the golden is `[1.199640, -0.177809]`. The inputs are identical (ids,
+markers and masks match the goldens), so the difference is in the arithmetic. To place it, the
+651 golden rows below 8192 tokens were run through every path available, one unpadded row at a
+time unless noted, and compared with the **exact** value: the same network in fp64. transformers'
+ModernBERT casts the queries and keys to fp32 for the rotary embedding even in an fp64 model, so
+that step was patched to stay in fp64; the fp64 runs on the GPU and on the CPU then agree to all
+printed digits on the rows checked.
+
+| Path (fp32 unless noted) | vs golden: max (rows > 1e-3) | vs exact: max (rows > 1e-3) |
+|---|---|---|
+| goldens: PyTorch CUDA, SDPA memory-efficient kernel | 0 | **1.05e-3 (1)** |
+| PyTorch CUDA, SDPA math kernel | 8.7e-4 (0) | 7.2e-4 (0) |
+| PyTorch CPU | 2.5e-3 (1) | 2.6e-3 (1) |
+| ONNX Runtime 1.30 (Python), all optimizations | 8.7e-4 (0) | 3.5e-4 (0) |
+| ONNX Runtime 1.30 (Python), optimizations off | 1.8e-3 (2) | 1.6e-3 (1) |
+| Rust runtime, CPU (ORT 1.28, batched) | 1.2e-3 (1) | **4.4e-4 (0)** |
+| Rust runtime, CUDA (batched) | 9.6e-4 (0) | **3.9e-4 (0)** |
+| the exact value | **1.05e-3 (1)** | 0 |
+
+- **The golden of this row is 1.05e-3 from the exact value.** The goldens reproduce bit for bit
+  with PyTorch's CUDA SDPA memory-efficient attention kernel, which PyTorch picks for fp32
+  attention on the GPU, TF32 off as the goldens were made. On the same GPU the math
+  kernel is 1.9e-4 from exact on this row, and the runtime 1.2e-4. The exact value itself is
+  1.05e-3 from the golden, so no accurate implementation passes the 1e-3 gate on this row. No
+  other golden is more than 3e-4 from exact.
+- **The runtime is within 4.4e-4 of exact on every row checked**, on the CPU and on CUDA (the two
+  8192-token rows of `von/over_max_len` were not run in fp64). That is closer
+  than the goldens (1.05e-3) and than PyTorch's own fp32 CPU path (2.6e-3). Against Python ONNX
+  Runtime 1.30 on single rows it differs by at most 3.3e-4 (median 9.5e-6).
+- **Why von's logits are this sensitive.** On `td/agent_trace_observability_000000` `urgency`
+  (151 tokens) PyTorch fp32 on the CPU is 2.6e-3 from exact. Per-layer hidden states (fp32 vs
+  exact) show the relative error at the option markers growing from 6e-7 after layer 7 to 3.7e-4
+  after layer 28, against 2e-6 on an ordinary row (`td/agent_trace_observability_000013`). The
+  scorer head adds less than 1e-6 on exact inputs: the logit error is the first-order image of the
+  encoder's final hidden-state error (the fp64 gradient predicts it to 1e-6). The head turns a unit
+  of hidden state into up to about one logit unit and the final states have a norm near 37, so a
+  relative error of 1e-5 in the encoder already means about 4e-4 in a logit. That is why von's
+  logit differences run larger than those of other ModernBERT graphs (`nli:modernbert-large`:
+  1.5e-4).
+
+Against goldens computed with the exact network the runtime would pass the 1e-3 gate on these 651
+rows by a factor of 2.3. Whether to regenerate `goldens-von.jsonl` that way is the owner's decision; until then the
+goldens and the gate stay as they are. The per-row data and the scripts that produced it are on
+choso-wsl in `~/agents/von-diag/` (`allrows.jsonl`, `allrows-pure.jsonl`, `rust-cpu.jsonl`,
+`rust-cuda.jsonl`, `analysis.txt`, `sensitivity-pure.log`).
 
 ## Quality and speed
 
@@ -305,6 +408,15 @@ reference is fp32 on GPU with TF32 off. ONNX ran on the CPU EP.
   - batched graph in PyTorch: 37 ms fp32, 38 ms bf16. An earlier run under heavier contention
     measured 78 and 46 ms.
   - ONNX Runtime CPU (8 threads, `-wl` graph): 0.98 s
+- **Latency of the Rust runtime** (choso-wsl, RTX 4090 and 24 cores):
+  - `parity_von --latency` on CUDA, in process: 5-question golden requests (7.1 rows, 559 tokens
+    on average) take 24.3 ms at the median (p95 29.7 ms).
+  - Through the daemon (`/api/decide`, model loaded), the five `triage` questions about a short
+    message: 23.3 ms at the median on CUDA, 0.76 s on the CPU.
+  - Longer states, same five questions (median of 3), CUDA / CPU: 500 words (2,949 input tokens)
+    0.17 s / 5.6 s; 1,000 words (5,629) 0.41 s / 13.3 s; 2,000 words (10,984) 0.78 s / 24.7 s;
+    4,000 words (21,699) 2.6 s on CUDA; 7,000 words (37,774) 7.4 s on CUDA, with 18.7 GB of the
+    card in use.
 - English only.
 - Near 8k tokens, quality visibly degrades, and the temperature map saturates at T = 12.
 

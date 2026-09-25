@@ -11,6 +11,7 @@ pub mod nli;
 pub mod onnx;
 pub mod qwen3guard;
 pub mod server;
+pub mod von;
 
 pub use engine::Engine;
 pub use onnx::{Device, Encoding, ModelFiles, OnnxModel};
