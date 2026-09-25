@@ -364,6 +364,15 @@ stage_cuda() {
             die "$TARGET_DIR/$p not found; build with --features ollaya-runner/cuda"
         cp -L "$TARGET_DIR/$p" "$lib/$p"
     done
+    # Windows: GPU runners start from a copy of ollaya.exe in this folder, so the DLLs it imports
+    # (DirectML.dll, the same file as in bin/) go here too. Otherwise the runner would pick up
+    # whatever version System32 has, and ollaya.exe imports DirectML by ordinal.
+    if [ -n "$EXE" ]; then
+        for dll in "$TARGET_DIR"/*.dll; do
+            case ${dll##*/} in onnxruntime_providers_*) continue ;; esac
+            [ ! -f "$dll" ] || cp -L "$dll" "$lib/"
+        done
+    fi
 
     wheels=$CACHE/wheels
     mkdir -p "$wheels"
@@ -422,6 +431,10 @@ stage_cuda() {
         printf "Ollaya's Apache-2.0 license.\n\n"
         printf '1. '
         ort_notice "Execution provider libraries: $ORT_PROVIDERS."
+        if [ -f "$lib/DirectML.dll" ]; then
+            printf '\nDirectML.dll is Microsoft DirectML as it ships with that ONNX Runtime build, the\n'
+            printf 'same file as bin/DirectML.dll, for the runners that start from this folder.\n'
+        fi
         cat <<'EOF'
 
 2. NVIDIA CUDA and cuDNN runtime libraries
