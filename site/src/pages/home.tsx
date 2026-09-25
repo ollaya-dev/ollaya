@@ -81,16 +81,20 @@ function Hero() {
   )
 }
 
-// Real output of the command shown, run on an RTX 4090 (fp16): laya routed the English text to
-// laya:en, which answered the triage preset's five questions in 8.9 ms (`--verbose` timings).
-// Two lines: the second hangs under the first, and keeps that indent when it wraps on a phone.
-const MOCK_COMMAND = ['ollaya run laya --preset triage \\', '"I was charged twice this month and want a refund."']
+// Real output of the command shown, run on an RTX 4090 through the CLI (`--verbose` timings): decider:2b
+// answered the agent preset's four questions in 178 ms (median of ten warm runs). The first line holds
+// the prompt; the others hang under it, and a JSON line that wraps on a phone continues under its key.
+const MOCK_COMMAND = [
+  "ollaya run decider --preset agent '{",
+  '  "request": "Fix the typo in README.md",',
+  '  "command": "git push --force origin main"',
+  "}'",
+]
 const mockRows = [
-  { q: 'intent', a: 'refund', p: 1.0 },
-  { q: 'is_urgent', a: 'no', p: 0.87 },
-  { q: 'frustration', a: '1.59 / 3', note: 'clearly annoyed', p: 0.36 },
-  { q: 'refund_requested', a: 'yes', p: 0.88 },
-  { q: 'churn_risk', a: 'no', p: 0.89 },
+  { q: 'action', a: 'block', p: 0.53 },
+  { q: 'on_task', a: 'no', p: 0.75 },
+  { q: 'risk', a: '1.23 / 2', note: 'could lose local work', p: 0.15 },
+  { q: 'destructive', a: 'yes', p: 0.9 },
 ]
 
 /** One command line: the prompt in its own column, so continuation lines hang under the command. */
@@ -120,12 +124,11 @@ function TerminalMock() {
         </div>
         <div class="p-4 font-mono text-[12.5px] leading-6 text-fg sm:p-5 sm:text-[13px]">
           <PromptLine>
-            <pre class="whitespace-pre-wrap">
-              <Code code={MOCK_COMMAND[0]!} lang="shell" />
-            </pre>
-            <pre class="pl-[2ch] whitespace-pre-wrap">
-              <Code code={MOCK_COMMAND[1]!} lang="shell" />
-            </pre>
+            {MOCK_COMMAND.map((line, i) => (
+              <pre class={i ? 'pl-[4ch] -indent-[2ch] whitespace-pre-wrap' : 'whitespace-pre-wrap'}>
+                <Code code={line} lang="shell" />
+              </pre>
+            ))}
           </PromptLine>
           <table class="mt-4 w-full border-collapse text-left">
             <caption class="sr-only">Answers returned by the model</caption>
@@ -167,7 +170,7 @@ function TerminalMock() {
         </div>
       </div>
       <figcaption class="mt-3 text-center text-xs text-muted lg:absolute lg:inset-x-0 lg:top-full">
-        Real output: routed to <span class="font-mono">laya:en</span>, answered in 8.9 ms on an RTX 4090.
+        Real output: <span class="font-mono">decider:2b</span> answered in 178 ms on an RTX 4090.
       </figcaption>
     </figure>
   )
