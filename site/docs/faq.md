@@ -32,6 +32,7 @@ Open decision models from these families. See [Models](/search).
 - **`gliclass`** from Knowledgator: an instruction-following zero-shot classifier that scores every option in one pass.
 - **`kev`** from Jared Palmer: `kev:0.8b`, a LoRA and a pointer head on Qwen3.5-0.8B that scores every option at its own span, calibrated.
 - **`qwen3guard`** from the Qwen team: a safety guard in 119 languages. It answers its own built-in questions (safe, controversial or unsafe, and the unsafe category), so you send it only the text.
+- **`von`** from Victor Hugo Panisa: Von 1.1 on ModernBERT-large, which scores every option at its own marker in one pass and reads states of up to 8,192 tokens.
 
 ## Where do the weights come from?
 
@@ -87,4 +88,4 @@ For an install without root (in `~/.local`), delete `~/.local/bin/ollaya`, `~/.l
 
 ## What is the license?
 
-Ollaya is Apache-2.0. Models carry their own licenses: `laya`, `decider`, `kev`, `qwen3guard`, `gliclass` and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` is MIT.
+Ollaya is Apache-2.0. Models carry their own licenses: `laya`, `decider`, `kev`, `qwen3guard`, `gliclass`, `von` and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` is MIT.

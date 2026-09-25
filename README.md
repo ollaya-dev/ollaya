@@ -48,8 +48,8 @@ churn_risk        no           ██████████░░░░░░ 
   NDJSON progress, and there are `/api/tags`, `/api/show`, `/api/ps` and more. See
   [docs/api.md](docs/api.md).
 - **Weights come from their authors.** Ollaya publishes only small ONNX graphs, about 3 MB each.
-  These graphs read the original `model.safetensors` from the author's Hugging Face repository,
-  pinned to a commit and verified by sha256. Ollaya never re-hosts weights.
+  These graphs read the original weight files (usually `model.safetensors`) from the author's
+  Hugging Face repository, pinned to a commit and verified by sha256. Ollaya never re-hosts weights.
 - **For agents.** `ollaya mcp` serves the models to Claude Code, Claude Desktop, Cursor and other
   MCP clients (`claude mcp add ollaya -- ollaya mcp`), and the
   [`ollaya-decisions` skill](skills/ollaya-decisions/SKILL.md) teaches agents when and how to use
@@ -82,6 +82,7 @@ churn_risk        no           ██████████░░░░░░ 
 | `qwen3guard` | Qwen3Guard-Gen-0.6B safety guard with built-in questions: safe, controversial or unsafe, and the category |
 | `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
 | `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
+| `von` | Victor Hugo Panisa's Von 1.1 (ModernBERT-large): every option scored at its own marker, 8k-token context |
 
 Browse them at [ollaya.dev/search](https://ollaya.dev/search). Laya tags ending in
 `-fp32` or `-fp16` pin the precision. The derived files of every model are also published at
@@ -133,5 +134,5 @@ generates golden fixtures, and packages the result into `registry/`. See the mod
 
 Apache-2.0. Each model keeps its own license: `laya` (Convai Innovations), `decider` (Mapika),
 `kev` (Jared Palmer, on Qwen3.5 by the Qwen team), `qwen3guard` (Qwen team), `gliclass`
-(Knowledgator) and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large`
-(Moritz Laurer) is MIT.
+(Knowledgator), `von` (Victor Hugo Panisa) and `nli:modernbert-large` are Apache-2.0, and
+`nli:deberta-v3-large` (Moritz Laurer) is MIT.

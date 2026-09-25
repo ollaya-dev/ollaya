@@ -62,6 +62,7 @@ If none is available, tell the user how to install Ollaya:
 | `gliclass` | Zero-shot, many options in one pass | ~15 ms GPU |
 | `kev` | Qwen3.5-0.8B decoder with a pointer head; calibrated | ~0.2 s GPU, ~2 s CPU |
 | `qwen3guard` | Safety guard; answers only its built-in questions (send no `questions`) | ~40 ms GPU, ~2 s CPU |
+| `von` | ModernBERT-large, every option scored at its own marker; states up to 8k tokens; calibrated | ~25 ms GPU, ~0.8 s CPU |
 
 Start with `laya`. Move to `decider` when accuracy matters more than latency, or when `laya`'s
 confidence is often low on your data.
