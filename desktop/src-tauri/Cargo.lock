@@ -2348,7 +2348,7 @@ dependencies = [
 
 [[package]]
 name = "ollaya-api"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "chrono",
  "futures-util",
@@ -2362,7 +2362,7 @@ dependencies = [
 
 [[package]]
 name = "ollaya-decision"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "indexmap 2.14.2",
  "serde",
@@ -2372,7 +2372,7 @@ dependencies = [
 
 [[package]]
 name = "ollaya-desktop"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "dirs 7.0.0",

@@ -1,6 +1,6 @@
 {
   "name": "ollaya-desktop",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Ollaya's desktop app (Tauri 2): start and stop the server, download models, run decisions",
   "license": "Apache-2.0",
