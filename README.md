@@ -78,6 +78,8 @@ churn_risk        no           ██████████░░░░░░ 
 | `laya:multilingual` | 100+ languages (mmBERT-base, 322M) |
 | `laya:typed-decisions` | Fine-tuned on the typed-decisions workflows |
 | `decider`, `decider:0.8b` | Mapika's Qwen3.5 decoders, 2B and 0.8B. The most accurate: 0.591 on typed-decisions |
+| `kev` | Jared Palmer's Kev-0.8B: a LoRA and a pointer head on Qwen3.5-0.8B, calibrated |
+| `qwen3guard` | Qwen3Guard-Gen-0.6B safety guard with built-in questions: safe, controversial or unsafe, and the category |
 | `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
 | `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
 
@@ -130,5 +132,6 @@ generates golden fixtures, and packages the result into `registry/`. See the mod
 ## License
 
 Apache-2.0. Each model keeps its own license: `laya` (Convai Innovations), `decider` (Mapika),
-`gliclass` (Knowledgator) and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large`
+`kev` (Jared Palmer, on Qwen3.5 by the Qwen team), `qwen3guard` (Qwen team), `gliclass`
+(Knowledgator) and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large`
 (Moritz Laurer) is MIT.

@@ -60,6 +60,8 @@ If none is available, tell the user how to install Ollaya:
 | `decider` | The most accurate; slower | ~0.2 s GPU, ~1 s CPU |
 | `nli` | Zero-shot, good at yes/no with clear statements | ~20 ms GPU |
 | `gliclass` | Zero-shot, many options in one pass | ~15 ms GPU |
+| `kev` | Qwen3.5-0.8B decoder with a pointer head; calibrated | ~0.2 s GPU, ~2 s CPU |
+| `qwen3guard` | Safety guard; answers only its built-in questions (send no `questions`) | ~40 ms GPU, ~2 s CPU |
 
 Start with `laya`. Move to `decider` when accuracy matters more than latency, or when `laya`'s
 confidence is often low on your data.
