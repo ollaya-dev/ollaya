@@ -59,6 +59,9 @@ pub struct Question {
     /// Instructions as the model reads them: strings verbatim, anything else as `json.dumps`.
     pub instructions: String,
     pub criteria: Criteria,
+    /// The definition as the caller sent it, for layouts that read the raw values (`kev`
+    /// renders instructions and criteria its own way, and its noul keys are case-sensitive).
+    pub definition: Value,
 }
 
 /// An ordered set of questions, keyed by the caller's question ids.
@@ -176,6 +179,7 @@ impl Question {
             qtype,
             instructions,
             criteria,
+            definition: Value::Object(def.clone()),
         })
     }
 

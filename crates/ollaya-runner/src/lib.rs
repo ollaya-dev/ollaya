@@ -6,8 +6,10 @@
 pub mod decider;
 pub mod engine;
 pub mod gliclass;
+pub mod kev;
 pub mod nli;
 pub mod onnx;
+pub mod qwen3guard;
 pub mod server;
 
 pub use engine::Engine;

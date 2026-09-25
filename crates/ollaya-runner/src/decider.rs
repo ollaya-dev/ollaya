@@ -245,7 +245,7 @@ impl DeciderModel {
     }
 }
 
-/// Session options for the decider graphs on `device`.
+/// Session options for the decoder graphs (decider, kev, qwen3guard) on `device`.
 ///
 /// On the CUDA provider, ONNX Runtime's memory planner gives the int64 shape values that the
 /// graph's `Reshape`s read on the host to other values while they are still needed, and runs fail
@@ -254,7 +254,7 @@ impl DeciderModel {
 /// buffers of the main graph (neither freed nor in-place ones), and ORT 1.28 allows that mode
 /// with the CUDA provider. The plan has one logic stream per device (CPU and CUDA), so two inter-op threads run
 /// it. The CPU provider plans these graphs correctly and keeps the defaults.
-fn configure(builder: SessionBuilder, device: Device) -> Result<SessionBuilder, Error> {
+pub(crate) fn configure(builder: SessionBuilder, device: Device) -> Result<SessionBuilder, Error> {
     match device {
         Device::Cpu => Ok(builder),
         Device::Cuda(_) => Ok(builder

@@ -135,4 +135,34 @@ logits per row, option logits and probabilities.
   folding capped at 64 elements. The CUDA EP then works with default options (checked on Qwen3Guard:
   CUDA vs CPU 1.3e-5). But it folds a few tiny weight-derived tensors into the graph (`-exp(A_log)`,
   16 floats per DeltaNet layer), and those graphs have not been through full parity.
-- **Rust runner.** It uses ORT 1.28, which was not tested. It should check this with a goldens run on CUDA.
+- **Rust runner.** ORT 1.28 through the C API, which has no `enable_mem_reuse`. The runner uses the
+  decider's CUDA session options instead (parallel execution mode, which reuses no buffers of the main
+  graph); see `crates/ollaya-runner/src/decider.rs`. Measured below: CUDA matches the goldens.
+
+## Rust runtime parity (measured)
+
+`crates/ollaya-runner/examples/parity_qwen3guard.rs` against `goldens-qwen3guard-gen-0.6b.jsonl`: 74
+states, 148 rows, 296 preset questions. It first checks the preset rules (part of the preset builds
+only the rows it reads; other questions are rejected), then both rows' token ids and last positions,
+then all 13 candidate logits of both rows and every preset question's option logits (tolerance 1e-3),
+and the decisions.
+
+```sh
+cargo run --release -p ollaya-runner --example parity_qwen3guard -- convert/out/qwen3guard-gen-0.6b convert/out/goldens-qwen3guard-gen-0.6b.jsonl cpu
+cargo run --release -p ollaya-runner --features ollaya-runner/cuda --example parity_qwen3guard -- convert/out/qwen3guard-gen-0.6b convert/out/goldens-qwen3guard-gen-0.6b.jsonl cuda
+```
+
+Results on choso-wsl (24 cores; RTX 4090, CUDA 13), `ort` 2.0.0-rc.13 with ONNX Runtime 1.28:
+
+| | CPU | CUDA |
+|---|---|---|
+| token rows and last positions identical | 148 / 148 | 148 / 148 |
+| max \|Δ candidate logit\| (13 per row) | 5.7e-5 | 7.8e-5 |
+| max \|Δ option logit\| | 5.7e-5 | 7.8e-5 |
+| decisions agree | **100 %** (296 / 296) | **100 %** (296 / 296) |
+| max \|Δ probability\| | 1.4e-5 (p99 4.3e-6) | 9.1e-6 (p99 4.3e-6) |
+
+- **Serving.** The registry ships the preset as the model's built-in questions (a
+  `vnd.ollaya.questions` layer, the same one a Modelfile's `QUESTIONS` writes), so `ollaya run
+  qwen3guard "<text>"` and requests without `questions` get all four answers. A request may also send
+  a subset of the preset unchanged; the category row is then built only when `category` is asked.

@@ -16,6 +16,12 @@ use crate::{Error, Output};
 pub trait Engine: Send + Sync {
     /// Answer every question about `state`, returning one logit per option per question.
     fn run(&self, state: &Value, questions: &Questions) -> Result<Output, Error>;
+
+    /// The only questions a fixed-preset model answers (its built-in set); `None` for models
+    /// that answer any typed question.
+    fn preset(&self) -> Option<&Questions> {
+        None
+    }
 }
 
 impl Engine for OnnxModel {
@@ -56,6 +62,8 @@ pub const LAYOUTS: &[&str] = &[
     "gliclass-uni-v1",
     "nli-pairs-v1",
     "decider-slots-v1",
+    "kev-pointer-v1",
+    "qwen3guard-gen-v1",
 ];
 
 /// The layout a `decision` layer declares.
@@ -85,6 +93,12 @@ pub fn load(
             files, device, threads,
         )?)),
         "decider-slots-v1" => Ok(Box::new(crate::decider::DeciderModel::load_files(
+            files, device, threads,
+        )?)),
+        "kev-pointer-v1" => Ok(Box::new(crate::kev::KevModel::load_files(
+            files, device, threads,
+        )?)),
+        "qwen3guard-gen-v1" => Ok(Box::new(crate::qwen3guard::GuardModel::load_files(
             files, device, threads,
         )?)),
         other => Err(Error::Model(format!(

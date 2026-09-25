@@ -182,7 +182,12 @@ fn warm_up(model: &dyn Engine) {
         "warm_up": {"type": "choice", "instructions": "Pick one.", "criteria": {"a": "first", "b": "second", "c": "third"}},
         "check": {"type": "noul", "instructions": "Is this a warm-up?"},
     });
-    if let Ok(q) = ollaya_decision::parse_questions(&questions)
+    // A fixed-preset model answers only its own questions.
+    let questions = match model.preset() {
+        Some(preset) => Ok(preset.clone()),
+        None => ollaya_decision::parse_questions(&questions),
+    };
+    if let Ok(q) = questions
         && let Err(e) = model.run(&Value::String("Warm-up request for the runner.".into()), &q)
     {
         tracing::warn!("warm-up failed: {e}");
@@ -266,4 +271,58 @@ fn error(status: StatusCode, code: &str, message: &str) -> Response {
         Json(json!({"error": {"code": code, "message": message}})),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use ollaya_decision::{Questions, parse_questions};
+    use serde_json::{Value, json};
+
+    use super::warm_up;
+    use crate::{Engine, Error, Output};
+
+    /// Records the question ids of every run.
+    struct Recorder {
+        preset: Option<Questions>,
+        asked: Mutex<Vec<Vec<String>>>,
+    }
+
+    impl Engine for Recorder {
+        fn run(&self, _state: &Value, questions: &Questions) -> Result<Output, Error> {
+            self.asked
+                .lock()
+                .unwrap()
+                .push(questions.keys().cloned().collect());
+            Ok(Output {
+                questions: Vec::new(),
+                input_tokens: 0,
+                state_tokens: 0,
+                state_truncated: false,
+            })
+        }
+
+        fn preset(&self) -> Option<&Questions> {
+            self.preset.as_ref()
+        }
+    }
+
+    #[test]
+    fn warm_up_asks_a_fixed_preset_model_its_own_questions() {
+        let open = Recorder {
+            preset: None,
+            asked: Mutex::default(),
+        };
+        warm_up(&open);
+        assert_eq!(*open.asked.lock().unwrap(), [["warm_up", "check"]]);
+
+        let preset = json!({"unsafe": {"type": "noul", "instructions": "Is it unsafe?"}});
+        let guard = Recorder {
+            preset: Some(parse_questions(&preset).unwrap()),
+            asked: Mutex::default(),
+        };
+        warm_up(&guard);
+        assert_eq!(*guard.asked.lock().unwrap(), [["unsafe"]]);
+    }
 }

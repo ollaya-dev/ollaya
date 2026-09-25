@@ -9,10 +9,12 @@ pub mod answer;
 pub mod calibration;
 pub mod decider;
 pub mod gliclass;
+pub mod kev;
 pub mod layout;
 pub mod nli;
 pub mod pyjson;
 pub mod question;
+pub mod qwen3guard;
 
 pub use answer::Answer;
 pub use calibration::{Calibration, CalibrationFile};

@@ -187,7 +187,52 @@ the exact rows, decide and option positions, fp32 option logits, probabilities a
   folding capped at 64 elements. The CUDA EP then works with default options (checked on Qwen3Guard:
   CUDA vs CPU 1.3e-5). But it folds a few tiny weight-derived tensors into the graph (`-exp(A_log)`,
   16 floats per DeltaNet layer), and those graphs have not been through full parity.
-- **Rust runner.** It uses ORT 1.28, which was not tested. It should check this with a goldens run on CUDA.
+- **Rust runner.** ORT 1.28 through the C API, which has no `enable_mem_reuse`. The runner uses the
+  decider's CUDA session options instead (parallel execution mode, which reuses no buffers of the main
+  graph); see `crates/ollaya-runner/src/decider.rs`. Measured below: CUDA matches the goldens.
+
+## Rust runtime parity (measured)
+
+`crates/ollaya-runner/examples/parity_kev.rs` against `goldens-kev-0.8b.jsonl`: 117 records, of which 16
+are requests upstream rejects (list-valued choice criteria) and 16 their `#valid` subsets, 480
+questions. It checks the rejections, then the token rows, decide and option positions, then the
+option logits (tolerance 1e-3), the decisions and the TypeSafe answers against upstream `to_answers`.
+
+```sh
+cargo run --release -p ollaya-runner --example parity_kev -- convert/out/kev-0.8b convert/out/goldens-kev-0.8b.jsonl cpu
+cargo run --release -p ollaya-runner --features ollaya-runner/cuda --example parity_kev -- convert/out/kev-0.8b convert/out/goldens-kev-0.8b.jsonl cuda
+```
+
+Results on choso-wsl (24 cores; RTX 4090, CUDA 13), `ort` 2.0.0-rc.13 with ONNX Runtime 1.28:
+
+| | CPU | CUDA |
+|---|---|---|
+| rejections as upstream (16 requests, each question on its own) | 0 mismatches | 0 mismatches |
+| token rows, decide and option positions identical | 480 / 480 | 480 / 480 |
+| max \|Δ option logit\| (raw pointer scores) | 2.6e-5 | 3.8e-5 |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| (T = 2.406) | 1.9e-6 (p99 1.4e-6) | 2.3e-6 (p99 1.7e-6) |
+| TypeSafe answers vs upstream `to_answers` | 0 differ, max 1.0e-4 (4-decimal rounding) | 0 differ, max 1.0e-4 |
+
+### ORT 1.28 `GemmTransposeFusion` (disabled for kev)
+
+- **What the graph has.** Its only `Gemm` is the pointer head's query projection (`head.q`,
+  1,024 → 256, node `node_linear_558`). Its input, the decide-token hidden states `[rows, 1024]`,
+  comes from the export's row gather (`GatherND`) through an identity `Transpose` (`node_index`,
+  perm `[0, 1]`). Neither the Qwen3Guard nor the decider graphs have a `Gemm`.
+- **The bug.** ORT 1.28's `GemmTransposeFusion` folds a `Transpose` that feeds only `Gemm`s into
+  them by flipping `transA`, without checking `perm`. On this graph the fused `Gemm` multiplies the
+  transposed input. With the pass left on, `parity_kev` fails on its first batch: "Non-zero status
+  code returned while running Gemm node. Name:'node_linear_558/GemmTransposeFusion/' Status Message:
+  GEMM: Dimension mismatch, W: {256,1024} K: 5 N:256" (K is the batch's 5 rows, read as the inner
+  dimension). A batch of exactly 1,024 rows (the hidden size) would pass the shape check and return
+  wrong scores; the runner's batches never get there (at most 8,192 / 64 = 128 rows). ORT 1.30
+  checks that the `Transpose` is a real matrix transpose (perm `[1, 0]`) first
+  (microsoft/onnxruntime#32435), so the Python parity with ORT 1.30 never met it.
+- **The fix.** kev sessions disable the pass (`with_disabled_optimizers("GemmTransposeFusion")`), so
+  ORT runs the graph as exported. It is a workaround for a wrong rewrite, not a precision trade: with
+  it, the Rust runtime matches the goldens on CPU and CUDA (above). The head is two small matmuls, so
+  the fusion is worth nothing here. The setting can go once `ort` links ORT 1.30 or newer.
 
 ## Typed-decisions quality (measured, for the catalog comparison)
 
