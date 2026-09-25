@@ -85,8 +85,9 @@ def file_entry(role, repo, revision, filename, local_path, location=None, verify
     return e
 
 
-def weightless(tmp_dir, out_dir, sources, maps):
-    report = make_weightless(tmp_dir, out_dir, sources, maps, link=True, sidecars=(), sink_casts=True)
+def weightless(tmp_dir, out_dir, sources, maps, verify=True, sink_casts=True):
+    report = make_weightless(tmp_dir, out_dir, sources, maps, link=True, sidecars=(), sink_casts=sink_casts,
+                             verify=verify)
     return report
 
 

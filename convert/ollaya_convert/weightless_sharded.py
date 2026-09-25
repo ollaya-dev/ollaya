@@ -231,12 +231,18 @@ def sink_casts_below_gathers(graph) -> int:
 
 def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
                     link: bool = True, sidecars=("tokenizer.json", "decision.json", "calibration.json"),
-                    sink_casts: bool = False):
+                    sink_casts: bool = False, verify: bool = True):
     """Rewrite `src_dir/model.onnx` into `out_dir/model.onnx` whose weights reference `sources`.
     Returns a report dict (counts, inline initializers, unused checkpoint tensors).
 
     The exported values are read one initializer at a time, so peak memory stays near the largest tensor
-    (a 9B export has 36 GB of fp32 external data). `sink_casts` applies `sink_casts_below_gathers`."""
+    (a 9B export has 36 GB of fp32 external data). `sink_casts` applies `sink_casts_below_gathers`.
+
+    `verify=False` is for graphs exported without the weights' values (too large to hold in fp32):
+    initializers map by name and shape only, never by value, no transpose is inferred, a name found
+    with the wrong shape raises, and every checkpoint tensor must be used. The caller must check that
+    no parameter stayed inline (its data would be uninitialized), and the graph must then pass parity
+    like any other."""
     model = onnx.load(os.path.join(src_dir, "model.onnx"), load_external_data=False)
     graph = model.graph
     by_shape = {}
@@ -255,9 +261,25 @@ def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
         return sources[si].value(e)   # no cache: a 2B model upcast to f32 would double peak memory
 
     for init in graph.initializer:
-        arr = _initializer_array(init, src_dir)
         found = None
-        for key in _candidates(init.name, maps):
+        if not verify:
+            # The first candidate name a checkpoint has decides; its shape must match. A name no
+            # checkpoint has stays inline (buffers and constants, which hold real values).
+            shape = tuple(init.dims)
+            hits = [h for h in (lookup(key) for key in _candidates(init.name, maps)) if h is not None]
+            if hits:
+                si, e = hits[0]
+                if e.shape != shape or (si, e.key) in used:
+                    raise ValueError("%s %s: checkpoint tensor %s %s does not fit or is already used"
+                                     % (init.name, shape, e.key, e.shape))
+                found = (si, e, False)
+            arr = _initializer_array(init, src_dir) if found is None else \
+                np.empty(0, dtype=helper.tensor_dtype_to_np_dtype(init.data_type))   # only the dtype is read
+            candidates = []
+        else:
+            arr = _initializer_array(init, src_dir)
+            candidates = _candidates(init.name, maps)
+        for key in candidates:
             hit = lookup(key)
             if hit is None:
                 continue
@@ -268,7 +290,7 @@ def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
                 found = (si, e, True)
             if found:
                 break
-        if found is None and arr.size > 4096:
+        if verify and found is None and arr.size > 4096:
             for transpose, shape in ((False, arr.shape), (True, arr.shape[::-1])):
                 if transpose and arr.ndim != 2:
                     continue
@@ -340,6 +362,8 @@ def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
     for si, k in used:
         e = sources[si].entries[k]
         used_bytes[e.dtype] += e.length
+    if not verify and any(unused.values()):
+        raise ValueError("checkpoint tensors the graph does not use: %s" % {k: v[:5] for k, v in unused.items() if v})
     report = {"graph_bytes": os.path.getsize(out), "stats": dict(stats), "inline": inline,
               "inline_bytes": sum(b for _, _, b in inline), "unused": unused,
               "used_bytes_by_dtype": dict(used_bytes),
