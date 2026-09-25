@@ -1,0 +1,34 @@
+[package]
+name = "ollaya-desktop"
+description = "Ollaya's desktop app: start and stop the server, download models, run decisions"
+version = "0.4.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/ollaya-dev/ollaya"
+publish = false
+
+# Its own workspace, so the engine's builds and CI never pull in the webview stack.
+[workspace]
+
+[lib]
+name = "ollaya_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+anyhow = "1.0.104"
+dirs = "7.0.0"
+futures-util = "0.3.34"
+ollaya-api = { path = "../../crates/ollaya-api" }
+reqwest = { version = "0.13.5", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+tauri = { version = "2.11.6", features = [] }
+tokio = { version = "1.53.1", features = ["time", "process"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

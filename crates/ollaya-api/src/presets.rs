@@ -1,4 +1,5 @@
-//! Built-in question sets, the same ones `laya.presets` ships.
+//! Built-in question sets, the same ones `laya.presets` ships. The CLI (`--preset`), the MCP
+//! server and the desktop app all use these.
 
 use serde_json::Value;
 
@@ -22,7 +23,7 @@ mod tests {
     fn every_preset_parses_as_questions() {
         for name in super::NAMES {
             let q = super::get(name).unwrap();
-            ollaya_decision::parse_questions(&q).unwrap_or_else(|e| panic!("{name}: {e}"));
+            serde_json::from_value::<crate::Questions>(q).unwrap_or_else(|e| panic!("{name}: {e}"));
         }
     }
 }

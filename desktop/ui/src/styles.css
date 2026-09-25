@@ -1,0 +1,85 @@
+/*
+ * The desktop app's styles: Tailwind CSS v4 with the website's colour tokens (site/src/styles/app.css),
+ * so the app and ollaya.dev look like one product in light and dark mode.
+ */
+@import "tailwindcss" source(none);
+
+@source "./";
+@source "../index.html";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
+  --color-canvas: #ffffff;
+  --color-fg: #171717;
+  --color-body: #262626;
+  --color-muted: #737373;
+  --color-faint: #a3a3a3;
+  --color-line: #e5e5e5;
+  --color-line-strong: #d4d4d4;
+  --color-subtle: #fafafa;
+  --color-code: #f5f5f5;
+  --color-fill: rgb(0 0 0 / 0.05);
+  --color-fill-strong: rgb(0 0 0 / 0.08);
+  --color-btn: #262626;
+  --color-btn-hover: #000000;
+  --color-btn-fg: #ffffff;
+  --color-ok: #16a34a;
+  --color-warn: #b45309;
+  --color-bad: #dc2626;
+  --color-accent-a: #0550ae;
+  --color-accent-b: #116329;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #0a0a0a;
+    --color-fg: #fafafa;
+    --color-body: #d4d4d4;
+    --color-muted: #a3a3a3;
+    --color-faint: #8a8a8a;
+    --color-line: #262626;
+    --color-line-strong: #404040;
+    --color-subtle: #111111;
+    --color-code: #171717;
+    --color-fill: rgb(255 255 255 / 0.06);
+    --color-fill-strong: rgb(255 255 255 / 0.1);
+    --color-btn: #f5f5f5;
+    --color-btn-hover: #ffffff;
+    --color-btn-fg: #0a0a0a;
+    --color-ok: #4ade80;
+    --color-warn: #fbbf24;
+    --color-bad: #f87171;
+    --color-accent-a: #79c0ff;
+    --color-accent-b: #7ee2a8;
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-fg);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  select {
+    cursor: default;
+  }
+}
+
+@layer components {
+  .bar {
+    background: linear-gradient(90deg, var(--color-accent-a), var(--color-accent-b));
+  }
+  .spin {
+    animation: spin 0.9s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

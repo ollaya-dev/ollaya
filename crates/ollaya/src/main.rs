@@ -7,8 +7,8 @@
 mod commands;
 mod daemon;
 mod mcp;
+use ollaya_api::presets;
 mod modelfile;
-mod presets;
 mod render;
 mod run;
 

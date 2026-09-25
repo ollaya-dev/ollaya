@@ -1,0 +1,148 @@
+name: Desktop app
+
+# Builds the Tauri app (desktop/) for macOS, Windows and Linux, with the `ollaya` engine bundled
+# inside (externalBin). A v* tag attaches the installers to that release; running it by hand
+# (workflow_dispatch) builds them as workflow artifacts only.
+#
+# Signing is on when its secrets exist:
+#   macOS   APPLE_CERTIFICATE (base64 .p12 of the "Developer ID Application" certificate),
+#           APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, and for notarization
+#           APPLE_API_ISSUER, APPLE_API_KEY and APPLE_API_KEY_P8 (App Store Connect API key).
+#   Windows see docs/distribution.md, "Signing the desktop app".
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+  # Secrets can't be tested in `if:`; these flags can.
+  APPLE_NOTARY: ${{ secrets.APPLE_API_KEY_P8 != '' && 'yes' || '' }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple silicon)
+            runner: macos-latest
+            triple: aarch64-apple-darwin
+            features: ollaya-runner/coreml
+            exe: ''
+          - name: Windows (x64)
+            runner: windows-latest
+            triple: x86_64-pc-windows-msvc
+            features: ''
+            exe: .exe
+          - name: Linux (x64)
+            runner: ubuntu-24.04
+            triple: x86_64-unknown-linux-gnu
+            features: ''
+            exe: ''
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: desktop-${{ matrix.triple }}
+          workspaces: |
+            . -> target
+            desktop/src-tauri -> target
+          cache-directories: |
+            ~/.cache/ort.pyke.io
+            ~/Library/Caches/ort.pyke.io
+      - name: Linux webview dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Build the engine
+        shell: bash
+        env:
+          FEATURES: ${{ matrix.features }}
+        run: cargo build --release --locked -p ollaya ${FEATURES:+--features "$FEATURES"}
+      - name: Bundle the engine (externalBin)
+        shell: bash
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          cp "target/release/ollaya${{ matrix.exe }}" "desktop/src-tauri/binaries/ollaya-${{ matrix.triple }}${{ matrix.exe }}"
+          # DLLs that ONNX Runtime needs on Windows go next to the executables.
+          resources=
+          for dll in target/release/*.dll; do
+            [ -f "$dll" ] || continue
+            name=$(basename "$dll")
+            cp "$dll" desktop/src-tauri/
+            resources="${resources:+$resources,}\"$name\":\"$name\""
+          done
+          echo "TAURI_EXTRA={\"bundle\":{\"resources\":{$resources}}}" >>"$GITHUB_ENV"
+          echo "Resources: {$resources}"
+      - name: Apple notarization key
+        if: runner.os == 'macOS' && env.APPLE_NOTARY == 'yes'
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$APPLE_API_KEY_P8" >"$HOME/.appstoreconnect/private_keys/AuthKey_$APPLE_API_KEY.p8"
+          echo "APPLE_API_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_$APPLE_API_KEY.p8" >>"$GITHUB_ENV"
+      - name: Build the app
+        working-directory: desktop
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          npm ci
+          # Unsigned builds when the secrets are absent (forks, first runs).
+          [ -n "$APPLE_CERTIFICATE" ] || unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
+          [ -n "$APPLE_API_ISSUER" ] || unset APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_PATH
+          npx tauri build --config "$TAURI_EXTRA"
+      - name: Collect installers
+        shell: bash
+        run: |
+          mkdir -p out
+          b=desktop/src-tauri/target/release/bundle
+          for f in "$b"/dmg/*.dmg "$b"/nsis/*.exe "$b"/msi/*.msi "$b"/appimage/*.AppImage "$b"/deb/*.deb "$b"/rpm/*.rpm; do
+            [ -f "$f" ] && cp "$f" out/
+          done
+          ls -l out
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-${{ matrix.triple }}
+          path: out/*
+          if-no-files-found: error
+      - name: Attach to the release
+        if: env.PUBLISH == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # release.yml creates the release; wait for it.
+          for _ in $(seq 1 60); do gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break; sleep 30; done
+          gh release upload "$GITHUB_REF_NAME" out/* --clobber

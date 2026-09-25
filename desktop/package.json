@@ -1,0 +1,29 @@
+{
+  "name": "ollaya-desktop",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Ollaya's desktop app (Tauri 2): start and stop the server, download models, run decisions",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "ui": "tsc --noEmit && node scripts/build-ui.mjs",
+    "preview": "node scripts/build-ui.mjs --mock",
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "@tauri-apps/cli": "2.11.5",
+    "esbuild": "0.28.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "@parcel/watcher": false
+  }
+}

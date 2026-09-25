@@ -18,6 +18,7 @@ pub mod error;
 pub mod host;
 pub mod keep_alive;
 pub mod models;
+pub mod presets;
 pub mod validate;
 
 pub use client::{Client, ClientError};

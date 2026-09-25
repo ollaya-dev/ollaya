@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Ollaya",
+  "version": "0.4.0",
+  "identifier": "dev.ollaya.app",
+  "build": {
+    "beforeDevCommand": "npm run ui",
+    "beforeBuildCommand": "npm run ui",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Ollaya",
+        "width": 1080,
+        "height": 740,
+        "minWidth": 820,
+        "minHeight": 580,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/ollaya"],
+    "category": "DeveloperTool",
+    "shortDescription": "Run decision models locally",
+    "longDescription": "Ollaya downloads and serves open decision models on your own machine: typed, calibrated answers in milliseconds, private and open source.",
+    "copyright": "© 2026 Ollaya",
+    "publisher": "Ollaya",
+    "homepage": "https://ollaya.dev",
+    "licenseFile": "../../LICENSE",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

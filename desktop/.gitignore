@@ -1,0 +1,6 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+# The ollaya engine binary, copied in by the build for Tauri's externalBin.
+src-tauri/binaries/

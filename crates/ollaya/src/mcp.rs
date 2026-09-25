@@ -25,7 +25,9 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::{daemon, presets};
+use ollaya_api::presets;
+
+use crate::daemon;
 
 const INSTRUCTIONS: &str = "Ollaya runs decision models locally. Call `decide` whenever you need a \
 typed judgement about a text or JSON state: classify it (choice), rate it (score) or check a \
