@@ -17,11 +17,9 @@ The existing Laya export does not apply. This document is the spec the Rust port
 runtime is `ollaya_decision::von` (rows), `ollaya_decision::pyrepr` (Python `str()`),
 `ollaya_decision::calibration::TemperatureMap` (the input-conditioned temperature) and
 `ollaya_runner::von` (the engine). Measured parity and speed are in
-[Rust runtime parity](#rust-runtime-parity) and [Quality and speed](#quality-and-speed). CUDA
-passes the runtime parity gate. On the CPU one row of 653 is 1.2e-3 from its golden logit, over the
-1e-3 gate. That golden is itself 1.05e-3 from the exact value, while the runtime is within 4.4e-4
-of exact on all 651 rows checked ([details](#the-one-cpu-row-over-1e-3)); what to do about it is
-the owner's decision.
+[Rust runtime parity](#rust-runtime-parity) and [Quality and speed](#quality-and-speed): on CPU
+and CUDA the runtime is within 4.4e-4 of the goldens' logits and makes the same decision on every
+question. The goldens are the network in float64; [why](#why-the-goldens-are-fp64).
 
 | | |
 |---|---|
@@ -294,20 +292,19 @@ Upstream answer rendering, for reference:
 ## Measured parity
 
 `uv run --with von-sdk==1.1.1 python -m ollaya_convert.families.von.parity out/von-wl --td-limit 100`
-(`convert/out/logs/parity-von-wl.log`).
 
 The run covers 883 questions (1051 rows): all edge cases and 100 typed-decisions rows. The
-reference is fp32 on GPU with TF32 off. ONNX ran on the CPU EP. The reference's attention runs
-through PyTorch's CUDA SDPA memory-efficient kernel, which is less exact than the rest of its fp32
-path: see [the one CPU row over 1e-3](#the-one-cpu-row-over-1e-3).
+reference is upstream's network run in float64, one unpadded row at a time, as for the goldens
+(`ref.Exact`; see [Why the goldens are fp64](#why-the-goldens-are-fp64)). ONNX ran on the CPU EP,
+ONNX Runtime 1.30, one padded batch per request.
 
 | Check | Result |
 |---|---|
 | Tokenizer: Rust core vs Python | 1051/1051 rows identical (truncation and padding off) |
-| Argmax, ONNX vs fp32 reference | 100.00% |
-| Max probability diff (calibrated) | choice 6.5e-6, score 1.4e-5, noul 2.3e-5 |
-| Max row-logit diff | 8.7e-4 (p99 3.2e-4) |
-| Reference vs `von`'s own `evaluate()` (828 questions upstream accepts) | 100% argmax, max diff 5.0e-5 (von rounds to 4 dp) |
+| Argmax, ONNX vs the fp64 reference | 100.00% |
+| Max probability diff (calibrated) | choice 3.8e-5 (the 77-option edge case; p99 1.4e-6), score 8.9e-6, noul 6.1e-6 |
+| Max row-logit diff | 3.5e-4 (p99 per type 4.2e-5 to 2.3e-4) |
+| Reference vs `von`'s own `evaluate()` (828 questions upstream accepts) | 100% argmax, max diff 7.7e-5 (von runs fp32 and rounds to 4 dp) |
 
 - The weightless graph (`out/von-wl`) and the self-contained export (`out/von`) give identical
   numbers.
@@ -332,27 +329,27 @@ Results on choso-wsl (24 cores; RTX 4090, CUDA 13), `ort` 2.0.0-rc.13 with ONNX 
 | | CPU | CUDA |
 |---|---|---|
 | state text and token count, row texts, ids and markers identical | 98 cases, 653 / 653 rows | same |
-| max \|Δ row logit\| | **1.2e-3** (p99 1.8e-4); 1 row over 1e-3 | 9.5e-4 (p99 1.5e-4) |
+| max \|Δ row logit\| | 4.4e-4 (p99 2.5e-4) | 3.9e-4 (p99 1.4e-4) |
 | decisions agree | **100 %** | **100 %** |
-| max \|Δ probability\| (input-conditioned T) | 3.1e-5 (p99 7.4e-6) | 2.5e-5 (p99 9.3e-6) |
-| calibration on the reference logits: T, probabilities | 1.0e-7, 1.1e-8 | same |
+| max \|Δ probability\| (input-conditioned T) | 3.4e-5 (p99 7.9e-6) | 4.7e-5 (p99 7.6e-6) |
+| calibration on the reference logits (as f32): T, probabilities | 3.6e-7, 7.8e-8 | same |
 | vs von `evaluate()` (368 questions, 4-decimal rounding) | 0 differ, max 8.0e-5 | 0 differ, max 7.4e-5 |
-| gate | fails on the logit tolerance | passes |
 
-### The one CPU row over 1e-3
+The worst rows are `edge/many_options_77` `intent` (1444 tokens) on the CPU and
+`td/agent_trace_observability_000000` `urgency` (151 tokens) on CUDA.
 
-The row is `preset/router/conversation` `is_sensitive` (102 tokens): the runtime gives
-`[1.200809, -0.177873]`, the golden is `[1.199640, -0.177809]`. The inputs are identical (ids,
-markers and masks match the goldens), so the difference is in the arithmetic. To place it, the
-651 golden rows below 8192 tokens were run through every path available, one unpadded row at a
-time unless noted, and compared with the **exact** value: the same network in fp64. transformers'
-ModernBERT casts the queries and keys to fp32 for the rotary embedding even in an fp64 model, so
-that step was patched to stay in fp64; the fp64 runs on the GPU and on the CPU then agree to all
-printed digits on the rows checked.
+### Why the goldens are fp64
 
-| Path (fp32 unless noted) | vs golden: max (rows > 1e-3) | vs exact: max (rows > 1e-3) |
+The first goldens were upstream's own forward in fp32 on the GPU, TF32 off. Against them the CPU
+runtime was 1.2e-3 off on one row, `preset/router/conversation` `is_sensitive` (102 tokens):
+`[1.200809, -0.177873]` against a golden `[1.199640, -0.177809]`, with identical ids, markers and
+masks. To place that difference, the 651 golden rows below 8192 tokens were run through every path
+available, one unpadded row at a time unless noted, and compared with the **exact** value, the same
+network in float64:
+
+| Path (fp32 unless noted) | vs the fp32 goldens: max (rows > 1e-3) | vs exact: max (rows > 1e-3) |
 |---|---|---|
-| goldens: PyTorch CUDA, SDPA memory-efficient kernel | 0 | **1.05e-3 (1)** |
+| fp32 goldens: PyTorch CUDA, SDPA memory-efficient kernel | 0 | **1.05e-3 (1)** |
 | PyTorch CUDA, SDPA math kernel | 8.7e-4 (0) | 7.2e-4 (0) |
 | PyTorch CPU | 2.5e-3 (1) | 2.6e-3 (1) |
 | ONNX Runtime 1.30 (Python), all optimizations | 8.7e-4 (0) | 3.5e-4 (0) |
@@ -361,32 +358,36 @@ printed digits on the rows checked.
 | Rust runtime, CUDA (batched) | 9.6e-4 (0) | **3.9e-4 (0)** |
 | the exact value | **1.05e-3 (1)** | 0 |
 
-- **The golden of this row is 1.05e-3 from the exact value.** The goldens reproduce bit for bit
+- **The fp32 goldens were 1.05e-3 from the exact value on that row.** They reproduce bit for bit
   with PyTorch's CUDA SDPA memory-efficient attention kernel, which PyTorch picks for fp32
-  attention on the GPU, TF32 off as the goldens were made. On the same GPU the math
-  kernel is 1.9e-4 from exact on this row, and the runtime 1.2e-4. The exact value itself is
-  1.05e-3 from the golden, so no accurate implementation passes the 1e-3 gate on this row. No
-  other golden is more than 3e-4 from exact.
-- **The runtime is within 4.4e-4 of exact on every row checked**, on the CPU and on CUDA (the two
-  8192-token rows of `von/over_max_len` were not run in fp64). That is closer
-  than the goldens (1.05e-3) and than PyTorch's own fp32 CPU path (2.6e-3). Against Python ONNX
-  Runtime 1.30 on single rows it differs by at most 3.3e-4 (median 9.5e-6).
-- **Why von's logits are this sensitive.** On `td/agent_trace_observability_000000` `urgency`
-  (151 tokens) PyTorch fp32 on the CPU is 2.6e-3 from exact. Per-layer hidden states (fp32 vs
-  exact) show the relative error at the option markers growing from 6e-7 after layer 7 to 3.7e-4
-  after layer 28, against 2e-6 on an ordinary row (`td/agent_trace_observability_000013`). The
-  scorer head adds less than 1e-6 on exact inputs: the logit error is the first-order image of the
-  encoder's final hidden-state error (the fp64 gradient predicts it to 1e-6). The head turns a unit
-  of hidden state into up to about one logit unit and the final states have a norm near 37, so a
-  relative error of 1e-5 in the encoder already means about 4e-4 in a logit. That is why von's
-  logit differences run larger than those of other ModernBERT graphs (`nli:modernbert-large`:
-  1.5e-4).
+  attention on the GPU (TF32 off does not change that). On the same GPU the math kernel was
+  1.9e-4 from exact on this row, and the runtime 1.2e-4. The exact value itself failed the 1e-3
+  gate against that golden, so no accurate implementation could pass it.
+- **Von's logits are sensitive to rounding.** On `td/agent_trace_observability_000000` `urgency`
+  PyTorch fp32 on the CPU is 2.6e-3 from exact. Per-layer hidden states (fp32 vs exact) show the
+  relative error at the option markers growing from 6e-7 after layer 7 to 3.7e-4 after layer 28,
+  against 2e-6 on an ordinary row (`td/agent_trace_observability_000013`). The scorer head adds
+  less than 1e-6 on exact inputs: the logit error is the first-order image of the encoder's final
+  hidden-state error (the fp64 gradient predicts it to 1e-6). The head turns a unit of hidden state
+  into up to about one logit unit and the final states have a norm near 37, so a relative error of
+  1e-5 in the encoder already means about 4e-4 in a logit. So von's logit differences run larger
+  than those of other ModernBERT graphs (`nli:modernbert-large`: 1.5e-4), and an fp32 reference
+  is not a fixed point to test against.
+- **So the goldens are the network in float64** (owner's decision, issue #5; the 1e-3 gate is
+  unchanged). `ref.Exact` runs upstream's own `OptionMarkerModel` (same code, same weights)
+  converted to float64. transformers' ModernBERT builds the rotary tables and applies them to q and
+  k in fp32 whatever the model's dtype, so `ref.fp64_rotary` keeps that step in float64 too; the
+  inverse frequencies stay the model's fp32 buffer, as in the ONNX graph. With it, fp64 on the GPU
+  and on the CPU agree to every printed digit. Rows up to 4096 tokens run on the GPU; the two
+  8192-token rows of `von/over_max_len` run on the CPU (fp64 attention at 8192 tokens would need
+  about 25 GB of GPU memory; on the CPU the whole run peaks at 6 GB).
+- **Old vs new goldens.** Every id, state, question, state text and token count, row text, ids and
+  markers (so every attention mask) and every upstream `answers` entry is identical; only the
+  reference numbers moved. Row logits moved by at most 1.05e-3 (the row above; p99 1.5e-4,
+  median 8.6e-6), option logits by at most 1.05e-3, temperatures by at most 3.5e-4 and
+  probabilities by at most 4.5e-5. No decision changed. The fp32 goldens are kept next to the new
+  ones as `convert/out/goldens-von.fp32-sdpa.jsonl`, and `--precision fp32` still produces them.
 
-Against goldens computed with the exact network the runtime would pass the 1e-3 gate on these 651
-rows by a factor of 2.3. Whether to regenerate `goldens-von.jsonl` that way is the owner's decision; until then the
-goldens and the gate stay as they are. The per-row data and the scripts that produced it are on
-choso-wsl in `~/agents/von-diag/` (`allrows.jsonl`, `allrows-pure.jsonl`, `rust-cpu.jsonl`,
-`rust-cuda.jsonl`, `analysis.txt`, `sensitivity-pure.log`).
 
 ## Quality and speed
 
@@ -410,7 +411,7 @@ choso-wsl in `~/agents/von-diag/` (`allrows.jsonl`, `allrows-pure.jsonl`, `rust-
   - ONNX Runtime CPU (8 threads, `-wl` graph): 0.98 s
 - **Latency of the Rust runtime** (choso-wsl, RTX 4090 and 24 cores):
   - `parity_von --latency` on CUDA, in process: 5-question golden requests (7.1 rows, 559 tokens
-    on average) take 24.3 ms at the median (p95 29.7 ms).
+    on average) take 23.4 ms at the median (p95 28.5 ms).
   - Through the daemon (`/api/decide`, model loaded), the five `triage` questions about a short
     message: 23.3 ms at the median on CUDA, 0.76 s on the CPU.
   - Longer states, same five questions (median of 3), CUDA / CPU: 500 words (2,949 input tokens)
@@ -464,6 +465,10 @@ uv run python -m ollaya_convert.families.weightless_ext out/von --out out/von-wl
 uv run --with von-sdk==1.1.1 python -m ollaya_convert.families.von.parity out/von-wl --td-limit 100
 uv run --with von-sdk==1.1.1 python -m ollaya_convert.families.von.goldens --out out/goldens-von.jsonl
 ```
+
+Both default to the float64 reference (`--precision fp64`). The goldens need a CUDA GPU for the
+rows up to 4096 tokens and run the two 8192-token rows on the CPU (`--long-device`); on choso-wsl
+(RTX 4090, 24 cores) the whole file takes 2.5 minutes.
 
 ## Attribution
 

@@ -1,4 +1,4 @@
-"""Check the Von ONNX export against the PyTorch fp32 reference (and against von itself) on the case set.
+"""Check the Von ONNX export against the PyTorch reference (and against von itself) on the case set.
 
     uv run --with von-sdk==1.1.1 python -m ollaya_convert.families.von.parity out/von --td-limit 100
 
@@ -7,7 +7,8 @@ Three checks per question:
                  links -- with truncation and padding switched off, reproduces every row's ids from
                  its packed text (add_special_tokens=True).
   2. export      ONNX (onnxruntime, padded batch of all rows) vs the upstream network run one unpadded
-                 row at a time in fp32 (TF32 off): logits, calibrated probabilities, argmax.
+                 row at a time in float64 (`ref.Exact`, as the goldens; `--precision fp32` for upstream's
+                 own fp32 forward, TF32 off): logits, calibrated probabilities, argmax.
   3. upstream    the reference's calibrated probabilities vs `OptionMarkerBackend.evaluate` (von's own
                  answer, rounded by von to 4 dp) for every question upstream accepts unchanged.
 """
@@ -39,11 +40,14 @@ def main():
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--provider", default="CPUExecutionProvider")
     ap.add_argument("--no-upstream", action="store_true")
+    ap.add_argument("--precision", choices=["fp64", "fp32"], default="fp64",
+                    help="reference: the network in float64 (default, as the goldens) or upstream's fp32 forward")
     a = ap.parse_args()
 
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     backend = ref.load(a.device)
+    exact = ref.Exact(backend, a.device) if a.precision == "fp64" else None
     tok = backend._get_model().tokenizer
     rust_tok = Tokenizer.from_file(os.path.join(a.model_dir, "tokenizer.json"))
     # Upstream's tokenizer.json bakes in truncation=512 / padding; the runtime must switch both off.
@@ -66,7 +70,7 @@ def main():
         for r in rows:
             tok_ok += int(rust_tok.encode(r["text"], add_special_tokens=True).ids == r["ids"])
         n_rows += len(rows)
-        ref_rows = ref.forward_rows(backend, enc)
+        ref_rows = ref.forward_rows(backend, enc, exact)
         batch = ref.collate(enc, tok.pad_token_id, MIN_MARKERS)
         t0 = time.perf_counter()
         (got,) = sess.run(None, {n: batch[n] for n in INPUT_NAMES})
@@ -99,7 +103,7 @@ def main():
 
     print("questions: %d   rows: %d   ort time: %.1fs (%s)" % (n_q, n_rows, t_ort, a.provider))
     print("tokenizer.json (Rust core) reproduces row ids: %d/%d" % (tok_ok, n_rows))
-    print("argmax agreement  onnx vs fp32 reference: %.4f" % (agree / n_q))
+    print("argmax agreement  onnx vs %s reference: %.4f" % (a.precision, agree / n_q))
     if up_n:
         print("reference vs von evaluate(): %d questions, argmax agreement %.4f" % (up_n, up_agree / up_n))
     for key in sorted(stats):

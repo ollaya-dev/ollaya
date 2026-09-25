@@ -11,7 +11,8 @@ Upstream (Apache-2.0):
 Delegated to upstream code, so it cannot drift:
   * state rendering        von.backends.option_marker_backend._format_state
   * sequence text          von.models.option_marker.OptionMarkerModel.pack_sequence
-  * the network            OptionMarkerModel.forward (encoder + gather + OptionMarkerScorer)
+  * the network            OptionMarkerModel.forward (encoder + gather + OptionMarkerScorer); the goldens
+                           and the export check run it in float64 (`Exact`), not upstream's fp32
   * calibration map load   OptionMarkerBackend._get_model (reads marker_calibration.json)
 Re-stated here, cited against option_marker_backend.py (von-sdk 1.1.1):
   * option descriptions per question type      evaluate_choice / evaluate_noul / evaluate_score
@@ -30,6 +31,8 @@ encoding is byte-identical to upstream (checked by `parity.py` against `OptionMa
   4. noul criteria keys are matched case-insensitively ("True" == "true"; last spelling wins), as the
      shared Rust question parser does. Upstream reads only the exact keys "true" / "false".
 """
+import contextlib
+import copy
 import json
 import os
 from typing import Any, Dict, List, Optional, Tuple
@@ -241,16 +244,83 @@ def collate(enc: Dict[str, Any], pad_id: int, min_markers: int = 1):
 # ------------------------------------------------------------------------------------------- network
 
 
+@contextlib.contextmanager
+def fp64_rotary():
+    """Keep ModernBERT's rotary embedding in the model's dtype while the context is open.
+
+    transformers' ModernBERT builds the cos/sin tables and applies them to q and k in fp32 whatever the
+    model's dtype (`.float()` in ModernBertRotaryEmbedding.forward and apply_rotary_pos_emb), so a
+    `.double()` model still rounds q and k to fp32 in every layer. Inside this context an fp64 input
+    stays fp64 end to end; an fp32 input takes the same fp32 operations as the original. The inverse
+    frequencies stay the model's own fp32 values (a buffer, upcast exactly), as in the ONNX graph.
+    """
+    from transformers.models.modernbert import modeling_modernbert as mm
+
+    orig_forward, orig_apply = mm.ModernBertRotaryEmbedding.forward, mm.apply_rotary_pos_emb
+
+    def forward(self, x, position_ids, layer_type):
+        dt = torch.float64 if x.dtype == torch.float64 else torch.float32
+        inv_freq = getattr(self, f"{layer_type}_inv_freq").to(dtype=dt, device=x.device)
+        scaling = getattr(self, f"{layer_type}_attention_scaling")
+        freqs = (inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1)
+                 @ position_ids[:, None, :].to(dt)).transpose(1, 2)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return (emb.cos() * scaling).to(x.dtype), (emb.sin() * scaling).to(x.dtype)
+
+    def apply(q, k, cos, sin, unsqueeze_dim=1):
+        cos, sin = cos.unsqueeze(unsqueeze_dim), sin.unsqueeze(unsqueeze_dim)
+        return (q * cos) + (mm.rotate_half(q) * sin), (k * cos) + (mm.rotate_half(k) * sin)
+
+    mm.ModernBertRotaryEmbedding.forward, mm.apply_rotary_pos_emb = forward, apply
+    try:
+        yield
+    finally:
+        mm.ModernBertRotaryEmbedding.forward, mm.apply_rotary_pos_emb = orig_forward, orig_apply
+
+
+# Rows longer than this run the fp64 reference on `long_device` (the CPU): fp64 attention on the GPU
+# materialises [16, seq, seq] float64 scores, about 25 GB at 8192 tokens.
+EXACT_LONG_TOKENS = 4096
+
+
+class Exact:
+    """The golden reference: upstream's network (same weights, same code) in float64.
+
+    Why not upstream's own fp32 forward: on the GPU PyTorch runs fp32 attention through the SDPA
+    memory-efficient kernel, and on one golden row that reference was 1.05e-3 from the exact value,
+    over the runtime's 1e-3 logit gate (docs/families/von.md, "Why the goldens are fp64"). fp64 on
+    the GPU and on the CPU agree to about 1e-12, so the reference no longer depends on the device.
+    """
+
+    def __init__(self, backend, device: str, long_device: str = "cpu", long_tokens: int = EXACT_LONG_TOKENS):
+        self.base = backend._get_model()
+        self.device, self.long_device, self.long_tokens = device, long_device, long_tokens
+        self.models = {}
+
+    def model(self, tokens: int):
+        device = self.long_device if tokens > self.long_tokens else self.device
+        if device not in self.models:
+            self.models[device] = copy.deepcopy(self.base).to(device=device, dtype=torch.float64).eval()
+        return self.models[device], device
+
+
 @torch.no_grad()
-def forward_rows(backend, enc: Dict[str, Any]) -> List[np.ndarray]:
-    """Upstream forward, one unpadded row at a time (batch 1, as von runs it). fp32 row logits."""
-    model = backend._get_model()
+def forward_rows(backend, enc: Dict[str, Any], exact: Optional[Exact] = None) -> List[np.ndarray]:
+    """Reference row logits, one unpadded row at a time (batch 1, as von runs it).
+
+    With `exact`, the network runs in float64 (the goldens); without it, upstream's own fp32 forward.
+    """
     out = []
     for it in enc["items"]:
         for r in it["rows"]:
-            ids = torch.tensor([r["ids"]], device=backend.device)
-            logits = model(input_ids=ids, attention_mask=torch.ones_like(ids), mask_positions=[r["markers"]])[0]
-            out.append(logits.float().cpu().numpy())
+            if exact is None:
+                model, device, ctx = backend._get_model(), backend.device, contextlib.nullcontext()
+            else:
+                (model, device), ctx = exact.model(len(r["ids"])), fp64_rotary()
+            ids = torch.tensor([r["ids"]], device=device)
+            with ctx:
+                logits = model(input_ids=ids, attention_mask=torch.ones_like(ids), mask_positions=[r["markers"]])[0]
+            out.append(logits.double().cpu().numpy() if exact is not None else logits.float().cpu().numpy())
     return out
 
 

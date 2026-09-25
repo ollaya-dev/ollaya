@@ -226,8 +226,8 @@ CATALOG = {
                        "395M", 8192, ["en"], weights={"option_marker.pt": "option_marker.pt"}),
         },
         "aliases": {"latest": "1.1"},
-        "parity": "Ollaya's Rust runtime matches the Python reference on 485 questions (653 rows). The token "
-                  "ids and marker positions are identical, and so is the decision on every question. "
-                  "Probabilities are within 3.1e-5, on CPU and CUDA.",
+        "parity": "Ollaya's Rust runtime matches upstream Von, run in float64, on 485 questions (653 rows). The "
+                  "token ids and marker positions are identical, and so is the decision on every question. Logits "
+                  "are within 4.4e-4 and probabilities within 4.7e-5, on CPU and CUDA.",
     },
 }

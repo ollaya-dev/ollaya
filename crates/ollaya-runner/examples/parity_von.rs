@@ -1,6 +1,6 @@
 //! Compare the `von-option-marker-v1` runtime against goldens from
-//! `ollaya_convert.families.von.goldens` (upstream von 1.1 in fp32, TF32 off, one unpadded row at
-//! a time).
+//! `ollaya_convert.families.von.goldens` (upstream von 1.1 run in float64, one unpadded row at a
+//! time; see "Why the goldens are fp64" in `docs/families/von.md`).
 //!
 //!     cargo run --release -p ollaya-runner --example parity_von -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]
 //!
@@ -33,7 +33,7 @@ use ollaya_runner::Device;
 use ollaya_runner::von::{VonEncoding, VonModel};
 use serde_json::Value;
 
-/// Largest raw-logit difference accepted (ONNX Runtime vs PyTorch fp32, TF32 off).
+/// Largest raw-logit difference accepted (ONNX Runtime in fp32 vs the network in float64).
 const LOGIT_TOL: f64 = 1e-3;
 /// Largest temperature / probability difference of the calibration on the reference's own logits.
 const CALIBRATION_TOL: f64 = 1e-6;
