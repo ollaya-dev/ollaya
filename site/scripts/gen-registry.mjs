@@ -101,6 +101,7 @@ async function readTag(ns, model, tag) {
     layout: decision?.layout ?? null,
     calibrationKeys: calibration ? Object.keys(calibration.temperature_by_options ?? {}) : null,
     calibrationTemperature: calibration?.temperature ?? null,
+    calibrationMap: calibration?.temperature_map?.kind ?? null,
     licenseLine: license ?? null,
     questions: questions ?? null,
   }
@@ -160,6 +161,8 @@ export interface RegistryTag {
   calibrationKeys: string[] | null
   /** Per-type temperatures [choice, score, noul] of the calibration layer, when its blob is local. */
   calibrationTemperature: number[] | null
+  /** Kind of the input-conditioned temperature map, when the calibration has one. */
+  calibrationMap: string | null
   licenseLine: string | null
   /** Built-in question ids (a questions layer), empty when its blob is not local; null without one. */
   questions: string[] | null

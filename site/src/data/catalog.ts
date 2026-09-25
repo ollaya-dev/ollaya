@@ -108,6 +108,19 @@ const overlays: Record<string, ModelOverlay> = {
       '0.6b': { summary: 'Qwen3Guard-Gen-0.6B: the safety level and unsafe category of a user message.' },
     },
   },
+  von: {
+    title: 'Von',
+    description:
+      'Decision model by Victor Hugo Panisa on ModernBERT-large: every option is scored at its own marker, all options of a question in one pass, with an input-conditioned calibration. 8k-token context.',
+    publisher: { name: 'Victor Hugo Panisa', url: 'https://huggingface.co/wfzyx' },
+    capabilities: ['decision', 'long-context'],
+    keywords: ['von', 'decision', 'modernbert', 'option marker', 'classification', 'classifier', 'typesafe', 'jev', 'system one'],
+    rank: 7,
+    tags: {
+      latest: { summary: 'Same as von:1.1.' },
+      '1.1': { summary: 'Von 1.1, ModernBERT-large, 0.447 on typed decisions; 8,192-token context.' },
+    },
+  },
   gliclass: {
     title: 'GLiClass',
     description:
@@ -385,9 +398,11 @@ export function layersFor(model: Model, tag: Tag): Layer[] {
         preview = `{"engine": "onnx", "family": "${r.config.family}", "encoder": "${r.encoder ?? ''}", "layout": "${r.layout ?? ''}", …}`
         break
       case 'calibration':
-        preview = r.calibrationKeys?.length
-          ? `{"temperature_by_options": {${r.calibrationKeys.map((k) => `"${k}": …`).join(', ')}}}`
-          : `{"temperature": [${(r.calibrationTemperature ?? [1, 1, 1]).map(temperature).join(', ')}]}`
+        preview = r.calibrationMap
+          ? `{"temperature_map": {"kind": "${r.calibrationMap}", …}}`
+          : r.calibrationKeys?.length
+            ? `{"temperature_by_options": {${r.calibrationKeys.map((k) => `"${k}": …`).join(', ')}}}`
+            : `{"temperature": [${(r.calibrationTemperature ?? [1, 1, 1]).map(temperature).join(', ')}]}`
         break
       case 'router':
         preview = r.router
