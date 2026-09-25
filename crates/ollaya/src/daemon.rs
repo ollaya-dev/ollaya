@@ -70,10 +70,13 @@ fn start_server() -> Result<PathBuf> {
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     // No console window, and not tied to this one.
     #[cfg(windows)]
-    std::os::windows::process::CommandExt::creation_flags(
-        &mut cmd,
-        DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
-    );
+    {
+        std::os::windows::process::CommandExt::creation_flags(
+            &mut cmd,
+            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+        );
+        keep_std_handles_private();
+    }
     cmd.spawn().context("starting `ollaya serve`")?;
     Ok(path)
 }
@@ -256,6 +259,33 @@ fn terminate(pid: u32) -> Result<()> {
 #[cfg(not(any(unix, windows)))]
 fn terminate(pid: u32) -> Result<()> {
     bail!("cannot stop Ollaya (process {pid}) on this platform")
+}
+
+/// Windows hands a new process every inheritable handle of its parent, not only the ones given as
+/// its stdio. The server outlives this command, so if it inherited this command's stdout (a pipe
+/// when a script or app captures `ollaya pull`), the reader would wait for the server to exit
+/// before it saw end-of-file. Our own standard handles are therefore made non-inheritable before
+/// the spawn; the server still gets its log file, which std duplicates for it explicitly.
+#[cfg(windows)]
+fn keep_std_handles_private() {
+    type Handle = *mut std::ffi::c_void;
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetStdHandle(which: u32) -> Handle;
+        fn SetHandleInformation(handle: Handle, mask: u32, flags: u32) -> i32;
+    }
+    const STD_HANDLES: [u32; 3] = [-10i32 as u32, -11i32 as u32, -12i32 as u32]; // input, output, error
+    const HANDLE_FLAG_INHERIT: u32 = 0x1;
+    for which in STD_HANDLES {
+        // SAFETY: plain Win32 calls on this process's own standard handles; a null or invalid
+        // handle (no console) just makes SetHandleInformation fail, which is fine.
+        unsafe {
+            let handle = GetStdHandle(which);
+            if !handle.is_null() && handle as isize != -1 {
+                SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
 }
 
 // Process creation flags (winbase.h).
