@@ -70,7 +70,7 @@ It only accepts loopback hosts by default.
 | URI | Contents |
 |---|---|
 | `ollaya://models` | The installed models |
-| `ollaya://presets/<name>` | The questions of a built-in preset: `triage`, `email`, `guard`, `moderation`, `router` |
+| `ollaya://presets/<name>` | The questions of a built-in preset: `triage`, `email`, `guard`, `moderation`, `router`, `agent` |
 
 ## Agent skill
 

@@ -1,9 +1,10 @@
-//! Built-in question sets, the same ones `laya.presets` ships. The CLI (`--preset`), the MCP
-//! server and the desktop app all use these.
+//! Built-in question sets: the five that `laya.presets` ships, plus Ollaya's own `agent`, which
+//! reviews a command an AI agent is about to run. The CLI (`--preset`), the MCP server and the
+//! desktop app all use these.
 
 use serde_json::Value;
 
-pub const NAMES: [&str; 5] = ["triage", "email", "guard", "moderation", "router"];
+pub const NAMES: [&str; 6] = ["triage", "email", "guard", "moderation", "router", "agent"];
 
 pub fn get(name: &str) -> Option<Value> {
     let text = match name {
@@ -12,6 +13,7 @@ pub fn get(name: &str) -> Option<Value> {
         "guard" => include_str!("presets/guard.json"),
         "moderation" => include_str!("presets/moderation.json"),
         "router" => include_str!("presets/router.json"),
+        "agent" => include_str!("presets/agent.json"),
         _ => return None,
     };
     Some(serde_json::from_str(text).expect("presets are valid JSON"))

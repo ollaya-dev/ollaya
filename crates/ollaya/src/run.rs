@@ -29,7 +29,7 @@ pub struct RunArgs {
     /// Question schema (JSON file of question id -> question). Overrides the model's own.
     #[arg(long, value_name = "FILE")]
     pub questions: Option<PathBuf>,
-    /// A built-in question set: triage, email, guard, moderation, router.
+    /// A built-in question set: triage, email, guard, moderation, router, agent.
     #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(presets::NAMES))]
     pub preset: Option<String>,
     /// Output format.
@@ -209,7 +209,7 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
 
 const HELP: &str = "Available commands:
   /set questions <file>   Use the questions in a JSON file
-  /preset <name>          Use a built-in question set (triage, email, guard, moderation, router)
+  /preset <name>          Use a built-in question set (triage, email, guard, moderation, router, agent)
   /show                   Show the model and the current questions
   /clear                  Clear the screen
   /bye                    Exit

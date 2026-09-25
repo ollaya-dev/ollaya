@@ -77,8 +77,11 @@ Built-in question sets, usable as `preset` (MCP), `--preset` (CLI):
 - `guard`: jailbreak, prompt_injection, sensitive_data, harm_severity, topic. State: a `prompt`.
 - `moderation`: toxic, harassment, threat, spam, severity. State: a `post`.
 - `router`: difficulty, domain, needs_tools, is_sensitive. State: a `request`.
+- `agent`: action (run, ask, block), on_task, risk (0–2), destructive. Reviews a command an
+  agent is about to run. State: the user's `request` and the `command`.
 
-A preset's instructions refer to a field (`message`, `body`, `prompt`, `post`, `request`). Pass the
+A preset's instructions refer to a field (`message`, `body`, `prompt`, `post`, `request`, or
+`request` and `command`). Pass the
 state as an object with that field, or as a plain string.
 
 ## Writing your own questions

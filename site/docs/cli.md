@@ -49,7 +49,7 @@ ollaya run laya --preset triage "I was charged twice for my subscription this mo
 
 | Flag | Effect |
 |---|---|
-| `--preset NAME` | Use a built-in question set: `triage`, `email`, `guard`, `moderation` or `router` |
+| `--preset NAME` | Use a built-in question set: `triage`, `email`, `guard`, `moderation`, `router` or `agent` |
 | `--questions FILE` | Use the questions in a JSON file (question id → question). Overrides the model's own |
 | `--format text\|json` | `text` (default) prints the table; `json` prints the full [`/api/decide`](/docs/api#decide) response |
 | `--keepalive DURATION` | How long to keep the model loaded afterwards: `5m`, `1h`, `0` (unload now), `-1` (keep loaded) |

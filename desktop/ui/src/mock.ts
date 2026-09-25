@@ -76,7 +76,7 @@ export function mock(): Backend {
       local = local.filter((m) => m.name !== model)
     },
     presets: async () =>
-      ['triage', 'email', 'guard', 'moderation', 'router'].map((name) => ({ name, questions: { intent: { type: 'choice' } } })),
+      ['triage', 'email', 'guard', 'moderation', 'router', 'agent'].map((name) => ({ name, questions: { intent: { type: 'choice' } } })),
     builtinQuestions: async (model) => builtin(model),
     decide: async (model, _state, preset, questions): Promise<DecideResponse> => {
       await wait(200)

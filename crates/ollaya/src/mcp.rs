@@ -69,7 +69,7 @@ pub struct DecideParams {
     #[serde(default)]
     pub questions: Option<Value>,
     /// A built-in question set to use instead of `questions`: "triage", "email", "guard",
-    /// "moderation" or "router". Read ollaya://presets/<name> to see what each one asks.
+    /// "moderation", "router" or "agent". Read ollaya://presets/<name> to see what each one asks.
     #[serde(default)]
     pub preset: Option<String>,
 }
