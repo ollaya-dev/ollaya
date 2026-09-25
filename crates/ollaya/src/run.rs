@@ -84,8 +84,13 @@ fn preset(name: &str) -> Result<Questions> {
     Ok(serde_json::from_value(q)?)
 }
 
-/// Where the questions come from: explicit flags first, then the model's built-in set.
-/// `None` means "use the model's own".
+/// The preset `ollaya run` uses for a model without built-in questions when neither
+/// `--questions` nor `--preset` is given, so the first command people try, `ollaya run laya`,
+/// answers something instead of stopping.
+const DEFAULT_PRESET: &str = "triage";
+
+/// Where the questions come from: explicit flags first, then the model's built-in set, then
+/// [`DEFAULT_PRESET`]. `None` means "use the model's own".
 fn choose_questions(args: &RunArgs, has_builtin: bool) -> Result<Option<Questions>> {
     if let Some(path) = &args.questions {
         return load_questions(path).map(Some);
@@ -96,11 +101,12 @@ fn choose_questions(args: &RunArgs, has_builtin: bool) -> Result<Option<Question
     if has_builtin {
         return Ok(None);
     }
-    bail!(
-        "{} has no built-in questions; pass --questions FILE or --preset NAME ({})",
-        args.model,
-        presets::NAMES.join(", ")
-    )
+    preset(DEFAULT_PRESET).map(Some)
+}
+
+/// Whether [`choose_questions`] fell back to [`DEFAULT_PRESET`].
+fn uses_default_preset(args: &RunArgs, has_builtin: bool) -> bool {
+    args.questions.is_none() && args.preset.is_none() && !has_builtin
 }
 
 struct Session {
@@ -184,6 +190,14 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
         Err(e) => return Err(e.into()),
     };
     let questions = choose_questions(args, show.questions.is_some())?;
+    if uses_default_preset(args, show.questions.is_some()) {
+        eprintln!(
+            "{} has no built-in questions, so it answers the {DEFAULT_PRESET} preset. \
+             Choose with --preset NAME ({}) or --questions FILE.",
+            args.model,
+            presets::NAMES.join(", ")
+        );
+    }
     let spinner = if std::io::stderr().is_terminal() {
         let s = ProgressBar::new_spinner();
         s.enable_steady_tick(Duration::from_millis(100));
@@ -393,9 +407,14 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-        let err = choose_questions(&args(None, None), false)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("--preset"), "{err}");
+        // No flags and no built-in questions: the default preset, and the caller says so.
+        let fallback = choose_questions(&args(None, None), false).unwrap().unwrap();
+        assert_eq!(
+            serde_json::to_value(&fallback).unwrap(),
+            serde_json::to_value(preset(DEFAULT_PRESET).unwrap()).unwrap()
+        );
+        assert!(uses_default_preset(&args(None, None), false));
+        assert!(!uses_default_preset(&args(None, None), true));
+        assert!(!uses_default_preset(&args(None, Some("guard")), false));
     }
 }

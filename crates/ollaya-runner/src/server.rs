@@ -113,15 +113,32 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
                     (None, None) => return Err(Error::Model("no graph given".into())),
                 };
                 match engine::load(&files(graph), Device::Cuda(id), config.threads) {
-                    Ok(model) => {
-                        return Ok((
-                            model,
-                            Loaded {
-                                device: format!("cuda:{id}"),
-                                precision,
-                            },
-                        ));
-                    }
+                    // A session can load on a GPU whose architecture this build has no CUDA
+                    // kernels for (RTX 50-series with an ONNX Runtime built before sm_120), and
+                    // then fail on its first request. Warm up here so `auto` can fall back to
+                    // the CPU instead of failing every request.
+                    Ok(model) => match warm_up(model.as_ref()) {
+                        Err(e) if is_cuda_failure(&e) && config.device == DeviceRequest::Auto => {
+                            tracing::warn!("GPU {id} failed its first request, using CPU: {e}");
+                        }
+                        Err(e) if is_cuda_failure(&e) => {
+                            return Err(Error::Model(format!(
+                                "GPU {id} failed its first request: {e}"
+                            )));
+                        }
+                        warmed => {
+                            if let Err(e) = warmed {
+                                tracing::warn!("warm-up failed: {e}");
+                            }
+                            return Ok((
+                                model,
+                                Loaded {
+                                    device: format!("cuda:{id}"),
+                                    precision,
+                                },
+                            ));
+                        }
+                    },
                     Err(e) if config.device == DeviceRequest::Auto => {
                         tracing::info!("CUDA unavailable, using CPU: {e}");
                     }
@@ -174,10 +191,16 @@ fn cuda_providers_present() -> Result<(), String> {
     }
 }
 
+/// An error that came from the CUDA provider rather than from the request: ONNX Runtime names
+/// CUDA in those messages ("CUDA error cudaErrorNoKernelImageForDevice ...").
+fn is_cuda_failure(e: &Error) -> bool {
+    e.to_string().contains("CUDA")
+}
+
 /// Run one small request before announcing readiness. The first run on a device pays one-off
 /// costs (CUDA/cuDNN handles, kernel selection, arena growth) that would otherwise land on the
 /// caller's first request.
-fn warm_up(model: &dyn Engine) {
+fn warm_up(model: &dyn Engine) -> Result<(), Error> {
     let questions = serde_json::json!({
         "warm_up": {"type": "choice", "instructions": "Pick one.", "criteria": {"a": "first", "b": "second", "c": "third"}},
         "check": {"type": "noul", "instructions": "Is this a warm-up?"},
@@ -187,10 +210,11 @@ fn warm_up(model: &dyn Engine) {
         Some(preset) => Ok(preset.clone()),
         None => ollaya_decision::parse_questions(&questions),
     };
-    if let Ok(q) = questions
-        && let Err(e) = model.run(&Value::String("Warm-up request for the runner.".into()), &q)
-    {
-        tracing::warn!("warm-up failed: {e}");
+    match questions {
+        Ok(q) => model
+            .run(&Value::String("Warm-up request for the runner.".into()), &q)
+            .map(drop),
+        Err(_) => Ok(()),
     }
 }
 
@@ -198,7 +222,12 @@ fn warm_up(model: &dyn Engine) {
 pub async fn run(config: RunnerConfig) -> Result<(), Error> {
     let (model, loaded) = tokio::task::spawn_blocking(move || {
         let (model, loaded) = load(&config)?;
-        warm_up(model.as_ref());
+        // A GPU model was warmed up while it was chosen.
+        if loaded.device == "cpu"
+            && let Err(e) = warm_up(model.as_ref())
+        {
+            tracing::warn!("warm-up failed: {e}");
+        }
         Ok::<_, Error>((model, loaded))
     })
     .await

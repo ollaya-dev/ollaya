@@ -56,7 +56,7 @@ ollaya run laya --preset triage "I was charged twice for my subscription this mo
 | `--verbose` | Also print every option's probability, the routing decision and the timings |
 | `--state-json` | Parse the state as JSON. A state that looks like a JSON object or array is detected anyway |
 
-Where the questions come from, first match wins: `--questions`, then `--preset`, then questions built into the model with a Modelfile. A model with none needs one of the flags.
+Where the questions come from, first match wins: `--questions`, then `--preset`, then questions built into the model (qwen3guard's, or ones added with a Modelfile), then the `triage` preset. When `run` falls back to `triage` it says so on stderr.
 
 **The state** is the rest of the command line. Without one, `run` reads piped stdin:
 

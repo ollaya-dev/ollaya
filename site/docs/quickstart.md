@@ -42,7 +42,7 @@ churn_risk        no                                    ████████
 
 `ollaya run` starts the server if it isn't running, pulls the model on first use and loads it. `laya` is a router: it sends English text to `laya:en` and other languages, Turkish for example, to `laya:multilingual`. Pulling `laya` pulls both.
 
-- `--preset NAME` asks a built-in question set: `triage`, `email`, `guard`, `moderation`, `router` or `agent`.
+- `--preset NAME` asks a built-in question set: `triage`, `email`, `guard`, `moderation`, `router` or `agent`. Without it, a model that has no questions of its own answers `triage`.
 - `--verbose` adds every option's probability, the routing decision and timings.
 - `--format json` prints the full API response.
 - Without a state, `ollaya run` reads piped stdin, or opens a prompt on a terminal.
