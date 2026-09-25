@@ -297,6 +297,10 @@ is not enabled yet.
 separate Cargo workspace, so the engine's builds and CI never pull in the webview stack
 (WebKitGTK on Linux).
 
+- **macOS:** a menu bar app (`src-tauri/src/tray.rs`): no Dock icon until the window is open,
+  and a menu with the server's state, Start/Stop, the installed models (checked when loaded;
+  click to load or unload), downloads, Open at Login (a LaunchAgent) and Quit. Windows and Linux
+  get the window only.
 - **The engine inside:** `desktop.yml` builds `ollaya` for the target and copies it to
   `desktop/src-tauri/binaries/ollaya-<target triple>`, which Tauri bundles next to the app
   (`externalBin`). The app runs `ollaya serve` from there, and `ollaya stop` for the server it
