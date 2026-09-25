@@ -27,8 +27,8 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          # One linux-amd64 binary with ORT's CUDA provider bridge; it runs on the CPU unless the
-          # -cuda tarball's libraries are installed next to it.
+          # One binary per x86-64 OS with ORT's CUDA provider bridge; it runs on the CPU unless the
+          # -cuda archive's libraries are installed next to it.
           - platform: linux-amd64
             runner: ubuntu-latest
             features: ollaya-runner/cuda
@@ -41,11 +41,10 @@ jobs:
             runner: macos-latest
             features: ollaya-runner/coreml
             package-args: ''
-          # CPU; the DirectML provider is part of pyke's Windows build but not enabled yet.
           - platform: windows-amd64
             runner: windows-latest
-            features: ''
-            package-args: ''
+            features: ollaya-runner/cuda
+            package-args: --cuda
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,6 +91,41 @@ jobs:
           OLLAYA_CARGO_FEATURES: ${{ matrix.features }}
           VERSION: ${{ steps.version.outputs.version }}
         run: scripts/package.sh --platform "$PLATFORM" ${PACKAGE_ARGS:+"$PACKAGE_ARGS"} target/release "$VERSION"
+      - name: Smoke test the Windows archives
+        if: matrix.platform == 'windows-amd64'
+        shell: bash
+        env:
+          OLLAYA_HOST: 127.0.0.1:11499
+        run: |
+          # The base archive alone runs with only the DLLs it ships (no GPU pack).
+          root=$RUNNER_TEMP/ollaya-smoke
+          7z x -bd -bso0 -o"$root" dist/ollaya-windows-amd64.zip
+          ls "$root/bin"
+          "$root/bin/ollaya.exe" --version
+          # With the GPU pack, the server starts GPU runners from a copy of itself inside the pack
+          # (docs/distribution.md, "The runtime library contract"). This runner has no GPU.
+          7z x -bd -bso0 -o"$root" dist/ollaya-windows-amd64-cuda.zip
+          "$root/bin/ollaya.exe" ps
+          ls -l "$root"/lib/ollaya/cuda_v13/ollaya-runner-*.exe
+          "$root/bin/ollaya.exe" stop
+      # Dry runs also build the runner's parity and bench tools for Windows, where GPU checks run
+      # from an installed layout on machines without a Rust toolchain.
+      - name: Parity and bench tools
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'windows-amd64'
+        shell: bash
+        env:
+          FEATURES: ${{ matrix.features }}
+        run: |
+          cargo build --release --locked -p ollaya-runner --example parity --example bench ${FEATURES:+--features "$FEATURES"}
+          mkdir -p tools
+          cp target/release/examples/parity.exe target/release/examples/bench.exe tools/
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: github.event_name == 'workflow_dispatch' && matrix.platform == 'windows-amd64'
+        with:
+          name: tools-${{ matrix.platform }}
+          path: tools/*.exe
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-${{ matrix.platform }}

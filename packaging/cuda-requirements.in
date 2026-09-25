@@ -1,5 +1,7 @@
 # NVIDIA runtime libraries shipped in lib/ollaya/cuda_v13 (see docs/distribution.md).
 # pyke's ORT 1.28 CUDA build needs CUDA >= 13.2 and cuDNN >= 9.23.
+# The hash lock is universal: it holds every platform's wheel hashes. package.sh takes the
+# manylinux x86_64 wheels for linux-amd64 and the win_amd64 wheels for windows-amd64.
 # Edit the pins here, then regenerate cuda-requirements.txt (hashes) with:
 #   uv pip compile packaging/cuda-requirements.in --no-deps --universal --generate-hashes \
 #     --no-annotate -o packaging/cuda-requirements.txt

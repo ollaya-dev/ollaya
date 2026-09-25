@@ -9,16 +9,17 @@
 #   ollaya-linux-amd64-cuda.tar.zst  lib/ollaya/cuda_v13/ (ORT CUDA provider + NVIDIA CUDA/cuDNN
 #                                    libraries) + share/doc/ollaya/cuda_v13/ (notices, NVIDIA licenses)
 #   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
-#   ollaya-windows-amd64.zip         bin/ollaya.exe (with its DLLs), share/
-#   ollaya-linux-amd64-cuda.sha256   sha256 of every library in the CUDA archive (FILES.sha256),
-#                                    which install.sh uses to skip an unchanged CUDA download
-#   sha256sum.txt                    over every archive in --out, and the file above
+#   ollaya-windows-amd64.zip         bin/ollaya.exe (with the DLLs it links), share/
+#   ollaya-windows-amd64-cuda.zip    the same GPU pack as the Linux one, with the Windows DLLs
+#   ollaya-<platform>-cuda.sha256    sha256 of every library in the CUDA archive (FILES.sha256),
+#                                    which the installers use to skip an unchanged CUDA download
+#   sha256sum.txt                    over every archive in --out, and the files above
 #
 # Options:
-#   --platform P  linux-amd64 | linux-arm64 | darwin-arm64 (default: this host)
-#   --cuda        also build the CUDA archive (linux-amd64 only). The binary must have been built
-#                 with `--features ollaya-runner/cuda`, which also puts the ORT provider libraries
-#                 in <target-dir>.
+#   --platform P  linux-amd64 | linux-arm64 | darwin-arm64 | windows-amd64 (default: this host)
+#   --cuda        also build the CUDA archive (linux-amd64 and windows-amd64). The binary must
+#                 have been built with `--features ollaya-runner/cuda`, which also puts the ORT
+#                 provider libraries in <target-dir>.
 #   --no-base     skip the base archive (only useful with --cuda)
 #   --stage DIR   stage the file trees into DIR/<archive name>/ and stop: no archives, no checksums
 #                 (the Dockerfile uses this)
@@ -28,10 +29,12 @@
 # Environment:
 #   OLLAYA_BIN             binary to package (default: <target-dir>/ollaya)
 #   OLLAYA_CARGO_PACKAGE   package whose dependency tree is listed in the notices (default: ollaya)
-#   OLLAYA_CARGO_FEATURES  cargo features of the build (default: ollaya-runner/cuda on linux-amd64,
-#                          ollaya-runner/coreml on darwin-arm64, none on linux-arm64)
+#   OLLAYA_CARGO_FEATURES  cargo features of the build (default: ollaya-runner/cuda on linux-amd64
+#                          and windows-amd64, ollaya-runner/coreml on darwin-arm64, none on
+#                          linux-arm64)
 #   OLLAYA_CACHE           download cache (default: ${XDG_CACHE_HOME:-~/.cache}/ollaya-package)
-#   PYTHON                 interpreter used for `pip download` (default: python3, else `uvx pip`)
+#   PYTHON                 interpreter used for `pip download` (default: python3 or python, else
+#                          `uvx pip`)
 #   ZSTD_LEVEL             zstd level (default: 19)
 #   SOURCE_DATE_EPOCH      timestamp for archive entries (default: last commit, else now)
 
@@ -43,16 +46,6 @@ ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 ORT_VERSION=1.28.0
 ORT_LICENSE_SHA256=2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c
 ORT_NOTICES_SHA256=0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2
-
-# ORT provider libraries shipped in the CUDA archive. TensorRT and NV TensorRT RTX providers are
-# left out: they need TensorRT 10 (libnvinfer), which is not shipped, and the runner only registers
-# the CUDA execution provider.
-ORT_PROVIDERS="libonnxruntime_providers_shared.so libonnxruntime_providers_cuda.so"
-
-# NVIDIA libraries to keep from the wheels in packaging/cuda-requirements.txt. Everything else in
-# the wheels (static libs, headers, cufftw, nvrtc .alt builds) is dropped.
-CUDA_LIBS_REQUIRED="libcudart.so.13 libcublas.so.13 libcublasLt.so.13 libcufft.so.12 libcurand.so.10
-libnvrtc.so.13 libnvJitLink.so.13 libcudnn.so.9"
 
 say() { printf '>>> %s\n' "$*" >&2; }
 die() { printf 'package.sh: error: %s\n' "$*" >&2; exit 1; }
@@ -146,15 +139,54 @@ case $PLATFORM in
     linux-amd64) TRIPLE=x86_64-unknown-linux-gnu DEFAULT_FEATURES=ollaya-runner/cuda ;;
     linux-arm64) TRIPLE=aarch64-unknown-linux-gnu DEFAULT_FEATURES= ;;
     darwin-arm64) TRIPLE=aarch64-apple-darwin DEFAULT_FEATURES=ollaya-runner/coreml ;;
-    windows-amd64) TRIPLE=x86_64-pc-windows-msvc DEFAULT_FEATURES= ;;
+    windows-amd64) TRIPLE=x86_64-pc-windows-msvc DEFAULT_FEATURES=ollaya-runner/cuda ;;
     *) die "unknown platform: $PLATFORM" ;;
 esac
 FEATURES=${OLLAYA_CARGO_FEATURES-$DEFAULT_FEATURES}
-[ "$CUDA" = 0 ] || [ "$PLATFORM" = linux-amd64 ] || die "--cuda is only supported for linux-amd64"
+case $PLATFORM in
+    linux-amd64 | windows-amd64) ;;
+    *) [ "$CUDA" = 0 ] || die "--cuda is only supported for linux-amd64 and windows-amd64" ;;
+esac
 [ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || die "--no-base without --cuda leaves nothing to do"
 
 EXE=
 [ "$PLATFORM" != windows-amd64 ] || EXE=.exe
+
+# The CUDA pack (lib/ollaya/cuda_v13): ORT's provider libraries, and the NVIDIA libraries kept from
+# the wheels in packaging/cuda-requirements.txt (see is_cuda_lib). Everything else in the wheels
+# (static and import libs, headers, cufftw, nvblas, nvrtc .alt builds) is dropped. The TensorRT
+# and NV TensorRT RTX providers are left out: they need TensorRT 10 (libnvinfer, nvinfer_10.dll),
+# which is not shipped, and the runner only registers the CUDA execution provider.
+if [ "$PLATFORM" = windows-amd64 ]; then
+    ORT_PROVIDERS="onnxruntime_providers_shared.dll onnxruntime_providers_cuda.dll"
+    CUDA_LIBS_REQUIRED="cudart64_13.dll cublas64_13.dll cublasLt64_13.dll cufft64_12.dll curand64_10.dll
+nvrtc64_130_0.dll nvJitLink_130_0.dll cudnn64_9.dll cudnn_graph64_9.dll"
+    WHEEL_TAG=win_amd64
+    WHEEL_PLATFORMS=win_amd64
+    # Windows wheels keep their DLLs in nvidia/*/bin/, Linux wheels in nvidia/*/lib/.
+    WHEEL_LIB_DIR=bin
+else
+    ORT_PROVIDERS="libonnxruntime_providers_shared.so libonnxruntime_providers_cuda.so"
+    CUDA_LIBS_REQUIRED="libcudart.so.13 libcublas.so.13 libcublasLt.so.13 libcufft.so.12 libcurand.so.10
+libnvrtc.so.13 libnvJitLink.so.13 libcudnn.so.9 libcudnn_graph.so.9"
+    WHEEL_TAG=x86_64
+    WHEEL_PLATFORMS="manylinux_2_28_x86_64 manylinux_2_27_x86_64 manylinux_2_17_x86_64
+manylinux2014_x86_64 manylinux_2_12_x86_64 manylinux2010_x86_64"
+    WHEEL_LIB_DIR=lib
+fi
+
+# is_cuda_lib NAME: whether the wheel file NAME goes into the CUDA pack.
+is_cuda_lib() {
+    case $PLATFORM:$1 in
+        linux-*:libcudart.so.13 | linux-*:libcublas.so.13 | linux-*:libcublasLt.so.13 | \
+            linux-*:libcufft.so.12 | linux-*:libcurand.so.10 | linux-*:libnvrtc.so.13 | \
+            linux-*:libnvJitLink.so.13 | linux-*:libcudnn*.so.9 | linux-*:libnvrtc-builtins.so.13.*) ;;
+        windows-*:cudart64_13.dll | windows-*:cublas64_13.dll | windows-*:cublasLt64_13.dll | \
+            windows-*:cufft64_12.dll | windows-*:curand64_10.dll | windows-*:nvrtc64_130_0.dll | \
+            windows-*:nvJitLink_130_0.dll | windows-*:cudnn*64_9.dll | windows-*:nvrtc-builtins64_13*.dll) ;;
+        *) return 1 ;;
+    esac
+}
 BIN=${OLLAYA_BIN:-$TARGET_DIR/ollaya$EXE}
 CARGO_PACKAGE=${OLLAYA_CARGO_PACKAGE:-ollaya}
 CACHE=${OLLAYA_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ollaya-package}
@@ -276,9 +308,13 @@ stage_base() {
     fi
     cp "$BIN" "$root/bin/ollaya$EXE"
     chmod 0755 "$root/bin/ollaya$EXE"
-    # Windows: the DLLs ONNX Runtime needs (DirectML) sit next to the executable (copy-dylibs).
+    # Windows: the DLLs ollaya.exe links (DirectML) sit next to it (copy-dylibs). ORT's provider
+    # DLLs are loaded only on demand: the CUDA ones ship in the GPU pack, the others not at all.
     if [ -n "$EXE" ]; then
-        for dll in "$TARGET_DIR"/*.dll; do [ ! -f "$dll" ] || cp "$dll" "$root/bin/"; done
+        for dll in "$TARGET_DIR"/*.dll; do
+            case ${dll##*/} in onnxruntime_providers_*) continue ;; esac
+            [ ! -f "$dll" ] || cp "$dll" "$root/bin/"
+        done
     fi
     cp "$ROOT/LICENSE" "$root/share/doc/ollaya/LICENSE"
     # The agent skill (skills/ollaya-decisions), for agents on machines without the repository.
@@ -300,19 +336,18 @@ stage_base() {
 
 pip_download() {
     dest=$1
-    set -- download --no-deps --only-binary=:all: --python-version 3.12 \
-        --platform manylinux_2_28_x86_64 --platform manylinux_2_27_x86_64 \
-        --platform manylinux_2_17_x86_64 --platform manylinux2014_x86_64 \
-        --platform manylinux_2_12_x86_64 --platform manylinux2010_x86_64 \
-        --require-hashes -r "$ROOT/packaging/cuda-requirements.txt" -d "$dest"
-    py=${PYTHON:-python3}
-    if have "$py" && "$py" -m pip --version >/dev/null 2>&1; then
-        "$py" -m pip --disable-pip-version-check -q "$@"
-    elif have uvx; then
-        uvx pip --disable-pip-version-check -q "$@"
-    else
-        die "need pip (python3 -m pip) or uv (uvx) to download the NVIDIA wheels"
-    fi
+    set -- download --no-deps --only-binary=:all: --python-version 3.12
+    for p in $WHEEL_PLATFORMS; do set -- "$@" --platform "$p"; done
+    set -- "$@" --require-hashes -r "$ROOT/packaging/cuda-requirements.txt" -d "$dest"
+    # Windows has `python`, and often a `python3` that only opens the Microsoft Store.
+    for py in ${PYTHON:-python3 python}; do
+        if have "$py" && "$py" -m pip --version >/dev/null 2>&1; then
+            "$py" -m pip --disable-pip-version-check -q "$@"
+            return
+        fi
+    done
+    have uvx || die "need pip (python3 -m pip) or uv (uvx) to download the NVIDIA wheels"
+    uvx pip --disable-pip-version-check -q "$@"
 }
 
 stage_cuda() {
@@ -342,24 +377,19 @@ stage_cuda() {
         pkg=$pname==$pver
         wprefix=$(printf '%s' "$pname" | tr - _)-$pver-
         whl=
-        for w in "$wheels/$wprefix"*x86_64*.whl; do [ -f "$w" ] && whl=$w; done
+        for w in "$wheels/$wprefix"*"$WHEEL_TAG"*.whl; do [ -f "$w" ] && whl=$w; done
         [ -n "$whl" ] || die "wheel for $pkg missing from $wheels"
         for m in $(unzip -Z1 "$whl"); do
             base=${m##*/}
             case $m in
-                */lib/*) ;;
+                */"$WHEEL_LIB_DIR"/*) ;;
                 *.dist-info/licenses/* | *.dist-info/License.txt | *.dist-info/LICENSE*)
                     unzip -p "$whl" "$m" >"$doc/licenses/$pname-$base"
                     continue
                     ;;
                 *) continue ;;
             esac
-            case $base in
-                libcudart.so.13 | libcublas.so.13 | libcublasLt.so.13 | libcufft.so.12 | \
-                    libcurand.so.10 | libnvrtc.so.13 | libnvJitLink.so.13 | libcudnn*.so.9 | \
-                    libnvrtc-builtins.so.13.*) ;;
-                *) continue ;;
-            esac
+            is_cuda_lib "$base" || continue
             # Copied byte for byte: the NVIDIA EULA only allows redistribution of unmodified files.
             unzip -p "$whl" "$m" >"$lib/$base"
             chmod 0644 "$lib/$base"
@@ -369,9 +399,11 @@ stage_cuda() {
     for f in $CUDA_LIBS_REQUIRED; do
         [ -f "$lib/$f" ] || die "$f not found in the NVIDIA wheels"
     done
-    ls "$lib"/libnvrtc-builtins.so.13.* >/dev/null 2>&1 || die "libnvrtc-builtins not found"
+    builtins=
+    for f in "$lib"/*nvrtc-builtins*; do [ ! -f "$f" ] || builtins=$f; done
+    [ -n "$builtins" ] || die "the NVRTC builtins library was not found in the NVIDIA wheels"
     # FILES.sha256 fingerprints the libraries themselves (the archive's own checksum changes with
-    # every release's timestamps). install.sh compares it with the installed copy and skips the
+    # every release's timestamps). The installers compare it with the installed copy and skip the
     # ~1 GB download when nothing changed.
     (
         cd "$lib"
