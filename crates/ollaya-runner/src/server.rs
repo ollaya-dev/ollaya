@@ -117,28 +117,36 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
                     // kernels for (RTX 50-series with an ONNX Runtime built before sm_120), and
                     // then fail on its first request. Warm up here so `auto` can fall back to
                     // the CPU instead of failing every request.
-                    Ok(model) => match warm_up(model.as_ref()) {
-                        Err(e) if is_cuda_failure(&e) && config.device == DeviceRequest::Auto => {
-                            tracing::warn!("GPU {id} failed its first request, using CPU: {e}");
-                        }
-                        Err(e) if is_cuda_failure(&e) => {
-                            return Err(Error::Model(format!(
-                                "GPU {id} failed its first request: {e}"
-                            )));
-                        }
-                        warmed => {
-                            if let Err(e) = warmed {
-                                tracing::warn!("warm-up failed: {e}");
+                    Ok(model) => {
+                        let warmed = warm_up(model.as_ref());
+                        match after_gpu_warm_up(&warmed, config.device) {
+                            AfterWarmUp::FallBackToCpu => {
+                                if let Err(e) = warmed {
+                                    tracing::warn!(
+                                        "GPU {id} failed its first request, using CPU: {e}"
+                                    );
+                                }
                             }
-                            return Ok((
-                                model,
-                                Loaded {
-                                    device: format!("cuda:{id}"),
-                                    precision,
-                                },
-                            ));
+                            AfterWarmUp::Fail => {
+                                let e = warmed.err().map(|e| e.to_string()).unwrap_or_default();
+                                return Err(Error::Model(format!(
+                                    "GPU {id} failed its first request: {e}"
+                                )));
+                            }
+                            AfterWarmUp::KeepGpu => {
+                                if let Err(e) = warmed {
+                                    tracing::warn!("warm-up failed: {e}");
+                                }
+                                return Ok((
+                                    model,
+                                    Loaded {
+                                        device: format!("cuda:{id}"),
+                                        precision,
+                                    },
+                                ));
+                            }
                         }
-                    },
+                    }
                     Err(e) if config.device == DeviceRequest::Auto => {
                         tracing::info!("CUDA unavailable, using CPU: {e}");
                     }
@@ -195,6 +203,24 @@ fn cuda_providers_present() -> Result<(), String> {
 /// CUDA in those messages ("CUDA error cudaErrorNoKernelImageForDevice ...").
 fn is_cuda_failure(e: &Error) -> bool {
     e.to_string().contains("CUDA")
+}
+
+/// What a model that loaded on a GPU does after its warm-up request.
+#[derive(Debug, PartialEq)]
+enum AfterWarmUp {
+    KeepGpu,
+    FallBackToCpu,
+    Fail,
+}
+
+/// A CUDA failure on the first request moves an `auto` model to the CPU and fails an explicit
+/// `cuda` one; anything else keeps the GPU, as before.
+fn after_gpu_warm_up(warmed: &Result<(), Error>, device: DeviceRequest) -> AfterWarmUp {
+    match warmed {
+        Err(e) if is_cuda_failure(e) && device == DeviceRequest::Auto => AfterWarmUp::FallBackToCpu,
+        Err(e) if is_cuda_failure(e) => AfterWarmUp::Fail,
+        _ => AfterWarmUp::KeepGpu,
+    }
 }
 
 /// Run one small request before announcing readiness. The first run on a device pays one-off
@@ -304,6 +330,37 @@ fn error(status: StatusCode, code: &str, message: &str) -> Response {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_cuda_failure_on_the_first_request_moves_auto_to_the_cpu() {
+        use super::{AfterWarmUp, DeviceRequest, after_gpu_warm_up};
+        // The message ONNX Runtime gives on an RTX 5090 with kernels only up to sm_90 (issue #10).
+        let no_kernel = || {
+            Err(crate::Error::Model(
+                "Non-zero status code returned while running Cast node. Status Message: CUDA error \
+                 cudaErrorNoKernelImageForDevice:no kernel image is available for execution on the device"
+                    .into(),
+            ))
+        };
+        assert_eq!(
+            after_gpu_warm_up(&no_kernel(), DeviceRequest::Auto),
+            AfterWarmUp::FallBackToCpu
+        );
+        assert_eq!(
+            after_gpu_warm_up(&no_kernel(), DeviceRequest::Cuda(0)),
+            AfterWarmUp::Fail
+        );
+        assert_eq!(
+            after_gpu_warm_up(&Ok(()), DeviceRequest::Auto),
+            AfterWarmUp::KeepGpu
+        );
+        // A failure that has nothing to do with the GPU keeps the model where it is.
+        let other = Err(crate::Error::Model("unexpected question type".into()));
+        assert_eq!(
+            after_gpu_warm_up(&other, DeviceRequest::Auto),
+            AfterWarmUp::KeepGpu
+        );
+    }
+
     use std::sync::Mutex;
 
     use ollaya_decision::{Questions, parse_questions};
@@ -343,7 +400,7 @@ mod tests {
             preset: None,
             asked: Mutex::default(),
         };
-        warm_up(&open);
+        warm_up(&open).unwrap();
         assert_eq!(*open.asked.lock().unwrap(), [["warm_up", "check"]]);
 
         let preset = json!({"unsafe": {"type": "noul", "instructions": "Is it unsafe?"}});
@@ -351,7 +408,7 @@ mod tests {
             preset: Some(parse_questions(&preset).unwrap()),
             asked: Mutex::default(),
         };
-        warm_up(&guard);
+        warm_up(&guard).unwrap();
         assert_eq!(*guard.asked.lock().unwrap(), [["unsafe"]]);
     }
 }
