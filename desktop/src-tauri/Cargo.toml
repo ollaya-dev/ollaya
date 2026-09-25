@@ -26,7 +26,11 @@ reqwest = { version = "0.13.5", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }
 tauri = { version = "2.11.6", features = [] }
-tokio = { version = "1.53.1", features = ["time", "process"] }
+tokio = { version = "1.53.1", features = ["time", "process", "sync", "macros"] }
+
+# macOS: Ollaya lives in the menu bar.
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri = { version = "2.11.6", features = ["tray-icon", "image-png"] }
 
 [profile.release]
 lto = "thin"

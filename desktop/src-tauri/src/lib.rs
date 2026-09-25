@@ -4,8 +4,15 @@
 //! `ollaya serve` in the background, as Ollama's app runs `ollama serve`. Everything else goes
 //! through the server's HTTP API with `ollaya-api`'s client, so the app and the CLI always see
 //! the same models. The web page in `ui/` calls the commands below.
+//!
+//! On macOS the app lives in the menu bar (`tray.rs`), with no Dock icon until its window is open.
 
+#[cfg(target_os = "macos")]
+mod tray;
+
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -15,7 +22,7 @@ use ollaya_api::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
+use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 /// Where the model library is listed: the website's search index.
 const LIBRARY_URL: &str = "https://ollaya.dev/search.json";
@@ -24,6 +31,16 @@ const LIBRARY_URL: &str = "https://ollaya.dev/search.json";
 struct AppState {
     /// This app started the server, so it stops it when it quits.
     started_server: AtomicBool,
+    /// Downloads in progress: model → (bytes done, bytes in total).
+    pulling: Mutex<HashMap<String, (u64, u64)>>,
+    /// Wakes the menu bar to redraw now rather than at its next poll.
+    refresh: tokio::sync::Notify,
+}
+
+impl AppState {
+    fn changed(&self) {
+        self.refresh.notify_one();
+    }
 }
 
 #[derive(Serialize)]
@@ -99,9 +116,19 @@ async fn status() -> Status {
     status_now().await
 }
 
-/// Start `ollaya serve` in the background (logging where the CLI's server logs), then wait for it.
 #[tauri::command]
-async fn start_server(state: State<'_, AppState>) -> Result<Status, String> {
+async fn start_server(app: AppHandle) -> Result<Status, String> {
+    start_server_now(&app).await
+}
+
+#[tauri::command]
+async fn stop_server(app: AppHandle) -> Result<Status, String> {
+    stop_server_now(&app).await
+}
+
+/// Start `ollaya serve` in the background (logging where the CLI's server logs), then wait for it.
+async fn start_server_now(app: &AppHandle) -> Result<Status, String> {
+    let state = app.state::<AppState>();
     let current = status_now().await;
     if current.running {
         return Ok(current);
@@ -132,6 +159,7 @@ async fn start_server(state: State<'_, AppState>) -> Result<Status, String> {
     while Instant::now() < deadline {
         let s = status_now().await;
         if s.running {
+            state.changed();
             return Ok(s);
         }
         tokio::time::sleep(Duration::from_millis(150)).await;
@@ -140,8 +168,8 @@ async fn start_server(state: State<'_, AppState>) -> Result<Status, String> {
 }
 
 /// `ollaya stop`: stops the server this user started (never another user's service).
-#[tauri::command]
-async fn stop_server(state: State<'_, AppState>) -> Result<Status, String> {
+async fn stop_server_now(app: &AppHandle) -> Result<Status, String> {
+    let state = app.state::<AppState>();
     let out = tokio::task::spawn_blocking(|| ollaya_command().arg("stop").output())
         .await
         .map_err(|e| e.to_string())?
@@ -158,12 +186,17 @@ async fn stop_server(state: State<'_, AppState>) -> Result<Status, String> {
         });
     }
     state.started_server.store(false, Ordering::SeqCst);
+    state.changed();
     Ok(status_now().await)
 }
 
 /// The public model library, as the website lists it.
 #[tauri::command]
 async fn library() -> Result<Value, String> {
+    library_now().await
+}
+
+async fn library_now() -> Result<Value, String> {
     let body = reqwest::get(LIBRARY_URL)
         .await
         .and_then(|r| r.error_for_status())
@@ -180,7 +213,23 @@ async fn installed() -> Result<TagsResponse, String> {
 /// Pull `model`, emitting `pull-progress` events with the bytes done over every layer.
 #[tauri::command]
 async fn pull(app: AppHandle, model: String) -> Result<(), String> {
+    pull_now(&app, model).await
+}
+
+/// Pull `model`, telling the window (`pull-progress` events) and the menu bar (`AppState`) how far
+/// it got, in bytes done over every layer.
+async fn pull_now(app: &AppHandle, model: String) -> Result<(), String> {
+    let state = app.state::<AppState>();
     let emit = |p: PullProgress| {
+        {
+            let mut pulling = state.pulling.lock().expect("pulling lock");
+            if p.done {
+                pulling.remove(&p.model);
+            } else {
+                pulling.insert(p.model.clone(), (p.completed, p.total));
+            }
+        }
+        state.changed();
         let _ = app.emit("pull-progress", p);
     };
     let request = PullRequest {
@@ -188,10 +237,28 @@ async fn pull(app: AppHandle, model: String) -> Result<(), String> {
         insecure: false,
         stream: Some(true),
     };
-    let mut stream = client()?
-        .pull_stream(&request)
-        .await
-        .map_err(|e| e.to_string())?;
+    emit(PullProgress {
+        model: model.clone(),
+        status: "starting".into(),
+        completed: 0,
+        total: 0,
+        done: false,
+        error: None,
+    });
+    let mut stream = match client()?.pull_stream(&request).await {
+        Ok(s) => s,
+        Err(e) => {
+            emit(PullProgress {
+                model: model.clone(),
+                status: "failed".into(),
+                completed: 0,
+                total: 0,
+                done: true,
+                error: Some(e.to_string()),
+            });
+            return Err(e.to_string());
+        }
+    };
     let mut layers: std::collections::HashMap<String, (u64, u64)> = Default::default();
     let mut last = Instant::now() - Duration::from_secs(1);
     while let Some(line) = stream.next().await {
@@ -291,6 +358,26 @@ async fn decide(
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(AppState::default())
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            tray::init(app.handle())?;
+            // Elsewhere the window is the app: show it (it starts hidden for the macOS menu bar).
+            #[cfg(not(target_os = "macos"))]
+            if let Some(window) = app.get_webview_window("main") {
+                window.show()?;
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // On macOS, closing the window leaves Ollaya in the menu bar.
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                tray::hide_window(window.app_handle());
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (window, event);
+        })
         .invoke_handler(tauri::generate_handler![
             status,
             start_server,
