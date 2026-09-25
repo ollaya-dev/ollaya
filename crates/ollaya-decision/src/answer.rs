@@ -27,16 +27,19 @@ pub struct Answer {
 }
 
 impl Answer {
+    /// `state_tokens` is the request's state length in tokens, which an input-conditioned
+    /// calibration reads.
     pub fn new(
         q: &Question,
         calibration: &Calibration,
         logits: &[f32],
         act_logits: Option<&[f32]>,
+        state_tokens: usize,
     ) -> Self {
         let act_probability = act_logits.map(|a| softmax(a.iter().map(|&v| f64::from(v)))[0]);
         Answer {
             qtype: q.qtype,
-            probabilities: calibration.probabilities(q.qtype, logits),
+            probabilities: calibration.probabilities(q.qtype, logits, state_tokens),
             act_probability,
         }
     }

@@ -171,9 +171,11 @@ fn main() -> Result<()> {
                 }
             }
 
-            let p = model
-                .calibration
-                .probabilities(q.qtype, &out.questions[r].logits);
+            let p = model.calibration.probabilities(
+                q.qtype,
+                &out.questions[r].logits,
+                out.state_tokens,
+            );
             let want_p: Vec<f64> = serde_json::from_value(gold["probabilities"].clone())?;
             prob_diffs.push(max_diff(&p, &want_p));
             if argmax(&p) != argmax(&want_p) {

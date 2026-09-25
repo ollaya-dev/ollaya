@@ -443,7 +443,8 @@ mod tests {
         )
         .unwrap();
         let cal = ollaya_decision::Calibration::default();
-        let decided = ollaya_decision::Answer::new(&q, &cal, &[2.0, 0.5, -1.0], Some(&[1.5, -0.5]));
+        let decided =
+            ollaya_decision::Answer::new(&q, &cal, &[2.0, 0.5, -1.0], Some(&[1.5, -0.5]), 10);
         let answer = Answer::from_decision(&decided, &q).unwrap();
         assert_eq!(
             serde_json::to_value(&answer).unwrap(),
@@ -466,7 +467,7 @@ mod tests {
         let noul =
             ollaya_decision::Question::parse("n", &json!({"type": "noul", "instructions": "x"}))
                 .unwrap();
-        let decided = ollaya_decision::Answer::new(&noul, &cal, &[0.0, 1.0], None);
+        let decided = ollaya_decision::Answer::new(&noul, &cal, &[0.0, 1.0], None, 10);
         let answer = DecideAnswer {
             answer: Answer::from_decision(&decided, &noul).unwrap(),
             laya: Some(LayaExtra::from_decision(&decided, &noul).unwrap()),

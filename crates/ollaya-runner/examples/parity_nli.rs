@@ -151,7 +151,9 @@ fn main() -> Result<()> {
             logit_max = logit_max.max(max_diff(logits, &want_logits));
 
             let want: Vec<f64> = serde_json::from_value(gold["probabilities"].clone())?;
-            let got = model.calibration.probabilities(q.qtype, logits);
+            let got = model
+                .calibration
+                .probabilities(q.qtype, logits, out.state_tokens);
             prob_diffs.push(
                 want.iter()
                     .zip(&got)

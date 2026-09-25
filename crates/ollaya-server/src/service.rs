@@ -176,7 +176,7 @@ impl Ollaya {
         if state_tokens > ollaya_api::MAX_STATE_TOKENS {
             return Err(Error::InputTooLong(state_tokens));
         }
-        let answers = answers_from(&model, &questions, &raw)?;
+        let answers = answers_from(&model, &questions, &raw, state_tokens)?;
         let eval_duration = eval_started.elapsed();
         Ok(DecideOutput {
             requested: name.to_string(),
@@ -458,11 +458,13 @@ fn check_limits(questions: &Questions) -> Result<(), Error> {
     Ok(())
 }
 
-/// Calibrated answers from the runner's raw logits.
+/// Calibrated answers from the runner's raw logits. `state_tokens` is the runner's count, which
+/// an input-conditioned calibration reads.
 fn answers_from(
     model: &Loadable,
     questions: &Questions,
     raw: &Value,
+    state_tokens: usize,
 ) -> Result<Vec<Answer>, Error> {
     let rows = raw["questions"]
         .as_array()
@@ -488,7 +490,13 @@ fn answers_from(
                 )));
             }
             let act: Option<Vec<f32>> = serde_json::from_value(row["act_logits"].clone()).ok();
-            Ok(Answer::new(q, &model.calibration, &logits, act.as_deref()))
+            Ok(Answer::new(
+                q,
+                &model.calibration,
+                &logits,
+                act.as_deref(),
+                state_tokens,
+            ))
         })
         .collect()
 }

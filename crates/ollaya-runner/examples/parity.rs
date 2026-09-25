@@ -73,10 +73,14 @@ fn main() -> Result<()> {
                 continue;
             }
             let gold_logits: Vec<f32> = serde_json::from_value(gold["logits"].clone())?;
-            let want = model.calibration.probabilities(q.qtype, &gold_logits);
-            let got = model
+            let want = model
                 .calibration
-                .probabilities(q.qtype, &out.questions[r].logits);
+                .probabilities(q.qtype, &gold_logits, out.state_tokens);
+            let got = model.calibration.probabilities(
+                q.qtype,
+                &out.questions[r].logits,
+                out.state_tokens,
+            );
             prob_diffs.push(
                 want.iter()
                     .zip(&got)
@@ -97,6 +101,7 @@ fn main() -> Result<()> {
                     &model.calibration,
                     &out.questions[r].logits,
                     out.questions[r].act_logits.as_deref(),
+                    out.state_tokens,
                 );
                 if let Some(diff) = compare(&answer.to_laya(q), want, 2e-4, "") {
                     ans_bad += 1;
