@@ -19,11 +19,13 @@ external reference to the original bytes, plus the Cast/Transpose that reproduce
 
 Every mapped initializer is checked for exact equality with its source after the transform. Anything
 that has no source (masks, rotary tables, small derived constants) stays inline and is reported.
-ONNX Runtime folds the Cast/Transpose chains at session creation.
+ONNX Runtime folds the Cast/Transpose chains at session creation, unless the model keeps its weights in
+their stored precision (docs/decisions/0001-decoder-weights-in-memory.md).
 """
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import shutil
@@ -154,11 +156,88 @@ def _candidates(name, maps):
     return out
 
 
+def _initializer_array(init: TensorProto, base_dir: str) -> np.ndarray:
+    """An initializer's value, read from its external data file on demand (one tensor in memory at a time)."""
+    if init.data_location != TensorProto.EXTERNAL:
+        return numpy_helper.to_array(init)
+    info = {kv.key: kv.value for kv in init.external_data}
+    dtype = np.dtype(helper.tensor_dtype_to_np_dtype(init.data_type))
+    count = int(np.prod(init.dims, dtype=np.int64))
+    with open(os.path.join(base_dir, info["location"]), "rb") as f:
+        f.seek(int(info.get("offset", 0)))
+        buf = f.read(int(info.get("length", count * dtype.itemsize)))
+    return np.frombuffer(buf, dtype=dtype, count=count).reshape(tuple(init.dims))
+
+
+def sink_casts_below_gathers(graph) -> int:
+    """Move each widening Cast of a checkpoint tensor below the Gathers that read rows of it (the token embedding, and a
+    tied LM head restricted to some rows): `Gather(Cast(W), ids)` becomes `Cast(Gather(W, ids))`, and likewise for
+    `GatherND` (batch_dims 0) and through Identity or order-keeping Transpose nodes. The values are identical (Cast is
+    elementwise), but only the gathered rows are widened. ONNX Runtime does not fold a Cast whose output exceeds its
+    folding limit (1 GiB by default; a Qwen3.5 embedding widened to fp32 is 1 to 4 GB), and it folds none when the
+    weights stay in their stored precision (decision.json `weights_in_memory: bf16`), so without this every forward
+    pass would widen the whole embedding. Returns the number of Gathers rewritten."""
+    external = {t.name: t.data_type for t in graph.initializer if t.data_location == TensorProto.EXTERNAL}
+    all_nodes = [copy.deepcopy(n) for n in graph.node]   # plain copies: stable identities for the rewrite below
+    producer = {o: n for n in all_nodes for o in n.output}
+
+    def passthrough(n):
+        """Identity, or a Transpose that keeps the axis order."""
+        if n.op_type == "Identity":
+            return True
+        perm = [list(a.ints) for a in n.attribute if a.name == "perm"]
+        return n.op_type == "Transpose" and bool(perm) and perm[0] == list(range(len(perm[0])))
+
+    def source(name):
+        """The checkpoint tensor `name` is a widened copy of (through Cast and pass-through nodes only), else None."""
+        n = producer.get(name)
+        while n is not None and passthrough(n):
+            name, n = n.input[0], producer.get(n.input[0])
+        if n is None or n.op_type != "Cast" or external.get(n.input[0]) not in (TensorProto.BFLOAT16, TensorProto.FLOAT16):
+            return None
+        return n.input[0], next(a.i for a in n.attribute if a.name == "to")
+
+    def gathers_rows(n):
+        attrs = {a.name: a.i for a in n.attribute}
+        return (n.op_type == "Gather" and attrs.get("axis", 0) == 0) or \
+            (n.op_type == "GatherND" and attrs.get("batch_dims", 0) == 0)
+
+    rewritten, nodes = 0, []
+    for n in all_nodes:
+        src = source(n.input[0]) if gathers_rows(n) else None
+        if src is None:
+            nodes.append(n)
+            continue
+        w, to = src
+        narrow = n.output[0] + ":narrow"
+        gather = helper.make_node(n.op_type, [w, n.input[1]], [narrow], name=(n.name or narrow) + ":narrow")
+        gather.attribute.extend(n.attribute)
+        nodes += [gather, helper.make_node("Cast", [narrow], [n.output[0]], to=to, name=(n.name or narrow) + ":widen")]
+        rewritten += 1
+    if not rewritten:
+        return 0
+    # drop the Cast and pass-through chains nothing reads any more
+    outputs = {o.name for o in graph.output}
+    while True:
+        used = {i for n in nodes for i in n.input} | outputs
+        keep = [not ((n.op_type == "Cast" or passthrough(n)) and not any(o in used for o in n.output)) for n in nodes]
+        if all(keep):
+            break
+        nodes = [n for n, k in zip(nodes, keep) if k]
+    del graph.node[:]
+    graph.node.extend(nodes)
+    return rewritten
+
+
 def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
-                    link: bool = True, sidecars=("tokenizer.json", "decision.json", "calibration.json")):
+                    link: bool = True, sidecars=("tokenizer.json", "decision.json", "calibration.json"),
+                    sink_casts: bool = False):
     """Rewrite `src_dir/model.onnx` into `out_dir/model.onnx` whose weights reference `sources`.
-    Returns a report dict (counts, inline initializers, unused checkpoint tensors)."""
-    model = onnx.load(os.path.join(src_dir, "model.onnx"), load_external_data=True)
+    Returns a report dict (counts, inline initializers, unused checkpoint tensors).
+
+    The exported values are read one initializer at a time, so peak memory stays near the largest tensor
+    (a 9B export has 36 GB of fp32 external data). `sink_casts` applies `sink_casts_below_gathers`."""
+    model = onnx.load(os.path.join(src_dir, "model.onnx"), load_external_data=False)
     graph = model.graph
     by_shape = {}
     for si, s in enumerate(sources):
@@ -176,7 +255,7 @@ def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
         return sources[si].value(e)   # no cache: a 2B model upcast to f32 would double peak memory
 
     for init in graph.initializer:
-        arr = numpy_helper.to_array(init)
+        arr = _initializer_array(init, src_dir)
         found = None
         for key in _candidates(init.name, maps):
             hit = lookup(key)
@@ -204,7 +283,7 @@ def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
                 if found:
                     break
         if found is None:
-            kept.append(init)
+            kept.append(numpy_helper.from_array(arr, init.name) if init.data_location == TensorProto.EXTERNAL else init)
             stats["inline"] += 1
             inline.append((init.name, list(arr.shape), int(arr.nbytes)))
             continue
@@ -236,6 +315,8 @@ def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
     nodes = list(graph.node)
     del graph.node[:]
     graph.node.extend(new_nodes + nodes)
+    if sink_casts:
+        stats["gather_before_cast"] = sink_casts_below_gathers(graph)
 
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, "model.onnx")
@@ -255,8 +336,13 @@ def make_weightless(src_dir: str, out_dir: str, sources: list[Source], maps,
             except OSError:
                 os.symlink(os.path.realpath(s.path), dst)
     unused = {s.location: sorted(k for k in s.entries if (i, k) not in used) for i, s in enumerate(sources)}
+    used_bytes = Counter()
+    for si, k in used:
+        e = sources[si].entries[k]
+        used_bytes[e.dtype] += e.length
     report = {"graph_bytes": os.path.getsize(out), "stats": dict(stats), "inline": inline,
               "inline_bytes": sum(b for _, _, b in inline), "unused": unused,
+              "used_bytes_by_dtype": dict(used_bytes),
               "files": [{"location": s.location, "repo": s.repo, "revision": s.revision, "filename": s.filename,
                          "bytes": os.path.getsize(s.path)} for s in sources]}
     return report

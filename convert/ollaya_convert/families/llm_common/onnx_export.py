@@ -86,8 +86,19 @@ def file_entry(role, repo, revision, filename, local_path, location=None, verify
 
 
 def weightless(tmp_dir, out_dir, sources, maps):
-    report = make_weightless(tmp_dir, out_dir, sources, maps, link=True, sidecars=())
+    report = make_weightless(tmp_dir, out_dir, sources, maps, link=True, sidecars=(), sink_casts=True)
     return report
+
+
+# Above this many bytes of BF16 checkpoint tensors (the 4B and 9B Qwen3.5 bases; decider-2b has 3.8 GB), the runtime
+# keeps the weights BF16 in memory and widens them at each forward pass instead of once at load:
+# docs/decisions/0001-decoder-weights-in-memory.md.
+BF16_IN_MEMORY_ABOVE = 6 * 2**30
+
+
+def weights_in_memory(report):
+    """decision.json "weights_in_memory" for a weightless export: "bf16" for large BF16 checkpoints, else "fp32"."""
+    return "bf16" if report["used_bytes_by_dtype"].get("BF16", 0) > BF16_IN_MEMORY_ABOVE else "fp32"
 
 
 def scratch_dir(prefix):
