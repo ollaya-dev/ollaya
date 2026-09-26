@@ -1,5 +1,7 @@
 Decision 1.0 is a family of decision models by the [vLLM Semantic Router](https://huggingface.co/llm-semantic-router) contributors, released under Apache-2.0. Each model is a fully fine-tuned Qwen3.5 text backbone plus a small endpoint head. For each question it lays out the context, the question and one segment per option, then scores every option at its last token against the end of the question, in one forward pass. It never generates text.
 
+> Needs Ollaya 0.7.0 or newer, which adds this model family. Update first (`ollaya --version`); an older version downloads the weights and then fails to load them.
+
 ## Models
 
 | Tag | Base | Params | Decision Index 0.2 | ECE |

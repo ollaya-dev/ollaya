@@ -1,5 +1,7 @@
 Winnow is a pair of open decision models by EldanRing, fine-tuned from Google DeepMind's Gemma 4 and released under Apache-2.0. The author publishes them as GGUF files, and Ollaya runs those files as they are, on llama.cpp. Winnow puts the state and one question into its own prompt, labels the options `A`, `B`, `C`, and reads the probability of each label as the next token. It never generates text.
 
+> Needs Ollaya 0.7.0 or newer, which runs GGUF models through llama.cpp. Update first (`ollaya --version`); an older version downloads the weights and then fails to load them.
+
 ## Models
 
 | Tag | Base | Weights | JevBench public (231) | Kev v9 clean (1,046) |
