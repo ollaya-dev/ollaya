@@ -1,4 +1,4 @@
-"""Export Mapika/decider-{0.8b,2b} to a weightless ONNX graph + tokenizer + decision/calibration config.
+"""Export Mapika/decider-{0.8b,2b,4b} to a weightless ONNX graph + tokenizer + decision/calibration config.
 
     uv run python -m ollaya_convert.families.decider.export decider-0.8b --out out/decider-0.8b
 
@@ -90,7 +90,11 @@ def export(slug: str, out_dir: str, root: str):
     ox.cleanup(tmp)
 
     shutil.copy(os.path.join(root, "tokenizer.json"), os.path.join(out_dir, "tokenizer.json"))
+    # decider_config.json "temperature", and from decider-ai 1.4.0 an optional "temperature_by_type" map (choice, noul,
+    # score; a missing type uses "temperature"). The score temperature divides each isolated level row's yes/no logits.
     T = float(cfg["temperature"])
+    by_type = {k: float(v) for k, v in (cfg.get("temperature_by_type") or {}).items()}
+    t_choice, t_noul, t_score = (by_type.get(k, T) for k in ("choice", "noul", "score"))
     decision = {
         "engine": "onnx",
         "family": "decider",
@@ -116,7 +120,7 @@ def export(slug: str, out_dir: str, root: str):
         "min_options": 2,
         "max_levels": 10,
         "isolated_levels": bool(cfg.get("isolated_levels", False)),
-        "isolated_row_temperature": T,
+        "isolated_row_temperature": t_score,
         "neutralize_none": bool(cfg.get("neutralize_none", True)),
         "independent_rows": True,
         "index_arrays_min_len": 8,
@@ -139,11 +143,14 @@ def export(slug: str, out_dir: str, root: str):
             "score": "log_sigmoid((label_logits[row_j, 1] - label_logits[row_j, 0]) / isolated_row_temperature), one row per level",
         },
         "opset": ox.OPSET,
-        "precision": "fp32 compute; weights BF16 from the checkpoint, Cast at load",
+        "precision": "fp32 compute; weights BF16 from the checkpoint, widened by Cast (at load, or per forward pass "
+                     "with weights_in_memory bf16)",
+        "weights_in_memory": ox.weights_in_memory(report),
     }
-    calibration = {"temperature": [T, 1.0, T], "temperature_by_options": {},
-                   "source": "decider_config.json temperature (fitted upstream on in-task data); score is 1.0 because the "
-                             "isolated-row temperature is applied inside the score option logits"}
+    calibration = {"temperature": [t_choice, 1.0, t_noul], "temperature_by_options": {},
+                   "source": ("decider_config.json temperature_by_type (choice, noul; fitted upstream by NLL per answer type)"
+                              if by_type else "decider_config.json temperature (fitted upstream on in-task data)")
+                             + "; score is 1.0 because the isolated-row temperature is applied inside the score option logits"}
     files = {
         "model": slug,
         "layers": [

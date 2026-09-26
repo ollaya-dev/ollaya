@@ -1,4 +1,4 @@
-"""Export jaredpalmer/kev-0.8b (Qwen3.5-0.8B-Base + LoRA + pointer head) to a weightless ONNX graph.
+"""Export jaredpalmer/kev-{0.8b,4b,9b} (Qwen3.5-Base + LoRA + pointer head) to a weightless ONNX graph.
 
     KEV_SRC=/path/to/kev uv run --with peft==0.21.0 --with pydantic==2.12.5 \
         python -m ollaya_convert.families.kev.export kev-0.8b --out out/kev-0.8b --run RUN --base BASE
@@ -10,13 +10,14 @@ Graph (layout `kev-pointer-v1`, see layout.py and docs/families/kev.md):
     outputs  scores      float32 [rows, k]    raw pointer-head scores (k(h_opt) . q(h_decide)) / 16
 
 The LoRA is NOT merged: every adapted Linear runs as `x W^T + 2.0 * (x A^T) B^T`, so the graph keeps
-three upstream files byte-referenced: the base `model.safetensors-00001-of-00001.safetensors` (BF16,
-Qwen/Qwen3.5-0.8B-Base), the adapter `adapter_model.safetensors` (F32) and the pointer head, which
-lives in `head.pt` (a torch zip whose tensors are stored uncompressed, so they have byte offsets too).
+the upstream files byte-referenced: the base shards `model.safetensors-0000i-of-0000n.safetensors` (BF16,
+Qwen/Qwen3.5-*-Base), the adapter `adapter_model.safetensors` (F32) and the pointer head, which lives
+in `head.pt` (a torch zip whose tensors are stored uncompressed, so they have byte offsets too).
 """
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 import shutil
@@ -62,6 +63,9 @@ def rename(name):
 def export(slug, out_dir, run_dir, base_dir):
     meta = ref.MODELS[slug]
     ck, tok, m = ref.load(run_dir, base_dir, device="cpu", merge=False)
+    if ck.upstream_base != (meta["base"], meta["base_revision"]):
+        raise SystemExit("%s head.pt names the base %s@%s, not the pinned %s@%s"
+                         % (slug, *ck.upstream_base, meta["base"], meta["base_revision"]))
     m.eval()
     temperature = float(ck.meta.temperature)
     lora_model = m.lm.base_model.model  # Qwen3_5TextModel with peft LoRA Linear wrappers
@@ -89,10 +93,14 @@ def export(slug, out_dir, run_dir, base_dir):
     tmp = ox.scratch_dir("kev-export-")
     secs = ox.export_graph(graph, args, INPUT_NAMES, OUTPUT_NAMES, dyn, os.path.join(tmp, "model.onnx"))
     print("exported in %.0fs" % secs)
+    del graph, lora_model, m, want, got   # the fp32 model (36 GB for a 9B) is not needed for the rewrite
+    gc.collect()
 
-    base_ckpt = os.path.join(base_dir, meta["base_file"])
+    base_ckpts = [os.path.join(base_dir, f) for f in meta["base_files"]]
     sources = [
-        safetensors_source(meta["base_file"], base_ckpt, repo=meta["base"], revision=meta["base_revision"], filename=meta["base_file"]),
+        safetensors_source(f, p, repo=meta["base"], revision=meta["base_revision"], filename=f)
+        for f, p in zip(meta["base_files"], base_ckpts)
+    ] + [
         safetensors_source("adapter_model.safetensors", os.path.join(run_dir, "adapter_model.safetensors"),
                            repo=meta["repo"], revision=meta["revision"], filename="adapter_model.safetensors"),
         torchzip_source("head.pt", os.path.join(run_dir, "head.pt"), repo=meta["repo"], revision=meta["revision"], filename="head.pt"),
@@ -144,7 +152,9 @@ def export(slug, out_dir, run_dir, base_dir):
         "option_logits": {"choice": "scores[row, :k]", "noul": "scores[row, :2] (0 = no = false, 1 = yes = true)",
                           "score": "scores[row, :levels]"},
         "opset": ox.OPSET,
-        "precision": "fp32 compute; base weights BF16 (Cast at load), adapter and head F32",
+        "precision": "fp32 compute; base weights BF16, widened by Cast (at load, or per forward pass with "
+                     "weights_in_memory bf16); adapter and head F32",
+        "weights_in_memory": ox.weights_in_memory(report),
     }
     calibration = {"temperature": [temperature] * 3, "temperature_by_options": {},
                    "source": "head.pt['temperature'] (fitted upstream on in-distribution development rows, scripts/calibrate_checkpoint.py)"}
@@ -153,7 +163,8 @@ def export(slug, out_dir, run_dir, base_dir):
         "layers": [
             {"role": "graph", "path": "model.onnx", "hosted_by": "ollaya", "bytes": os.path.getsize(os.path.join(out_dir, "model.onnx")),
              "sha256": ox.sha256_file(os.path.join(out_dir, "model.onnx"))},
-            ox.file_entry("weights/base", meta["base"], meta["base_revision"], meta["base_file"], base_ckpt, location=meta["base_file"]),
+            *[ox.file_entry("weights/base", meta["base"], meta["base_revision"], f, p, location=f)
+              for f, p in zip(meta["base_files"], base_ckpts)],
             ox.file_entry("weights/adapter", meta["repo"], meta["revision"], "adapter_model.safetensors",
                           os.path.join(run_dir, "adapter_model.safetensors"), location="adapter_model.safetensors"),
             ox.file_entry("weights/head", meta["repo"], meta["revision"], "head.pt", os.path.join(run_dir, "head.pt"), location="head.pt")
@@ -162,7 +173,8 @@ def export(slug, out_dir, run_dir, base_dir):
             {"role": "decision", "path": "decision.json", "hosted_by": "ollaya"},
             {"role": "calibration", "path": "calibration.json", "hosted_by": "ollaya"},
             ox.file_entry("license", meta["repo"], meta["revision"], "README.md", os.path.join(run_dir, "README.md"), verify=False)
-            | {"note": "Apache-2.0 per the model card (adapter + head); base Qwen3.5-0.8B-Base is Apache-2.0 with a LICENSE file"},
+            | {"note": "Apache-2.0 per the model card (adapter + head); base %s is Apache-2.0 with a LICENSE file"
+                       % meta["base"].split("/")[-1]},
         ],
         "weightless": {k: v for k, v in report.items() if k != "unused"},
         "unused_checkpoint_tensors": {k: len(v) for k, v in report["unused"].items()},

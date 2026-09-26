@@ -19,10 +19,21 @@ import sys
 import torch
 
 KEV_GIT = {"repo": "https://github.com/jaredpalmer/kev", "commit": "234e5a7498f82f253de34e67b9fa99aefb5f20f5"}
+# Each checkpoint names its base and base revision in head.pt; the export checks them against these pins.
 MODELS = {
-    "kev-0.8b": {"repo": "jaredpalmer/kev-0.8b", "revision": "54f4f8777356cd5bbbb6c6919c657f26e6f2f6d8",
+    # Kev-0.8B round 15 (documents + skills delta). Round 7 + dates was 54f4f8777356cd5bbbb6c6919c657f26e6f2f6d8.
+    "kev-0.8b": {"repo": "jaredpalmer/kev-0.8b", "revision": "9a45d25eb2ab761841196625383fa1dff0e56c1e",
                  "base": "Qwen/Qwen3.5-0.8B-Base", "base_revision": "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68",
-                 "base_file": "model.safetensors-00001-of-00001.safetensors"},
+                 "base_files": ["model.safetensors-00001-of-00001.safetensors"]},
+    # Kev-4B round 10 (skills delta on round 8).
+    "kev-4b": {"repo": "jaredpalmer/kev-4b", "revision": "139fdd94f1b6a6ad80cc15e08fcb99cac885a101",
+               "base": "Qwen/Qwen3.5-4B-Base", "base_revision": "1001bb4d826a52d1f399e183466143f4da7b741b",
+               "base_files": ["model.safetensors-00001-of-00002.safetensors",
+                              "model.safetensors-00002-of-00002.safetensors"]},
+    # Kev-9B (decision-v7 recipe + dates/unknowable delta; head.pt carries the fitted temperature).
+    "kev-9b": {"repo": "jaredpalmer/kev-9b", "revision": "2629c06a5aeb0feb3b9783bafed17ed8f39ecf5c",
+               "base": "Qwen/Qwen3.5-9B-Base", "base_revision": "68c46c4b3498877f3ef123c856ecfde50c39f404",
+               "base_files": ["model.safetensors-%05d-of-00004.safetensors" % i for i in range(1, 5)]},
 }
 
 
@@ -53,6 +64,7 @@ def load(run_dir: str, base_dir: str, device: str = "cpu", merge: bool = True):
     torch.backends.cudnn.allow_tf32 = False
     _, kc, _ = _import_kev()
     ck = kc.Checkpoint(run_dir)
+    ck.upstream_base = (ck.meta.base, ck.meta.base_revision)  # what head.pt names, before the local override
     ck.meta.base, ck.meta.base_revision = base_dir, None   # same bytes as the pinned base revision, read locally
     tok, m = ck.load(device, kc.LoadOptions(dtype=torch.float32, merge=merge))
     return ck, tok, m

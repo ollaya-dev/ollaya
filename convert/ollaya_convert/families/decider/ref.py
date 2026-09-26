@@ -25,6 +25,9 @@ MODELS = {
                      "base": "Qwen/Qwen3.5-0.8B-Base"},
     "decider-2b": {"repo": "Mapika/decider-2b", "revision": "9839cc9d908be16c5988c0d041034b5fdf82c7a2",
                    "base": "Qwen/Qwen3.5-2B-Base"},
+    # v2.1: one temperature per answer type (decider_config.json "temperature_by_type", decider-ai 1.4.0).
+    "decider-4b": {"repo": "Mapika/decider-4b", "revision": "eb5fbdfc9448473ec25e399882912863afbdb70e",
+                   "base": "Qwen/Qwen3.5-4B-Base"},
 }
 
 
@@ -105,8 +108,13 @@ def answers(d, state, questions, logits):
 
     rqs = {k: render_question(v) for k, v in questions.items()}
     flat, index = plan_rows(rqs, d.isolated_levels)
+    # decider-ai 1.4.0: one temperature per answer type (an isolated Score question's level rows use "score").
+    by_type = getattr(d, "T_by_type", None) or {}
+    types = [None] * len(flat)
+    for k, _, s, n in index:
+        types[s:s + n] = [rqs[k]["type"]] * n
     probs = []
-    for r, row in zip(logits, flat):
-        z = torch.tensor(r[: len(row["options"])]) / d.T
+    for r, row, t in zip(logits, flat, types):
+        z = torch.tensor(r[: len(row["options"])]) / by_type.get(t, d.T)
         probs.append(torch.softmax(z, -1).tolist())
     return assemble(rqs, index, probs)
