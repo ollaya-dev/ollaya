@@ -49,7 +49,8 @@ churn_risk        no           ██████████░░░░░░ 
   [docs/api.md](docs/api.md).
 - **Weights come from their authors.** Ollaya publishes only small ONNX graphs, about 3 MB each.
   These graphs read the original weight files (usually `model.safetensors`) from the author's
-  Hugging Face repository, pinned to a commit and verified by sha256. Ollaya never re-hosts weights.
+  Hugging Face repository, pinned to a commit and verified by sha256. Models whose authors publish
+  GGUF files (`winnow`) run that file itself on llama.cpp. Ollaya never re-hosts weights.
 - **For agents.** `ollaya mcp` serves the models to Claude Code, Claude Desktop, Cursor and other
   MCP clients (`claude mcp add ollaya -- ollaya mcp`), and the
   [`ollaya-decisions` skill](skills/ollaya-decisions/SKILL.md) teaches agents when and how to use
@@ -64,7 +65,8 @@ churn_risk        no           ██████████░░░░░░ 
   ```
   Then run `ollaya create triage -f Modelfile` and `ollaya run triage "…"`.
 - **Fast and exact.**
-  - **Hardware:** ONNX Runtime on CPU, and CUDA on NVIDIA GPUs.
+  - **Hardware:** ONNX Runtime on CPU, and CUDA on NVIDIA GPUs. GGUF models run on llama.cpp:
+    CPU, CUDA, and Metal on Apple silicon.
   - **Precision:** fp16 on GPU and fp32 on CPU, chosen when the model loads.
   - **Accuracy:** fp32 exports give the same decision as the PyTorch reference on 100% of 2,383
     questions per checkpoint.
@@ -84,6 +86,7 @@ churn_risk        no           ██████████░░░░░░ 
 | `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
 | `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
 | `von` | Victor Hugo Panisa's Von 1.1 (ModernBERT-large): every option scored at its own marker, 8k-token context |
+| `winnow`, `winnow:e4b` | EldanRing's Winnow-12B and Winnow-E4B, Gemma 4 fine-tunes run from the author's Q8_0 GGUF on llama.cpp |
 
 Browse them at [ollaya.dev/search](https://ollaya.dev/search). Laya tags ending in
 `-fp32` or `-fp16` pin the precision. The derived files of every model are also published at
@@ -116,7 +119,7 @@ Configuration is through environment variables: `OLLAYA_HOST`, `OLLAYA_MODELS`,
 | `crates/ollaya-api` | API types and client; the contract is [docs/api.md](docs/api.md) |
 | `crates/ollaya-registry` | Model names, manifests, blob store, resumable pulls |
 | `crates/ollaya-decision` | Question schema, sequence layouts, calibration, answers |
-| `crates/ollaya-runner` | Inference engines (ONNX Runtime) |
+| `crates/ollaya-runner` | Inference engines (ONNX Runtime, and llama.cpp for GGUF models) |
 | `crates/ollaya-lang` | Script and language detection for routers |
 | `convert/` | Build-time Python: ONNX export, parity checks, packaging |
 | `site/` | The website and the static model registry host |
@@ -136,5 +139,6 @@ generates golden fixtures, and packages the result into `registry/`. See the mod
 Apache-2.0. Each model keeps its own license: `laya` (Convai Innovations), `decider` (Mapika),
 `kev` (Jared Palmer, on Qwen3.5 by the Qwen team), `decision` (the vLLM Semantic Router
 contributors, on Qwen3.5), `qwen3guard` (Qwen team), `gliclass` (Knowledgator), `von` (Victor Hugo
-Panisa) and `nli:modernbert-large` are Apache-2.0, and
-`nli:deberta-v3-large` (Moritz Laurer) is MIT.
+Panisa), `winnow` (EldanRing, on Gemma 4 by Google DeepMind) and `nli:modernbert-large` are
+Apache-2.0, and `nli:deberta-v3-large` (Moritz Laurer) is MIT. llama.cpp, which Ollaya ships for
+GGUF models, is MIT.

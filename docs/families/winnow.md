@@ -1,8 +1,12 @@
 # winnow (`winnow-v1`)
 
-**EldanRing/Winnow-12B** is Gemma 4 12B IT with a LoRA (r=32, α=64) merged into the weights, released
-only as GGUF. It reads option-label logits after a Gemma-4-specific prompt. Its own server
-(https://github.com/EldanRing/winnow-inference) is a patched llama.cpp with `/v1/systemone`.
+**EldanRing/Winnow-12B** and **EldanRing/Winnow-E4B** are Gemma 4 12B IT and Gemma 4 E4B IT with a LoRA
+(r=32, α=64) merged into the weights, released only as GGUF. They read option-label logits after a
+Gemma-4-specific prompt. Their own server (https://github.com/EldanRing/winnow-inference) is a patched
+llama.cpp with `/v1/systemone`. Ollaya ships them as `winnow:12b` (also `winnow:latest`) and
+`winnow:e4b`.
+
+### Winnow-12B
 
 | | |
 |---|---|
@@ -12,17 +16,34 @@ only as GGUF. It reads option-label logits after a Gemma-4-specific prompt. Its 
 | License | Apache-2.0. Winnow ships `LICENSE` + `NOTICE`. Gemma 4 itself is Apache-2.0 (https://ai.google.dev/gemma/docs/gemma_4_license): the HF repo is not gated, and unlike Gemma 1–3 there are no Gemma Terms of Use. Google also links a prohibited-use policy and an intended-use statement. Redistribution is allowed under Apache-2.0 with attribution; Ollaya does not redistribute anyway, since the GGUF is fetched from EldanRing's repo. |
 | Inference code | `winnow-inference@6c2b3c04e248a319f2cb43832628eba03e55fe38` (pinned by the model card). Builds on llama.cpp (MIT). |
 
-## Recommended engine: llama.cpp (stock `llama-server`)
+### Winnow-E4B
 
-This is option (b). The model exists only as GGUF, and 12B in ONNX fp32 is impractical.
+| | |
+|---|---|
+| Repo / commit | `EldanRing/Winnow-E4B@734302fe5fbfeb3f21a7ece62653c9539be4aaf3` |
+| Files | `gguf/Winnow-E4B-Q8_0.gguf` 8.01 GB, sha256 `840e3f50e5a9c218727f44e121d1b37cc9e2c3b318c8eb422ba6ef2e27b618a2`; `gguf/Winnow-E4B-BF16.gguf` 15.05 GB; optional `gguf/mmproj-Winnow-E4B.gguf` 990 MB (vision) |
+| Base | `google/gemma-4-E4B-it@ee0ef6023621cff504d758262d4e04895a5af4a2` |
+| License | Apache-2.0, with the author's `LICENSE` and `NOTICE`, as for 12B |
+| Inference code | `winnow-inference@77d14580c6732ca2f3745750c1dc1fd446d8bcee` (`inference_source_commit` in `release-manifest.json`). `native/` is unchanged from 6c2b3c04, so the prompt is the same. |
+| Temperature | `1.2574172017327816`, fitted by the author for the Q8_0 GGUF on 778 calibration questions (`release-manifest.json`, `decision_calibration`). The author's server defaults to 1.0; Ollaya ships the fitted value in `calibration.json`. |
+| Template | Its chat template has no empty-thought marker, so the prompt has none (`decision.json`: `"thought": false`). |
 
-- **No patched server needed.** Winnow's server patches only add a selected-rows head (a speed-up),
-  bounded SWA forks and the HTTP route. The numbers are next-token logits of the label tokens with
-  Gemma's final soft-cap, which a stock llama-server returns.
-- **Readout.** Ollaya's llama runner serves the GGUF with the `winnow-v1` prompt below and reads the
-  label logits with the same bias trick as [llm-logits.md](llm-logits.md).
-- **Determinism.** The rules there apply too. Use a fixed prefix/suffix split, which is also Winnow's
-  own plan: prefix once, fork per question.
+## Engine: llama.cpp in the runner
+
+The models exist only as GGUF, so they run on llama.cpp: ggml-org's own release build of v0.5.0,
+loaded as libraries by Ollaya's runner (see
+[decisions/0001-llama-cpp-runtime.md](../decisions/0001-llama-cpp-runtime.md)).
+
+- **No patched llama.cpp needed.** Winnow's patches add a selected-rows head (a speed-up), bounded SWA
+  forks, a tensor-order change for tied embeddings and the HTTP route. The numbers are next-token
+  logits of the label tokens with Gemma's final soft-cap, which stock llama.cpp computes.
+- **Readout.** The runner builds the `winnow-v1` prompt below, tokenizes it with the GGUF's
+  vocabulary, and reads the label logits at the last token with `llama_get_logits_ith`.
+- **Plan.** Every question is `ids[..P]` (the state prefix: one cold pass, kept while the next
+  question shares it) followed by `ids[P..]` as one batch, with a full-size sliding-window cache
+  (`swa_full`) so the cache can be cut back to the prefix. The split is fixed, so the numbers never
+  depend on what ran before ([llm-logits.md](llm-logits.md), "Determinism").
+- **Context.** 8,192 tokens, the author's measured text profile; the state is cut to 6,144 tokens.
 
 ## Prompt (port of `native/protocol.h` `compile()`)
 
@@ -46,8 +67,9 @@ ids    = tokenize(prefix, add_bos=true, parse_special=true) ⧺ tokenize(suffix,
 ```
 
 The two strings are tokenized separately; that split is part of the layout. `<|channel>thought\n<channel|>`
-(the empty-thought marker) is added because Winnow's GGUF chat template contains it. Winnow adds it only
-when the template is empty or contains that string.
+(the empty-thought marker) is added because Winnow-12B's GGUF chat template contains it. Winnow adds it
+only when the template is empty or contains that string: Winnow-E4B's template does not, so its prompt
+has no marker. The export records which applies (`decision.json`: `"thought"`).
 
 ### Rendered options
 
@@ -90,15 +112,30 @@ Answer semantics:
 
 ## Parity / quality
 
-- **Not run end to end.** The Q8_0 GGUF is 12.67 GB, above this task's 10 GB download cap.
-- **Checked here.** The prompt port follows the pinned C++ source line for line, and its llama.cpp
-  mechanics were exercised on `gemma-4-E2B-it` (same tokenizer family and control tokens). The bias
-  trick is exact to 1e-5 against the full-vocabulary distribution on Gemma 4
-  ([llm-logits.md](llm-logits.md)).
-- **Future golden.** Winnow's server has `POST /v1/winnow/inspect` with `include_token_ids: true`, which
-  returns its prompt token ids. The natural golden test is to run it once on a GPU box, compare its ids
-  with `ref.compile_request` + llama-server `/tokenize`, then compare probabilities (argmax tolerance,
-  see the determinism notes).
+Goldens: `ref.py` sends each of the 123 test requests (505 questions, 15 rejected) to a stock
+`llama-server` of the pinned build (b11146), loaded with the author's GGUF on the device under test.
+The runner must match every decision, with option logits within 1e-3. Measured on choso-wsl,
+2026-09-26:
+
+| Model | Device | Questions | Decisions | Option logits max | Probabilities max |
+|---|---|---|---|---|---|
+| 12b Q8_0 | CUDA, RTX 4090 | 505 | 505/505 | 1.13e-5 | 2.6e-6 |
+| e4b Q8_0 | CUDA, RTX 4090 | 505 | 505/505 | 1.29e-5 | 3.0e-6 |
+| e4b Q8_0 | CPU, x86-64 Linux | 505 | 505/505 | 1.14e-5 | 2.9e-6 |
+| e4b Q8_0 | CPU, Windows x86-64 (against `llama-server.exe` win-cpu) | 15 | 15/15 | 7.6e-6 | 1.1e-6 |
+
+- **Windows.** The golden replay on Windows stopped on a text-encoding error in the Python tool
+  (cp1252), so the native Windows check covered only the first 3 requests.
+- **Author's server.** e4b against winnow-inference's own server on the same requests: in its reference
+  mode all 503 decisions agree (probability difference p99 3.0e-6, max 0.0028); in its default mode
+  501 of 503 agree (p99 0.030, max 0.052).
+- **Not run.** Metal and the Apple CPU, linux-arm64, 12b on the CPU, and llama.cpp with CUDA on
+  Windows.
+- **Typed-decisions (measured here).** All 400 states, 2,000 decisions, argmax against the majority
+  label: 12b 0.702 (ECE 0.155 at T 1, the shipped value), e4b 0.722 (ECE 0.022 with the shipped T
+  1.2574, 0.060 at T 1).
+- **Latency (measured here, in the runner without HTTP, five questions, short state).** RTX 4090: 12b
+  154 ms, e4b 96 ms at the median. x86-64 CPU (24 cores): e4b 5.1 s.
 
 Published numbers (model card and `docs/BENCHMARKS.md`, RTX PRO 5000, 2026-09-21):
 

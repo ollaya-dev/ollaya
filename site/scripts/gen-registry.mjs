@@ -69,6 +69,7 @@ async function readTag(ns, model, tag) {
       size: l.size,
       url: (l.urls ?? [])[0] ?? null,
       precision: l.annotations?.['org.ollaya.precision'] ?? null,
+      quantization: l.annotations?.['org.ollaya.quantization'] ?? null,
     }
     layers.push(layer)
     if (kind === 'router') router = await readJsonBlob(l.digest)
@@ -97,6 +98,7 @@ async function readTag(ns, model, tag) {
     layers,
     router: router ?? null,
     precision: params?.precision ?? null,
+    engine: decision?.engine ?? null,
     encoder: decision?.encoder ?? null,
     layout: decision?.layout ?? null,
     calibrationKeys: calibration ? Object.keys(calibration.temperature_by_options ?? {}) : null,
@@ -132,6 +134,8 @@ const types = `export interface RegistryLayer {
   /** Where the client downloads it from (Hugging Face for weights and tokenizers). */
   url: string | null
   precision: string | null
+  /** A GGUF weights layer's quantization (Q8_0, Q4_0, ...). */
+  quantization: string | null
 }
 
 export interface RegistryTag {
@@ -156,6 +160,8 @@ export interface RegistryTag {
   router: { strategy: string; default: string; routes: Record<string, string> } | null
   /** Pinned precision (from the params layer), or null when the tag carries both graphs. */
   precision: string | null
+  /** The decision layer's engine: onnx, or llama for GGUF models. */
+  engine: string | null
   encoder: string | null
   layout: string | null
   calibrationKeys: string[] | null

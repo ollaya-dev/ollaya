@@ -34,6 +34,7 @@ Open decision models from these families. See [Models](/search).
 - **`decision`** from the vLLM Semantic Router contributors: `decision:eos`, Decision 1.0 Eos, a fully fine-tuned Qwen3.5-0.8B with an endpoint head that scores every option at its last token, calibrated, with rows of up to 16,384 tokens.
 - **`qwen3guard`** from the Qwen team: a safety guard in 119 languages. It answers its own built-in questions (safe, controversial or unsafe, and the unsafe category), so you send it only the text.
 - **`von`** from Victor Hugo Panisa: Von 1.1 on ModernBERT-large, which scores every option at its own marker in one pass and reads states of up to 8,192 tokens.
+- **`winnow`** from EldanRing: Winnow-12B (`winnow`) and Winnow-E4B (`winnow:e4b`), Gemma 4 fine-tunes published as GGUF files. Ollaya runs the author's file on llama.cpp, on an NVIDIA GPU, Apple silicon's GPU or the CPU.
 
 ## Where do the weights come from?
 
@@ -53,7 +54,7 @@ A decision is a single forward pass. Measured end to end through the HTTP API on
 
 ## Do I need a GPU?
 
-No. Ollaya runs on the CPU, and on x86-64 Linux and Windows uses an NVIDIA GPU with driver R580 or newer (CUDA 13) when one is present. The install scripts download the CUDA libraries only when they find a GPU. The desktop app runs models on the CPU.
+No. Ollaya runs on the CPU, and on x86-64 Linux and Windows uses an NVIDIA GPU with driver R580 or newer (CUDA 13) when one is present. The install scripts download the CUDA libraries only when they find a GPU. The desktop app runs models on the CPU. GGUF models such as `winnow` run on llama.cpp, which also uses the GPU of Apple silicon Macs (Metal); their parity has been checked on CUDA and the x86-64 CPU, not yet on Metal. They are large language models, so a GPU makes a much bigger difference for them than for the encoder models: see each model's page for measured speeds.
 
 ## Which platforms are supported?
 
@@ -93,4 +94,4 @@ For an install without root (in `~/.local`), delete `~/.local/bin/ollaya`, `~/.l
 
 ## What is the license?
 
-Ollaya is Apache-2.0. Models carry their own licenses: `laya`, `decider`, `kev`, `decision`, `qwen3guard`, `gliclass`, `von` and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` is MIT.
+Ollaya is Apache-2.0. Models carry their own licenses: `laya`, `decider`, `kev`, `decision`, `qwen3guard`, `gliclass`, `von`, `winnow` and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` is MIT.

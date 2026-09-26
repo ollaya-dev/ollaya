@@ -159,6 +159,21 @@ const overlays: Record<string, ModelOverlay> = {
       '1.1': { summary: 'Von 1.1, ModernBERT-large, 0.447 on typed decisions; 8,192-token context.' },
     },
   },
+  winnow: {
+    stats: { tag: 'winnow:12b', accuracy: 0.702 },
+    title: 'Winnow',
+    description:
+      "Decision models by EldanRing, fine-tuned from Google's Gemma 4 and published as GGUF. Winnow reads the answer labels' logits after its own prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Apple silicon or the CPU.",
+    publisher: { name: 'EldanRing', url: 'https://huggingface.co/EldanRing' },
+    capabilities: ['decision', 'multilingual', 'fine-tuned', 'gguf'],
+    keywords: ['winnow', 'gemma', 'gemma 4', 'gguf', 'llama.cpp', 'llm', 'decision', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 8,
+    tags: {
+      latest: { summary: 'Same as winnow:12b.' },
+      '12b': { summary: 'Winnow-12B, Q8_0 GGUF: 0.702 on typed decisions, 85.7 % on the author\'s JevBench set; a 16 GB GPU holds it.' },
+      e4b: { summary: "Winnow-E4B, Q8_0 GGUF, with the author's fitted temperature: 0.722 on typed decisions, smaller and faster than 12b." },
+    },
+  },
   gliclass: {
     stats: { tag: 'gliclass:large', accuracy: 0.477, latencyMs: 14.7 },
     title: 'GLiClass',
@@ -184,7 +199,6 @@ const planned: { key: string; label: string }[] = [
   { key: 'gliclass', label: 'GLiClass' },
   { key: 'nli', label: 'NLI zero-shot classifiers' },
   { key: 'decider', label: 'decider' },
-  { key: 'gguf', label: 'GGUF LLM-based decision models via llama.cpp' },
 ]
 
 // ---------------------------------------------------------------------------------------------
@@ -208,6 +222,8 @@ export interface Tag {
   /** Base tag for precision-pinned variants ("en" for "en-fp16"). */
   variantOf?: string
   precision: Precision | null
+  /** GGUF models: the quantization of the author's file (Q8_0), which llama.cpp runs on every device. */
+  quantization?: string
   /** Tags the router may send a request to (router tags only). */
   routesTo?: string[]
   backbone?: string
@@ -283,7 +299,8 @@ function buildTag(model: RegistryModel, t: RegistryTag, overlay: ModelOverlay | 
   const isRouter = t.config.format === 'router' || t.router !== null
   const o = overlay?.tags?.[t.name] ?? (t.precision ? overlay?.tags?.[t.name.replace(/-(fp16|fp32)$/, '')] : undefined)
   const graphs = new Set(t.layers.filter((l) => l.kind === 'graph').map((l) => l.precision))
-  const precision: Precision | null = isRouter
+  const quantization = t.layers.find((l) => l.quantization)?.quantization ?? undefined
+  const precision: Precision | null = isRouter || quantization
     ? null
     : t.precision === 'fp16' || t.precision === 'fp32'
       ? t.precision
@@ -300,6 +317,7 @@ function buildTag(model: RegistryModel, t: RegistryTag, overlay: ModelOverlay | 
     name: t.name,
     kind: isRouter ? 'router' : 'model',
     precision,
+    quantization,
     routesTo,
     backbone: t.encoder ? t.encoder.split('/').pop() : undefined,
     encoder: t.encoder ?? undefined,
@@ -411,6 +429,7 @@ export function sizeLabel(tag: Tag): string {
 }
 
 export function precisionLabel(tag: Tag): string {
+  if (tag.quantization) return `${tag.quantization} GGUF`
   if (tag.precision === 'auto') return 'fp16 on GPU · fp32 on CPU'
   return tag.precision ?? '–'
 }
@@ -435,9 +454,13 @@ export function layersFor(model: Model, tag: Tag): Layer[] {
       case 'weights':
       case 'tokenizer':
         preview = l.url ? l.url.replace(/^https?:\/\//, '').replace(/\/resolve\/([0-9a-f]{7})[0-9a-f]*\//, '/resolve/$1…/') : ''
+        if (l.quantization) preview = `gguf · ${l.quantization} · ${preview}`
         break
       case 'decision':
-        preview = `{"engine": "onnx", "family": "${r.config.family}", "encoder": "${r.encoder ?? ''}", "layout": "${r.layout ?? ''}", …}`
+        preview =
+          r.engine === 'llama'
+            ? `{"engine": "llama", "family": "${r.config.family}", "layout": "${r.layout ?? ''}", "gguf": {…}, …}`
+            : `{"engine": "onnx", "family": "${r.config.family}", "encoder": "${r.encoder ?? ''}", "layout": "${r.layout ?? ''}", …}`
         break
       case 'calibration':
         preview = r.calibrationMap
