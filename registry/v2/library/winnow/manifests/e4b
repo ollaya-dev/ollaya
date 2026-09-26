@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+  "config": {
+    "mediaType": "application/vnd.ollaya.config.v1+json",
+    "digest": "sha256:274b51337582ffed72cbc67ac9508949b4c7da8bf3d9f6e673b2be864ac3dbb3",
+    "size": 510,
+    "urls": [
+      "https://ollaya.dev/blobs/sha256-274b51337582ffed72cbc67ac9508949b4c7da8bf3d9f6e673b2be864ac3dbb3"
+    ]
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.ollaya.weights.gguf",
+      "digest": "sha256:840e3f50e5a9c218727f44e121d1b37cc9e2c3b318c8eb422ba6ef2e27b618a2",
+      "size": 8005437472,
+      "urls": [
+        "https://huggingface.co/EldanRing/Winnow-E4B/resolve/734302fe5fbfeb3f21a7ece62653c9539be4aaf3/gguf/Winnow-E4B-Q8_0.gguf"
+      ],
+      "annotations": {
+        "org.ollaya.quantization": "Q8_0"
+      }
+    },
+    {
+      "mediaType": "application/vnd.ollaya.decision",
+      "digest": "sha256:3b76b10f430adffd51097e0dc97ae676a1f60e8f216a00e6aacb48faf95be5ad",
+      "size": 2058,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-3b76b10f430adffd51097e0dc97ae676a1f60e8f216a00e6aacb48faf95be5ad"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.calibration",
+      "digest": "sha256:82007815eb87481ab1f03d337327145c615e0220ba4648e32d95175c36da023c",
+      "size": 258,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-82007815eb87481ab1f03d337327145c615e0220ba4648e32d95175c36da023c"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.license",
+      "digest": "sha256:b8186b826818c648764eaae1f08d4006208c078217497425c3df8666a4b4be35",
+      "size": 11204,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-b8186b826818c648764eaae1f08d4006208c078217497425c3df8666a4b4be35"
+      ]
+    }
+  ]
+}

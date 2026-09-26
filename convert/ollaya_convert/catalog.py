@@ -40,6 +40,22 @@ def _laya(sub, description, params, ctx, languages, mlx=False):
     }
 
 
+def _gguf(export, repo, commit, gguf, description, params, languages, notice=None):
+    """A GGUF model run by llama.cpp: the author's GGUF, unmodified, plus the decision.json and
+    calibration.json that `llm_common/export_llama.py` derived from it (`out/<export>`)."""
+    return {
+        "kind": "gguf",
+        "repo": repo,
+        "commit": commit,
+        "gguf": gguf,
+        "export_dir": os.path.join(OUT, export),
+        "parameter_size": params,
+        "languages": languages,
+        "description": description,
+        "notice": notice,
+    }
+
+
 def _wl(slug, repo, commit, description, params, ctx, languages, license=None, license_text=None, wl_dir=None,
         weights=None, arch=None):
     """A model converted under `families/`, whose weightless graph (`out/<slug>-wl`) already
@@ -285,5 +301,30 @@ CATALOG = {
                   "token ids and marker positions are identical, and so is the decision on every question. Logits "
                   "are within 4.4e-4 and probabilities within 4.7e-5 on x86-64 CPU and CUDA; on Apple silicon's CPU "
                   "one of the 653 rows is 1.1e-3 off, and every decision is still the same.",
+    },
+    "winnow": {
+        "namespace": "library",
+        "model": "winnow",
+        "family": "winnow",
+        "author": "EldanRing",
+        "license": "Apache-2.0",
+        "license_text": "Winnow by EldanRing (https://huggingface.co/EldanRing), a fine-tune of Google DeepMind's "
+                        "Gemma 4.\nLicensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        "tags": {
+            # Q8_0, the quantization the author measured and recommends. The GGUF holds the weights,
+            # tokenizer and chat template; llama.cpp loads it as the author published it.
+            "12b": _gguf("winnow-12b-q8_0", "EldanRing/Winnow-12B", "b6ac22b0d51b69b18200acacb3fbdd98073fffe8",
+                         "gguf/Winnow-12B-Q8_0.gguf",
+                         "Winnow-12B (Gemma 4 12B IT fine-tune), Q8_0 GGUF on llama.cpp: option-label logits "
+                         "after Winnow's own prompt.",
+                         "12B", ["multilingual"], notice="NOTICE"),
+            "e4b": _gguf("winnow-e4b-q8_0", "EldanRing/Winnow-E4B", "734302fe5fbfeb3f21a7ece62653c9539be4aaf3",
+                         "gguf/Winnow-E4B-Q8_0.gguf",
+                         "Winnow-E4B (Gemma 4 E4B IT fine-tune), Q8_0 GGUF on llama.cpp: option-label logits "
+                         "after Winnow's own prompt, with the author's fitted temperature.",
+                         "7.5B", ["multilingual"], notice="NOTICE"),
+        },
+        "aliases": {"latest": "12b"},
+        "parity": "PARITY-PENDING",
     },
 }
