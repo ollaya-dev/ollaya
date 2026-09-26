@@ -19,7 +19,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::engine::Engine;
-use crate::onnx::{Device, ModelFiles, load_tokenizer, session_with};
+use crate::onnx::{CudaArena, Device, ModelFiles, load_tokenizer, session_for};
 use crate::{Error, Output, QuestionOutput};
 
 /// Rows per `session.run`: the export's row axis is 1..=4096.
@@ -42,8 +42,46 @@ struct DecisionConfig {
     engine: String,
     layout: String,
     contract: Contract,
+    #[serde(default)]
+    weights_in_memory: WeightsInMemory,
     #[serde(flatten)]
     decider: DeciderLayout,
+}
+
+/// How a decoder graph holds the checkpoint's BF16 weights in memory (`decision.weights_in_memory`).
+/// Either way the graph computes in fp32 on the same values, so the outputs are identical; only
+/// memory and speed differ. See `docs/decisions/0002-decoder-weights-in-memory.md`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WeightsInMemory {
+    /// Widened to fp32 once, when the session loads (ONNX Runtime folds the `Cast` nodes): twice
+    /// the memory of the checkpoint, the fastest forward pass. Models up to 2B params.
+    #[default]
+    Fp32,
+    /// Kept as stored (BF16); each forward pass widens a layer's weights just before they are used.
+    /// Half the memory and a fast load, for about 12% more time per forward pass on the GPU.
+    Bf16,
+}
+
+impl WeightsInMemory {
+    /// ONNX Runtime folds constant subgraphs (here: `Cast(bf16 weight)`) only when the result is
+    /// at most this many bytes; the default is 1 GiB. Below this limit fall the small tensors
+    /// (norms, biases, masks), above it every weight matrix, so the matrices stay BF16.
+    const FOLD_LIMIT_BYTES: &str = "1048576";
+
+    pub(crate) fn configure(self, builder: SessionBuilder) -> Result<SessionBuilder, Error> {
+        match self {
+            WeightsInMemory::Fp32 => Ok(builder),
+            // ONNX Runtime warns about every cast it leaves unfolded (hundreds, by design here),
+            // so this session logs errors only.
+            WeightsInMemory::Bf16 => Ok(builder
+                .with_config_entry(
+                    "optimization.constant_folding_max_output_size_in_bytes",
+                    Self::FOLD_LIMIT_BYTES,
+                )?
+                .with_log_level(ort::logging::LogLevel::Error)?),
+        }
+    }
 }
 
 /// Scoring rows for one request.
@@ -114,9 +152,14 @@ impl DeciderModel {
         };
         let tokenizer = load_tokenizer(&files.tokenizer)?;
 
-        let session = session_with(&files.graph, device, intra_threads, |b| {
-            configure(b, device)
-        })?;
+        let weights = config.weights_in_memory;
+        let session = session_for(
+            &files.graph,
+            device,
+            intra_threads,
+            CudaArena::SameAsRequested,
+            |b| weights.configure(configure(b, device)?),
+        )?;
         let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
         if inputs.len() != INPUTS.len()
             || !INPUTS.iter().all(|n| inputs.contains(n))
@@ -260,5 +303,31 @@ pub(crate) fn configure(builder: SessionBuilder, device: Device) -> Result<Sessi
         Device::Cuda(_) => Ok(builder
             .with_parallel_execution(true)?
             .with_inter_threads(2)?),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WeightsInMemory;
+
+    #[test]
+    fn weights_in_memory_defaults_to_fp32() {
+        #[derive(serde::Deserialize)]
+        struct D {
+            #[serde(default)]
+            weights_in_memory: WeightsInMemory,
+        }
+        let parse = |s: &str| serde_json::from_str::<D>(s).map(|d| d.weights_in_memory);
+        // Graphs exported before the field existed keep today's behaviour.
+        assert_eq!(parse("{}").unwrap(), WeightsInMemory::Fp32);
+        assert_eq!(
+            parse(r#"{"weights_in_memory": "fp32"}"#).unwrap(),
+            WeightsInMemory::Fp32
+        );
+        assert_eq!(
+            parse(r#"{"weights_in_memory": "bf16"}"#).unwrap(),
+            WeightsInMemory::Bf16
+        );
+        assert!(parse(r#"{"weights_in_memory": "fp16"}"#).is_err());
     }
 }

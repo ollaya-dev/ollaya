@@ -20,7 +20,7 @@ external reference to the original bytes, plus the Cast/Transpose that reproduce
 Every mapped initializer is checked for exact equality with its source after the transform. Anything
 that has no source (masks, rotary tables, small derived constants) stays inline and is reported.
 ONNX Runtime folds the Cast/Transpose chains at session creation, unless the model keeps its weights in
-their stored precision (docs/decisions/0001-decoder-weights-in-memory.md).
+their stored precision (docs/decisions/0002-decoder-weights-in-memory.md).
 """
 from __future__ import annotations
 

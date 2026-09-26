@@ -92,7 +92,7 @@ def weightless(tmp_dir, out_dir, sources, maps):
 
 # Above this many bytes of BF16 checkpoint tensors (the 4B and 9B Qwen3.5 bases; decider-2b has 3.8 GB), the runtime
 # keeps the weights BF16 in memory and widens them at each forward pass instead of once at load:
-# docs/decisions/0001-decoder-weights-in-memory.md.
+# docs/decisions/0002-decoder-weights-in-memory.md.
 BF16_IN_MEMORY_ABOVE = 6 * 2**30
 
 

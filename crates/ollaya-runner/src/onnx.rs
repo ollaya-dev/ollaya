@@ -96,6 +96,33 @@ pub fn session_with(
     intra_threads: Option<usize>,
     configure: impl FnOnce(SessionBuilder) -> Result<SessionBuilder, Error>,
 ) -> Result<Session, Error> {
+    session_for(graph, device, intra_threads, CudaArena::Default, configure)
+}
+
+/// How the CUDA provider's memory arena grows when a run needs more than it holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CudaArena {
+    /// ONNX Runtime's default: each extension is twice the previous one. Few allocations, but
+    /// up to twice the memory that is live.
+    Default,
+    /// Each extension is exactly the request. The decoder graphs allocate large buffers of many
+    /// sizes on every run (attention scores grow with the square of the row length; with
+    /// `weights_in_memory: bf16`, one layer's widened weights), and doubling left decider-4b's
+    /// arena bigger than a 24 GB GPU: the NVIDIA driver on Windows (WSL) then spilled 4 GB into
+    /// system memory and a parity run slowed down more than tenfold. Exact growth held decider-2b
+    /// at 8.4 GB instead of 10.2 GB at the same speed
+    /// (`docs/decisions/0002-decoder-weights-in-memory.md`).
+    SameAsRequested,
+}
+
+/// [`session_with`], with the CUDA arena growing as `arena` says.
+pub fn session_for(
+    graph: &Path,
+    device: Device,
+    intra_threads: Option<usize>,
+    arena: CudaArena,
+    configure: impl FnOnce(SessionBuilder) -> Result<SessionBuilder, Error>,
+) -> Result<Session, Error> {
     if device == Device::Metal {
         return Err(Error::Model(
             "the Metal device runs on MLX, not ONNX Runtime".into(),
@@ -107,7 +134,7 @@ pub fn session_with(
         builder = builder.with_intra_threads(n)?;
     }
     if let Device::Cuda(id) = device {
-        builder = with_cuda(builder, id)?;
+        builder = with_cuda(builder, id, arena)?;
     }
     Ok(configure(builder)?.commit_from_file(graph)?)
 }
@@ -116,20 +143,24 @@ pub fn session_with(
 fn with_cuda(
     builder: ort::session::builder::SessionBuilder,
     device_id: i32,
+    arena: CudaArena,
 ) -> Result<ort::session::builder::SessionBuilder, Error> {
     // TF32 matmuls keep 10 mantissa bits, which moves calibrated probabilities by ~1e-3 and
     // flips close decisions. fp32 graphs run in true fp32; speed comes from fp16 graphs.
-    Ok(builder.with_execution_providers([ort::ep::CUDA::default()
+    let mut ep = ort::ep::CUDA::default()
         .with_device_id(device_id)
-        .with_tf32(false)
-        .build()
-        .error_on_failure()])?)
+        .with_tf32(false);
+    if arena == CudaArena::SameAsRequested {
+        ep = ep.with_arena_extend_strategy(ort::ep::ArenaExtendStrategy::SameAsRequested);
+    }
+    Ok(builder.with_execution_providers([ep.build().error_on_failure()])?)
 }
 
 #[cfg(not(feature = "cuda"))]
 fn with_cuda(
     _builder: ort::session::builder::SessionBuilder,
     _device_id: i32,
+    _arena: CudaArena,
 ) -> Result<ort::session::builder::SessionBuilder, Error> {
     Err(Error::Model(
         "this build of ollaya has no CUDA support".into(),

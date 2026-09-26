@@ -17,8 +17,9 @@ use ort::session::builder::SessionBuilder;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::decider::WeightsInMemory;
 use crate::engine::Engine;
-use crate::onnx::{Device, ModelFiles, load_tokenizer, session_with};
+use crate::onnx::{CudaArena, Device, ModelFiles, load_tokenizer, session_for};
 use crate::{Error, Output, QuestionOutput};
 
 /// Rows per `session.run`: the export's row axis is 1..=4096.
@@ -40,6 +41,8 @@ struct DecisionConfig {
     engine: String,
     layout: String,
     contract: Contract,
+    #[serde(default)]
+    weights_in_memory: WeightsInMemory,
     #[serde(flatten)]
     kev: KevLayout,
 }
@@ -112,9 +115,14 @@ impl KevModel {
         };
         let tokenizer = load_tokenizer(&files.tokenizer)?;
 
-        let session = session_with(&files.graph, device, intra_threads, |b| {
-            configure(b, device)
-        })?;
+        let weights = config.weights_in_memory;
+        let session = session_for(
+            &files.graph,
+            device,
+            intra_threads,
+            CudaArena::SameAsRequested,
+            |b| weights.configure(configure(b, device)?),
+        )?;
         let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
         if inputs.len() != INPUTS.len()
             || !INPUTS.iter().all(|n| inputs.contains(n))
