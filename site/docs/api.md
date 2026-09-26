@@ -38,6 +38,7 @@ order: 3
 - **Numbers.** Probabilities, confidences, `score` and `noul` are rounded to 4 decimal places. Durations are integers in nanoseconds; timestamps are RFC 3339 in UTC.
 - **Streaming.** `/api/pull` and `/api/create` stream newline-delimited JSON, one object per line, ending with exactly one `{"status":"success"}` or an error line. Send `"stream": false` for a single response.
 - **Request IDs.** Every response carries `X-Request-Id`, and `/v1/*` responses also `x-typesafe-request-id`. A valid client-sent `X-Request-Id` is echoed.
+- **Concurrency.** A loaded model runs one request at a time, and each request answers all its questions in one pass. Requests to the same model queue, so sending more at once doesn't finish sooner; each one's round trip then includes the wait. Ask every question about a state in one request. Different loaded models run in parallel.
 - **No implicit pulls.** No endpoint downloads a model as a side effect. `ollaya run` pulls first; applications call `/api/pull`.
 
 ## Errors
@@ -123,7 +124,7 @@ Once a stream has started, a failure arrives as a last line in the same shape, s
 | `score` | `score`: the expected level Σ i·pᵢ, which can fall between levels. `confidence`. `legend`: `"0"`… → the level's description. `probabilities`: `"0"`… → probability. |
 | `noul` | `noul`: the probability that the statement holds. No `confidence`, as in TypeSafe. |
 
-`confidence` is TypeSafe's normalized top probability, (K · p<sub>max</sub> − 1) / (K − 1) for K options: 0 when every option is equally likely, 1 when one option has all the probability. The formula is the same for every model, so thresholds transfer. Probabilities are calibrated with each model's temperatures. On a CUDA GPU the fp16 graph runs, whose answers can differ from fp32 on near-ties.
+`confidence` is TypeSafe's normalized top probability, (K · p<sub>max</sub> − 1) / (K − 1) for K options: 0 when every option is equally likely, 1 when one option has all the probability. The formula is the same for every model, but what a given confidence means is not: models are calibrated differently, so tune a threshold per model on your own data. Probabilities are calibrated with each model's temperatures. On a CUDA GPU the fp16 graph runs, whose answers can differ from fp32 on near-ties.
 
 ## keep_alive
 
@@ -253,6 +254,8 @@ A router such as `laya` (`laya:latest`) has no weights: for each request it pick
 | Mostly non-Latin script (Arabic, Cyrillic, CJK, …) | `multilingual` | `laya:multilingual` |
 | Latin script, but not English (Turkish, German, …) | `multilingual` | `laya:multilingual` |
 | No letters at all | `english` (the default) | `laya:en` |
+
+Short text in capitals without accented letters, such as merchant names on a card statement (`MIGROS KADIKOY ISTANBUL TR`), SKUs or usernames, usually can't be identified and goes to `laya:en`. If you know the language, request `laya:multilingual` or `laya:en` directly; the response's `model` says which checkpoint answered.
 
 Routing costs microseconds. Branch on `route`, never on `reason`, whose wording may change. `laya:typed-decisions` is never picked by the router; request it directly.
 

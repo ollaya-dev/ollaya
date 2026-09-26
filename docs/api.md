@@ -402,8 +402,9 @@ These are TypeSafe's shapes, field for field and in this order. `/v1/*` returns 
 
 `confidence` is TypeSafe's normalized top probability over K options:
 **(K·p<sub>max</sub> − 1) / (K − 1)**, clamped to [0, 1]. It is 0 when every option is equally
-likely and 1 when one option has all the probability. It is the same formula for every model, so a
-threshold transfers across models.
+likely and 1 when one option has all the probability. It is the same formula for every model, but a
+threshold does not transfer across models: how often an answer at a given confidence is right
+depends on the model's calibration and on the task, so tune thresholds per model.
 
 Probabilities are calibrated with the model's temperatures. On CUDA hosts the default variant is
 fp16, whose answers can differ from the fp32 reference on near-ties (top-2 gap below 0.01). Measured

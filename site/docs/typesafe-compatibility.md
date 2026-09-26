@@ -22,6 +22,7 @@ export TYPESAFE_DEFAULT_MODEL=laya      # otherwise the SDK sends its default, "
 - **API key.** Ollaya accepts any key, unless the server sets `OLLAYA_API_KEY`; then the SDK's key must match it.
 - **Request IDs.** Every response carries `x-typesafe-request-id`, so `response.request_id` works.
 - **Retries.** The SDK times out after 10 s and retries. The first request to a model waits while it loads, and a load that outlives the request continues, so the retry finds the model warm.
+- **Warm-up and timings.** To load a model before the first request, send `{"model": "laya", "keep_alive": -1}` to [`/api/decide`](/docs/api#decide) (no `state`). `/v1/*` responses carry no timings, as TypeSafe's don't; `/api/decide` reports `total_duration`, `load_duration` and `eval_duration`.
 
 ## Endpoints
 
