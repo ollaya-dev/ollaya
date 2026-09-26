@@ -113,6 +113,7 @@ Compatibility covers the API, not the model:
 - **Model names** are Ollaya's (`laya`, `laya:en`), so set `TYPESAFE_DEFAULT_MODEL` or pass `model`.
 - **Missing `instructions`.** When a question has none, the model reads the question id in its place, so name questions descriptively (`is_urgent`, `tone`).
 - **Limits.** At most 256 questions per request, 2–255 choices and 2–10 score levels. Each model also has an option budget: about 125 options for `laya:en`, 250 for `laya:multilingual`.
+- **Long states.** TypeSafe reads up to 65,536 tokens; an open model's context is shorter (512 tokens for `laya:en`, 1,024 for `laya:multilingual`, including the questions). When a state doesn't fit, `/v1/*` returns `422 STATE_TRUNCATED` rather than answering from part of it. Use a model with a longer context, shorten the state, or call [`/api/decide`](/docs/api#decide), which truncates and reports `state_truncated`.
 - **`/v1/*` stays pure.** Native fields such as `keep_alive` and `extras` are ignored there; routing, timings and truncation are reported on [`/api/decide`](/docs/api#decide).
 - **Quality** comes from open models, so it differs from Jev's by task:
   - `laya:typed-decisions` scores 0.766 on typed-decisions, against 0.727 published for Jev 1.13.
