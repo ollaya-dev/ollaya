@@ -822,7 +822,7 @@ Details of one local model.
 | `questions` | object \| `null` | Embedded question schema ([§5.2](#52-question-schema)), or `null` |
 | `router` | object \| `null` | For a router: `strategy` (string, e.g. `script`), `default` (route name) and `routes` (route name → canonical model name). `null` otherwise. |
 | `details` | [details](#model-details) | |
-| `model_info` | object | Namespaced facts. `general.*` keys are stable: `general.architecture` (string), `general.languages` (array of string), `general.source` (string). `<family>.*` keys are family-specific (e.g. `laya.context_length`, `laya.head_max_len`, `laya.encoder`, `laya.layout`). A router has `general.*` keys only. |
+| `model_info` | object | Namespaced facts. `general.*` keys are stable: `general.architecture` (string), `general.languages` (array of string: the languages the model was trained and evaluated for, ISO 639-1 codes or `multilingual`; a model on a multilingual base may still read others), `general.source` (string). `<family>.*` keys are family-specific (e.g. `laya.context_length`, `laya.head_max_len`, `laya.encoder`, `laya.layout`). A router has `general.*` keys only. |
 | `capabilities` | array of string | Open set: `choice`, `score`, `noul` (question types), `act` (has an act head: `laya.act_probability` is non-null). For a router, the intersection of its targets' capabilities. |
 | `modified_at` | string | As in `/api/tags` |
 
