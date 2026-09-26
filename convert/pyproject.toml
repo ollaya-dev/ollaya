@@ -5,7 +5,9 @@ description = "Build-time conversion of decision models to the Ollaya (ONNX) mod
 requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
 dependencies = [
-    "laya==0.3.7",
+    # The reference the goldens were made with. 0.3.7 is no longer listed on PyPI (the
+    # author removed it), so it is pinned by its file URL; the file is still served.
+    "laya @ https://files.pythonhosted.org/packages/b5/fd/dd60f49451ef43af50c3fcd5d5d9b12aea590f5bcb9afb3e5ec5171b6fa6/laya-0.3.7.tar.gz",
     "torch==2.14.*",
     "transformers==5.17.*",
     "tokenizers==0.23.*",
@@ -19,8 +21,10 @@ dependencies = [
 [tool.uv]
 package = false
 
+# CUDA 13 wheels on Linux and Windows. PyTorch publishes no CUDA build for macOS, so there
+# torch comes from PyPI (Apple silicon wheels, CPU and MPS); exports and parity run on the CPU.
 [tool.uv.sources]
-torch = { index = "pytorch-cu130" }
+torch = { index = "pytorch-cu130", marker = "sys_platform != 'darwin'" }
 
 [[tool.uv.index]]
 name = "pytorch-cu130"

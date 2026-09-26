@@ -133,6 +133,8 @@ cargo build --release -p ollaya --features cuda   # CUDA build (x86-64 Linux and
 
 `convert/` rebuilds models. It exports them, checks parity against the PyTorch reference,
 generates golden fixtures, and packages the result into `registry/`. See the module docstrings.
+`cd convert && uv sync` installs it: with CUDA 13 torch on Linux and Windows, and with the CPU and
+MPS build from PyPI on Apple silicon Macs, where exports and parity run on the CPU.
 
 ## License
 
