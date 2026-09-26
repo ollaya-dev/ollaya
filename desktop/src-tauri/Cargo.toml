@@ -33,7 +33,7 @@ tokio = { version = "1.53.1", features = ["time", "process", "sync", "macros"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "2.11.6", features = ["tray-icon", "image-png"] }
 objc2 = "0.6.4"
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSGeometry"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSGeometry", "NSNotification"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = [
     "std",
     "NSButton",

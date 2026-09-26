@@ -7,17 +7,20 @@
 //! Tauri builds the menu; [`appkit`] then dresses the native `NSMenu` with what Tauri's menu API
 //! has no words for: the header view, subtitles and section headers.
 //!
-//! The menu is rebuilt from a [`Snapshot`] of the server whenever that snapshot changes: every
-//! two seconds, or at once after an action (`AppState::refresh`). While the menu is open only the
-//! header changes in place, because replacing the menu would close it.
+//! The menu follows a [`Snapshot`] of the server, taken every two seconds or at once after an
+//! action (`AppState::refresh`). When only check marks, download progress or the header change,
+//! the items are updated in place, so an open menu stays open and shows the progress live. When
+//! the items themselves change (a model installed, the server started), the menu is rebuilt, but
+//! never while it is open: replacing it would close it. The rebuild waits for the menu to close.
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use ollaya_api::KeepAlive;
 use tauri::image::Image;
 use tauri::menu::{
-    CheckMenuItemBuilder, Menu, MenuBuilder, MenuEvent, MenuItemBuilder, PredefinedMenuItem,
-    SubmenuBuilder,
+    CheckMenuItem, CheckMenuItemBuilder, Menu, MenuBuilder, MenuEvent, MenuItem, MenuItemBuilder,
+    PredefinedMenuItem, SubmenuBuilder,
 };
 use tauri::tray::TrayIconBuilder;
 use tauri::{ActivationPolicy, AppHandle, Manager, Wry};
@@ -31,8 +34,7 @@ const TRAY: &str = "ollaya";
 const ICON_AWAKE: &[u8] = include_bytes!("../icons/tray-awake.png");
 const ICON_ASLEEP: &[u8] = include_bytes!("../icons/tray-asleep.png");
 
-/// What the menu shows. Equal snapshots draw equal menus, so an unchanged one isn't redrawn
-/// (redrawing would close a menu the user has open).
+/// What the menu shows. Equal snapshots draw equal menus, so an unchanged one isn't redrawn.
 #[derive(Clone, Default, PartialEq)]
 struct Snapshot {
     running: bool,
@@ -47,14 +49,60 @@ struct Snapshot {
     open_at_login: bool,
 }
 
+impl Snapshot {
+    /// Whether `self` and `other` draw menus with the same items, which differ at most in their
+    /// check marks, titles, subtitles and whether they are enabled.
+    fn same_items(&self, other: &Self) -> bool {
+        self.running == other.running
+            && self.version == other.version
+            && self.url == other.url
+            && self.installed == other.installed
+            && self.available == other.available
+    }
+}
+
+/// The menu on screen: the snapshot it shows, and the items a redraw can update in place.
+struct Drawn {
+    shown: Snapshot,
+    items: Items,
+}
+
+/// Handles to the menu items that change without changing the menu's shape.
+struct Items {
+    /// Installed models, checked while loaded.
+    models: HashMap<String, CheckMenuItem<Wry>>,
+    /// Library models, disabled while downloading.
+    pulls: HashMap<String, MenuItem<Wry>>,
+    login: CheckMenuItem<Wry>,
+}
+
+impl Items {
+    /// Updates the items for `s`, which must have the same items as the menu they belong to.
+    fn update(&self, s: &Snapshot) {
+        let rich = appkit::has_subtitles();
+        for (name, item) in &self.models {
+            let _ = item.set_checked(s.loaded.contains(name));
+        }
+        for (name, item) in &self.pulls {
+            let pulling = s.pulling.iter().find(|(m, _)| m == name);
+            let _ = item.set_enabled(pulling.is_none());
+            if !rich {
+                let _ = item.set_text(pull_title(name, pulling));
+            }
+        }
+        let _ = self.login.set_checked(s.open_at_login);
+    }
+}
+
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
     app.set_activation_policy(ActivationPolicy::Accessory)?;
     appkit::set_app(app.clone());
+    appkit::watch_menus();
     TrayIconBuilder::with_id(TRAY)
         .icon(Image::from_bytes(ICON_ASLEEP)?)
         .icon_as_template(true)
         .tooltip("Ollaya")
-        .menu(&build_menu(app, &Snapshot::default())?)
+        .menu(&build_menu(app, &Snapshot::default())?.0)
         .show_menu_on_left_click(true)
         .on_menu_event(on_menu_event)
         .build(app)?;
@@ -66,14 +114,14 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
             let _ = start_server_now(&app).await;
         }
         let mut library: Vec<String> = Vec::new();
-        let mut shown: Option<Snapshot> = None;
+        let mut drawn: Option<Drawn> = None;
         loop {
             if library.is_empty() {
                 library = library_names().await;
             }
             let now = snapshot(&app, &library).await;
-            if shown.as_ref() != Some(&now) && redraw(&app, &now) {
-                shown = Some(now);
+            if drawn.as_ref().map(|d| &d.shown) != Some(&now) {
+                redraw(&app, now, &mut drawn);
             }
             let state = app.state::<AppState>();
             tokio::select! {
@@ -142,22 +190,34 @@ async fn snapshot(app: &AppHandle, library: &[String]) -> Snapshot {
     s
 }
 
-/// Draws `s` and says whether the whole menu was redrawn. While the menu is open only its header
-/// is updated; the rest waits for a pass after it closes.
-fn redraw(app: &AppHandle, s: &Snapshot) -> bool {
+/// Draws `s`, and records in `drawn` what the menu now shows. A menu with the same items is
+/// updated in place, open or not. Otherwise the menu is rebuilt if it is closed; if it is open,
+/// only the header is updated and the rebuild waits for a pass after the menu closes.
+fn redraw(app: &AppHandle, s: Snapshot, drawn: &mut Option<Drawn>) {
     let Some(tray) = app.tray_by_id(TRAY) else {
-        return false;
+        return;
     };
+    if let Some(d) = drawn.as_mut().filter(|d| d.shown.same_items(&s)) {
+        d.items.update(&s);
+        let header = s.clone();
+        let _ = tray.with_inner_tray_icon(move |t| {
+            if let Some(item) = t.ns_status_item() {
+                appkit::update(&item, &header);
+            }
+        });
+        d.shown = s;
+        return;
+    }
     let open = tray
         .with_inner_tray_icon(|t| t.ns_status_item().is_some_and(|i| appkit::menu_is_open(&i)))
         .unwrap_or(false);
     let header = s.clone();
     if open {
         let _ = tray.with_inner_tray_icon(move |_| appkit::update_header(&header));
-        return false;
+        return;
     }
-    let Ok(menu) = build_menu(app, s) else {
-        return false;
+    let Ok((menu, items)) = build_menu(app, &s) else {
+        return;
     };
     let _ = tray.set_menu(Some(menu));
     let _ = tray.with_inner_tray_icon(move |t| {
@@ -175,7 +235,7 @@ fn redraw(app: &AppHandle, s: &Snapshot) -> bool {
         "Ollaya is stopped".to_owned()
     };
     let _ = tray.set_tooltip(Some(tip));
-    true
+    *drawn = Some(Drawn { shown: s, items });
 }
 
 /// The header's second line, and whether its switch is on and can be used.
@@ -191,7 +251,15 @@ fn header_state(s: &Snapshot) -> (String, bool, bool) {
     }
 }
 
-fn build_menu(app: &AppHandle, s: &Snapshot) -> tauri::Result<Menu<Wry>> {
+/// A library model's title where subtitles aren't available.
+fn pull_title(name: &str, pulling: Option<&(String, u32)>) -> String {
+    match pulling {
+        Some((_, pct)) => format!("Downloading {name}… {pct}%"),
+        None => format!("Download {name}"),
+    }
+}
+
+fn build_menu(app: &AppHandle, s: &Snapshot) -> tauri::Result<(Menu<Wry>, Items)> {
     // Subtitles and section headers need macOS 14; older systems get plainer titles.
     let rich = appkit::has_subtitles();
     let host = s.url.trim_start_matches("http://").to_owned();
@@ -229,12 +297,13 @@ fn build_menu(app: &AppHandle, s: &Snapshot) -> tauri::Result<Menu<Wry>> {
                 .build(app)?,
         );
     }
+    let mut installed = HashMap::new();
     for name in &s.installed {
-        models = models.item(
-            &CheckMenuItemBuilder::with_id(format!("model:{name}"), name)
-                .checked(s.loaded.contains(name))
-                .build(app)?,
-        );
+        let item = CheckMenuItemBuilder::with_id(format!("model:{name}"), name)
+            .checked(s.loaded.contains(name))
+            .build(app)?;
+        models = models.item(&item);
+        installed.insert(name.clone(), item);
     }
     if !rich && !s.installed.is_empty() {
         models = models.separator().item(
@@ -249,20 +318,24 @@ fn build_menu(app: &AppHandle, s: &Snapshot) -> tauri::Result<Menu<Wry>> {
     if !s.available.is_empty() {
         models = models.separator();
     }
+    let mut pulls = HashMap::new();
     for name in &s.available {
         let pulling = s.pulling.iter().find(|(m, _)| m == name);
-        let title = match (rich, pulling) {
-            (true, _) => name.clone(),
-            (false, Some((_, pct))) => format!("Downloading {name}… {pct}%"),
-            (false, None) => format!("Download {name}"),
+        let title = if rich {
+            name.clone()
+        } else {
+            pull_title(name, pulling)
         };
-        models = models.item(
-            &MenuItemBuilder::with_id(format!("pull:{name}"), title)
-                .enabled(pulling.is_none())
-                .build(app)?,
-        );
+        let item = MenuItemBuilder::with_id(format!("pull:{name}"), title)
+            .enabled(pulling.is_none())
+            .build(app)?;
+        models = models.item(&item);
+        pulls.insert(name.clone(), item);
     }
 
+    let login = CheckMenuItemBuilder::with_id("login", "Open at Login")
+        .checked(s.open_at_login)
+        .build(app)?;
     menu = menu
         .item(&models.build()?)
         .separator()
@@ -271,14 +344,15 @@ fn build_menu(app: &AppHandle, s: &Snapshot) -> tauri::Result<Menu<Wry>> {
                 .accelerator("CmdOrCtrl+O")
                 .build(app)?,
         )
-        .item(
-            &CheckMenuItemBuilder::with_id("login", "Open at Login")
-                .checked(s.open_at_login)
-                .build(app)?,
-        )
+        .item(&login)
         .separator()
         .item(&PredefinedMenuItem::quit(app, Some("Quit Ollaya"))?);
-    menu.build()
+    let items = Items {
+        models: installed,
+        pulls,
+        login,
+    };
+    Ok((menu.build()?, items))
 }
 
 fn on_menu_event(app: &AppHandle, event: MenuEvent) {
@@ -398,15 +472,19 @@ fn set_open_at_login(on: bool) {
 mod appkit {
     use std::cell::RefCell;
     use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     use objc2::rc::Retained;
     use objc2::runtime::NSObject;
     use objc2::{ClassType, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
     use objc2_app_kit::{
         NSAutoresizingMaskOptions, NSColor, NSControlStateValueOff, NSControlStateValueOn, NSFont,
-        NSFontWeightSemibold, NSMenu, NSMenuItem, NSStatusItem, NSSwitch, NSTextField, NSView,
+        NSFontWeightSemibold, NSMenu, NSMenuDidBeginTrackingNotification,
+        NSMenuDidEndTrackingNotification, NSMenuItem, NSStatusItem, NSSwitch, NSTextField, NSView,
     };
-    use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
+    use objc2_foundation::{
+        NSNotification, NSNotificationCenter, NSPoint, NSRect, NSSize, NSString,
+    };
     use tauri::{AppHandle, Manager};
 
     use super::{AppState, Snapshot, header_state, start_server_now, stop_server_now};
@@ -418,8 +496,71 @@ mod appkit {
 
     static APP: OnceLock<AppHandle> = OnceLock::new();
 
+    /// Whether one of the app's menus is open, from AppKit's tracking notifications.
+    static TRACKING: AtomicBool = AtomicBool::new(false);
+
     pub fn set_app(app: AppHandle) {
         let _ = APP.set(app);
+    }
+
+    define_class!(
+        /// Receives the notifications that a menu opened or closed. Notifications, not a menu
+        /// delegate: tray-icon makes the status item the menu's delegate.
+        // SAFETY: NSObject has no subclassing requirements, and MenuWatcher doesn't implement Drop.
+        #[unsafe(super(NSObject))]
+        #[thread_kind = MainThreadOnly]
+        #[name = "OllayaMenuWatcher"]
+        struct MenuWatcher;
+
+        impl MenuWatcher {
+            #[unsafe(method(menuOpened:))]
+            fn opened(&self, _note: &NSNotification) {
+                TRACKING.store(true, Ordering::Relaxed);
+            }
+
+            #[unsafe(method(menuClosed:))]
+            fn closed(&self, _note: &NSNotification) {
+                TRACKING.store(false, Ordering::Relaxed);
+                // A rebuild may be waiting for the menu to close.
+                if let Some(app) = APP.get() {
+                    app.state::<AppState>().changed();
+                }
+            }
+        }
+    );
+
+    impl MenuWatcher {
+        fn new(mtm: MainThreadMarker) -> Retained<Self> {
+            let this = Self::alloc(mtm).set_ivars(());
+            // SAFETY: NSObject's designated initializer.
+            unsafe { msg_send![super(this), init] }
+        }
+    }
+
+    /// Starts following whether a menu is open. Call once, on the main thread.
+    pub fn watch_menus() {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let watcher = MenuWatcher::new(mtm);
+        let center = NSNotificationCenter::defaultCenter();
+        // SAFETY: both selectors take the notification; the names are constants AppKit exports.
+        unsafe {
+            center.addObserver_selector_name_object(
+                &watcher,
+                sel!(menuOpened:),
+                Some(NSMenuDidBeginTrackingNotification),
+                None,
+            );
+            center.addObserver_selector_name_object(
+                &watcher,
+                sel!(menuClosed:),
+                Some(NSMenuDidEndTrackingNotification),
+                None,
+            );
+        }
+        // The center doesn't retain its observers, and this one lives as long as the app.
+        std::mem::forget(watcher);
     }
 
     /// The header on screen, so a redraw while the menu is open can update it in place.
@@ -484,12 +625,15 @@ mod appkit {
         NSMenuItem::class().responds_to(sel!(setSubtitle:))
     }
 
-    /// The menu is open while the status item's button is highlighted.
+    /// Whether a menu is open: AppKit is tracking one, or the status item's button is highlighted.
+    /// The highlight alone isn't enough: on macOS 27 it is off while the status item's menu is
+    /// open.
     pub fn menu_is_open(item: &NSStatusItem) -> bool {
-        let Some(mtm) = MainThreadMarker::new() else {
-            return false;
-        };
-        item.button(mtm).is_some_and(|b| b.isHighlighted())
+        let highlighted = MainThreadMarker::new()
+            .and_then(|mtm| item.button(mtm))
+            .is_some_and(|b| b.isHighlighted());
+        let tracking = TRACKING.load(Ordering::Relaxed);
+        tracking || highlighted
     }
 
     /// Dresses the menu Tauri just attached to the status item.
@@ -521,25 +665,55 @@ mod appkit {
         }
     }
 
-    /// Subtitles on the models, and a section header over the installed and the library ones.
-    fn dress_models(mtm: MainThreadMarker, menu: &NSMenu, s: &Snapshot) {
+    /// Updates a menu with the same items as `s` (the header, and the models' subtitles).
+    pub fn update(item: &NSStatusItem, s: &Snapshot) {
+        update_header(s);
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let Some(menu) = item.menu(mtm) else {
+            return;
+        };
+        if !has_subtitles() {
+            return;
+        }
+        for i in 0..menu.numberOfItems() {
+            if let Some(models) = menu.itemAtIndex(i).and_then(|entry| entry.submenu()) {
+                subtitle_models(&models, s);
+            }
+        }
+    }
+
+    /// Subtitles on the models: loaded, downloading or click to download. Returns the index of
+    /// the first library model.
+    fn subtitle_models(menu: &NSMenu, s: &Snapshot) -> Option<isize> {
         let mut first_library = None;
         for i in 0..menu.numberOfItems() {
             let Some(entry) = menu.itemAtIndex(i) else {
                 continue;
             };
             let title = entry.title().to_string();
-            if s.loaded.contains(&title) {
-                entry.setSubtitle(Some(&NSString::from_str("Loaded")));
+            let subtitle = if s.loaded.contains(&title) {
+                Some("Loaded".to_owned())
             } else if s.available.contains(&title) {
                 first_library.get_or_insert(i);
-                let subtitle = match s.pulling.iter().find(|(m, _)| *m == title) {
+                Some(match s.pulling.iter().find(|(m, _)| *m == title) {
                     Some((_, pct)) => format!("Downloading, {pct}%"),
                     None => "Click to download".to_owned(),
-                };
-                entry.setSubtitle(Some(&NSString::from_str(&subtitle)));
-            }
+                })
+            } else if s.installed.contains(&title) {
+                None
+            } else {
+                continue;
+            };
+            entry.setSubtitle(subtitle.map(|t| NSString::from_str(&t)).as_deref());
         }
+        first_library
+    }
+
+    /// Subtitles on the models, and a section header over the installed and the library ones.
+    fn dress_models(mtm: MainThreadMarker, menu: &NSMenu, s: &Snapshot) {
+        let first_library = subtitle_models(menu, s);
         // Insert from the bottom up so the first index stays valid.
         if let Some(i) = first_library {
             let header = NSMenuItem::sectionHeaderWithTitle(&NSString::from_str("Library"), mtm);
