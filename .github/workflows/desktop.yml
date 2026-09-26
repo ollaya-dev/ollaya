@@ -37,7 +37,7 @@ jobs:
           - name: macOS (Apple silicon)
             runner: macos-latest
             triple: aarch64-apple-darwin
-            features: ollaya-runner/coreml
+            features: ollaya-runner/coreml,ollaya-runner/mlx
             exe: ''
           - name: Windows (x64)
             runner: windows-latest
@@ -79,11 +79,29 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: MLX build cache
+        if: runner.os == 'macOS'
+        run: echo "OLLAYA_MLX_DIR=$HOME/.cache/ollaya-mlx" >>"$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: runner.os == 'macOS'
+        with:
+          # MLX and mlx-c, built by crates/ollaya-mlx-sys/build.rs (about 4 minutes cold).
+          path: ~/.cache/ollaya-mlx
+          key: ollaya-mlx-${{ hashFiles('crates/ollaya-mlx-sys/build.rs') }}
+      - name: Metal toolchain
+        if: runner.os == 'macOS'
+        # Xcode 26 ships the Metal compiler as a separate component.
+        run: xcrun -sdk macosx metal --version || xcodebuild -downloadComponent MetalToolchain
       - name: Build the engine
         shell: bash
         env:
           FEATURES: ${{ matrix.features }}
-        run: cargo build --release --locked -p ollaya ${FEATURES:+--features "$FEATURES"}
+        run: |
+          if [ "${{ runner.os }}" = macOS ]; then
+            # MLX needs macOS 14; without this the engine would claim rustc's default, 11.0.
+            export MACOSX_DEPLOYMENT_TARGET=14.0
+          fi
+          cargo build --release --locked -p ollaya ${FEATURES:+--features "$FEATURES"}
       - name: Bundle the engine (externalBin)
         shell: bash
         run: |
@@ -107,6 +125,12 @@ jobs:
           scripts/llama-cpp.sh "$kind" desktop/src-tauri/lib/ollaya/llama \
             desktop/src-tauri/lib/ollaya/llama.cpp-THIRD_PARTY_NOTICES
           resources="${resources:+$resources,}\"lib/ollaya/\":\"lib/ollaya/\""
+          # MLX's Metal library: the runner finds it in Contents/Resources/mlx_metal/.
+          if [ -f target/release/mlx.metallib ]; then
+            mkdir -p desktop/src-tauri/mlx_metal
+            cp target/release/mlx.metallib desktop/src-tauri/mlx_metal/
+            resources="$resources,\"mlx_metal/mlx.metallib\":\"mlx_metal/mlx.metallib\""
+          fi
           echo "TAURI_EXTRA={\"bundle\":{\"resources\":{$resources}}}" >>"$GITHUB_ENV"
           echo "Resources: {$resources}"
       - name: Sign llama.cpp for notarization

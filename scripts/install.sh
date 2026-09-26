@@ -58,6 +58,10 @@ main() {
                 ARCH=arm64
             fi
             [ "$ARCH" = arm64 ] || error "Ollaya supports Apple silicon Macs only"
+            # The MLX engine, linked into bin/ollaya from 0.7.0 on, needs macOS 14.
+            case $(sw_vers -productVersion 2>/dev/null || :) in
+                1[0-3].* | [1-9].*) error "Ollaya needs macOS 14 (Sonoma) or later; this Mac runs macOS $(sw_vers -productVersion)" ;;
+            esac
             PLATFORM=darwin-arm64
             ;;
         *) error "this script supports Linux and macOS only (found $OS)" ;;
@@ -302,6 +306,25 @@ main() {
             fetch_verified "$CUDA_ARCHIVE"
         fi
     fi
+    # The MLX engine's Metal kernels (lib/ollaya/mlx_metal), kept like the CUDA libraries when the
+    # installed copy matches the release's ollaya-darwin-arm64-mlx.sha256. Releases before 0.7.0
+    # have no MLX archive.
+    MLX_ARCHIVE=
+    MLX_KEEP=false
+    if [ "$PLATFORM" = darwin-arm64 ] && grep -q " ollaya-$PLATFORM-mlx\.tgz\$" "$TMP/sha256sum.txt"; then
+        MLX_DIR=$PREFIX/lib/ollaya/mlx_metal
+        MLX_FILES=ollaya-$PLATFORM-mlx.sha256
+        if [ -f "$MLX_DIR/FILES.sha256" ] && grep -q " $MLX_FILES\$" "$TMP/sha256sum.txt" &&
+            (fetch_verified "$MLX_FILES") >/dev/null 2>&1 && cmp -s "$TMP/$MLX_FILES" "$MLX_DIR/FILES.sha256" &&
+            cuda_intact "$MLX_DIR"; then
+            MLX_KEEP=true
+            status "The MLX engine's Metal library is unchanged; keeping the installed copy"
+        else
+            if [ -z "$ZSTD" ]; then MLX_ARCHIVE=ollaya-$PLATFORM-mlx.tgz; else MLX_ARCHIVE=ollaya-$PLATFORM-mlx.tar.zst; fi
+            status "Downloading the MLX engine's Metal library"
+            fetch_verified "$MLX_ARCHIVE"
+        fi
+    fi
 
     # --- install ---------------------------------------------------------------------------
 
@@ -320,6 +343,7 @@ main() {
     }
     unpack "$BASE_ARCHIVE"
     [ -z "$CUDA_ARCHIVE" ] || unpack "$CUDA_ARCHIVE"
+    [ -z "$MLX_ARCHIVE" ] || unpack "$MLX_ARCHIVE"
     [ -f "$STAGE/bin/ollaya" ] || error "$BASE_ARCHIVE does not contain bin/ollaya"
     if [ -n "$CUDA_ARCHIVE" ] && [ ! -f "$STAGE/lib/ollaya/cuda_v13/libonnxruntime_providers_cuda.so" ]; then
         error "$CUDA_ARCHIVE does not contain lib/ollaya/cuda_v13"
@@ -331,6 +355,9 @@ main() {
     # Kept CUDA libraries keep their notices too (the base archive replaces share/doc/ollaya).
     if $CUDA_KEEP && [ -d "$PREFIX/share/doc/ollaya/cuda_v13" ] && [ ! -e "$STAGE/share/doc/ollaya/cuda_v13" ]; then
         $SUDO mv "$PREFIX/share/doc/ollaya/cuda_v13" "$STAGE/share/doc/ollaya/cuda_v13"
+    fi
+    if $MLX_KEEP && [ -d "$PREFIX/share/doc/ollaya/mlx_metal" ] && [ ! -e "$STAGE/share/doc/ollaya/mlx_metal" ]; then
+        $SUDO mv "$PREFIX/share/doc/ollaya/mlx_metal" "$STAGE/share/doc/ollaya/mlx_metal"
     fi
     $SUDO rm -rf "$PREFIX/share/doc/ollaya"
     $SUDO mv "$STAGE/share/doc/ollaya" "$PREFIX/share/doc/ollaya"
@@ -348,6 +375,11 @@ main() {
         $SUDO mkdir -p "$STAGE/lib/ollaya"
         $SUDO rm -rf "$STAGE/lib/ollaya/cuda_v13"
         $SUDO mv "$PREFIX/lib/ollaya/cuda_v13" "$STAGE/lib/ollaya/cuda_v13"
+    fi
+    if $MLX_KEEP; then
+        $SUDO mkdir -p "$STAGE/lib/ollaya"
+        $SUDO rm -rf "$STAGE/lib/ollaya/mlx_metal"
+        $SUDO mv "$PREFIX/lib/ollaya/mlx_metal" "$STAGE/lib/ollaya/mlx_metal"
     fi
     $SUDO rm -rf "$PREFIX/lib/ollaya"
     if [ -d "$STAGE/lib/ollaya" ]; then

@@ -28,7 +28,7 @@
 #                 provider libraries in <target-dir>.
 #   --mlx         also build the MLX archive (darwin-arm64 only). The binary must have been built
 #                 with `--features ollaya-runner/mlx`, whose build script puts mlx.metallib in
-#                 <target-dir>. Not part of release builds yet (docs/decisions/0001-mlx-engine.md).
+#                 <target-dir> (docs/decisions/0001-mlx-engine.md).
 #   --no-base     skip the base archive (only useful with --cuda or --mlx)
 #   --stage DIR   stage the file trees into DIR/<archive name>/ and stop: no archives, no checksums
 #                 (the Dockerfile uses this)
