@@ -176,6 +176,28 @@ Logs: `convert/out/logs/parity-gliclass-instruct-{large,edge}-wl.log`.
   edge cases plus 20 typed-decisions rows). Each carries labels, prompt, text, ids, markers, fp32
   logits, option logits and probabilities, plus `rejected`.
 
+## Metal parity (MLX)
+
+The MLX engine ([decision record](../decisions/0001-mlx-engine.md)) implements the uni-encoder head
+(segment embeddings, label-span pooling, the two projectors and the MLP scorer) on its ModernBERT
+backbone, with the `gliclass` arch layer. `instruct-edge` passes on the Apple GPU; it is not in the
+library (see [Quality and speed](#quality-and-speed)), so this verifies the head. `instruct-large`
+stays on ONNX Runtime until the DeBERTa backbone (phase 3).
+
+```sh
+cargo run --release -p ollaya-runner --features mlx --example parity_gliclass -- <model-dir> convert/out/goldens-gliclass-instruct-edge.jsonl metal
+```
+
+Apple M4 Pro, macOS 27, same goldens and gate as the CPU (label logits within 1e-3, same decisions):
+
+| edge | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| texts, ids and label positions identical | 482 questions (+1 rejected as expected) | same |
+| max \|Δ label logit\| | 7.7e-5 (p99 4.5e-5) | 9.1e-5 (p99 2.8e-5) |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| | 1.4e-5 (p99 6.4e-6) | 6.9e-6 (p99 4.7e-6) |
+| all 97 requests, in process | 0.97 s | 2.91 s |
+
 ## Quality and speed
 
 - **typed-decisions test** (400 states, 2000 questions; argmax vs majority gold; measured here

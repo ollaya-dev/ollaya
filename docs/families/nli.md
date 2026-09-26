@@ -177,6 +177,31 @@ Logs: `convert/out/logs/parity-{deberta,modernbert}-large-zeroshot-v2.0-wl.log`.
   cases, each with the premise, rows (`hypothesis`, `ids`, fp32 `scores`), option logits,
   probabilities and `rejected`.
 
+## Metal parity (MLX)
+
+The MLX engine ([decision record](../decisions/0001-mlx-engine.md)) runs `modernbert-large` on
+the Apple GPU from the upstream `model.safetensors`, with the `sequence-classification` arch layer.
+It is built with the `mlx` feature, which is not in releases yet. `deberta-v3-large` stays on ONNX
+Runtime until the DeBERTa backbone (phase 3).
+
+```sh
+cargo run --release -p ollaya-runner --features mlx --example parity_nli -- <model-dir> convert/out/goldens-modernbert-large-zeroshot-v2.0.jsonl metal
+```
+
+Apple M4 Pro, macOS 27, against the same goldens and the same gate as the CPU (row scores and
+option logits within 1e-3, same decisions):
+
+| | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| hypotheses and token ids identical | 483 questions, 1,513 rows | same |
+| max \|Δ row score\|, \|Δ option logit\| | 7.2e-4, 7.0e-4 | 4.1e-4, 4.1e-4 |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| | 5.9e-5 (p99 1.8e-5) | 5.2e-5 (p99 1.4e-5) |
+| through the daemon, p50 / p95 per request | 140 / 429 ms | 312 / 941 ms |
+
+The daemon timings are the golden requests (4.7 questions and about 15 rows each) sent twice, with other
+jobs running on the machine.
+
 ## Quality and speed
 
 - **typed-decisions test** (400 states, 2000 questions; argmax vs majority gold; measured here

@@ -389,6 +389,21 @@ network in float64:
   ones as `convert/out/goldens-von.fp32-sdpa.jsonl`, and `--precision fp32` still produces them.
 
 
+### Metal (MLX): stays on ONNX Runtime
+
+The MLX engine ([decision record](../decisions/0001-mlx-engine.md)) implements von's
+`OptionMarkerScorer` on its ModernBERT backbone and reads `option_marker.pt` in place, by the byte
+offsets in the arch layer. On the Apple GPU (M4 Pro, macOS 27) it makes the same decision on all
+485 questions, with probabilities within 3.1e-5 and row logits within 3.3e-4 at p99, but one row is
+over the 1e-3 gate: `td/agent_trace_observability_000000` `urgency` (151 tokens), 2.0e-3 from the
+float64 goldens. That is the row whose rounding error grows through the encoder
+([above](#why-the-goldens-are-fp64)). Every fp32 variant tried on Metal lands between 1.0e-3 and
+4.1e-3 there, so von stays on ONNX Runtime on Macs: it is not in the engine's layouts and gets no
+arch layer.
+
+ONNX Runtime on the same Mac's CPU (Apple silicon, `parity_von ... cpu`) is also over the gate on
+that row, at 1.1e-3 (p99 2.4e-4, decisions 100 %); the 4.4e-4 above was measured on x86.
+
 ## Quality and speed
 
 - **JevBench (author's numbers, official harness):** easy 0.938, standard 0.653, hard 0.351.
