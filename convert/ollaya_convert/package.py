@@ -11,6 +11,11 @@ Weights and tokenizers are never copied. Their manifest layers point at the auth
 Face repository, pinned to a commit, and carry the file's sha256 (the Git LFS object id), which
 `ollaya pull` verifies. Graphs name the weights by their blob file name (`sha256-<hex>`), so the
 blob store needs no links to load them.
+
+A tag whose catalog entry has `arch` also gets an `application/vnd.ollaya.arch` layer: the network
+the MLX engine builds from the same weights file (`arch.py`), derived from the author's config at
+the pinned commit. Only tags that pass their parity gate on Metal have one
+(docs/decisions/0001-mlx-engine.md).
 """
 import argparse
 import hashlib
@@ -20,6 +25,7 @@ import urllib.request
 
 import onnx
 
+from . import arch as mlx_arch
 from . import weightless
 from .catalog import CATALOG
 
@@ -37,6 +43,7 @@ MEDIA = {
     "params": "application/vnd.ollaya.params",
     "questions": "application/vnd.ollaya.questions",
     "license": "application/vnd.ollaya.license",
+    "arch": "application/vnd.ollaya.arch",
 }
 HF = "https://huggingface.co"
 
@@ -96,6 +103,24 @@ def upstream(media_type, repo, commit, path):
     return {"mediaType": media_type, "digest": "sha256:" + oid, "size": size, "urls": [url]}
 
 
+def hf_json(repo, commit, path):
+    with urllib.request.urlopen("%s/%s/resolve/%s/%s" % (HF, repo, commit, path)) as r:
+        return json.load(r)
+
+
+def arch_layers(v, blobs, weights_path):
+    """The arch layer for MLX, when the catalog entry asks for one: `arch.family` and the author's
+    `arch.config` (and, for laya, `arch.agent_config`) at the pinned commit, checked against the
+    local copy of the weights file."""
+    spec = v.get("arch")
+    if not spec:
+        return []
+    config = hf_json(v["repo"], v["commit"], spec["config"])
+    agent = hf_json(v["repo"], v["commit"], spec["agent_config"]) if spec.get("agent_config") else None
+    layer = mlx_arch.build(spec["family"], config, weights_path, agent)
+    return [blobs.put(MEDIA["arch"], mlx_arch.dumps(layer))]
+
+
 def write_manifest(namespace, model, tag, config, layers):
     manifest = {"schemaVersion": 2, "mediaType": MANIFEST_V2, "config": config, "layers": layers}
     d = os.path.join(REGISTRY, "v2", namespace, model, "manifests")
@@ -131,7 +156,7 @@ def graph_from_wl(wl_dir, oids):
 def package_wl(spec, tag, v, blobs):
     """One tag of a model converted under `families/` (fp32 graph; runs fp32 on every device)."""
     repo, commit = v["repo"], v["commit"]
-    oids, weights = {}, []
+    oids, weights, locals_ = {}, [], []
     for location, source in v["weights"].items():
         w_repo, w_commit, path = source if isinstance(source, tuple) else (repo, commit, source)
         d = upstream(MEDIA["weights"], w_repo, w_commit, path)
@@ -142,6 +167,10 @@ def package_wl(spec, tag, v, blobs):
                 raise SystemExit("%s does not match %s@%s:%s" % (local, w_repo, w_commit, path))
         oids[location] = oid
         weights.append(d)
+        locals_.append(local)
+    if v.get("arch") and len(locals_) != 1:
+        raise SystemExit("%s: the MLX engine reads one weights file" % spec["model"])
+    arch = arch_layers(v, blobs, locals_[0]) if v.get("arch") else []
     data, stats = graph_from_wl(v["wl_dir"], oids)
     print("  %s:%s fp32 graph %.1f MB %s" % (spec["model"], tag, len(data) / 2**20, stats))
     graph = blobs.put(MEDIA["graph"], data, {"org.ollaya.precision": "fp32"})
@@ -162,7 +191,7 @@ def package_wl(spec, tag, v, blobs):
         "source": "huggingface.co/%s@%s" % (repo, commit), "license": license_id,
         "release_date": hf_commit_date(repo, commit),
     }, indent=2).encode())
-    return config, [graph] + weights + [tokenizer, decision, calibration] + questions + [lic]
+    return config, [graph] + weights + [tokenizer, decision, calibration] + questions + [lic] + arch
 
 
 def package_model(spec, blobs):
@@ -197,7 +226,7 @@ def package_model(spec, blobs):
             "description": v["description"], "source": "huggingface.co/%s@%s" % (repo, commit),
             "license": spec["license"], "release_date": hf_commit_date(repo, commit),
         }, indent=2).encode())
-        layers = graphs + [weights, tokenizer, decision, calibration, lic]
+        layers = graphs + [weights, tokenizer, decision, calibration, lic] + arch_layers(v, blobs, v["checkpoint"])
         write_manifest(ns, model, tag, config, layers)
         # Precision-pinned variants: same layers plus a params layer the runtime honours.
         for precision in v["exports"]:

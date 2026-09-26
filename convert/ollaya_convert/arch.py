@@ -282,6 +282,11 @@ def build(family, config, weights_path, agent_config=None):
     return {"schema": SCHEMA, "backbone": backbone, "head": head, "weights": weights}
 
 
+def dumps(arch):
+    """The layer's bytes (what `main` writes and `package.py` publishes)."""
+    return (json.dumps(arch, indent=1) + "\n").encode()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("family", choices=["laya", "sequence-classification", "von", "gliclass"])
@@ -293,9 +298,8 @@ def main():
     config = json.load(open(a.config))
     agent = json.load(open(a.agent_config)) if a.agent_config else None
     arch = build(a.family, config, a.weights, agent)
-    with open(a.out, "w") as f:
-        json.dump(arch, f, indent=1)
-        f.write("\n")
+    with open(a.out, "wb") as f:
+        f.write(dumps(arch))
     print("wrote %s: %s + %s head, %s weights, %d tensor offsets" % (
         a.out, arch["backbone"]["type"], arch["head"]["type"], arch["weights"]["format"],
         len(arch["weights"].get("tensors", {}))))

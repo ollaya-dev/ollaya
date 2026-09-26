@@ -15,9 +15,12 @@ LAYA_REPO = "convaiinnovations/laya"
 LAYA_COMMIT = "aa8c91ca088ec597df95a0d1c76b3063cb2ae5e8"
 
 
-def _laya(sub, description, params, ctx, languages):
+def _laya(sub, description, params, ctx, languages, mlx=False):
+    """`mlx`: publish an arch layer (the tag passed its parity gate on Metal)."""
     prefix = sub + "/" if sub else ""
     slug = sub or "en"
+    arch = {"family": "laya", "config": prefix + "encoder/config.json",
+            "agent_config": prefix + "rl_agent_config.json"} if mlx else None
     return {
         "repo": LAYA_REPO,
         "commit": LAYA_COMMIT,
@@ -33,16 +36,19 @@ def _laya(sub, description, params, ctx, languages):
         "context_length": ctx,
         "languages": languages,
         "description": description,
+        "arch": arch,
     }
 
 
 def _wl(slug, repo, commit, description, params, ctx, languages, license=None, license_text=None, wl_dir=None,
-        weights=None):
+        weights=None, arch=None):
     """A model converted under `families/`, whose weightless graph (`out/<slug>-wl`) already
     references the upstream checkpoint by its file name.
 
     `weights` maps each graph location to its upstream file: a path in `repo`, or a
-    `(repo, commit, path)` triple for a file in another repository (a LoRA's base model)."""
+    `(repo, commit, path)` triple for a file in another repository (a LoRA's base model).
+    `arch`: `{"family": ..., "config": <path in repo>}` for an arch layer (MLX; see `arch.py`), only
+    for tags that passed their parity gate on Metal."""
     return {
         "kind": "wl",
         "repo": repo,
@@ -56,6 +62,7 @@ def _wl(slug, repo, commit, description, params, ctx, languages, license=None, l
         "description": description,
         "license": license,
         "license_text": license_text,
+        "arch": arch,
     }
 
 
@@ -74,9 +81,9 @@ CATALOG = {
                         "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
         "tags": {
             "en": _laya("", "English decision model (ModernBERT-large): guardrails, email and ticket triage.",
-                        "421M", 512, ["en"]),
+                        "421M", 512, ["en"], mlx=True),
             "multilingual": _laya("multilingual", "Decision model for 100+ languages (mmBERT-base).",
-                                  "322M", 1024, ["multilingual"]),
+                                  "322M", 1024, ["multilingual"], mlx=True),
             "typed-decisions": _laya("typed-decisions",
                                      "Fine-tuned on the typed-decisions workflows (0.766 accuracy).",
                                      "421M", 1024, ["en"]),
@@ -108,6 +115,7 @@ CATALOG = {
                 "a51e07b524299e309dd2b88d48b0cfa2bd9ec598",
                 "Zero-shot NLI classifier (ModernBERT-large, Apache-2.0): faster, slightly less accurate.",
                 "396M", 512, ["en"], license="Apache-2.0",
+                arch={"family": "sequence-classification", "config": "config.json"},
                 license_text="ModernBERT-large zero-shot v2.0 by Moritz Laurer "
                              "(https://huggingface.co/MoritzLaurer/ModernBERT-large-zeroshot-v2.0)\n"
                              "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE),
