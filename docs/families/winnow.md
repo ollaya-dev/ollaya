@@ -32,7 +32,7 @@ llama.cpp with `/v1/systemone`. Ollaya ships them as `winnow:12b` (also `winnow:
 
 The models exist only as GGUF, so they run on llama.cpp: ggml-org's own release build of v0.5.0,
 loaded as libraries by Ollaya's runner (see
-[decisions/0001-llama-cpp-runtime.md](../decisions/0001-llama-cpp-runtime.md)).
+[decisions/0003-llama-cpp-runtime.md](../decisions/0003-llama-cpp-runtime.md)).
 
 - **No patched llama.cpp needed.** Winnow's patches add a selected-rows head (a speed-up), bounded SWA
   forks, a tensor-order change for tied embeddings and the HTTP route. The numbers are next-token

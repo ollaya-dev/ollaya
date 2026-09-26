@@ -1,5 +1,5 @@
 //! The llama.cpp engine: GGUF decision models (`winnow-v1`, `llm-logits-v1`) on libllama, inside
-//! the runner process (docs/decisions/0001-llama-cpp-runtime.md).
+//! the runner process (docs/decisions/0003-llama-cpp-runtime.md).
 //!
 //! The libraries are llama.cpp's own release build, loaded at run time from the install
 //! (`lib/ollaya/llama`, plus `libggml-cuda.so` from the CUDA pack): see [`ffi`]. The layouts in

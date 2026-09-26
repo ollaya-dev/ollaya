@@ -11,7 +11,7 @@
 #
 # The files are ggml-org's own release build of llama.cpp v0.5.0 (build b11146), byte for byte,
 # from the release archives pinned below by the sha256 GitHub publishes for each asset
-# (docs/decisions/0001-llama-cpp-runtime.md). Both linux-amd64 kinds come from the CUDA 13.4
+# (docs/decisions/0003-llama-cpp-runtime.md). Both linux-amd64 kinds come from the CUDA 13.4
 # archive, so the CPU and CUDA backends are one build. Nothing else from the archives is staged
 # (no llama-server, no tools), and never as a symbolic link: each library is stored once, under
 # the name the loader asks for (libllama.so.0, libllama.0.dylib). <notices-file> receives the

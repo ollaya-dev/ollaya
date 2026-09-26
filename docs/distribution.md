@@ -126,7 +126,7 @@ releases before 0.4.0, which have no such file, they download the archive as bef
 ### llama.cpp (GGUF models)
 
 GGUF models (`winnow`, `llm-logits-v1`) run on llama.cpp's own release build, loaded by the runner
-as libraries; see [decisions/0001-llama-cpp-runtime.md](decisions/0001-llama-cpp-runtime.md).
+as libraries; see [decisions/0003-llama-cpp-runtime.md](decisions/0003-llama-cpp-runtime.md).
 `scripts/llama-cpp.sh` stages them from ggml-org's release archives, each verified against a pinned
 sha256 (llama.cpp v0.5.0, build b11146):
 

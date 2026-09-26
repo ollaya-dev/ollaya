@@ -24,7 +24,7 @@ stock LM head.
 
 - **Runtime.** Ollaya's runner loads llama.cpp's own release libraries (v0.5.0, build b11146) and
   reads the label logits with `llama_get_logits_ith`: exact fp32 logits, no bias trick. See
-  [decisions/0001-llama-cpp-runtime.md](../decisions/0001-llama-cpp-runtime.md).
+  [decisions/0003-llama-cpp-runtime.md](../decisions/0003-llama-cpp-runtime.md).
 - **Reference.** The goldens are made with the same build's stock `llama-server`, driven through the
   runner's fixed plan (`llm_common/plan.py`) and read with the bias trick below. Parity compares the two
   as log-probabilities over each question's options.
