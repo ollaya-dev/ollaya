@@ -3,12 +3,16 @@
 //! Parity notes (each was measured; see `docs/decisions/0001-mlx-engine.md`):
 //! * GELU is the exact (erf) form, as `ACT2FN["gelu"]`; the tanh approximation that
 //!   mlx-embeddings uses moves probabilities by 8e-3.
-//! * Rotary embeddings: `mx.fast.rope` with `traditional = false` (the two halves rotate), which
-//!   matches Hugging Face's `rotate_half`.
+//! * Rotary embeddings: Hugging Face's `x * cos + rotate_half(x) * sin` (the two halves rotate),
+//!   with cos and sin computed in f64 on the CPU. Not `mx.fast.rope`: its kernel uses
+//!   `metal::fast::cos` / `sin`, whose error grows with the angle: on unit inputs, 1.8e-4 at
+//!   positions up to 512 and 2e-3 up to 8192, against 6e-7 with these tables.
 //! * Attention: MLX's fused SDPA with a boolean mask over keys. A query row that may see no key
 //!   gives NaN there and, through the values of the next layer, everywhere; so padding query rows
 //!   of the sliding-window layers get the full key mask (their outputs are never read).
 //! * No `mx.compile`: kernels compiled at run time use fast math on macOS 15+ (mlx#4553).
+
+use std::cell::RefCell;
 
 use ollaya_mlx::{Array, Dtype};
 
@@ -107,6 +111,17 @@ pub fn relu(x: &Array) -> Result<Array> {
     x.maximum(&Array::scalar(0.0)).map_err(mlx)
 }
 
+/// `x * cos + rotate_half(x) * sin` over the last axis, `rotate_half(x) = [-x2, x1]`; `cos` and
+/// `sin` are [seq, head_dim] and `x` is [.., seq, head_dim].
+fn rotate(x: &Array, cos: &Array, sin: &Array) -> Result<Array> {
+    let halves = x.split(2, -1).map_err(mlx)?;
+    let neg = halves[1].multiply(&Array::scalar(-1.0)).map_err(mlx)?;
+    let rotated = Array::concatenate(&[&neg, &halves[0]], -1).map_err(mlx)?;
+    x.multiply(cos)
+        .and_then(|a| a.add(&rotated.multiply(sin)?))
+        .map_err(mlx)
+}
+
 struct Layer {
     attn_norm: Option<Norm>,
     wqkv: Linear,
@@ -118,6 +133,44 @@ struct Layer {
     theta: f32,
 }
 
+/// cos and sin of the rotary angles of positions `0..len`, [len, head_dim] each, for one base.
+struct Rotary {
+    theta: f32,
+    len: i32,
+    cos: Array,
+    sin: Array,
+}
+
+impl Rotary {
+    /// Hugging Face's default RoPE, the frequencies repeated for both halves. `inv_freq` is the
+    /// model's fp32 buffer, `1 / theta^(2j / head_dim)` computed in f32 as transformers computes
+    /// it (bit for bit at head_dim 64, checked against torch); the angles `p * inv_freq` and
+    /// their cos and sin are f64, rounded once to f32. That is what von's float64 goldens
+    /// compute, and within one f32 rounding of an fp32 reference.
+    fn new(theta: f32, head_dim: usize, len: i32) -> Result<Rotary> {
+        let half = head_dim / 2;
+        let inv: Vec<f64> = (0..half)
+            .map(|j| f64::from(1.0 / theta.powf((2 * j) as f32 / head_dim as f32)))
+            .collect();
+        let n = len as usize * head_dim;
+        let (mut cos, mut sin) = (Vec::with_capacity(n), Vec::with_capacity(n));
+        for p in 0..len {
+            for j in 0..head_dim {
+                let (s, c) = (f64::from(p) * inv[j % half]).sin_cos();
+                cos.push(c as f32);
+                sin.push(s as f32);
+            }
+        }
+        let shape = [len, head_dim as i32];
+        Ok(Rotary {
+            theta,
+            len,
+            cos: Array::from_slice(&cos, &shape).map_err(mlx)?,
+            sin: Array::from_slice(&sin, &shape).map_err(mlx)?,
+        })
+    }
+}
+
 pub struct ModernBert {
     pub hidden: usize,
     heads: usize,
@@ -127,6 +180,8 @@ pub struct ModernBert {
     emb_norm: Norm,
     layers: Vec<Layer>,
     final_norm: Norm,
+    /// Rotary tables per base, grown to the longest batch seen (in powers of two).
+    rotary: RefCell<Vec<Rotary>>,
 }
 
 impl ModernBert {
@@ -169,7 +224,35 @@ impl ModernBert {
             emb_norm: norm("embeddings.norm")?,
             layers,
             final_norm: norm("final_norm")?,
+            rotary: RefCell::new(Vec::new()),
         })
+    }
+
+    /// cos and sin for positions `0..seq` with base `theta`, [seq, head_dim] each.
+    fn rotary(&self, theta: f32, seq: i32) -> Result<(Array, Array)> {
+        let mut tables = self.rotary.borrow_mut();
+        let i = match tables.iter().position(|t| t.theta == theta) {
+            Some(i) if tables[i].len >= seq => i,
+            found => {
+                let len = (seq.max(128) as u32).next_power_of_two() as i32;
+                let table = Rotary::new(theta, self.head_dim, len)?;
+                match found {
+                    Some(i) => {
+                        tables[i] = table;
+                        i
+                    }
+                    None => {
+                        tables.push(table);
+                        tables.len() - 1
+                    }
+                }
+            }
+        };
+        let (t, hd) = (&tables[i], self.head_dim as i32);
+        Ok((
+            t.cos.slice(&[0, 0], &[seq, hd]).map_err(mlx)?,
+            t.sin.slice(&[0, 0], &[seq, hd]).map_err(mlx)?,
+        ))
     }
 
     /// Token embeddings before the embedding norm: [rows, seq, hidden].
@@ -218,6 +301,12 @@ impl ModernBert {
         };
 
         let scale = (self.head_dim as f32).powf(-0.5);
+        let mut rotary: Vec<(f32, (Array, Array))> = Vec::new();
+        for layer in &self.layers {
+            if !rotary.iter().any(|(t, _)| *t == layer.theta) {
+                rotary.push((layer.theta, self.rotary(layer.theta, seq)?));
+            }
+        }
         let mut x = self.emb_norm.forward(x)?;
         for layer in &self.layers {
             let normed = match &layer.attn_norm {
@@ -233,7 +322,11 @@ impl ModernBert {
                 .and_then(|a| a.split(3, 0))
                 .map_err(mlx)?;
             let part = |i: usize| qkv[i].squeeze(0).map_err(mlx);
-            let rope = |a: Array| a.rope(hd, false, layer.theta, 1.0, 0).map_err(mlx);
+            let (_, (cos, sin)) = rotary
+                .iter()
+                .find(|(t, _)| *t == layer.theta)
+                .expect("a table per base");
+            let rope = |a: Array| rotate(&a, cos, sin);
             let (q, k, v) = (rope(part(0)?)?, rope(part(1)?)?, part(2)?);
             let mask = if layer.sliding {
                 sliding_mask.as_ref().expect("built when a layer slides")

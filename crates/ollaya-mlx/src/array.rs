@@ -465,39 +465,6 @@ impl Array {
         )
     }
 
-    /// Rotary embedding of the last `dims` features, positions `offset..` along axis -2.
-    /// `traditional = false` rotates the two halves (GPT-NeoX and Hugging Face style).
-    pub fn rope(
-        &self,
-        dims: i32,
-        traditional: bool,
-        base: f32,
-        scale: f32,
-        offset: i32,
-    ) -> Result<Array> {
-        let base = sys::mlx_optional_float {
-            value: base,
-            has_value: true,
-        };
-        // SAFETY: valid handle; no custom frequencies.
-        op(
-            |res, s| unsafe {
-                sys::mlx_fast_rope(
-                    res,
-                    self.raw,
-                    dims,
-                    traditional,
-                    base,
-                    scale,
-                    offset,
-                    Array::null(),
-                    s,
-                )
-            },
-            "rope",
-        )
-    }
-
     /// Fused attention `softmax(q k^T * scale + mask) v` for `[batch, heads, seq, dim]` inputs.
     /// A boolean `mask` keeps `true` positions. Every query row must keep at least one key:
     /// a fully masked row gives NaN.
