@@ -117,7 +117,8 @@ export function SearchPage() {
 
 /** The default tag's measured numbers; the note under the list says how they were measured. */
 function Stats({ stats }: { stats: ModelStats }) {
-  const ms = stats.latencyMs < 100 ? stats.latencyMs.toFixed(1).replace(/\.0$/, '') : String(Math.round(stats.latencyMs))
+  const latency = stats.latencyMs
+  const ms = latency === undefined ? null : latency < 100 ? latency.toFixed(1).replace(/\.0$/, '') : String(Math.round(latency))
   return (
     <>
       {stats.accuracy !== undefined ? (
@@ -125,9 +126,11 @@ function Stats({ stats }: { stats: ModelStats }) {
           <span class="tabular-nums text-fg">{stats.accuracy.toFixed(3)}</span> typed-decisions
         </span>
       ) : null}
-      <span title={`Median request to ${stats.tag} on an RTX 4090${stats.latencyNote ? `, ${stats.latencyNote}` : ''}`}>
-        <span class="tabular-nums text-fg">{ms} ms</span> on RTX 4090
-      </span>
+      {ms !== null ? (
+        <span title={`Median request to ${stats.tag} on an RTX 4090${stats.latencyNote ? `, ${stats.latencyNote}` : ''}`}>
+          <span class="tabular-nums text-fg">{ms} ms</span> on RTX 4090
+        </span>
+      ) : null}
     </>
   )
 }

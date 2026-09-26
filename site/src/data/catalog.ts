@@ -42,7 +42,8 @@ export interface ModelStats {
   /** The tag the numbers are for, e.g. "laya:en". */
   tag: string
   accuracy?: number
-  latencyMs: number
+  /** Left out where no end-to-end measurement exists for the tag. */
+  latencyMs?: number
   /** What the latency covers when it isn't five questions, e.g. "its four built-in questions". */
   latencyNote?: string
 }
@@ -101,7 +102,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   kev: {
-    stats: { tag: 'kev:0.8b', accuracy: 0.447, latencyMs: 185 },
+    stats: { tag: 'kev:0.8b', accuracy: 0.46 },
     title: 'Kev',
     description:
       "Decision models by Jared Palmer: a LoRA on a Qwen3.5 base plus a pointer head that scores every option at its own span, in one forward pass per question. Calibrated with Kev's own temperature.",
