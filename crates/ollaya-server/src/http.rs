@@ -614,6 +614,9 @@ async fn systemone(
     let out = run_decision(&s, input)
         .await
         .map_err(|e| decision_error(&e, req.questions.as_ref()))?;
+    if out.state_truncated {
+        return Err(ErrorBody::state_truncated(&out.model).into());
+    }
     let resp = views::decide_response(out, false).map_err(|e| api_error(&e))?;
     Ok(Json(resp.into_system_one()))
 }
