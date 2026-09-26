@@ -487,14 +487,14 @@ function Private() {
 type Support = { ok: boolean; text?: string; note?: string }
 
 // What each release ships (see /download and the release assets). GPU means a provider the runner
-// registers; today that is CUDA only, so Apple, AMD and Intel GPUs fall back to the CPU.
+// registers: CUDA on NVIDIA, and MLX on Apple silicon for the layouts that pass parity on Metal.
 const platforms: { name: string; detail: string; app: Support; cli: Support; gpu: Support }[] = [
   {
     name: 'macOS',
-    detail: 'Apple silicon',
+    detail: 'Apple silicon, macOS 14+',
     app: { ok: true, text: 'Menu bar app', note: '.dmg' },
     cli: { ok: true, text: 'Install script' },
-    gpu: { ok: false, text: 'CPU only' },
+    gpu: { ok: true, text: 'Apple GPU', note: 'Laya and NLI on MLX' },
   },
   {
     name: 'Windows',
@@ -594,7 +594,7 @@ function Platforms() {
         </a>
         <p class="max-w-md text-[13px] text-muted sm:text-right">
           NVIDIA GPUs need driver R580 or newer; the install scripts fetch the CUDA libraries only when they find one.
-          In the desktop apps, and on Apple, AMD and Intel GPUs, models run on the CPU.
+          On a Mac, laya and nli run on the Apple GPU through MLX; other models, AMD and Intel GPUs, and the Windows and Linux desktop apps use the CPU.
         </p>
       </div>
     </Section>

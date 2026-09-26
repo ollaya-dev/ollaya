@@ -185,7 +185,7 @@ export function DownloadPage({ origin }: { origin: string }) {
             <Step title="Run a model">
               <CodeBlock code="ollaya run laya" />
             </Step>
-            <Requirements items={['A Mac with Apple silicon (arm64).']} />
+            <Requirements items={['A Mac with Apple silicon (arm64) and macOS 14 or newer.']} />
           </Panel>
 
           <Panel id="docker" selected={selected}>

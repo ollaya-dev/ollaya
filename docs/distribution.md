@@ -162,7 +162,7 @@ sha256 (llama.cpp v0.5.0, build b11146):
 | WSL 2 | Windows NVIDIA driver with CUDA 13 | The driver's `libcuda.so.1` comes from `/usr/lib/wsl/lib`. Never install a Linux driver inside WSL. |
 | Windows | 10 or 11 on x64 | pyke's Windows build. `ollaya.exe` imports the Microsoft Visual C++ runtime (`VCRUNTIME140.dll`, `MSVCP140.dll`), as the CUDA provider does. |
 | Windows, GPU | NVIDIA driver R580 or newer (CUDA 13) | pyke's Windows CUDA 13 build, with the same minor-version compatibility as on Linux. `install.ps1` reads the driver from `nvidia-smi`, or from WMI. |
-| macOS | Apple silicon | The minimum macOS version comes from pyke's CoreML build. The release workflow prints it with `vtool -show-build`. |
+| macOS | 14 or newer on Apple silicon | The MLX engine needs macOS 14; the release workflow builds darwin-arm64 with `MACOSX_DEPLOYMENT_TARGET=14.0` and prints it with `vtool -show-build`. |
 | musl (Alpine) | not supported | glibc build. Use the Docker image. |
 
 - **Runtime libraries.** The binary itself needs only `libc`, `libm`, `libstdc++` and `libgcc_s`.

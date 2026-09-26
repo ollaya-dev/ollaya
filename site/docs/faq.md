@@ -59,7 +59,7 @@ No. Ollaya runs on the CPU, and on x86-64 Linux and Windows uses an NVIDIA GPU w
 ## Which platforms are supported?
 
 - **Linux** x86-64 and ARM64 with glibc 2.38 or newer: Ubuntu 24.04, Debian 13, Fedora 39, RHEL 10 or newer.
-- **macOS** on Apple silicon.
+- **macOS** 14 or newer on Apple silicon. `laya` and `nli:modernbert-large` run on the Apple GPU through MLX, 2 to 3 times faster than on the CPU; the other models run on the CPU.
 - **Docker:** `ghcr.io/ollaya-dev/ollaya` for linux/amd64 and linux/arm64, and `:cuda` for NVIDIA GPUs. Use it on older Linux distributions too.
 - **Windows** 10 and 11 on 64-bit x86 PCs: the desktop app (CPU), or `irm {{SITE_ORIGIN}}/install.ps1 | iex` for the command line, which also uses an NVIDIA GPU. WSL 2 with the Linux installer works too.
 - **The desktop app** runs on all three: see [Download](/download).
