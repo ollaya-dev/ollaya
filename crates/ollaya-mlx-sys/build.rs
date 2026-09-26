@@ -85,6 +85,20 @@ mod imp {
                  build without the `mlx` feature"
             );
         }
+        // The binary's own minimum macOS comes from rustc (11.0 unless this is set), not from
+        // MLX's libraries: a release build must say 14.0, or it claims to run where MLX can't.
+        println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
+        let deployment = std::env::var("MACOSX_DEPLOYMENT_TARGET").ok();
+        let major = deployment
+            .as_deref()
+            .and_then(|v| v.split('.').next()?.parse::<u32>().ok());
+        if major.is_none_or(|m| m < 14) {
+            println!(
+                "cargo:warning=MLX needs macOS {DEPLOYMENT_TARGET} but MACOSX_DEPLOYMENT_TARGET is {}; \
+                 set it to {DEPLOYMENT_TARGET} for binaries you ship",
+                deployment.as_deref().unwrap_or("unset (rustc's 11.0)")
+            );
+        }
         let prefix = match std::env::var_os("OLLAYA_MLX_DIR") {
             Some(root) => PathBuf::from(root).join(key()),
             None => PathBuf::from(env("OUT_DIR")).join("mlx"),

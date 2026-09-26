@@ -4,10 +4,17 @@ name: Release
 # ghcr.io/<owner>/ollaya:{<version>,latest} (cpu, amd64 + arm64) and :{<version>-cuda,cuda}.
 # Tags with a hyphen (v0.2.0-rc.1) become prereleases and don't move latest or cuda.
 # Running it by hand (workflow_dispatch) builds and packages everything but publishes nothing.
+# The MLX engine (docs/decisions/0001-mlx-engine.md) is not in release builds yet: only a manual
+# run with `mlx` checked builds darwin-arm64 with it and packages ollaya-darwin-arm64-mlx.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      mlx:
+        description: 'darwin-arm64: build with the MLX engine and package the MLX archive (not for releases yet)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -46,6 +53,9 @@ jobs:
             features: ollaya-runner/cuda
             package-args: --cuda
     runs-on: ${{ matrix.runner }}
+    env:
+      # 'true' only for darwin-arm64 in a manual run with the mlx input; tags never set it.
+      MLX: ${{ matrix.platform == 'darwin-arm64' && github.event_name == 'workflow_dispatch' && inputs.mlx }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,12 +82,31 @@ jobs:
       - name: Install zstd
         if: runner.os == 'macOS'
         run: command -v zstd >/dev/null || brew install zstd
+      - name: MLX build cache
+        if: env.MLX == 'true'
+        run: echo "OLLAYA_MLX_DIR=$HOME/.cache/ollaya-mlx" >>"$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: env.MLX == 'true'
+        with:
+          # MLX and mlx-c, built by crates/ollaya-mlx-sys/build.rs (about 4 minutes cold).
+          path: ~/.cache/ollaya-mlx
+          key: ollaya-mlx-${{ hashFiles('crates/ollaya-mlx-sys/build.rs') }}
+      - name: Metal toolchain
+        if: env.MLX == 'true'
+        # Xcode 26 ships the Metal compiler as a separate component.
+        run: xcrun -sdk macosx metal --version || xcodebuild -downloadComponent MetalToolchain
       - name: Build
         shell: bash
         env:
           FEATURES: ${{ matrix.features }}
           OLLAYA_BUILD_VERSION: ${{ steps.version.outputs.version }}
-        run: cargo build --release --locked -p ollaya ${FEATURES:+--features "$FEATURES"}
+        run: |
+          if [ "$MLX" = true ]; then
+            FEATURES=${FEATURES:+$FEATURES,}ollaya-runner/mlx
+            # MLX needs macOS 14; without this the binary would claim rustc's default, 11.0.
+            export MACOSX_DEPLOYMENT_TARGET=14.0
+          fi
+          cargo build --release --locked -p ollaya ${FEATURES:+--features "$FEATURES"}
       - name: Smoke test
         run: target/release/ollaya --version
       - name: Minimum macOS version
@@ -88,9 +117,16 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
           PACKAGE_ARGS: ${{ matrix.package-args }}
-          OLLAYA_CARGO_FEATURES: ${{ matrix.features }}
+          FEATURES: ${{ matrix.features }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: scripts/package.sh --platform "$PLATFORM" ${PACKAGE_ARGS:+"$PACKAGE_ARGS"} target/release "$VERSION"
+        run: |
+          if [ "$MLX" = true ]; then
+            FEATURES=${FEATURES:+$FEATURES,}ollaya-runner/mlx
+            PACKAGE_ARGS=${PACKAGE_ARGS:+$PACKAGE_ARGS }--mlx
+          fi
+          export OLLAYA_CARGO_FEATURES=$FEATURES
+          # shellcheck disable=SC2086 # PACKAGE_ARGS is a list of flags
+          scripts/package.sh --platform "$PLATFORM" $PACKAGE_ARGS target/release "$VERSION"
       - name: Smoke test the Windows archives
         if: matrix.platform == 'windows-amd64'
         shell: bash
@@ -134,6 +170,7 @@ jobs:
             dist/*.tgz
             dist/*.zip
             dist/*-cuda.sha256
+            dist/*-mlx.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 7

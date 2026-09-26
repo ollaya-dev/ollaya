@@ -54,6 +54,46 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  mlx:
+    name: MLX engine on macOS (clippy, unit tests)
+    # The `mlx` feature, off by default: builds MLX and mlx-c from pinned sources with CMake and
+    # links them. GitHub's macOS runners have no usable Metal GPU (runner-images#7085), so the GPU
+    # tests (crates/ollaya-mlx/tests) and the Metal parity runs happen on a Mac by hand
+    # (docs/decisions/0001-mlx-engine.md).
+    runs-on: macos-latest
+    env:
+      # MLX needs macOS 14; the binary says so only when rustc is told (its default is 11.0).
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: mlx
+          cache-directories: ~/Library/Caches/ort.pyke.io
+      - name: MLX build cache
+        run: echo "OLLAYA_MLX_DIR=$HOME/.cache/ollaya-mlx" >>"$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # MLX and mlx-c, built by crates/ollaya-mlx-sys/build.rs (about 4 minutes cold).
+          path: ~/.cache/ollaya-mlx
+          key: ollaya-mlx-${{ hashFiles('crates/ollaya-mlx-sys/build.rs') }}
+      - name: Metal toolchain
+        # Xcode 26 ships the Metal compiler as a separate component.
+        run: xcrun -sdk macosx metal --version || xcodebuild -downloadComponent MetalToolchain
+      - run: cargo clippy --workspace --all-targets --locked --features ollaya/mlx -- -D warnings
+      - run: cargo test --locked -p ollaya-runner -p ollaya-server --lib --features ollaya-runner/mlx
+      - name: Binary and Metal library
+        run: |
+          cargo build --release --locked -p ollaya --features ollaya/mlx
+          vtool -show-build target/release/ollaya
+          ls -l target/release/ollaya target/release/mlx.metallib
+
   desktop:
     name: Desktop app (typecheck, clippy)
     runs-on: ubuntu-24.04

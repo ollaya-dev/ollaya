@@ -9,10 +9,13 @@
 #   ollaya-linux-amd64-cuda.tar.zst  lib/ollaya/cuda_v13/ (ORT CUDA provider + NVIDIA CUDA/cuDNN
 #                                    libraries) + share/doc/ollaya/cuda_v13/ (notices, NVIDIA licenses)
 #   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
+#   ollaya-darwin-arm64-mlx.tar.zst  lib/ollaya/mlx_metal/ (mlx.metallib, the MLX engine's Metal
+#                                    kernels) + share/doc/ollaya/mlx_metal/ (notices); also .tgz
 #   ollaya-windows-amd64.zip         bin/ollaya.exe (with the DLLs it links), share/
 #   ollaya-windows-amd64-cuda.zip    the same GPU pack as the Linux one, with the Windows DLLs
 #   ollaya-<platform>-cuda.sha256    sha256 of every library in the CUDA archive (FILES.sha256),
 #                                    which the installers use to skip an unchanged CUDA download
+#   ollaya-darwin-arm64-mlx.sha256   the same for the MLX archive
 #   sha256sum.txt                    over every archive in --out, and the files above
 #
 # Options:
@@ -20,7 +23,10 @@
 #   --cuda        also build the CUDA archive (linux-amd64 and windows-amd64). The binary must
 #                 have been built with `--features ollaya-runner/cuda`, which also puts the ORT
 #                 provider libraries in <target-dir>.
-#   --no-base     skip the base archive (only useful with --cuda)
+#   --mlx         also build the MLX archive (darwin-arm64 only). The binary must have been built
+#                 with `--features ollaya-runner/mlx`, whose build script puts mlx.metallib in
+#                 <target-dir>. Not part of release builds yet (docs/decisions/0001-mlx-engine.md).
+#   --no-base     skip the base archive (only useful with --cuda or --mlx)
 #   --stage DIR   stage the file trees into DIR/<archive name>/ and stop: no archives, no checksums
 #                 (the Dockerfile uses this)
 #   --out DIR     output directory (default: dist)
@@ -30,8 +36,8 @@
 #   OLLAYA_BIN             binary to package (default: <target-dir>/ollaya)
 #   OLLAYA_CARGO_PACKAGE   package whose dependency tree is listed in the notices (default: ollaya)
 #   OLLAYA_CARGO_FEATURES  cargo features of the build (default: ollaya-runner/cuda on linux-amd64
-#                          and windows-amd64, ollaya-runner/coreml on darwin-arm64, none on
-#                          linux-arm64)
+#                          and windows-amd64, ollaya-runner/coreml on darwin-arm64, plus
+#                          ollaya-runner/mlx with --mlx, none on linux-arm64)
 #   OLLAYA_CACHE           download cache (default: ${XDG_CACHE_HOME:-~/.cache}/ollaya-package)
 #   PYTHON                 interpreter used for `pip download` (default: python3 or python, else
 #                          `uvx pip`)
@@ -46,6 +52,20 @@ ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 ORT_VERSION=1.28.0
 ORT_LICENSE_SHA256=2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c
 ORT_NOTICES_SHA256=0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2
+
+# MLX (docs/decisions/0001-mlx-engine.md): the pins in crates/ollaya-mlx-sys/build.rs, and the
+# notices of what the `mlx` feature links into bin/ollaya. MLX's ACKNOWLEDGMENTS.md carries the
+# licenses of the code it includes (PocketFFT, metal-cpp); its CMake build also compiles in {fmt}
+# and nlohmann/json, header-only.
+MLX_VERSION=0.32.2
+MLX_C_COMMIT=ebc88f10caa1b625e6b581437a8dea6df8a70085
+MLX_LICENSE_SHA256=ccfab7ccb2ea306f71531c8ca77bb55507606cd90768b1e32b8b52ab5b48cf01
+MLX_ACKNOWLEDGMENTS_SHA256=fbf1078b24ca057b31fef9297390bbe96e001258ecf4c0b108394c764e607799
+MLX_C_LICENSE_SHA256=44326a4ea062241ae6fc26ee2ec90bdc81af7eb7b9d3966181b733fa69d42057
+FMT_VERSION=12.1.0
+FMT_LICENSE_SHA256=07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8
+JSON_VERSION=3.11.3
+JSON_LICENSE_SHA256=86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14
 
 say() { printf '>>> %s\n' "$*" >&2; }
 die() { printf 'package.sh: error: %s\n' "$*" >&2; exit 1; }
@@ -80,7 +100,10 @@ write_checksums() {
         export LC_ALL
         : >sha256sum.txt.tmp
         for f in *; do
-            case $f in *.tar.zst | *.tgz | *.zip | *-cuda.sha256) [ -f "$f" ] || continue ;; *) continue ;; esac
+            case $f in
+                *.tar.zst | *.tgz | *.zip | *-cuda.sha256 | *-mlx.sha256) [ -f "$f" ] || continue ;;
+                *) continue ;;
+            esac
             printf '%s  %s\n' "$(sha256_of "$f")" "$f" >>sha256sum.txt.tmp
         done
         [ -s sha256sum.txt.tmp ] || { rm -f sha256sum.txt.tmp; die "no archives in $dir"; }
@@ -103,12 +126,13 @@ fetch() {
 
 # --- arguments ---------------------------------------------------------------------------------
 
-PLATFORM='' CUDA=0 BASE=1 STAGE='' OUT=dist
+PLATFORM='' CUDA=0 MLX=0 BASE=1 STAGE='' OUT=dist
 while [ $# -gt 0 ]; do
     case $1 in
         --platform) [ $# -ge 2 ] || usage; PLATFORM=$2; shift 2 ;;
         --platform=*) PLATFORM=${1#*=}; shift ;;
         --cuda) CUDA=1; shift ;;
+        --mlx) MLX=1; shift ;;
         --no-base) BASE=0; shift ;;
         --stage) [ $# -ge 2 ] || usage; STAGE=$2; shift 2 ;;
         --out) [ $# -ge 2 ] || usage; OUT=$2; shift 2 ;;
@@ -142,12 +166,17 @@ case $PLATFORM in
     windows-amd64) TRIPLE=x86_64-pc-windows-msvc DEFAULT_FEATURES=ollaya-runner/cuda ;;
     *) die "unknown platform: $PLATFORM" ;;
 esac
+[ "$MLX" = 0 ] || DEFAULT_FEATURES=$DEFAULT_FEATURES,ollaya-runner/mlx
 FEATURES=${OLLAYA_CARGO_FEATURES-$DEFAULT_FEATURES}
 case $PLATFORM in
     linux-amd64 | windows-amd64) ;;
     *) [ "$CUDA" = 0 ] || die "--cuda is only supported for linux-amd64 and windows-amd64" ;;
 esac
-[ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || die "--no-base without --cuda leaves nothing to do"
+[ "$MLX" = 0 ] || [ "$PLATFORM" = darwin-arm64 ] || die "--mlx is only supported for darwin-arm64"
+[ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || [ "$MLX" = 1 ] ||
+    die "--no-base without --cuda or --mlx leaves nothing to do"
+# The `mlx` feature links MLX into bin/ollaya, so its notices go into the base archive too.
+case ",$FEATURES," in *mlx,*) LINKS_MLX=1 ;; *) LINKS_MLX=0 ;; esac
 
 EXE=
 [ "$PLATFORM" != windows-amd64 ] || EXE=.exe
@@ -228,6 +257,43 @@ onnxruntime-ThirdPartyNotices.txt next to this file.
 
 EOF
     sed 's/^/    /' "$CACHE/onnxruntime-$ORT_VERSION/LICENSE"
+}
+
+# --- MLX notices -------------------------------------------------------------------------------
+
+if [ "$MLX" = 1 ] || [ "$LINKS_MLX" = 1 ]; then
+    MLX_RAW=https://raw.githubusercontent.com/ml-explore
+    fetch "$MLX_RAW/mlx/v$MLX_VERSION/LICENSE" "$CACHE/mlx-$MLX_VERSION/LICENSE" "$MLX_LICENSE_SHA256"
+    fetch "$MLX_RAW/mlx/v$MLX_VERSION/ACKNOWLEDGMENTS.md" "$CACHE/mlx-$MLX_VERSION/ACKNOWLEDGMENTS.md" \
+        "$MLX_ACKNOWLEDGMENTS_SHA256"
+    fetch "$MLX_RAW/mlx-c/$MLX_C_COMMIT/LICENSE" "$CACHE/mlx-c-$MLX_C_COMMIT/LICENSE" "$MLX_C_LICENSE_SHA256"
+    fetch "https://raw.githubusercontent.com/fmtlib/fmt/$FMT_VERSION/LICENSE" \
+        "$CACHE/fmt-$FMT_VERSION/LICENSE" "$FMT_LICENSE_SHA256"
+    fetch "https://raw.githubusercontent.com/nlohmann/json/v$JSON_VERSION/LICENSE.MIT" \
+        "$CACHE/json-$JSON_VERSION/LICENSE.MIT" "$JSON_LICENSE_SHA256"
+fi
+
+# mlx_notice WHERE: MLX, mlx-c and what their build compiles in, with every license text.
+mlx_notice() {
+    cat <<EOF
+MLX $MLX_VERSION (https://github.com/ml-explore/mlx) and mlx-c $MLX_C_COMMIT
+(https://github.com/ml-explore/mlx-c), built from source. $1
+License: MIT (both). MLX's build also compiles in {fmt} $FMT_VERSION (MIT) and nlohmann/json
+$JSON_VERSION (MIT), and MLX includes PocketFFT (BSD-3-Clause) and metal-cpp (Apache-2.0), whose
+notices follow MLX's own below.
+
+MLX:
+
+EOF
+    sed 's/^/    /' "$CACHE/mlx-$MLX_VERSION/LICENSE"
+    printf '\nmlx-c:\n\n'
+    sed 's/^/    /' "$CACHE/mlx-c-$MLX_C_COMMIT/LICENSE"
+    printf '\n{fmt}:\n\n'
+    sed 's/^/    /' "$CACHE/fmt-$FMT_VERSION/LICENSE"
+    printf '\nnlohmann/json:\n\n'
+    sed 's/^/    /' "$CACHE/json-$JSON_VERSION/LICENSE.MIT"
+    printf "\nMLX's third-party software (from its ACKNOWLEDGMENTS.md):\n\n"
+    sed -n '/^# Third-Party Software/,$p' "$CACHE/mlx-$MLX_VERSION/ACKNOWLEDGMENTS.md" | sed 's/^/    /'
 }
 
 # --- Rust dependency notices -------------------------------------------------------------------
@@ -328,7 +394,13 @@ stage_base() {
         printf 'contains the third-party software below.\n\n'
         printf '1. '
         ort_notice "Linked into bin/ollaya$EXE."
-        printf '\n2. Rust crates compiled into bin/ollaya\n\n'
+        n=2
+        if [ "$LINKS_MLX" = 1 ]; then
+            printf '\n2. '
+            mlx_notice "Linked into bin/ollaya$EXE (the MLX engine)."
+            n=3
+        fi
+        printf '\n%s. Rust crates compiled into bin/ollaya\n\n' "$n"
         rust_notices
     } >"$root/share/doc/ollaya/THIRD_PARTY_NOTICES"
     say "Staged $name"
@@ -453,6 +525,29 @@ EOF
     say "Staged $name ($(du -sk "$lib" | awk '{ printf "%.0f MiB", $1 / 1024 }') of libraries)"
 }
 
+stage_mlx() {
+    name=ollaya-$PLATFORM-mlx
+    root=$TREES/$name
+    lib=$root/lib/ollaya/mlx_metal
+    doc=$root/share/doc/ollaya/mlx_metal
+    rm -rf "$root"
+    mkdir -p "$lib" "$doc"
+    [ -f "$TARGET_DIR/mlx.metallib" ] ||
+        die "$TARGET_DIR/mlx.metallib not found; build with --features ollaya-runner/mlx"
+    cp "$TARGET_DIR/mlx.metallib" "$lib/mlx.metallib"
+    chmod 0644 "$lib/mlx.metallib"
+    # As for CUDA: a fingerprint of the files themselves, for keep-if-unchanged installs.
+    (cd "$lib" && printf '%s  %s\n' "$(sha256_of mlx.metallib)" mlx.metallib) >"$WORK/FILES.sha256"
+    mv "$WORK/FILES.sha256" "$lib/FILES.sha256"
+    {
+        printf 'Ollaya %s MLX package (%s): third-party notices\n\n' "$VERSION" "$PLATFORM"
+        printf "lib/ollaya/mlx_metal/mlx.metallib holds MLX's Metal kernels, compiled ahead of time.\n"
+        printf "It is third-party software, not covered by Ollaya's Apache-2.0 license.\n\n"
+        mlx_notice "Its Metal kernels, as compiled by this build."
+    } >"$doc/THIRD_PARTY_NOTICES"
+    say "Staged $name ($(human_size "$lib/mlx.metallib") metallib)"
+}
+
 # --- archives ----------------------------------------------------------------------------------
 
 # tar_create DIR ENTRIES...: deterministic tar stream of DIR/ENTRIES on stdout. Only the named
@@ -504,6 +599,7 @@ archive() {
 
 [ "$BASE" = 0 ] || stage_base
 [ "$CUDA" = 0 ] || stage_cuda
+[ "$MLX" = 0 ] || stage_mlx
 
 if [ -n "$STAGE" ]; then
     say "Staged trees are in $STAGE"
@@ -514,5 +610,9 @@ fi
 if [ "$CUDA" = 1 ]; then
     archive "ollaya-$PLATFORM-cuda" lib share
     cp "$TREES/ollaya-$PLATFORM-cuda/lib/ollaya/cuda_v13/FILES.sha256" "$OUT/ollaya-$PLATFORM-cuda.sha256"
+fi
+if [ "$MLX" = 1 ]; then
+    archive "ollaya-$PLATFORM-mlx" lib share
+    cp "$TREES/ollaya-$PLATFORM-mlx/lib/ollaya/mlx_metal/FILES.sha256" "$OUT/ollaya-$PLATFORM-mlx.sha256"
 fi
 write_checksums "$OUT"
