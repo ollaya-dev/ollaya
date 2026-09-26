@@ -71,6 +71,14 @@
       "urls": [
         "https://ollaya.dev/blobs/sha256-ec56c3e69fab09b41de6f1c80fdcc13b83ec1eef1f72d3022baaafde3d9307e9"
       ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.arch",
+      "digest": "sha256:0bed1ebe7d32a74299026e2f1167af59a25a9ba747281d71a1857b17a92c5eb5",
+      "size": 1352,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-0bed1ebe7d32a74299026e2f1167af59a25a9ba747281d71a1857b17a92c5eb5"
+      ]
     }
   ]
 }
