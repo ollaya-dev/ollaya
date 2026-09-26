@@ -21,11 +21,11 @@ Each release on GitHub (`ollaya-dev/ollaya`, set with `OLLAYA_REPO`) carries:
 
 | Archive | Contents | Size |
 |---|---|---|
-| `ollaya-linux-amd64.tar.zst` | `bin/ollaya`, `share/doc/ollaya/` | 7.7 MiB* |
-| `ollaya-linux-amd64-cuda.tar.zst` | `lib/ollaya/cuda_v13/` (20 libraries), `share/doc/ollaya/cuda_v13/` | 1092 MiB (2069 MiB unpacked) |
+| `ollaya-linux-amd64.tar.zst` | `bin/ollaya`, `lib/ollaya/llama/` (llama.cpp, CPU), `share/doc/ollaya/` | 7.7 MiB*; llama.cpp adds 23 MiB unpacked |
+| `ollaya-linux-amd64-cuda.tar.zst` | `lib/ollaya/cuda_v13/` (21 libraries, llama.cpp's `libggml-cuda.so` included), `share/doc/ollaya/cuda_v13/` | 1092 MiB (2069 MiB unpacked) before `libggml-cuda.so` (159 MiB unpacked) |
 | `ollaya-linux-amd64-cuda.sha256` | The sha256 of every library in `lib/ollaya/cuda_v13/`, also installed there as `FILES.sha256` | 2 KiB |
-| `ollaya-linux-arm64.tar.zst` | `bin/ollaya`, `share/doc/ollaya/` (CPU only) | |
-| `ollaya-darwin-arm64.tar.zst` | `bin/ollaya`, `share/doc/ollaya/` (CPU and CoreML) | |
+| `ollaya-linux-arm64.tar.zst` | `bin/ollaya`, `lib/ollaya/llama/`, `share/doc/ollaya/` (CPU only) | |
+| `ollaya-darwin-arm64.tar.zst` | `bin/ollaya`, `lib/ollaya/llama/` (llama.cpp with Metal), `share/doc/ollaya/` (CPU and CoreML) | |
 | `ollaya-darwin-arm64.tgz` | The same as the darwin `.tar.zst`. Stock macOS has no `zstd`, so `install.sh` falls back to it | |
 | `ollaya-windows-amd64.zip` | `bin/ollaya.exe`, `bin/DirectML.dll`, `share/` | 21.8 MiB |
 | `ollaya-windows-amd64-cuda.zip` | `lib/ollaya/cuda_v13/` (21 DLLs), `share/doc/ollaya/cuda_v13/` | 1123 MiB (1645 MiB unpacked) |
@@ -45,7 +45,8 @@ Notes on the archives:
 - **Top-level entries only.** An archive holds only `bin/`, `lib/` and `share/`, never `.`, so
   unpacking it over a prefix never changes the prefix directory's own mode.
 
-`share/doc/ollaya/` holds `LICENSE`, `THIRD_PARTY_NOTICES` and `onnxruntime-ThirdPartyNotices.txt`.
+`share/doc/ollaya/` holds `LICENSE`, `THIRD_PARTY_NOTICES`, `onnxruntime-ThirdPartyNotices.txt` and
+`llama.cpp-THIRD_PARTY_NOTICES`.
 The CUDA archive adds `share/doc/ollaya/cuda_v13/`, with its own `THIRD_PARTY_NOTICES` and
 `licenses/`, the license text from each NVIDIA wheel.
 
@@ -121,6 +122,36 @@ releases before 0.4.0, which have no such file, they download the archive as bef
   DirectML provider, which is compiled in but never registered. The base zip has it in `bin/`, and
   the pack has a copy: GPU runners start from inside the pack and load the DLLs they import from
   their own folder, and without the copy they would pick up whatever version `System32` has.
+
+### llama.cpp (GGUF models)
+
+GGUF models (`winnow`, `llm-logits-v1`) run on llama.cpp's own release build, loaded by the runner
+as libraries; see [decisions/0001-llama-cpp-runtime.md](decisions/0001-llama-cpp-runtime.md).
+`scripts/llama-cpp.sh` stages them from ggml-org's release archives, each verified against a pinned
+sha256 (llama.cpp v0.5.0, build b11146):
+
+| Where | Files | From |
+|---|---|---|
+| `lib/ollaya/llama/` (linux-amd64) | `libllama.so.0`, `libggml.so.0`, `libggml-base.so.0` and 14 `libggml-cpu-*.so` variants | `llama-b11146-bin-ubuntu-cuda-13.4-x64.tar.gz` |
+| `lib/ollaya/cuda_v13/libggml-cuda.so` | the CUDA backend | the same archive, so CPU and CUDA are one build |
+| `lib/ollaya/llama/` (linux-arm64) | the same set, arm64 CPU variants | `llama-b11146-bin-ubuntu-arm64.tar.gz` |
+| `lib/ollaya/llama/` (darwin-arm64) | `libllama.0.dylib`, `libggml*.0.dylib` (Metal built in, shaders embedded, macOS 13.3 or newer) | `llama-b11146-bin-macos-arm64.tar.gz` |
+| `lib/ollaya/llama/` (windows-amd64) | `llama.dll`, `ggml.dll`, `ggml-base.dll`, the `ggml-cpu-*.dll` variants and `libomp.dll` | `llama-b11146-bin-win-cpu-x64.zip` |
+
+- **Nothing else.** No `llama-server`, no tools, no symbolic links: each library is stored once,
+  under the name the loader asks for.
+- **How the runner finds them.** The daemon passes `--llama-dir` (`$OLLAYA_LIBRARY_PATH/llama`, else
+  `<exe dir>/../lib/ollaya/llama`). ggml loads the best CPU variant for the machine. The CUDA backend
+  is found next to a GPU runner's `argv[0]`, the CUDA pack, where it links the pack's `libcudart`,
+  `libcublas` and `libcublasLt` through its `$ORIGIN` RUNPATH.
+- **Build check.** The runner refuses a llama.cpp whose version or default parameter structs
+  differ from the ones `crates/ollaya-runner/src/llama/ffi.rs` was written for.
+- **`ollaya llama-devices`** (hidden) loads the libraries the way a runner does and prints the
+  llama.cpp version and the devices it finds. The release workflow runs it on every archive.
+- **Host libraries.** Linux: GCC's OpenMP runtime (`libgomp.so.1`), which `install.sh` checks and the
+  Docker image installs. Windows: the Visual C++ runtime (`MSVCP140.dll`).
+- **Upgrades.** `libggml-cuda.so` is part of the CUDA pack's `FILES.sha256`, so the pack is only
+  downloaded again when a llama.cpp bump changes it.
 
 ## Supported systems
 

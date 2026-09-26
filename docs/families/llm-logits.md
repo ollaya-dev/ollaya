@@ -17,16 +17,17 @@ Reference implementation:
 - `demo.py`: end-to-end checks, typed-decisions quality and temperature fitting;
 - `determinism.py`: how llama.cpp numbers move with batch splits.
 
-## Recommended engine: llama.cpp (`llama-server`)
+## Engine: llama.cpp in the runner
 
-This is option (b), and it is the only option for these models: the weights exist only as GGUF, and
-the readout is the stock LM head.
+This is the only option for these models: the weights exist only as GGUF, and the readout is the
+stock LM head.
 
-- **v1 runner.** Stock `llama-server` over HTTP, using the bias trick below.
-- **Upgrade path.** Link `libllama` directly, e.g. through the Rust `llama-cpp-2` crate. That reads
-  `llama_get_logits_ith` for exact logits with no bias trick, and forks the state prefix explicitly with
-  `llama_memory_seq_cp`, which Winnow's patched server does. The explicit fork also fixes the
-  determinism issue described below.
+- **Runtime.** Ollaya's runner loads llama.cpp's own release libraries (v0.5.0, build b11146) and
+  reads the label logits with `llama_get_logits_ith`: exact fp32 logits, no bias trick. See
+  [decisions/0001-llama-cpp-runtime.md](../decisions/0001-llama-cpp-runtime.md).
+- **Reference.** The goldens are made with the same build's stock `llama-server`, driven through the
+  runner's fixed plan (`llm_common/plan.py`) and read with the bias trick below. Parity compares the two
+  as log-probabilities over each question's options.
 
 ## Prompt
 
@@ -150,9 +151,11 @@ With `cache_prompt: true`, whether a request reuses a prefix depends on what tha
 
 The runner must use a fixed evaluation plan per request. Options, from best to simplest:
 
-1. **libllama runner.** Evaluate `pre⧺system⧺mid⧺"State:…Question: "` as one batch, fork it
-   (`llama_memory_seq_cp`), then evaluate each question suffix as one batch. This is deterministic and
-   shares the prefix.
+1. **libllama runner (what Ollaya ships).** Evaluate the state prefix as one batch, keep it, and
+   evaluate each question's suffix as one batch after it, cutting the cache back to the prefix
+   (`llama_memory_seq_rm`) between questions. This is deterministic and shares the prefix. Forking the
+   prefix into several sequences (`llama_memory_seq_cp`) and decoding every suffix in one batch would
+   be faster, but it is a different split and needs its own goldens.
 2. **llama-server with a pinned plan.** Per request: first a prefix-only request, then each question
    with `cache_prompt: true` on the same slot (`id_slot`), with `-np 1` per model or one slot per
    in-flight request. This plan was measured in `determinism.py` as split vs split2: bit-identical.
@@ -230,7 +233,9 @@ catalog claim.
 - **Cost.** One prefill per question: the state is shared through the cache, and the question suffix
   is prefilled each time.
 - **Quantization.** Results depend on the GGUF's quantization and the llama.cpp version and backend.
-  Goldens for a GGUF are tied to a pinned llama.cpp build (b11149 here), with argmax-level tolerance.
+  Goldens for a GGUF are tied to the pinned llama.cpp build and to a device class (CPU, CUDA, Metal):
+  `export_llama.py` writes them for one device and `replay.py` for the others. The measurements in this
+  document were made on b11149; the shipped runtime is b11146 (v0.5.0).
 
 ## Files
 
@@ -242,8 +247,9 @@ catalog claim.
   - `ggml-org/gemma-4-E2B-it-GGUF@b4243c156154b6dca9324415f8c7ccc098b4aed1/gemma-4-E2B-it-Q8_0.gguf`
     (sha256 `996d0877…a63a`, Apache-2.0).
 - `decision.json` and `calibration.json` are small and derived; Ollaya hosts them.
-- The llama-server binary comes from the llama.cpp releases (MIT). This work used b11149,
-  `llama-b11149-bin-ubuntu-cuda-13.4-x64` + `cudart`.
+- llama.cpp comes from ggml-org's releases (MIT): the libraries for the runtime
+  (`scripts/llama-cpp.sh`), and the same build's `llama-server` for the goldens. The measurements above
+  used b11149 (`llama-b11149-bin-ubuntu-cuda-13.4-x64` + `cudart`).
 
 ## Prior art
 

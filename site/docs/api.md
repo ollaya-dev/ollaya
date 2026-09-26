@@ -261,7 +261,7 @@ Routing costs microseconds. Branch on `route`, never on `reason`, whose wording 
 GET /api/tags
 ```
 
-The models on this machine, newest first. Each entry has `name`, `model` (the same), `modified_at`, `size` in bytes, `digest` (sha256 of the manifest, bare hex) and `details`: `parent_model`, `format` (`onnx` or `router`), `family`, `families`, `parameter_size` and `quantization_level` (the precisions it carries, such as `F16/F32`).
+The models on this machine, newest first. Each entry has `name`, `model` (the same), `modified_at`, `size` in bytes, `digest` (sha256 of the manifest, bare hex) and `details`: `parent_model`, `format` (`onnx`, `gguf` or `router`), `family`, `families`, `parameter_size` and `quantization_level` (the precisions it carries, such as `F16/F32`, or a GGUF model's quantization, such as `Q8_0`).
 
 ```json
 {
@@ -315,7 +315,7 @@ A router is shown as itself, not resolved to a target.
 GET /api/ps
 ```
 
-The loaded models, sorted by name. Routers never appear; their loaded targets do. Each entry has `name`, `model`, `size` (memory, RAM plus VRAM), `digest`, `details` (with the precision actually loaded, `F16` or `F32`), `expires_at` (when it will unload, or `null` when kept loaded), `size_vram`, `context_length` and `device` (`cpu`, `cuda:0`, …).
+The loaded models, sorted by name. Routers never appear; their loaded targets do. Each entry has `name`, `model`, `size` (memory, RAM plus VRAM), `digest`, `details` (with the precision actually loaded: `F16` or `F32`, or a GGUF model's quantization), `expires_at` (when it will unload, or `null` when kept loaded), `size_vram`, `context_length` and `device` (`cpu`, `cuda:0`, `metal`, …).
 
 ## Pull a model
 

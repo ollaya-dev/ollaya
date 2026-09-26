@@ -1074,7 +1074,7 @@ request body. Not paginated: the list is bounded by `OLLAYA_MAX_LOADED_MODELS`.
 | `models[].expires_at` | string \| `null` | When the model unloads if no further request arrives. While a request is running, the current time: the timer starts when the last request finishes. `null` when kept forever (`keep_alive` < 0). Ollama sends a far-future date instead; `null` is explicit. |
 | `models[].size_vram` | integer | Part of `size` in GPU memory; `0` on CPU |
 | `models[].context_length` | integer | The model's `max_len` in tokens |
-| `models[].device` | string | Where the runner computes: `cpu`, `cuda:0`, … |
+| `models[].device` | string | Where the runner computes: `cpu`, `cuda:0`, `metal` (GGUF models on Apple silicon), … |
 
 ```shell
 curl http://localhost:11435/api/ps
