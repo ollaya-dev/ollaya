@@ -45,6 +45,7 @@ fn main() -> Result<()> {
     let (mut cases, mut questions, mut enc_bad, mut disagree, mut ans_checked, mut ans_bad) =
         (0, 0, 0, 0, 0, 0);
     let mut prob_diffs = Vec::new();
+    let mut worst = (0.0, String::new());
     for line in std::io::BufReader::new(file).lines() {
         let rec: Value = serde_json::from_str(&line?)?;
         let id = rec["id"].as_str().unwrap_or("?").to_owned();
@@ -84,12 +85,15 @@ fn main() -> Result<()> {
                 &out.questions[r].logits,
                 out.state_tokens,
             );
-            prob_diffs.push(
-                want.iter()
-                    .zip(&got)
-                    .map(|(a, b)| (a - b).abs())
-                    .fold(0.0, f64::max),
-            );
+            let diff = want
+                .iter()
+                .zip(&got)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0, f64::max);
+            if diff > worst.0 {
+                worst = (diff, format!("{id} {qid}, {} tokens", ids.len()));
+            }
+            prob_diffs.push(diff);
             if argmax(&want) != argmax(&got) {
                 disagree += 1;
                 if disagree <= 5 {
@@ -122,9 +126,10 @@ fn main() -> Result<()> {
         .unwrap_or(0.0);
     println!(
         "{cases} cases, {questions} questions | encoding mismatches: {enc_bad} | decisions agree: {:.2}% ({disagree} differ) \
-         | prob diff max {:.1e} p99 {p99:.1e} | laya answers outside rounding: {ans_bad}/{ans_checked}",
+         | prob diff max {:.1e} p99 {p99:.1e} (worst: {}) | laya answers outside rounding: {ans_bad}/{ans_checked}",
         100.0 * (questions - enc_bad - disagree) as f64 / (questions - enc_bad).max(1) as f64,
         prob_diffs.last().copied().unwrap_or(0.0),
+        worst.1,
     );
     if enc_bad > 0 {
         bail!("encoding parity failed");
