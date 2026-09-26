@@ -11,7 +11,7 @@ TypeSafe's closed Jev model created the "System One" category of decision models
 
 ## Point the SDK at Ollaya
 
-The official TypeSafe Python SDK 0.7.1 works unchanged. Set three environment variables:
+The official TypeSafe Python SDK 0.7.1 works unchanged. Set these environment variables:
 
 ```shell
 export TYPESAFE_BASE_URL=http://localhost:11435
