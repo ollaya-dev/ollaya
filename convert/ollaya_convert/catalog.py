@@ -66,6 +66,21 @@ def _wl(slug, repo, commit, description, params, ctx, languages, license=None, l
     }
 
 
+def _kev_weights(base, base_commit, shards):
+    """Graph location -> upstream file of a Kev checkpoint: the base model's shards from Qwen's repository, the
+    adapter and head.pt from Kev's."""
+    files = ["model.safetensors-%05d-of-%05d.safetensors" % (i, shards) for i in range(1, shards + 1)]
+    return {**{f: (base, base_commit, f) for f in files},
+            "adapter_model.safetensors": "adapter_model.safetensors", "head.pt": "head.pt"}
+
+
+def _kev_license(repo, base):
+    return ("Kev by Jared Palmer (https://huggingface.co/jaredpalmer/%s)\n"
+            "LoRA adapter and pointer head: Apache-2.0, per the model card.\n"
+            "Base model: %s by the Qwen team (https://huggingface.co/Qwen/%s), Apache-2.0.\n"
+            "Licensed under the Apache License, Version 2.0.\n\n" % (repo, base, base)) + LICENSE_APACHE
+
+
 LICENSE_MIT_NLI = ("DeBERTa-v3-large zero-shot v2.0 by Moritz Laurer "
                    "(https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0), MIT License.\n"
                    "Note from the model card: part of the training data carries non-commercial licenses.\n")
@@ -174,29 +189,35 @@ CATALOG = {
         "family": "kev",
         "author": "Jared Palmer (adapter and pointer head) and the Qwen team (base model)",
         "license": "Apache-2.0",
-        "license_text": "Kev by Jared Palmer (https://huggingface.co/jaredpalmer/kev-0.8b)\n"
-                        "LoRA adapter and pointer head: Apache-2.0, per the model card.\n"
-                        "Base model: Qwen3.5-0.8B-Base by the Qwen team (https://huggingface.co/Qwen/Qwen3.5-0.8B-Base), "
-                        "Apache-2.0.\n"
-                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        "license_text": _kev_license("kev-0.8b", "Qwen3.5-0.8B-Base"),
         "tags": {
-            "0.8b": _wl("kev-0.8b", "jaredpalmer/kev-0.8b", "54f4f8777356cd5bbbb6c6919c657f26e6f2f6d8",
+            # Round 15 (2026-09-24); round 7 + dates was 54f4f8777356cd5bbbb6c6919c657f26e6f2f6d8.
+            "0.8b": _wl("kev-0.8b", "jaredpalmer/kev-0.8b", "9a45d25eb2ab761841196625383fa1dff0e56c1e",
                         "Pointer-head decision model (LoRA on Qwen3.5-0.8B base): each option is scored at its own "
                         "span, all in one forward pass per question.",
-                        "0.76B", 8192, ["en"], wl_dir=os.path.join(OUT, "kev-0.8b"),
-                        weights={
-                            "model.safetensors-00001-of-00001.safetensors": (
-                                "Qwen/Qwen3.5-0.8B-Base", "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68",
-                                "model.safetensors-00001-of-00001.safetensors"),
-                            "adapter_model.safetensors": "adapter_model.safetensors",
-                            "head.pt": "head.pt",
-                        }),
+                        "0.76B", 8192, ["en"], wl_dir=os.path.join(OUT, "kev-0.8b-r15"),
+                        license_text=_kev_license("kev-0.8b", "Qwen3.5-0.8B-Base"),
+                        weights=_kev_weights("Qwen/Qwen3.5-0.8B-Base", "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68", 1)),
+            # Round 10 (2026-09-24): skills delta on round 8.
+            "4b": _wl("kev-4b", "jaredpalmer/kev-4b", "139fdd94f1b6a6ad80cc15e08fcb99cac885a101",
+                      "Kev on Qwen3.5-4B base (LoRA and pointer head): more accurate than 0.8b out of domain. "
+                      "Needs about 9 GB of memory.",
+                      "4.2B", 8192, ["en"], wl_dir=os.path.join(OUT, "kev-4b"),
+                      license_text=_kev_license("kev-4b", "Qwen3.5-4B-Base"),
+                      weights=_kev_weights("Qwen/Qwen3.5-4B-Base", "1001bb4d826a52d1f399e183466143f4da7b741b", 2)),
+            "9b": _wl("kev-9b", "jaredpalmer/kev-9b", "2629c06a5aeb0feb3b9783bafed17ed8f39ecf5c",
+                      "Largest Kev (Qwen3.5-9B base, LoRA and pointer head). Needs about 17 GB of memory; best on a "
+                      "24 GB GPU.",
+                      "7.9B", 8192, ["en"], wl_dir=os.path.join(OUT, "kev-9b"),
+                      license_text=_kev_license("kev-9b", "Qwen3.5-9B-Base"),
+                      weights=_kev_weights("Qwen/Qwen3.5-9B-Base", "68c46c4b3498877f3ef123c856ecfde50c39f404", 4)),
         },
         "aliases": {"latest": "0.8b"},
         "parity": "Ollaya's Rust runtime matches upstream Kev (PyTorch fp32) exactly on 480 questions from 117 "
-                  "requests, and rejects the same 16 requests upstream rejects. The token rows and option "
-                  "positions are identical, and so is the decision on every question. Probabilities are within "
-                  "2.3e-6, on CPU and CUDA, and the TypeSafe answers equal upstream's to its 4-decimal rounding.",
+                  "requests per checkpoint, and rejects the same 16 requests upstream rejects. The token rows and "
+                  "option positions are identical, and so is the decision on every question. Probabilities are "
+                  "within 2.8e-6 (0.8b), 3.1e-5 (4b) and 3.8e-6 (9b), on CPU and CUDA, and the TypeSafe answers "
+                  "equal upstream's to its 4-decimal rounding.",
     },
     "qwen3guard": {
         "namespace": "library",

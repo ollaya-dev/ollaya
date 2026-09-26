@@ -27,10 +27,10 @@ TypeSafe's closed Jev model created the decision-model category. Ollaya serves o
 Open decision models from these families. See [Models](/search).
 
 - **`laya`** from Convai Innovations: `laya` (a router), `laya:en`, `laya:multilingual` and `laya:typed-decisions`, each also as `-fp16` and `-fp32`. `laya` sends English text to `laya:en` and other languages, Turkish for example, to `laya:multilingual`. It is the fastest.
-- **`decider`** from Mapika: `decider:2b` and `decider:0.8b`, built on Qwen3.5. It is the most accurate, and the slowest.
+- **`decider`** from Mapika: `decider:2b` and `decider:0.8b`, built on Qwen3.5. With `kev:4b` and `kev:9b` these are the most accurate, and the slowest.
 - **`nli`** from Moritz Laurer: zero-shot NLI classifiers on DeBERTa-v3-large and ModernBERT-large. It is the most accurate encoder.
 - **`gliclass`** from Knowledgator: an instruction-following zero-shot classifier that scores every option in one pass.
-- **`kev`** from Jared Palmer: `kev:0.8b`, a LoRA and a pointer head on Qwen3.5-0.8B that scores every option at its own span, calibrated.
+- **`kev`** from Jared Palmer: `kev:0.8b`, `kev:4b` and `kev:9b`, a LoRA and a pointer head on Qwen3.5 that scores every option at its own span, calibrated.
 - **`qwen3guard`** from the Qwen team: a safety guard in 119 languages. It answers its own built-in questions (safe, controversial or unsafe, and the unsafe category), so you send it only the text.
 - **`von`** from Victor Hugo Panisa: Von 1.1 on ModernBERT-large, which scores every option at its own marker in one pass and reads states of up to 8,192 tokens.
 

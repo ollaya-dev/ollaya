@@ -89,14 +89,14 @@ const overlays: Record<string, ModelOverlay> = {
     stats: { tag: 'decider:2b', accuracy: 0.591, latencyMs: 190 },
     title: 'decider',
     description:
-      'Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass. The most accurate open decision model Ollaya ships.',
+      'Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass. decider:2b scores 0.591 on typed decisions.',
     publisher: { name: 'Mapika', url: 'https://huggingface.co/Mapika' },
     capabilities: ['decision', 'long-context'],
     keywords: ['decider', 'decision', 'qwen', 'llm', 'classification', 'typesafe', 'jev', 'system one'],
     rank: 2,
     tags: {
       latest: { summary: 'Same as decider:2b.' },
-      '2b': { summary: 'Qwen3.5-2B base, 0.591 on typed decisions: the most accurate model here.' },
+      '2b': { summary: 'Qwen3.5-2B base, 0.591 on typed decisions.' },
       '0.8b': { summary: 'Qwen3.5-0.8B base, 0.506 on typed decisions: smaller and faster.' },
     },
   },
@@ -111,7 +111,9 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 6,
     tags: {
       latest: { summary: 'Same as kev:0.8b.' },
-      '0.8b': { summary: 'Qwen3.5-0.8B base with the Kev adapter and head, 0.447 on typed decisions.' },
+      '9b': { summary: 'Qwen3.5-9B base, 0.722 on typed decisions: the most accurate Kev. Needs a 24 GB GPU.' },
+      '4b': { summary: 'Qwen3.5-4B base, round 10, 0.669 on typed decisions. Best on a GPU.' },
+      '0.8b': { summary: 'Qwen3.5-0.8B base, round 15, 0.460 on typed decisions: small and fast.' },
     },
   },
   qwen3guard: {

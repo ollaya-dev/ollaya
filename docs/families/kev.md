@@ -10,12 +10,22 @@ They serve TypeSafe's `POST /v1/systemone`. Inference code lives in https://gith
 pinned here at `234e5a7498f82f253de34e67b9fa99aefb5f20f5`. The model repos hold only the adapter,
 `head.pt` and a tokenizer.
 
-| Model | Base (license) | Status in Ollaya |
-|---|---|---|
-| `jaredpalmer/kev-0.8b` | Qwen/Qwen3.5-0.8B-Base @ `dc7cdfe2` (Apache-2.0) | **converted, ONNX** |
-| `jaredpalmer/kev-4b` | Qwen/Qwen3.5-4B-Base | same exporter (hybrid Qwen3.5); not converted, fp32 is ~16 GB |
-| `jaredpalmer/kev-9b` | Qwen/Qwen3.5-9B-Base | not converted |
-| `jaredpalmer/kev-0.5b` / `kev-0.6b` / `kev-8b` | Qwen2.5-0.5B / Qwen3-0.6B-Base / Qwen3-8B-Base | attention-only bases: upstream uses a packed block-causal form; the row form here is equivalent (upstream tests `test_rows_match_packed`) but they need a plain-attention trunk; not converted |
+**The pin still describes what upstream serves** (checked at kev HEAD `3d9973b`, 2026-09-25): `kev/api.py` is
+byte-identical (sha256 `7bffacfb…`), and in `kev/model.py` the delimiter tokens, `user()`, `encode`, `rows_of`
+and `PointerHead` are unchanged; later commits add serving paths (a prefix cache, CUDA graphs, fused kernels,
+batching) that upstream describes as equal up to fp32 rounding. The checkpoints' own `provenance.json` agree:
+kev-0.8b r15 and kev-4b r10 were trained with this `api.py` and a `model.py` whose encoding and head code are
+identical to the pin's; kev-9b was trained with an earlier revision (`406f464`) whose token rows and head math
+are the same.
+
+| Model | Checkpoint | Base (license) | Temperature | Status in Ollaya |
+|---|---|---|---|---|
+| `jaredpalmer/kev-0.8b` | round 15, `9a45d25e` (2026-09-24) | Qwen/Qwen3.5-0.8B-Base @ `dc7cdfe2` (Apache-2.0), 1 shard | 2.351 | **converted, ONNX** |
+| `jaredpalmer/kev-4b` | round 10, `139fdd94` (2026-09-24) | Qwen/Qwen3.5-4B-Base @ `1001bb4d` (Apache-2.0), 2 shards | 2.406 | **converted, ONNX** (weights stay BF16 in memory) |
+| `jaredpalmer/kev-9b` | `2629c06a` (2026-09-21) | Qwen/Qwen3.5-9B-Base @ `68c46c4b` (Apache-2.0), 4 shards | 2.297 | **converted, ONNX** (weights stay BF16 in memory) |
+| `jaredpalmer/kev-0.5b` / `kev-0.6b` / `kev-8b` | | Qwen2.5-0.5B / Qwen3-0.6B-Base / Qwen3-8B-Base | | attention-only bases: upstream uses a packed block-causal form; the row form here is equivalent (upstream tests `test_rows_match_packed`) but they need a plain-attention trunk; not converted |
+
+kev-0.8b was first converted at `54f4f877` (round 7 plus the dates delta, T 2.406); Ollaya now pins round 15.
 
 ## Recommended engine: ONNX (single forward)
 
@@ -31,17 +41,22 @@ pinned here at `234e5a7498f82f253de34e67b9fa99aefb5f20f5`. The model repos hold 
 
 | Layer | Source |
 |---|---|
-| `model.onnx` (graph, 9.9 MB) | derived, hosted by Ollaya |
-| base weights, BF16 + F32 | `Qwen/Qwen3.5-0.8B-Base@dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68/model.safetensors-00001-of-00001.safetensors` (1.7 GB; its vision and MTP tensors are unused, 168 of 488) |
-| LoRA adapter, F32 | `jaredpalmer/kev-0.8b@54f4f8777356cd5bbbb6c6919c657f26e6f2f6d8/adapter_model.safetensors` (43 MB; all 372 used) |
-| pointer head, F32 | same repo, `head.pt` (2.1 MB). A `torch.save` zip whose tensors are stored uncompressed, so the graph references them **by byte offset inside the zip**. Nothing is re-packed. |
-| `tokenizer.json` | same repo, used as-is |
+| `model.onnx` (graph, 10 to 11 MB) | derived, hosted by Ollaya |
+| base weights, BF16 | the base repo's `model.safetensors-0000i-of-0000n.safetensors` shards at the pinned revision: 0.8B 1 shard (1.7 GB), 4B 2 shards (9.3 GB), 9B 4 shards (19.3 GB). The vision tower and MTP tensors (and the 9B's untied `lm_head`) are unused. |
+| LoRA adapter, F32 | the kev repo's `adapter_model.safetensors`: 43 MB (0.8b), 130 MB (4b), 173 MB (9b); every tensor used |
+| pointer head, F32 | same repo, `head.pt` (2.1 to 8.4 MB). A `torch.save` zip whose tensors are stored uncompressed, so the graph references them **by byte offset inside the zip**. Nothing is re-packed. |
+| `tokenizer.json` | same repo, used as-is (the same file in all three repos) |
 | `decision.json`, `calibration.json` | derived, hosted by Ollaya (temperature copied from `head.pt`) |
 | license | Apache-2.0 per the model card (adapter + head). The base has its own LICENSE (Apache-2.0). |
 
-- **Mapping.** 696 checkpoint tensors map to graph initializers: 284 casts from BF16, the rest F32.
-  About 100 KB of masks stay inline.
-- **Hashes.** sha256 values are in `convert/out/kev-0.8b/files.json`.
+- **Mapping.** Every base tensor of the language model, every adapter tensor and the four head tensors map to
+  graph initializers; the base's are a `Cast` from BF16, the rest F32. About 100 KB of masks stay inline. The
+  embedding lookup reads rows before widening them (`Cast(Gather(E, ids))`, see
+  [decider.md](decider.md)).
+- **Weights in memory.** `decision.json` `weights_in_memory` is `fp32` for 0.8b (widened once at load) and `bf16`
+  for 4b and 9b (kept as stored, widened per forward pass): see
+  [ADR-0001](../decisions/0002-decoder-weights-in-memory.md).
+- **Hashes.** sha256 values are in each export's `files.json` (`convert/out/kev-0.8b-r15`, `kev-4b`, `kev-9b`).
 - **Tokenizer caveat (important).** Use the kev repo's `tokenizer.json`, not the base's. Upstream loads
   the base tokenizer through transformers 5.17. Its `Qwen2Tokenizer` replaces the base file's
   pre-tokenizer `[\p{L}\p{M}]+` with `\p{L}+`, and the kev repo file is that re-saved tokenizer. With the
@@ -105,8 +120,9 @@ The special-token ids come from `decision.json.special_tokens` (`state`, `questi
 ### Option logits
 
 - **All types.** Option logits are `scores[row, :k]`.
-- **Calibration.** `calibration.json` = `{"temperature": [2.406, 2.406, 2.406]}`. Upstream fitted this on
-  in-distribution dev rows and applies it for every type.
+- **Calibration.** `calibration.json` holds the checkpoint's temperature for every type: 2.351 (0.8b r15), 2.406
+  (4b r10), 2.297 (9b). Upstream fitted each on in-distribution dev rows (`head.pt["temperature_fit"]`) and applies
+  it for every type.
 
 ## ONNX contract
 
@@ -119,7 +135,8 @@ The special-token ids come from `decision.json.special_tokens` (`state`, `questi
 
 - **Positions and masking.** Positions are implicit (`0..seq-1`), matching upstream's row form. There is
   no mask input: the model is causal and right padding is inert.
-- **Precision.** Opset 20; fp32 compute, BF16 base weights cast at load.
+- **Precision.** Opset 20; fp32 compute on the BF16 base weights, widened at load (0.8b) or per forward pass
+  (4b, 9b; `weights_in_memory`).
 
 ## Measured parity
 
@@ -136,45 +153,53 @@ requests; for example, list-valued choice criteria get a pydantic 422 in both.
 - **Options.** Choice 1..255; score 1..255 levels. TypeSafe caps score at 10; kev does not.
 - **Context.** Rows up to 8,192 tokens, beyond the 384-token training state length (upstream flags this
   as "untested there").
-- **Accuracy.** Out-of-domain accuracy is modest at 0.8B: 0.652 on transfer-v4, where Kev-4B gets 0.797.
+- **Accuracy.** Out-of-domain accuracy is modest at 0.8B: 0.648 on transfer-v4 development, where Kev-4B r10
+  gets 0.817 and Kev-9B 0.822.
+- **Memory.** The weights take 8.5 GB (4b) and 16 GB (9b), kept BF16, plus activations that grow with the
+  row length. On an RTX 4090, kev-9b's parity run peaked at 22.0 GiB of the card's 24.0 with rows of up to 2,033
+  tokens, so rows much longer than that do not fit a 24 GB GPU.
 - **Tokenizer.** The Qwen3.5 tokenizer caveat above applies.
 - **Not ported.** The opt-in `KEV_DATE_FACTS` preprocessing, and the demo endpoints `/permute` and
   `/separate`.
 
-## Upstream benchmark numbers (model card, Kev-0.8B)
+## Upstream benchmark numbers (model cards)
 
-| | value |
-|---|---|
-| decision-v7 dev, in-distribution (1,204 records), accuracy | 0.825 |
-| transfer-v4 dev, out-of-domain (764 records), accuracy / Brier | 0.652 / 0.499 |
-| locked test, in-distribution / out-of-domain accuracy | 0.834 / 0.684 |
-| as served (T = 2.41), Brier / ECE / confident errors | 0.430 / 0.054 / 0.3 % |
-| Jev on the same items, in-distribution / out-of-domain | 0.845 / 0.857 |
+| | Kev-0.8B r15 | Kev-4B r10 | Kev-9B | Jev |
+|---|---|---|---|---|
+| decision-v7 dev, in-distribution, accuracy | 0.827 (1,264 q.) | 0.873 (1,264 q.) | 0.872 (1,204 records) | 0.845 |
+| transfer-v4 dev, out-of-domain, accuracy / Brier | 0.648 / 0.430 (656 q.) | 0.817 / 0.243 (656 q.) | 0.822 / 0.286 (764 records) | 0.857 / 0.211 |
+| transfer-v4 locked test, out-of-domain accuracy / Brier | 0.697 / 0.397 | 0.838 / 0.224 | 0.852 / 0.237 | – |
+| real documents (documents-v1 locked test), accuracy | 0.851 | – | – | – |
+| skill records (hard-v1 locked test), accuracy | 0.665 | 0.803 | – | – |
+| developer tooling (devtools-v1 locked test), accuracy | 0.637 | 0.756 | – | – |
+
+The Decision Index 0.2 (2026-09-25) scores Kev-9B at 35.41 balanced skill, Kev-4B at 31.31 (an earlier round than
+r10) and Kev-0.8B at 13.26 (Jev 51.67).
 
 ## Attribution
 
 Kev is by Jared Palmer (https://github.com/jaredpalmer/kev), released under Apache-2.0 (adapter and
-head). The base, Qwen3.5-0.8B-Base, is by the Qwen team (Apache-2.0). Training data sources carry their
-own licenses; see the model card.
+head). The bases, Qwen3.5-0.8B-Base, Qwen3.5-4B-Base and Qwen3.5-9B-Base, are by the Qwen team
+(Apache-2.0). Training data sources carry their own licenses; see the model cards.
 
 ## Parity results
 
-kev-0.8b: weightless graph on ONNX Runtime 1.30 CPU, against upstream fp32 on CUDA with TF32 off.
-Report in `convert/out/kev-0.8b/parity.json`.
+Goldens come from upstream `kev` at the pinned commit in fp32 (`Checkpoint.load(dtype=fp32, merge=True)`, row form,
+TF32 off), written by `families/kev/goldens.py`: 117 records per checkpoint (77 Laya edge cases, 4 decoder cases and
+20 typed-decisions rows, plus the `#valid` subsets of the 16 requests upstream rejects), 480 questions. Per request they
+hold the exact rows, decide and option positions, fp32 option logits, probabilities at the checkpoint's temperature
+and upstream answers.
 
-| | value |
-|---|---|
-| requests | 131 (77 Laya edge + 4 decoder edge + 50 typed-decisions, spread over all workflows) |
-| questions / rows | 630 / 630. Some requests were rejected: 16 by both sides (list-valued choice criteria → pydantic 422), with their valid questions scored individually. |
-| token rows, decide and option positions identical | 630 / 630 |
-| argmax agreement, ONNX vs fp32 | **100 %** |
-| argmax agreement, ONNX vs upstream `to_answers` | **100 %** |
-| max \|Δ score\| (raw pointer logits) | 3.0e-5 (choice), 1.9e-5 (noul), 2.0e-5 (score) |
-| max \|Δ probability\| (T = 2.406) | 1.9e-6 |
-| contract (scores / T → softmax) vs upstream answers | ≤ 5.0e-5, which is upstream's 4-decimal rounding |
+| checkpoint | goldens | reference ran on |
+|---|---|---|
+| kev-0.8b round 15 | `convert/out/goldens-kev-0.8b-r15.jsonl` | CUDA |
+| kev-4b round 10 | `convert/out/goldens-kev-4b.jsonl` | CUDA |
+| kev-9b | `convert/out/goldens-kev-9b.jsonl` | CPU (its 32 GB of fp32 weights do not fit the GPU) |
 
-Goldens: `convert/out/goldens-kev-0.8b.jsonl`, written by `families/kev/goldens.py`. Per request it holds
-the exact rows, decide and option positions, fp32 option logits, probabilities and upstream answers.
+The token rows of all three are identical to each other and to the round-7 kev-0.8b goldens
+(`goldens-kev-0.8b.jsonl`), record for record: the encoding did not change between checkpoints or code revisions.
+The round-7 conversion also had an export-side check (ONNX Runtime 1.30 CPU vs upstream fp32 on 131 requests, max
+|Δ probability| 1.9e-6; `convert/out/kev-0.8b/parity.json`).
 
 ## ONNX Runtime CUDA EP note (measured)
 
@@ -193,26 +218,29 @@ the exact rows, decide and option positions, fp32 option logits, probabilities a
 
 ## Rust runtime parity (measured)
 
-`crates/ollaya-runner/examples/parity_kev.rs` against `goldens-kev-0.8b.jsonl`: 117 records, of which 16
-are requests upstream rejects (list-valued choice criteria) and 16 their `#valid` subsets, 480
-questions. It checks the rejections, then the token rows, decide and option positions, then the
-option logits (tolerance 1e-3), the decisions and the TypeSafe answers against upstream `to_answers`.
+`crates/ollaya-runner/examples/parity_kev.rs` against each checkpoint's goldens: 117 records, of which 16 are
+requests upstream rejects (list-valued choice criteria) and 16 their `#valid` subsets, 480 questions. It checks the
+rejections, then the token rows, decide and option positions, then the option logits (tolerance 1e-3), the decisions
+and the TypeSafe answers against upstream `to_answers`.
 
 ```sh
-cargo run --release -p ollaya-runner --example parity_kev -- convert/out/kev-0.8b convert/out/goldens-kev-0.8b.jsonl cpu
-cargo run --release -p ollaya-runner --features ollaya-runner/cuda --example parity_kev -- convert/out/kev-0.8b convert/out/goldens-kev-0.8b.jsonl cuda
+cargo run --release -p ollaya-runner --example parity_kev -- convert/out/kev-4b convert/out/goldens-kev-4b.jsonl cpu
+cargo run --release -p ollaya-runner --features ollaya-runner/cuda --example parity_kev -- convert/out/kev-4b convert/out/goldens-kev-4b.jsonl cuda
 ```
 
-Results on choso-wsl (24 cores; RTX 4090, CUDA 13), `ort` 2.0.0-rc.13 with ONNX Runtime 1.28:
+Results on choso-wsl (i9-13900K; RTX 4090, CUDA 13), `ort` 2.0.0-rc.13 with ONNX Runtime 1.28, each checkpoint in its
+shipped configuration (0.8b folds its weights to fp32 at load; 4b and 9b keep them BF16). Every run: 0 rejection
+mismatches, token rows and positions identical 480 / 480, decisions agree **100 %**, and 0 TypeSafe answers differ
+from upstream (max 1.0e-4, its 4-decimal rounding).
 
-| | CPU | CUDA |
+| | max \|Δ option logit\| | max \|Δ probability\| (p99) |
 |---|---|---|
-| rejections as upstream (16 requests, each question on its own) | 0 mismatches | 0 mismatches |
-| token rows, decide and option positions identical | 480 / 480 | 480 / 480 |
-| max \|Δ option logit\| (raw pointer scores) | 2.6e-5 | 3.8e-5 |
-| decisions agree | **100 %** | **100 %** |
-| max \|Δ probability\| (T = 2.406) | 1.9e-6 (p99 1.4e-6) | 2.3e-6 (p99 1.7e-6) |
-| TypeSafe answers vs upstream `to_answers` | 0 differ, max 1.0e-4 (4-decimal rounding) | 0 differ, max 1.0e-4 |
+| kev-0.8b r15, CPU | 4.6e-5 | 2.8e-6 (1.3e-6) |
+| kev-0.8b r15, CUDA | 3.4e-5 | 1.9e-6 (1.5e-6) |
+| kev-4b r10, CPU | 2.3e-4 | 3.1e-5 (2.5e-6) |
+| kev-4b r10, CUDA | 2.2e-4 | 3.0e-5 (2.8e-6) |
+| kev-9b, CPU | 3.6e-5 | 3.8e-6 (2.0e-6) |
+| kev-9b, CUDA | 7.5e-5 | 4.2e-6 (3.3e-6) |
 
 ### ORT 1.28 `GemmTransposeFusion` (disabled for kev)
 
@@ -233,14 +261,21 @@ Results on choso-wsl (24 cores; RTX 4090, CUDA 13), `ort` 2.0.0-rc.13 with ONNX 
   ORT runs the graph as exported. It is a workaround for a wrong rewrite, not a precision trade: with
   it, the Rust runtime matches the goldens on CPU and CUDA (above). The head is two small matmuls, so
   the fusion is worth nothing here. The setting can go once `ort` links ORT 1.30 or newer.
+- **Larger checkpoints.** The 4b and 9b graphs have the same head, with 2,560 and 4,096 inputs; the
+  workaround applies to every kev session.
 
 ## Typed-decisions quality (measured, for the catalog comparison)
 
-kev-0.8b on the typed-decisions test split (400 rows, 2,000 questions, teacher gold), scored with the
-fp32 upstream reference:
+The typed-decisions test split (400 rows, 2,000 questions, teacher gold), at each checkpoint's shipped temperature.
+0.8b and 4b are scored with the fp32 upstream reference (`llm_common/eval_refs.py`); 9b's fp32 reference does not fit
+the GPU, so it is scored through Ollaya's runtime on CUDA, which matches the reference to the numbers above (the same
+path gives kev-4b 0.669 / 0.095 against its reference's 0.669).
 
-- **As shipped (T = 2.41).** Accuracy 0.447, ECE 0.055.
-- **Per type.** Choice 0.480, score 0.361, noul 0.528.
-- **Cross-fitted per-type temperatures.** 0.447 / 0.053.
-- **Reference points on the same decisions.** Kev-4B 0.658 and Kev-9B 0.716 (Winnow's report),
-  decider-0.8b 0.506.
+| | accuracy | ECE | choice / score / noul | cross-fitted accuracy / ECE |
+|---|---|---|---|---|
+| kev-0.8b r15 (T 2.351) | 0.460 | 0.055 | 0.505 / 0.376 / 0.525 | 0.460 / 0.049 |
+| kev-4b r10 (T 2.406) | 0.669 | 0.095 | 0.645 / 0.615 / 0.765 | 0.669 / 0.123 |
+| kev-9b (T 2.297) | 0.722 | 0.095 | 0.693 / 0.675 / 0.812 | – |
+
+For reference: round-7 kev-0.8b scored 0.447 / 0.055, decider-2b 0.591 and decider-4b 0.680; Winnow's report has
+Kev-4B 0.658 and Kev-9B 0.716 (it does not say which revisions it scored).
