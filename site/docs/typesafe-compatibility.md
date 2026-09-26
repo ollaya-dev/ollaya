@@ -17,11 +17,13 @@ The official TypeSafe Python SDK 0.7.1 works unchanged. Set three environment va
 export TYPESAFE_BASE_URL=http://localhost:11435
 export TYPESAFE_API_KEY=local           # the SDK needs a non-empty key; any value works
 export TYPESAFE_DEFAULT_MODEL=laya      # otherwise the SDK sends its default, "jev-latest"
+export NO_PROXY=localhost,127.0.0.1    # keep local requests off any system proxy
 ```
 
 - **API key.** Ollaya accepts any key, unless the server sets `OLLAYA_API_KEY`; then the SDK's key must match it.
 - **Request IDs.** Every response carries `x-typesafe-request-id`, so `response.request_id` works.
 - **Retries.** The SDK times out after 10 s and retries. The first request to a model waits while it loads, and a load that outlives the request continues, so the retry finds the model warm.
+- **System proxies.** On a Mac with a system HTTP proxy, the TypeSafe SDK (like `httpx`) sends requests for `localhost` through the proxy too, ignoring the system's exception list. Your states then pass through the proxy, and while Ollaya is down the SDK reports `502 status code (no body)` instead of a refused connection. Set `NO_PROXY=localhost,127.0.0.1` next to `TYPESAFE_BASE_URL`.
 - **Warm-up and timings.** To load a model before the first request, send `{"model": "laya", "keep_alive": -1}` to [`/api/decide`](/docs/api#decide) (no `state`). `/v1/*` responses carry no timings, as TypeSafe's don't; `/api/decide` reports `total_duration`, `load_duration` and `eval_duration`.
 
 ## Endpoints
