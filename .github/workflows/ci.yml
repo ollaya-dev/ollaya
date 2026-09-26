@@ -157,7 +157,7 @@ jobs:
         with:
           persist-credentials: false
       - name: ShellCheck
-        run: shellcheck scripts/install.sh scripts/package.sh packaging/docker-healthcheck.sh
+        run: shellcheck scripts/install.sh scripts/package.sh scripts/llama-cpp.sh packaging/docker-healthcheck.sh
       - name: install.sh parses under dash
         run: dash -n scripts/install.sh
       - name: install.sh embeds packaging/ollaya.service unchanged

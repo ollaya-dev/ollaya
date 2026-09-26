@@ -4,3 +4,5 @@ src-tauri/target/
 src-tauri/gen/
 # The ollaya engine binary, copied in by the build for Tauri's externalBin.
 src-tauri/binaries/
+# llama.cpp's libraries, staged by scripts/llama-cpp.sh for the bundle's resources.
+src-tauri/lib/

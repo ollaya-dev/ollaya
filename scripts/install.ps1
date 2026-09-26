@@ -207,9 +207,15 @@ function Install-Ollaya {
             if (Test-Path (Join-Path $dest $part)) { Remove-Item -Recurse -Force (Join-Path $dest $part) }
             Move-Item (Join-Path $stage $part) (Join-Path $dest $part)
         }
+        # lib\ollaya holds llama.cpp's libraries (llama), which run GGUF models, and the GPU pack
+        # (cuda_v13). A kept GPU pack stays; everything else there is replaced.
         if (Test-Path "$stage\lib\ollaya") {
-            New-Item -ItemType Directory -Force -Path (Join-Path $dest 'lib') | Out-Null
-            Move-Item "$stage\lib\ollaya" $libOllaya
+            New-Item -ItemType Directory -Force -Path $libOllaya | Out-Null
+            foreach ($item in Get-ChildItem -LiteralPath "$stage\lib\ollaya") {
+                $target = Join-Path $libOllaya $item.Name
+                if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+                Move-Item $item.FullName $target
+            }
         }
     } finally {
         if ($stage) { Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue }

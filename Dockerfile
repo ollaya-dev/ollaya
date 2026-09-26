@@ -58,9 +58,13 @@ RUN --mount=type=cache,id=ollaya-nvidia-wheels,target=/root/.cache/ollaya-packag
 # --- runtime ---------------------------------------------------------------------------------
 
 # Debian 13: pyke's ONNX Runtime needs glibc 2.38 or newer. bash (for the health check),
-# libstdc++ and zlib (for cuDNN) are part of the slim image already.
+# libstdc++ and zlib (for cuDNN) are part of the slim image already; llama.cpp's libraries (GGUF
+# models) also need GCC's OpenMP runtime, libgomp1.
 FROM debian:${DEBIAN_RELEASE}-slim AS runtime
 ARG OLLAYA_UID=1000
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd --gid "${OLLAYA_UID}" ollaya \
     && useradd --uid "${OLLAYA_UID}" --gid ollaya --home-dir /home/ollaya --create-home \
         --shell /usr/sbin/nologin ollaya \

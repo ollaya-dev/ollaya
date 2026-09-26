@@ -72,6 +72,11 @@ main() {
         if ! printf '%s\n' "$glibc" | awk -F. '{ exit !($1 > 2 || ($1 == 2 && $2 >= 38)) }'; then
             error "Ollaya needs glibc 2.38 or newer, this system has $glibc (Ubuntu 24.04, Debian 13, Fedora 39, RHEL 10 or newer; or use the Docker image)"
         fi
+        # llama.cpp's CPU backends (GGUF models) use GCC's OpenMP runtime from the system.
+        ldconfig=$(command -v ldconfig 2>/dev/null || echo /sbin/ldconfig)
+        if [ -x "$ldconfig" ] && ! "$ldconfig" -p 2>/dev/null | grep -q 'libgomp\.so\.1 '; then
+            warn "GCC's OpenMP runtime (libgomp.so.1) was not found: GGUF models such as winnow need it. Install your distribution's libgomp1 (or libgomp) package"
+        fi
     fi
 
     missing=
@@ -336,14 +341,18 @@ main() {
         $SUDO rm -rf "$PREFIX/share/ollaya/skills"
         $SUDO mv "$STAGE/share/ollaya/skills" "$PREFIX/share/ollaya/skills"
     fi
-    # Remove GPU libraries from an earlier install, so they never outlive the binary they match
-    # (unless they are byte for byte the ones this release ships).
-    if ! $CUDA_KEEP; then
-        $SUDO rm -rf "$PREFIX/lib/ollaya"
-        if [ -d "$STAGE/lib/ollaya" ]; then
-            $SUDO mkdir -p "$PREFIX/lib"
-            $SUDO mv "$STAGE/lib/ollaya" "$PREFIX/lib/ollaya"
-        fi
+    # lib/ollaya is replaced as a whole, so libraries never outlive the binary they match. The
+    # CUDA libraries are the exception when they are byte for byte the ones this release ships:
+    # they move into the new tree unchanged.
+    if $CUDA_KEEP; then
+        $SUDO mkdir -p "$STAGE/lib/ollaya"
+        $SUDO rm -rf "$STAGE/lib/ollaya/cuda_v13"
+        $SUDO mv "$PREFIX/lib/ollaya/cuda_v13" "$STAGE/lib/ollaya/cuda_v13"
+    fi
+    $SUDO rm -rf "$PREFIX/lib/ollaya"
+    if [ -d "$STAGE/lib/ollaya" ]; then
+        $SUDO mkdir -p "$PREFIX/lib"
+        $SUDO mv "$STAGE/lib/ollaya" "$PREFIX/lib/ollaya"
     fi
     $SUDO rm -rf "$STAGE"
     STAGE=

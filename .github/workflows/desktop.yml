@@ -97,8 +97,45 @@ jobs:
             cp "$dll" desktop/src-tauri/
             resources="${resources:+$resources,}\"$name\":\"$name\""
           done
+          # llama.cpp's libraries for GGUF models (CPU; Metal and CPU on macOS), which the app
+          # points `ollaya serve` at with OLLAYA_LIBRARY_PATH=<resources>/lib/ollaya.
+          case "${{ matrix.triple }}" in
+            aarch64-apple-darwin) kind=darwin-arm64 ;;
+            x86_64-pc-windows-msvc) kind=windows-amd64 ;;
+            *) kind=linux-amd64 ;;
+          esac
+          scripts/llama-cpp.sh "$kind" desktop/src-tauri/lib/ollaya/llama \
+            desktop/src-tauri/lib/ollaya/llama.cpp-THIRD_PARTY_NOTICES
+          resources="${resources:+$resources,}\"lib/ollaya/\":\"lib/ollaya/\""
           echo "TAURI_EXTRA={\"bundle\":{\"resources\":{$resources}}}" >>"$GITHUB_ENV"
           echo "Resources: {$resources}"
+      - name: Sign llama.cpp for notarization
+        # Notarization needs every Mach-O in the app signed with the Developer ID, the hardened
+        # runtime and a timestamp. Tauri signs the app and the engine; the llama.cpp files are
+        # resources, so they are signed here, in a keychain of their own.
+        if: runner.os == 'macOS' && env.APPLE_NOTARY == 'yes'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          kc=$RUNNER_TEMP/llama-signing.keychain-db
+          pw=$(openssl rand -hex 16)
+          security create-keychain -p "$pw" "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p "$pw" "$kc"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode >"$RUNNER_TEMP/llama-signing.p12"
+          security import "$RUNNER_TEMP/llama-signing.p12" -k "$kc" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/llama-signing.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$kc" >/dev/null
+          # codesign finds an identity only in a keychain on the search list.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          for f in desktop/src-tauri/lib/ollaya/llama/*; do
+            codesign --force --options runtime --timestamp --keychain "$kc" --sign "$APPLE_SIGNING_IDENTITY" "$f"
+          done
+          codesign --verify --strict --verbose=2 desktop/src-tauri/lib/ollaya/llama/libllama.0.dylib
+          security delete-keychain "$kc"
       - name: Apple notarization key
         if: runner.os == 'macOS' && env.APPLE_NOTARY == 'yes'
         env:

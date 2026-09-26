@@ -162,6 +162,32 @@ jobs:
           path: tools/*.exe
           if-no-files-found: error
           retention-days: 7
+      - name: Smoke test llama.cpp
+        # The packaged ollaya must load its llama.cpp libraries from the install location, pass
+        # the build check (version and struct layout) and find the CPU. The CUDA backend needs
+        # the NVIDIA driver, which the runners do not have, so only its libraries are checked.
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          d=$(mktemp -d)
+          exe=
+          case $PLATFORM in
+            windows-*) 7z x -bd -bso0 -o"$d" "dist/ollaya-$PLATFORM.zip"; exe=.exe ;;
+            *) zstd -dc "dist/ollaya-$PLATFORM.tar.zst" | tar -xf - -C "$d" ;;
+          esac
+          ls -l "$d/lib/ollaya/llama"
+          "$d/bin/ollaya$exe" llama-devices | tee "$d/devices.json"
+          grep -q '"type": "cpu"' "$d/devices.json"
+          if [ -f "dist/ollaya-$PLATFORM-cuda.tar.zst" ]; then
+            zstd -dc "dist/ollaya-$PLATFORM-cuda.tar.zst" | tar -xf - -C "$d"
+            (cd "$d/lib/ollaya/cuda_v13" && sha256sum -c --quiet FILES.sha256)
+            # Everything libggml-cuda.so links is in the pack, except the driver's libcuda.so.1 and
+            # libggml-base, which the runner has already loaded from lib/ollaya/llama.
+            missing=$(LD_LIBRARY_PATH="$d/lib/ollaya/llama" ldd "$d/lib/ollaya/cuda_v13/libggml-cuda.so" |
+              grep 'not found' | grep -v 'libcuda\.so\.1' || true)
+            [ -z "$missing" ] || { echo "$missing"; exit 1; }
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-${{ matrix.platform }}

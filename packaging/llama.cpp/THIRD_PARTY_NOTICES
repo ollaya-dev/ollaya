@@ -1,0 +1,67 @@
+llama.cpp v0.5.0 (https://github.com/ggml-org/llama.cpp, release build b11146, commit
+7fe450e19305b828c199d602c23a8337aaa1f03b)
+
+Ollaya runs GGUF models on llama.cpp. The libraries in lib/ollaya/llama, and libggml-cuda.so in
+the CUDA package's lib/ollaya/cuda_v13, are ggml-org's own release build of llama.cpp v0.5.0,
+unmodified: libllama, libggml, libggml-base and the ggml backends. They are licensed under the
+MIT license, and contain the components below, whose license texts follow. None of these files is
+covered by Ollaya's Apache-2.0 license.
+
+  llama.cpp and ggml    MIT    The ggml authors
+  llamafile sgemm       MIT    Mozilla Foundation (in the CPU backends)
+
+libggml-cuda.so, in the CUDA package, was compiled by ggml-org with the NVIDIA CUDA Toolkit 13.4 and
+contains code generated from its headers (CCCL: CUB, Thrust and libcu++, Apache License 2.0 with LLVM
+Exceptions, https://github.com/NVIDIA/cccl). It runs with the NVIDIA libraries in the same directory.
+
+--------------------------------------------------------------------------------
+llama.cpp and ggml
+Source: https://github.com/ggml-org/llama.cpp/blob/7fe450e19305b828c199d602c23a8337aaa1f03b/LICENSE
+
+MIT License
+
+Copyright (c) 2023-2026 The ggml authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+llamafile sgemm
+Source: https://github.com/ggml-org/llama.cpp/blob/7fe450e19305b828c199d602c23a8337aaa1f03b/ggml/src/ggml-cpu/llamafile/sgemm.cpp
+
+Copyright 2024 Mozilla Foundation
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

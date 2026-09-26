@@ -5,13 +5,16 @@
 #   scripts/package.sh --checksums <dir>
 #
 # Archives, written to --out (default: ./dist):
-#   ollaya-<platform>.tar.zst        bin/ollaya + share/doc/ollaya/ (LICENSE, THIRD_PARTY_NOTICES)
+#   ollaya-<platform>.tar.zst        bin/ollaya + lib/ollaya/llama/ (llama.cpp's libraries: CPU, and Metal
+#                                    on macOS) + share/doc/ollaya/ (LICENSE, THIRD_PARTY_NOTICES)
 #   ollaya-linux-amd64-cuda.tar.zst  lib/ollaya/cuda_v13/ (ORT CUDA provider + NVIDIA CUDA/cuDNN
-#                                    libraries) + share/doc/ollaya/cuda_v13/ (notices, NVIDIA licenses)
+#                                    libraries + libggml-cuda.so, llama.cpp's CUDA backend) +
+#                                    share/doc/ollaya/cuda_v13/ (notices, NVIDIA licenses)
 #   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
 #   ollaya-darwin-arm64-mlx.tar.zst  lib/ollaya/mlx_metal/ (mlx.metallib, the MLX engine's Metal
 #                                    kernels) + share/doc/ollaya/mlx_metal/ (notices); also .tgz
-#   ollaya-windows-amd64.zip         bin/ollaya.exe (with the DLLs it links), share/
+#   ollaya-windows-amd64.zip         bin/ollaya.exe (with the DLLs it links), lib/ollaya/llama/ (CPU),
+#                                    share/
 #   ollaya-windows-amd64-cuda.zip    the same GPU pack as the Linux one, with the Windows DLLs
 #   ollaya-<platform>-cuda.sha256    sha256 of every library in the CUDA archive (FILES.sha256),
 #                                    which the installers use to skip an unchanged CUDA download
@@ -66,6 +69,10 @@ FMT_VERSION=12.1.0
 FMT_LICENSE_SHA256=07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8
 JSON_VERSION=3.11.3
 JSON_LICENSE_SHA256=86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14
+# llama.cpp, which runs GGUF models, comes from scripts/llama-cpp.sh (its build and
+# pins live there).
+LLAMA_CPP_BUILD=$(sed -n 's/^LLAMA_CPP_BUILD=//p' "$ROOT/scripts/llama-cpp.sh")
+
 
 say() { printf '>>> %s\n' "$*" >&2; }
 die() { printf 'package.sh: error: %s\n' "$*" >&2; exit 1; }
@@ -388,17 +395,22 @@ stage_base() {
     cp -R "$ROOT/skills/ollaya-decisions" "$root/share/ollaya/skills/ollaya-decisions"
     cp "$CACHE/onnxruntime-$ORT_VERSION/ThirdPartyNotices.txt" \
         "$root/share/doc/ollaya/onnxruntime-ThirdPartyNotices.txt"
+    # llama.cpp's libraries for GGUF models: the CPU backends (and Metal on macOS).
+    OLLAYA_CACHE=$CACHE "$ROOT/scripts/llama-cpp.sh" "$PLATFORM" "$root/lib/ollaya/llama" \
+        "$root/share/doc/ollaya/llama.cpp-THIRD_PARTY_NOTICES"
     {
         printf 'Ollaya %s (%s): third-party notices\n\n' "$VERSION" "$PLATFORM"
         printf 'Ollaya is licensed under the Apache License 2.0 (see LICENSE). bin/ollaya also\n'
         printf 'contains the third-party software below.\n\n'
         printf '1. '
         ort_notice "Linked into bin/ollaya$EXE."
-        n=2
+        printf '\n2. llama.cpp %s (MIT), in lib/ollaya/llama: see llama.cpp-THIRD_PARTY_NOTICES.\n' \
+            "$LLAMA_CPP_BUILD"
+        n=3
         if [ "$LINKS_MLX" = 1 ]; then
-            printf '\n2. '
+            printf '\n3. '
             mlx_notice "Linked into bin/ollaya$EXE (the MLX engine)."
-            n=3
+            n=4
         fi
         printf '\n%s. Rust crates compiled into bin/ollaya\n\n' "$n"
         rust_notices
@@ -483,6 +495,13 @@ stage_cuda() {
     builtins=
     for f in "$lib"/*nvrtc-builtins*; do [ ! -f "$f" ] || builtins=$f; done
     [ -n "$builtins" ] || die "the NVRTC builtins library was not found in the NVIDIA wheels"
+    if [ "$PLATFORM" = linux-amd64 ]; then
+        # llama.cpp's CUDA backend, which finds libcudart and libcublas next to it. The Windows
+        # pack has none yet: GGUF models run on the CPU there.
+        OLLAYA_CACHE=$CACHE "$ROOT/scripts/llama-cpp.sh" linux-amd64-cuda "$WORK/llama-cuda" \
+            "$doc/llama.cpp-THIRD_PARTY_NOTICES"
+        cp "$WORK/llama-cuda/libggml-cuda.so" "$lib/libggml-cuda.so"
+    fi
     # FILES.sha256 fingerprints the libraries themselves (the archive's own checksum changes with
     # every release's timestamps). The installers compare it with the installed copy and skip the
     # ~1 GB download when nothing changed.
@@ -521,6 +540,10 @@ NVIDIA GPUs, and only by Ollaya.
 EOF
         printf '    %-44s %s\n' File 'PyPI package'
         LC_ALL=C sort "$WORK/cuda-libs" | awk -F '\t' '{ printf "    %-44s %s\n", $1, $2 }'
+        if [ "$PLATFORM" = linux-amd64 ]; then
+            printf '\n3. llama.cpp %s CUDA backend (MIT), libggml-cuda.so: see llama.cpp-THIRD_PARTY_NOTICES.\n' \
+                "$LLAMA_CPP_BUILD"
+        fi
     } >"$doc/THIRD_PARTY_NOTICES"
     say "Staged $name ($(du -sk "$lib" | awk '{ printf "%.0f MiB", $1 / 1024 }') of libraries)"
 }
@@ -606,7 +629,7 @@ if [ -n "$STAGE" ]; then
     exit 0
 fi
 
-[ "$BASE" = 0 ] || archive "ollaya-$PLATFORM" bin share
+[ "$BASE" = 0 ] || archive "ollaya-$PLATFORM" bin lib share
 if [ "$CUDA" = 1 ]; then
     archive "ollaya-$PLATFORM-cuda" lib share
     cp "$TREES/ollaya-$PLATFORM-cuda/lib/ollaya/cuda_v13/FILES.sha256" "$OUT/ollaya-$PLATFORM-cuda.sha256"

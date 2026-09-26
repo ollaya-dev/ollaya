@@ -147,6 +147,16 @@ async fn start_server_now(app: &AppHandle) -> Result<Status, String> {
     cmd.arg("serve")
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log);
+    // GGUF models run on the llama.cpp build bundled in the app's resources (desktop.yml stages
+    // it there); `ollaya serve` finds it through OLLAYA_LIBRARY_PATH.
+    if std::env::var_os("OLLAYA_LIBRARY_PATH").is_none()
+        && let Ok(dir) = app.path().resource_dir()
+    {
+        let lib = dir.join("lib").join("ollaya");
+        if lib.join("llama").is_dir() {
+            cmd.env("OLLAYA_LIBRARY_PATH", lib);
+        }
+    }
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     #[cfg(windows)]
