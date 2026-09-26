@@ -635,6 +635,50 @@ async fn systemone_is_typesafe_shaped() {
     d.stop().await;
 }
 
+async fn systemone_rejects_truncated_state() {
+    let d = Daemon::laya().await;
+    let request = |state: String| {
+        json!({"model": "laya:en", "state": state, "questions": triage()}).to_string()
+    };
+    for path in ["/v1/systemone", "/v1/decisions"] {
+        let (status, _, body) = post_raw(&d.url(path), request("word ".repeat(100))).await;
+        assert_eq!(status, 200, "{path}: {body}");
+        assert_eq!(body["model"], "laya:en");
+        assert!(body.get("state_truncated").is_none());
+
+        let (status, headers, body) = post_raw(
+            &d.url(path),
+            request(format!("{}refund", "word ".repeat(100))),
+        )
+        .await;
+        assert_eq!(status, 422, "{path}: {body}");
+        assert_eq!(headers["x-typesafe-request-id"], headers["x-request-id"]);
+        assert_eq!(
+            body,
+            json!({
+                "error": "state: part of state was dropped to fit the context of laya:en",
+                "code": "STATE_TRUNCATED",
+                "detail": [{
+                    "loc": ["body", "state"],
+                    "msg": "part of state was dropped to fit the context of laya:en",
+                    "type": "state_truncated",
+                    "ctx": {"model": "laya:en"}
+                }]
+            }),
+            "{path}"
+        );
+    }
+
+    let (status, _, body) = post_raw(
+        &d.url("/api/decide"),
+        request(format!("{}refund", "word ".repeat(100))),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["state_truncated"], true);
+    d.stop().await;
+}
+
 async fn model_specific_errors() {
     let d = Daemon::start(
         |dir| {
@@ -1138,6 +1182,7 @@ fn main() {
         tags_show_ps_and_v1_models,
         decide_routes_answers_and_unloads,
         systemone_is_typesafe_shaped,
+        systemone_rejects_truncated_state,
         model_specific_errors,
         auth_origin_and_host,
         queue_bound_and_cancellation,

@@ -55,7 +55,7 @@ Every error, on every endpoint, has this body:
 |---|---|
 | `error` | Human-readable message. Don't parse it; the one frozen message is `model "<name>" not found, try pulling it first`, as in Ollama. |
 | `code` | Machine-readable code. Branch on this. |
-| `detail` | Only for `INVALID_REQUEST`, `TOO_MANY_OPTIONS` and `INPUT_TOO_LONG`: every validation issue, in TypeSafe's (FastAPI's) `ValidationError` shape: `loc`, `msg`, `type` and sometimes `ctx`. |
+| `detail` | Only for `INVALID_REQUEST`, `TOO_MANY_OPTIONS`, `INPUT_TOO_LONG` and `STATE_TRUNCATED`: every validation issue, in TypeSafe's (FastAPI's) `ValidationError` shape: `loc`, `msg`, `type` and sometimes `ctx`. |
 
 | Code | HTTP | When | Retry |
 |---|---|---|---|
@@ -63,6 +63,7 @@ Every error, on every endpoint, has this body:
 | `INVALID_REQUEST` | 422 | Body fails validation; `detail` lists every issue | no |
 | `TOO_MANY_OPTIONS` | 422 | A question's options don't fit the model's option budget | no |
 | `INPUT_TOO_LONG` | 422 | `state` is longer than 65,536 tokens | no |
+| `STATE_TRUNCATED` | 422 | `/v1/systemone` or `/v1/decisions` would drop part of `state` to fit the model's context | no |
 | `UNAUTHORIZED` | 401 | `OLLAYA_API_KEY` is set and the request lacks the key | no |
 | `FORBIDDEN` | 403 | Browser `Origin` or `Host` header not allowed | no |
 | `MODEL_NOT_FOUND` | 404 | Model (or a router's target) not on this machine; for a pull, not in the registry | no |
@@ -111,7 +112,7 @@ Once a stream has started, a failure arrives as a last line in the same shape, s
 | `noul` | optional | optional: `{"true": "…", "false": "…"}` | `noul` |
 
 - **`instructions`** may be a string, an object, an array or `null`. When it is absent or `null`, the model reads the question id instead, so a descriptive id such as `is_spam` works on its own.
-- **`state`** is a string, an object or an array, up to 65,536 tokens. A state longer than the model's context is truncated to fit, and `/api/decide` reports `state_truncated: true`.
+- **`state`** is a string, an object or an array, up to 65,536 tokens. If it exceeds the model's available context, `/api/decide` truncates it and reports `state_truncated: true`. `/v1/systemone` and `/v1/decisions` return `422 STATE_TRUNCATED` with the answering model in `detail[0].ctx.model`.
 - **Model limits.** Every option needs room in the model's context: about 125 options for `laya:en` (512 tokens) and 250 for `laya:multilingual` (1,024). More is `422 TOO_MANY_OPTIONS`. For a router, the target's limits apply.
 
 **Answers** are TypeSafe's shapes, in this field order:

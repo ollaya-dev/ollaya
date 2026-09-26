@@ -23,6 +23,7 @@ pub enum ErrorCode {
     InvalidRequest,
     TooManyOptions,
     InputTooLong,
+    StateTruncated,
     Unauthorized,
     Forbidden,
     ModelNotFound,
@@ -45,11 +46,12 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Every code this version defines, in the order of the table in `docs/api.md` §4.2.
-    pub const ALL: [ErrorCode; 20] = [
+    pub const ALL: [ErrorCode; 21] = [
         ErrorCode::InvalidJson,
         ErrorCode::InvalidRequest,
         ErrorCode::TooManyOptions,
         ErrorCode::InputTooLong,
+        ErrorCode::StateTruncated,
         ErrorCode::Unauthorized,
         ErrorCode::Forbidden,
         ErrorCode::ModelNotFound,
@@ -74,6 +76,7 @@ impl ErrorCode {
             ErrorCode::InvalidRequest => "INVALID_REQUEST",
             ErrorCode::TooManyOptions => "TOO_MANY_OPTIONS",
             ErrorCode::InputTooLong => "INPUT_TOO_LONG",
+            ErrorCode::StateTruncated => "STATE_TRUNCATED",
             ErrorCode::Unauthorized => "UNAUTHORIZED",
             ErrorCode::Forbidden => "FORBIDDEN",
             ErrorCode::ModelNotFound => "MODEL_NOT_FOUND",
@@ -111,7 +114,10 @@ impl ErrorCode {
             ErrorCode::MethodNotAllowed => 405,
             ErrorCode::OperationInProgress => 409,
             ErrorCode::RequestTooLarge => 413,
-            ErrorCode::InvalidRequest | ErrorCode::TooManyOptions | ErrorCode::InputTooLong => 422,
+            ErrorCode::InvalidRequest
+            | ErrorCode::TooManyOptions
+            | ErrorCode::InputTooLong
+            | ErrorCode::StateTruncated => 422,
             ErrorCode::ModelLoadFailed
             | ErrorCode::InferenceFailed
             | ErrorCode::StorageError
@@ -145,7 +151,10 @@ impl ErrorCode {
     pub fn has_detail(&self) -> bool {
         matches!(
             self,
-            ErrorCode::InvalidRequest | ErrorCode::TooManyOptions | ErrorCode::InputTooLong
+            ErrorCode::InvalidRequest
+                | ErrorCode::TooManyOptions
+                | ErrorCode::InputTooLong
+                | ErrorCode::StateTruncated
         )
     }
 }
@@ -404,6 +413,16 @@ impl ValidationIssue {
         .with_ctx(json!({"max_tokens": MAX_STATE_TOKENS, "tokens": tokens}))
     }
 
+    /// A state that did not fit the answering model's context.
+    pub fn state_truncated(model: &str) -> Self {
+        ValidationIssue::new(
+            body_loc(&["state"]),
+            "state_truncated",
+            format!("part of state was dropped to fit the context of {model}"),
+        )
+        .with_ctx(json!({"model": model}))
+    }
+
     /// `loc` as the TypeSafe SDK prints it: keys joined by `.`, without the leading `body`.
     pub fn path(&self) -> String {
         self.loc
@@ -443,7 +462,7 @@ pub struct ErrorBody {
     pub error: String,
     /// Machine-readable code; branch on this.
     pub code: ErrorCode,
-    /// Validation issues, only for `INVALID_REQUEST`, `TOO_MANY_OPTIONS` and `INPUT_TOO_LONG`.
+    /// Validation issues, only for codes whose `has_detail` is true.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<Vec<ValidationIssue>>,
 }
@@ -532,6 +551,14 @@ impl ErrorBody {
         ErrorBody::with_issues(
             ErrorCode::InputTooLong,
             vec![ValidationIssue::input_too_long(tokens)],
+        )
+    }
+
+    /// `422 STATE_TRUNCATED` on TypeSafe routes.
+    pub fn state_truncated(model: &str) -> Self {
+        ErrorBody::with_issues(
+            ErrorCode::StateTruncated,
+            vec![ValidationIssue::state_truncated(model)],
         )
     }
 

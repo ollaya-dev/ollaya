@@ -147,7 +147,7 @@ Every error response, on every endpoint including `/v1/*`, has this body:
 |---|---|---|---|
 | `error` | string | always | Human-readable message. Not stable: do not parse it (exception: [§3](#3-model-names-and-resolution)). |
 | `code` | string | always | Machine-readable code from the table below, `UPPER_SNAKE_CASE`. Branch on this. |
-| `detail` | array of [issues](#44-validation-issues) | omitted unless `code` is `INVALID_REQUEST`, `TOO_MANY_OPTIONS` or `INPUT_TOO_LONG` | Every validation problem found, in TypeSafe's `ValidationError` shape. |
+| `detail` | array of [issues](#44-validation-issues) | omitted unless `code` is `INVALID_REQUEST`, `TOO_MANY_OPTIONS`, `INPUT_TOO_LONG` or `STATE_TRUNCATED` | Every validation problem found, in TypeSafe's `ValidationError` shape. |
 
 <!-- json: ErrorBody -->
 ```json
@@ -180,6 +180,7 @@ The `code` set is **open**: clients MUST handle an unknown code by falling back 
 | `INVALID_REQUEST` | 422 | Body fails validation (schema, limits, model name, `keep_alive`, `extras`, …); `detail` lists every issue | no |
 | `TOO_MANY_OPTIONS` | 422 | A question's options do not fit the answering model's option budget ([§5.3](#53-model-specific-limits)) | no |
 | `INPUT_TOO_LONG` | 422 | `state` is longer than 65,536 tokens | no |
+| `STATE_TRUNCATED` | 422 | `/v1/systemone` or `/v1/decisions` would drop part of `state` to fit the answering model's context | no |
 | `UNAUTHORIZED` | 401 | `OLLAYA_API_KEY` is set and the request has no matching `Authorization: Bearer` header | no |
 | `FORBIDDEN` | 403 | `Origin` or `Host` header not allowed ([§14](#14-security)) | no |
 | `MODEL_NOT_FOUND` | 404 | Model (or a router's target) not on this machine; for `/api/pull`, not in the registry | no |
@@ -233,7 +234,7 @@ an invalid name, a manifest that does not exist and an unreachable registry
 | `loc` | array of string \| integer | always | Path to the bad value: `"body"`, then keys and array indexes. Inside a question, the question's `type` follows its id, as FastAPI does for discriminated unions: `["body","questions","urgency","score","criteria"]`. |
 | `msg` | string | always | Human-readable; pydantic's wording where pydantic has one. Not stable. |
 | `type` | string | always | Machine-readable issue type (open set, see below) |
-| `ctx` | object | omitted when there is no limit to report | The limit and the actual value, e.g. `{"min_length": 2, "actual_length": 1}` |
+| `ctx` | object | omitted when there is no extra context to report | The limit and actual value, or the answering model, e.g. `{"min_length": 2, "actual_length": 1}`. |
 
 TypeSafe's schema also allows an `input` field. Ollaya never sends it, because it would echo user
 data back.
@@ -260,6 +261,7 @@ TypeSafe SDK users therefore see the same text from Ollaya as from TypeSafe.
 | `calibration` | `/api/create` calibration key that is not `<type>:<bucket>` | – |
 | `too_many_options` | Code `TOO_MANY_OPTIONS` | `{"options": n, "model": "<canonical>"}` |
 | `input_too_long` | Code `INPUT_TOO_LONG` | `{"max_tokens": 65536, "tokens": n}` |
+| `state_truncated` | Code `STATE_TRUNCATED` | `{"model": "<canonical>"}` |
 
 Example: a `/v1/systemone` body without `state` and with a one-level score. Both issues are
 reported:
@@ -347,10 +349,29 @@ another.
 |---|---|---|---|
 | Options that do not fit the model's option budget. laya-markers-v1 places every option's `[MASK]` inside `max_len`: about 125 options for `laya:en` (512 tokens) and 250 for `laya:multilingual` (1,024 tokens). | `TOO_MANY_OPTIONS` | 422 | `["body","questions",<id>,<type>,"criteria"]` |
 | `state` over 65,536 tokens (TypeSafe's limit) | `INPUT_TOO_LONG` | 422 | `["body","state"]` |
+| Part of `state` would be dropped to fit the answering model's context on `/v1/systemone` or `/v1/decisions` | `STATE_TRUNCATED` | 422 | `["body","state"]` |
 
-A state that is shorter than 65,536 tokens but longer than the model's context is **truncated** to
-fit, as laya does. `/api/decide` reports this in `state_truncated`; `/v1/*` cannot, because its
-shape is TypeSafe's.
+A state that is shorter than 65,536 tokens but longer than the model's context is truncated to fit
+on `/api/decide`, as laya does. That route reports `state_truncated: true`. The TypeSafe response
+shape has no truncation field, so `/v1/systemone` and `/v1/decisions` return `422 STATE_TRUNCATED`
+instead of a decision based on incomplete state. The model's available context depends on the
+questions and options, so this error does not state a fixed token limit.
+
+<!-- json: ErrorBody -->
+```json
+{
+  "error": "state: part of state was dropped to fit the context of laya:en",
+  "code": "STATE_TRUNCATED",
+  "detail": [
+    {
+      "loc": ["body", "state"],
+      "msg": "part of state was dropped to fit the context of laya:en",
+      "type": "state_truncated",
+      "ctx": {"model": "laya:en"}
+    }
+  ]
+}
+```
 
 <!-- json: ErrorBody -->
 ```json
@@ -1152,7 +1173,8 @@ Rules for `/v1/*`:
 - Response: **exactly** `model`, `answers` and `usage`, with the answer shapes of
   [§5.4](#54-answer-shapes). No native fields: Ollaya-only data goes on `/api/*`.
 - Errors: the [error body](#41-error-body). `extract_message` shows `error`, and `422` carries
-  TypeSafe's `detail` list.
+  TypeSafe's `detail` list. A decision that would drop part of `state` returns
+  `422 STATE_TRUNCATED`.
 - Headers: `x-typesafe-request-id` on every response.
 
 ### 8.1 `POST /v1/systemone`
