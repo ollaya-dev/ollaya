@@ -44,6 +44,9 @@ MEDIA = {
     "questions": "application/vnd.ollaya.questions",
     "license": "application/vnd.ollaya.license",
     "arch": "application/vnd.ollaya.arch",
+    # A GGUF file (weights, tokenizer and chat template) that llama.cpp loads, unmodified from the
+    # author's repository.
+    "gguf": "application/vnd.ollaya.weights.gguf",
 }
 HF = "https://huggingface.co"
 
@@ -194,10 +197,48 @@ def package_wl(spec, tag, v, blobs):
     return config, [graph] + weights + [tokenizer, decision, calibration] + questions + [lic] + arch
 
 
+def package_gguf(spec, tag, v, blobs):
+    """One tag of a GGUF model, run by llama.cpp: the author's GGUF, unmodified, plus the derived
+    decision.json and calibration.json (`llm_common/export_llama.py`)."""
+    repo, commit = v["repo"], v["commit"]
+    gguf = upstream(MEDIA["gguf"], repo, commit, v["gguf"])
+    oid = gguf["digest"].split(":", 1)[1]
+    decision_bytes = open(os.path.join(v["export_dir"], "decision.json"), "rb").read()
+    dj = json.loads(decision_bytes)
+    pin = dj["gguf"]
+    if (pin["repo"], pin["revision"], pin["path"], pin["sha256"]) != (repo, commit, v["gguf"], oid):
+        raise SystemExit("%s/decision.json was exported from %s@%s:%s (%s), not %s@%s:%s (%s)" % (
+            v["export_dir"], pin["repo"], pin["revision"], pin["path"], pin["sha256"], repo, commit, v["gguf"], oid))
+    gguf["annotations"] = {"org.ollaya.quantization": pin["quantization"]}
+    decision = blobs.put(MEDIA["decision"], decision_bytes)
+    calibration = blobs.put(MEDIA["calibration"], open(os.path.join(v["export_dir"], "calibration.json"), "rb").read())
+    text = v.get("license_text") or spec["license_text"]
+    if v.get("notice"):  # the author's NOTICE, as the pinned commit has it
+        with urllib.request.urlopen("%s/%s/resolve/%s/%s" % (HF, repo, commit, v["notice"])) as r:
+            text = r.read().decode() + "\n" + text
+    lic = blobs.put(MEDIA["license"], text.encode())
+    config = blobs.put(MEDIA["config"], json.dumps({
+        "model_format": "gguf", "engine": "llama", "layout": dj["layout"], "family": spec["family"],
+        "parameter_size": v["parameter_size"], "context_length": dj["llama"]["n_ctx"],
+        "languages": v["languages"], "description": v["description"],
+        "source": "huggingface.co/%s@%s" % (repo, commit), "license": v.get("license") or spec["license"],
+        "release_date": hf_commit_date(repo, commit),
+    }, indent=2).encode())
+    print("  %s:%s %s %.2f GB (%s)" % (spec["model"], tag, pin["quantization"], gguf["size"] / 1e9, v["gguf"]))
+    return config, [gguf, decision, calibration, lic]
+
+
 def package_model(spec, blobs):
     ns, model = spec["namespace"], spec["model"]
     lic = blobs.put(MEDIA["license"], spec["license_text"].encode())
     for tag, v in spec["tags"].items():
+        if v.get("kind") == "gguf":
+            config, layers = package_gguf(spec, tag, v, blobs)
+            write_manifest(ns, model, tag, config, layers)
+            for alias, target in spec.get("aliases", {}).items():
+                if target == tag:
+                    write_manifest(ns, model, alias, config, layers)
+            continue
         if v.get("kind") == "wl":
             config, layers = package_wl(spec, tag, v, blobs)
             write_manifest(ns, model, tag, config, layers)

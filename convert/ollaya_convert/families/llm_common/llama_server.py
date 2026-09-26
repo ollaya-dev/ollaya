@@ -25,8 +25,6 @@ import subprocess
 import time
 import urllib.request
 
-import numpy as np
-
 BIAS = 100.0
 
 
@@ -38,15 +36,22 @@ class LlamaServer:
     # ---- process management -------------------------------------------------------------------
     @classmethod
     def start(cls, binary: str, model: str, port: int = 8093, ctx: int = 8192, parallel: int = 4,
-              ngl: int = 999, extra=(), log=None, timeout: float = 300):
+              ngl: int = 999, extra=(), log=None, timeout: float = 300, argv=None):
+        """`argv`, when given, replaces every argument after `--port` (the runtime's exact list)."""
         env = dict(os.environ)
         libdir = os.path.dirname(os.path.abspath(binary))
         env["LD_LIBRARY_PATH"] = libdir + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
-        cmd = [binary, "-m", model, "--port", str(port), "--host", "127.0.0.1", "-c", str(ctx),
-               "-np", str(parallel), "-ngl", str(ngl), "--no-webui", *extra]
+        if argv is not None:
+            # As the runtime does: no LLAMA_ARG_* defaults from the environment.
+            env = {k: v for k, v in env.items() if not k.startswith("LLAMA_")}
+            cmd = [binary, "-m", model, "--host", "127.0.0.1", "--port", str(port), *argv]
+        else:
+            cmd = [binary, "-m", model, "--port", str(port), "--host", "127.0.0.1", "-c", str(ctx),
+                   "-np", str(parallel), "-ngl", str(ngl), "--no-webui", *extra]
         out = open(log, "w") if log else subprocess.DEVNULL
         proc = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, env=env)
         srv = cls("http://127.0.0.1:%d" % port, proc)
+        srv.command = cmd
         t0 = time.time()
         while time.time() - t0 < timeout:
             if proc.poll() is not None:
@@ -113,6 +118,8 @@ class LlamaServer:
                 "top_k": k, "temperature": 1.0, "top_p": 1.0, "min_p": 0.0, "typical_p": 1.0,
                 "repeat_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0,
                 "dry_multiplier": 0.0, "xtc_probability": 0.0, "cache_prompt": cache_prompt, "stream": False}
+        import numpy as np  # lazy: the Metal replay runs without the convert environment
+
         r = self._post("/completion", body)
         top = r["completion_probabilities"][0]["top_probs"]
         p = {t["id"]: t["prob"] for t in top}
