@@ -409,7 +409,7 @@ function OpenModels() {
       lead="Open weights, ready to pull."
       body={
         laya
-          ? 'Start with Laya from Convai Innovations: an English model, a 100+ language model, a model fine-tuned for typed decisions, and a router that picks for you.'
+          ? 'Pick by what you need: laya is the fastest, decider the most accurate, von reads up to 8,192 tokens, and qwen3guard screens text for safety. The models page shows each one’s accuracy and speed.'
           : 'Open decision models from their authors, pulled by name.'
       }
     >
