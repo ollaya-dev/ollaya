@@ -53,8 +53,8 @@ impl Default for OllayaMcp {
 pub struct DecideParams {
     /// The model: "laya" (default; routes English to laya:en and other languages to
     /// laya:multilingual), "decider" (most accurate), "nli", "gliclass", "von", "kev",
-    /// "qwen3guard" (a safety guard that answers only its built-in questions: give neither
-    /// `questions` nor `preset`), or a model created with a Modelfile.
+    /// "decision", "qwen3guard" (a safety guard that answers only its built-in questions: give
+    /// neither `questions` nor `preset`), or a model created with a Modelfile.
     #[serde(default)]
     pub model: Option<String>,
     /// What to decide about: a string, or any JSON object or array (a ticket, an email, a message

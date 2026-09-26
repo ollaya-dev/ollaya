@@ -61,6 +61,7 @@ If none is available, tell the user how to install Ollaya:
 | `nli` | Zero-shot, good at yes/no with clear statements | ~20 ms GPU |
 | `gliclass` | Zero-shot, many options in one pass | ~15 ms GPU |
 | `kev` | Qwen3.5-0.8B decoder with a pointer head; calibrated | ~0.2 s GPU, ~2 s CPU |
+| `decision` | Decision 1.0 Eos: fully fine-tuned Qwen3.5-0.8B with an endpoint head; rows up to 16k tokens; calibrated | ~0.2 s GPU, ~0.85 s CPU |
 | `qwen3guard` | Safety guard; answers only its built-in questions (send no `questions`) | ~40 ms GPU, ~2 s CPU |
 | `von` | ModernBERT-large, every option scored at its own marker; states up to 8k tokens; calibrated | ~25 ms GPU, ~0.8 s CPU |
 

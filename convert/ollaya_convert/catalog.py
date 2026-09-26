@@ -219,6 +219,32 @@ CATALOG = {
                   "within 2.8e-6 (0.8b), 3.1e-5 (4b) and 3.8e-6 (9b), on CPU and CUDA, and the TypeSafe answers "
                   "equal upstream's to its 4-decimal rounding.",
     },
+    "decision": {
+        "namespace": "library",
+        "model": "decision",
+        "family": "decision",
+        "author": "the vLLM Semantic Router contributors",
+        "license": "Apache-2.0",
+        "license_text": "Decision 1.0 by the vLLM Semantic Router contributors "
+                        "(https://huggingface.co/llm-semantic-router)\n"
+                        "A fine-tune of Qwen3.5 by the Qwen team (https://huggingface.co/Qwen), Apache-2.0.\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        "tags": {
+            # The backbone and the head are read in place from the author's safetensors.
+            "eos": _wl("decision-eos-0.8b", "llm-semantic-router/Decision-1.0-Eos-0.8B",
+                       "3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd",
+                       "Decision 1.0 Eos (fully fine-tuned Qwen3.5-0.8B) with an endpoint head: every option is "
+                       "scored at its own last token against the question, in one forward pass per question.",
+                       "0.75B", 16384, ["en", "zh"], wl_dir=os.path.join(OUT, "decision-eos-0.8b"),
+                       weights={"model.safetensors": "backbone/model.safetensors",
+                                "decision_head.safetensors": "decision_head.safetensors"}),
+        },
+        "aliases": {"latest": "eos"},
+        "parity": "Ollaya's Rust runtime matches the author's code (PyTorch fp32) exactly on 466 questions from 117 "
+                  "requests, and rejects the same 17 requests the author rejects. The token rows and option "
+                  "positions are identical, and so is the decision on every question. Probabilities are within "
+                  "3.2e-6, on CPU and CUDA, and the TypeSafe answers equal the author's up to 4-decimal rounding.",
+    },
     "qwen3guard": {
         "namespace": "library",
         "model": "qwen3guard",

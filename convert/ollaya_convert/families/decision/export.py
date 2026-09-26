@@ -139,7 +139,10 @@ def export(slug, out_dir, root, empty=False):
     # Every parameter references the checkpoint; only buffers and constants stay inline.
     inline_params = sorted(params & {name for name, _, _ in report["inline"]})
     assert not inline_params and report["stats"]["external"] == len(params), (inline_params, report["stats"])
-    shutil.copy(os.path.join(root, "tokenizer.json"), os.path.join(out_dir, "tokenizer.json"))
+    tok_out = os.path.join(out_dir, "tokenizer.json")
+    if os.path.exists(tok_out):  # a previous export's copy keeps the snapshot's read-only mode
+        os.remove(tok_out)
+    shutil.copyfile(os.path.join(root, "tokenizer.json"), tok_out)
 
     from transformers import AutoTokenizer
 

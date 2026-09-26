@@ -116,6 +116,20 @@ const overlays: Record<string, ModelOverlay> = {
       '0.8b': { summary: 'Qwen3.5-0.8B base, round 15, 0.460 on typed decisions: small and fast.' },
     },
   },
+  decision: {
+    stats: { tag: 'decision:eos', latencyMs: 217 },
+    title: 'Decision 1.0',
+    description:
+      'Decision models by the vLLM Semantic Router contributors: a fully fine-tuned Qwen3.5 backbone plus an endpoint head that scores every option at its own last token against the question, in one forward pass per question. 16k-token rows.',
+    publisher: { name: 'vLLM Semantic Router', url: 'https://huggingface.co/llm-semantic-router' },
+    capabilities: ['decision', 'long-context'],
+    keywords: ['decision', 'eos', 'nox', 'lux', 'semantic router', 'vllm', 'qwen', 'llm', 'endpoint', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 6,
+    tags: {
+      latest: { summary: 'Same as decision:eos.' },
+      eos: { summary: 'Decision 1.0 Eos, fully fine-tuned Qwen3.5-0.8B: 17.49 on Decision Index 0.2.' },
+    },
+  },
   qwen3guard: {
     stats: { tag: 'qwen3guard:0.6b', latencyMs: 37, latencyNote: 'its four built-in questions' },
     title: 'Qwen3Guard',
@@ -246,6 +260,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
   de: 'German',
   fr: 'French',
   es: 'Spanish',
+  zh: 'Chinese',
 }
 
 function languagesLabel(langs: string[]): string {
