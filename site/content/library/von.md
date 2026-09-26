@@ -29,7 +29,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `von`
 - **Yes/no without criteria.** A `noul` question without `true`/`false` descriptions adds a second sequence without the state. It measures the question's own lean towards yes or no, which is taken off the answer, as Von does.
 - **Calibration.** The temperature is computed per question from the answer's entropy, the state's length and the number of options, with Von's own fitted coefficients.
 - **Weights.** Von's trained weights exist only in the author's `option_marker.pt`, a PyTorch archive whose tensors are stored uncompressed. Ollaya downloads it from Hugging Face, pinned to a commit and verified by sha256, and the ONNX graph reads the tensors in place by byte offset. Nothing in it is unpickled or executed, and Ollaya hosts only the graph (3 MB).
-- **Parity.** Ollaya's Rust runtime reproduces upstream Von computed in float64: the same token ids and option markers, the same decision on every test question, and logits within 4.4e-4, on CPU and CUDA.
+- **Parity.** Ollaya's Rust runtime reproduces upstream Von computed in float64: the same token ids and option markers, the same decision on every test question, and logits within 4.4e-4 on x86-64 CPU and CUDA. On Apple silicon's CPU one row is 1.1e-3 off, and every decision is still the same.
 
 ## Limits
 

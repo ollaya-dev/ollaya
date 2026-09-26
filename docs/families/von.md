@@ -17,9 +17,9 @@ The existing Laya export does not apply. This document is the spec the Rust port
 runtime is `ollaya_decision::von` (rows), `ollaya_decision::pyrepr` (Python `str()`),
 `ollaya_decision::calibration::TemperatureMap` (the input-conditioned temperature) and
 `ollaya_runner::von` (the engine). Measured parity and speed are in
-[Rust runtime parity](#rust-runtime-parity) and [Quality and speed](#quality-and-speed): on CPU
-and CUDA the runtime is within 4.4e-4 of the goldens' logits and makes the same decision on every
-question. The goldens are the network in float64; [why](#why-the-goldens-are-fp64).
+[Rust runtime parity](#rust-runtime-parity) and [Quality and speed](#quality-and-speed): on x86-64
+CPU and CUDA the runtime is within 4.4e-4 of the goldens' logits and makes the same decision on every
+question. On Apple silicon's CPU one row is 1.1e-3 off, and every decision is still the same. The goldens are the network in float64; [why](#why-the-goldens-are-fp64).
 
 | | |
 |---|---|

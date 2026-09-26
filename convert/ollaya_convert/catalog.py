@@ -228,6 +228,7 @@ CATALOG = {
         "aliases": {"latest": "1.1"},
         "parity": "Ollaya's Rust runtime matches upstream Von, run in float64, on 485 questions (653 rows). The "
                   "token ids and marker positions are identical, and so is the decision on every question. Logits "
-                  "are within 4.4e-4 and probabilities within 4.7e-5, on CPU and CUDA.",
+                  "are within 4.4e-4 and probabilities within 4.7e-5 on x86-64 CPU and CUDA; on Apple silicon's CPU "
+                  "one of the 653 rows is 1.1e-3 off, and every decision is still the same.",
     },
 }
