@@ -501,7 +501,7 @@ const platforms: { name: string; detail: string; app: Support; cli: Support; gpu
     detail: '10 and 11, x64',
     app: { ok: true, text: 'Desktop app', note: '.exe or .msi' },
     cli: { ok: true, text: 'PowerShell script' },
-    gpu: { ok: false, text: 'CPU only', note: 'NVIDIA via WSL 2' },
+    gpu: { ok: true, text: 'NVIDIA, CUDA 13', note: 'Command line' },
   },
   {
     name: 'Linux',
@@ -557,7 +557,7 @@ function Platforms() {
       id="platforms"
       title="Platforms"
       lead="Runs where you work."
-      body="A desktop app and a command line for macOS, Windows and Linux, and a Docker image for servers. Every model runs on the CPU; an NVIDIA GPU on Linux, in WSL 2 or in Docker takes a request down to milliseconds."
+      body="A desktop app and a command line for macOS, Windows and Linux, and a Docker image for servers. Every model runs on the CPU; an NVIDIA GPU on Linux, Windows, WSL 2 or Docker takes a request down to milliseconds."
     >
       <div class="overflow-hidden rounded-2xl border border-line">
         <table class="block w-full border-collapse md:table md:table-fixed">
@@ -593,8 +593,8 @@ function Platforms() {
           Install for your platform <Icon name="arrowRight" class="size-4" />
         </a>
         <p class="max-w-md text-[13px] text-muted sm:text-right">
-          NVIDIA GPUs need driver R580 or newer; the installers fetch the CUDA libraries only when they find one. On
-          Apple, AMD and Intel GPUs, models run on the CPU.
+          NVIDIA GPUs need driver R580 or newer; the install scripts fetch the CUDA libraries only when they find one.
+          In the desktop apps, and on Apple, AMD and Intel GPUs, models run on the CPU.
         </p>
       </div>
     </Section>

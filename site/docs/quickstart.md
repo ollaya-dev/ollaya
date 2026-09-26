@@ -24,7 +24,7 @@ irm {{SITE_ORIGIN}}/install.ps1 | iex
 
 Or get the [desktop app](/download), which bundles the same command line and server.
 
-The script downloads the latest release from GitHub and checks its sha256. On Linux it also fetches the CUDA libraries when it finds an NVIDIA GPU, and, where systemd runs and it has root rights, sets up a service that serves the API on `127.0.0.1:11435`. See [Download](/download) for requirements and the Docker images.
+The script downloads the latest release from GitHub and checks its sha256. On Linux and Windows it also fetches the CUDA libraries when it finds an NVIDIA GPU. On Linux, where systemd runs and it has root rights, it sets up a service that serves the API on `127.0.0.1:11435`. See [Download](/download) for requirements and the Docker images.
 
 ## 2. Run a model
 

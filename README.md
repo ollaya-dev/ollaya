@@ -94,8 +94,8 @@ Browse them at [ollaya.dev/search](https://ollaya.dev/search). Laya tags ending 
   `curl -fsSL https://ollaya.dev/install.sh | sh`. When an NVIDIA GPU is present
   (driver R580+), the installer adds the CUDA runtime.
 - **macOS** (Apple silicon): the same command.
-- **Windows** (x64, CPU): `irm https://ollaya.dev/install.ps1 | iex` in PowerShell. For an NVIDIA GPU,
-  use WSL 2 with the Linux command.
+- **Windows** (x64): `irm https://ollaya.dev/install.ps1 | iex` in PowerShell. When an NVIDIA GPU is
+  present (driver R580+), the installer adds the CUDA runtime, as on Linux.
 - **Desktop app** for macOS, Windows and Linux: start and stop the server, download models and run
   them in one window. On macOS it lives in the menu bar. Get it from
   [ollaya.dev/download](https://ollaya.dev/download).
@@ -124,7 +124,7 @@ Configuration is through environment variables: `OLLAYA_HOST`, `OLLAYA_MODELS`,
 
 ```sh
 cargo test --workspace
-cargo build --release -p ollaya --features cuda   # CUDA build (Linux x86_64)
+cargo build --release -p ollaya --features cuda   # CUDA build (x86-64 Linux and Windows)
 ```
 
 `convert/` rebuilds models. It exports them, checks parity against the PyTorch reference,

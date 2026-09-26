@@ -149,8 +149,9 @@ export function DownloadPage({ origin }: { origin: string }) {
               <CodeBlock code={installWindows} lang="powershell" />
               <Note>
                 In PowerShell. It installs <code class="font-mono">ollaya</code> for your user, with no administrator
-                rights, and puts it on your <code class="font-mono">PATH</code>. The archive is checked against the
-                release's sha256.
+                rights, and puts it on your <code class="font-mono">PATH</code>. The archives are checked against the
+                release's sha256. With an NVIDIA GPU it also fetches the CUDA libraries (about 1 GB). It never installs
+                drivers.
               </Note>
             </Step>
             <Step title="Run a model">
@@ -158,9 +159,10 @@ export function DownloadPage({ origin }: { origin: string }) {
             </Step>
             <Requirements
               items={[
-                'Windows 10 or 11 on a 64-bit x86 PC. Models run on the CPU.',
+                'Windows 10 or 11 on a 64-bit x86 PC. Runs on the CPU.',
+                'An NVIDIA GPU is optional: driver R580 or newer (CUDA 13). The command line uses it; the desktop app runs on the CPU.',
                 <>
-                  For an NVIDIA GPU, use WSL 2 with the Linux installer. The server in WSL answers Windows programs at{' '}
+                  WSL 2 with the Linux installer works too. The server in WSL answers Windows programs at{' '}
                   <code class="font-mono">localhost:{LOCAL_PORT}</code>.
                 </>,
               ]}

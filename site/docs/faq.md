@@ -52,14 +52,14 @@ A decision is a single forward pass. Measured end to end through the HTTP API on
 
 ## Do I need a GPU?
 
-No. Ollaya runs on the CPU, and on Linux x86-64 uses an NVIDIA GPU with driver R580 or newer (CUDA 13) when one is present. The installer downloads the CUDA libraries only when it finds a GPU.
+No. Ollaya runs on the CPU, and on x86-64 Linux and Windows uses an NVIDIA GPU with driver R580 or newer (CUDA 13) when one is present. The install scripts download the CUDA libraries only when they find a GPU. The desktop app runs models on the CPU.
 
 ## Which platforms are supported?
 
 - **Linux** x86-64 and ARM64 with glibc 2.38 or newer: Ubuntu 24.04, Debian 13, Fedora 39, RHEL 10 or newer.
 - **macOS** on Apple silicon.
 - **Docker:** `ghcr.io/ollaya-dev/ollaya` for linux/amd64 and linux/arm64, and `:cuda` for NVIDIA GPUs. Use it on older Linux distributions too.
-- **Windows** 10 and 11 on 64-bit x86 PCs, on the CPU: the desktop app, or `irm {{SITE_ORIGIN}}/install.ps1 | iex` for the command line. For an NVIDIA GPU, use WSL 2 with the Linux installer.
+- **Windows** 10 and 11 on 64-bit x86 PCs: the desktop app (CPU), or `irm {{SITE_ORIGIN}}/install.ps1 | iex` for the command line, which also uses an NVIDIA GPU. WSL 2 with the Linux installer works too.
 - **The desktop app** runs on all three: see [Download](/download).
 
 ## Does my data leave my machine?

@@ -7,12 +7,13 @@ daemon that spawns GPU runners.
 |---|---|
 | `scripts/package.sh` | Builds the release archives from a cargo target directory |
 | `scripts/install.sh` | The `curl -fsSL https://ollaya.dev/install.sh \| sh` installer (the site serves this file) |
+| `scripts/install.ps1` | The `irm https://ollaya.dev/install.ps1 \| iex` installer for Windows (the site serves this file too) |
 | `packaging/ollaya.service` | The systemd unit. `install.sh` embeds a copy, and CI checks that the two match |
 | `packaging/cuda-requirements.{in,txt}` | Pinned, hash-locked NVIDIA wheels that the CUDA libraries come from |
 | `packaging/docker-healthcheck.sh` | The image's `HEALTHCHECK` |
 | `Dockerfile`, `.dockerignore` | The `cpu` and `cuda` images |
 | `.github/workflows/ci.yml` | fmt, clippy and tests (CPU), the site build, and lint for the packaging scripts |
-| `.github/workflows/release.yml` | On a `v*` tag: tarballs, a GitHub Release and the GHCR images |
+| `.github/workflows/release.yml` | On a `v*` tag: the archives, a GitHub Release and the GHCR images |
 
 ## Release artifacts
 
@@ -26,16 +27,21 @@ Each release on GitHub (`ollaya-dev/ollaya`, set with `OLLAYA_REPO`) carries:
 | `ollaya-linux-arm64.tar.zst` | `bin/ollaya`, `share/doc/ollaya/` (CPU only) | |
 | `ollaya-darwin-arm64.tar.zst` | `bin/ollaya`, `share/doc/ollaya/` (CPU and CoreML) | |
 | `ollaya-darwin-arm64.tgz` | The same as the darwin `.tar.zst`. Stock macOS has no `zstd`, so `install.sh` falls back to it | |
+| `ollaya-windows-amd64.zip` | `bin/ollaya.exe`, `bin/DirectML.dll`, `share/` | 21.8 MiB |
+| `ollaya-windows-amd64-cuda.zip` | `lib/ollaya/cuda_v13/` (21 DLLs), `share/doc/ollaya/cuda_v13/` | 1123 MiB (1645 MiB unpacked) |
+| `ollaya-windows-amd64-cuda.sha256` | The sha256 of every DLL in `lib/ollaya/cuda_v13/`, also installed there as `FILES.sha256` | 2 KiB |
 | `sha256sum.txt` | SHA-256 of every archive, in `sha256sum -c` format | |
 
 \* Measured with the 34 MB `parity` example standing in for `ollaya`, which isn't built yet.
 
 Notes on the archives:
-- **One linux-amd64 binary.** It is built with `--features ollaya-runner/cuda`, which puts ORT's
-  provider bridge into the binary. The same binary runs on the CPU and only uses the GPU when the
-  `-cuda` archive is installed next to it, as Ollama's is.
-- **Deterministic.** The archives are built with GNU tar (`--sort=name`, owner 0, `SOURCE_DATE_EPOCH`
-  set to the last commit). Two runs of `package.sh` produce the same SHA-256.
+- **One binary per x86-64 OS.** linux-amd64 and windows-amd64 are built with
+  `--features ollaya-runner/cuda`, which puts ORT's provider bridge into the binary. The same
+  binary runs on the CPU and only uses the GPU when the `-cuda` archive is installed next to it,
+  as Ollama's is.
+- **Deterministic.** The tarballs are built with GNU tar (`--sort=name`, owner 0, `SOURCE_DATE_EPOCH`
+  set to the last commit). Two runs of `package.sh` produce the same SHA-256. The Windows zips
+  (7-Zip) keep file times, so they are not byte-reproducible; `FILES.sha256` still is.
 - **Top-level entries only.** An archive holds only `bin/`, `lib/` and `share/`, never `.`, so
   unpacking it over a prefix never changes the prefix directory's own mode.
 
@@ -46,10 +52,10 @@ The CUDA archive adds `share/doc/ollaya/cuda_v13/`, with its own `THIRD_PARTY_NO
 ### Upgrades keep unchanged CUDA libraries
 
 The CUDA archive's own sha256 changes with every release (its entries carry the release's
-timestamp), but its libraries usually don't. So `install.sh` compares the release's
-`ollaya-linux-amd64-cuda.sha256` with the installed `FILES.sha256`, checks every installed library
-against it, and keeps the installed copy when all of them match. Otherwise, and for releases
-before 0.4.0, which have no such file, it downloads the archive as before.
+timestamp), but its libraries usually don't. So `install.sh` and `install.ps1` compare the
+release's `ollaya-<platform>-cuda.sha256` with the installed `FILES.sha256`, check every installed
+library against it, and keep the installed copy when all of them match. Otherwise, and for
+releases before 0.4.0, which have no such file, they download the archive as before.
 
 ### What `lib/ollaya/cuda_v13` contains
 
@@ -73,13 +79,48 @@ before 0.4.0, which have no such file, it downloads the archive as before.
 - **Left out.** Two providers stay out: `libonnxruntime_providers_tensorrt.so` and
   `libonnxruntime_providers_nv_tensorrt_rtx.so`. They need TensorRT 10 (`libnvinfer.so.10`), which
   isn't shipped, and the runner registers only the CUDA execution provider.
-- **Changing the set.** The lists live in `ORT_PROVIDERS` and the `case` in `stage_cuda` in
-  `package.sh`.
+- **Changing the set.** The lists live in `ORT_PROVIDERS`, `CUDA_LIBS_REQUIRED` and `is_cuda_lib`
+  in `package.sh`.
 - **Updating the pins.** Edit the pins in `packaging/cuda-requirements.in`. Then regenerate the hash
-  lock with the `uv pip compile` command in that file's header.
-- **Download.** `package.sh` fetches the wheels with `pip download --require-hashes`. It falls back to
-  `uvx pip` when there's no `pip`; `uv pip download` doesn't exist. The wheels are cached in
-  `~/.cache/ollaya-package/wheels`, about 1.2 GB.
+  lock with the `uv pip compile` command in that file's header. The lock is universal: it holds the
+  hashes of every platform's wheels, so one file serves Linux and Windows.
+- **Download.** `package.sh` fetches the wheels with `pip download --require-hashes`, for the
+  manylinux x86-64 platforms or for `win_amd64`. It falls back to `uvx pip` when there's no `pip`;
+  `uv pip download` doesn't exist. The wheels are cached in `~/.cache/ollaya-package/wheels`, about
+  1.2 GB per platform.
+
+**On Windows** the pack holds the same 20 files under their Windows names, and `DirectML.dll`
+(1645 MiB unpacked):
+
+| File | Source |
+|---|---|
+| `onnxruntime_providers_shared.dll`, `onnxruntime_providers_cuda.dll` | pyke's ORT 1.28 `cuda13,tensorrt,nvrtx,directml` build (`copy-dylibs`) |
+| `DirectML.dll` | the same build; the same file as `bin/DirectML.dll` |
+| `cudart64_13.dll` | `nvidia-cuda-runtime==13.4.92` |
+| `cublas64_13.dll`, `cublasLt64_13.dll` | `nvidia-cublas==13.8.0.4` |
+| `curand64_10.dll` | `nvidia-curand==10.4.4.72` |
+| `cudnn64_9.dll` and its 9 `cudnn_*64_9.dll` libraries | `nvidia-cudnn-cu13==9.26.0.51` |
+| `cufft64_12.dll` | `nvidia-cufft==12.4.0.43` |
+| `nvrtc64_130_0.dll`, `nvrtc-builtins64_134.dll` | `nvidia-cuda-nvrtc==13.4.92` |
+| `nvJitLink_130_0.dll` | `nvidia-nvjitlink==13.4.92` |
+
+- **Taken from** the `nvidia/*/bin/` folders of the `win_amd64` wheels, byte for byte. `nvblas64_13.dll`
+  and `cufftw64_12.dll` are left out, as on Linux, and so are the TensorRT providers
+  (`onnxruntime_providers_tensorrt.dll` and `onnxruntime_providers_nv_tensorrt_rtx.dll`, which need
+  `nvinfer_10.dll`).
+- **What the provider loads.** `onnxruntime_providers_cuda.dll` imports `cublas64_13.dll` and
+  `cublasLt64_13.dll` and links the CUDA runtime statically. It loads `cudnn64_9.dll`,
+  `cufft64_12.dll` and `nvrtc64_130_0.dll` by name when it needs them, cuDNN loads its
+  sub-libraries itself, and `nvcuda.dll` comes with the driver in `System32`. `cudart64_13.dll`
+  ships anyway, as `libcudart.so.13` does on Linux.
+- **Loaded for Laya.** A `laya:en` fp16 runner on an RTX 4090 loaded 7 files from the pack, 711 of
+  the 1645 MiB: the two providers, `DirectML.dll`, `cublas64_13.dll`, `cublasLt64_13.dll`,
+  `cudnn64_9.dll` and `cudnn_graph64_9.dll` (the runner process's module list). Everything else it
+  loaded came from the driver (`nvcuda.dll` and its `DriverStore` libraries).
+- **DirectML.dll.** `ollaya.exe` imports it (by ordinal), because pyke's Windows builds include the
+  DirectML provider, which is compiled in but never registered. The base zip has it in `bin/`, and
+  the pack has a copy: GPU runners start from inside the pack and load the DLLs they import from
+  their own folder, and without the copy they would pick up whatever version `System32` has.
 
 ## Supported systems
 
@@ -88,12 +129,16 @@ before 0.4.0, which have no such file, it downloads the archive as before.
 | Linux | glibc 2.38 or newer: Ubuntu 24.04, Debian 13, Fedora 39, RHEL 10 or newer | pyke's `libonnxruntime.a` references `__isoc23_strtol` and related symbols (`GLIBC_2.38`) and `GLIBCXX_3.4.31`. The provider `.so` needs glibc 2.38 too. `install.sh` checks this. Older hosts can use the Docker image. |
 | Linux, GPU | NVIDIA driver R580 or newer (CUDA 13) on x86-64 | Uses pyke's CUDA 13 build. The driver's CUDA major version must be at least 13; minor-version compatibility covers the 13.4 runtime. |
 | WSL 2 | Windows NVIDIA driver with CUDA 13 | The driver's `libcuda.so.1` comes from `/usr/lib/wsl/lib`. Never install a Linux driver inside WSL. |
+| Windows | 10 or 11 on x64 | pyke's Windows build. `ollaya.exe` imports the Microsoft Visual C++ runtime (`VCRUNTIME140.dll`, `MSVCP140.dll`), as the CUDA provider does. |
+| Windows, GPU | NVIDIA driver R580 or newer (CUDA 13) | pyke's Windows CUDA 13 build, with the same minor-version compatibility as on Linux. `install.ps1` reads the driver from `nvidia-smi`, or from WMI. |
 | macOS | Apple silicon | The minimum macOS version comes from pyke's CoreML build. The release workflow prints it with `vtool -show-build`. |
 | musl (Alpine) | not supported | glibc build. Use the Docker image. |
 
 - **Runtime libraries.** The binary itself needs only `libc`, `libm`, `libstdc++` and `libgcc_s`.
 - **Shared tested build.** The CUDA path was tested with the pyke build that the dev build uses
-  (`b89451ba…`), under WSL 2 with driver 616.92 (CUDA UMD 13.4) on an RTX 4090.
+  (`b89451ba…`), under WSL 2 with driver 616.92 (CUDA UMD 13.4) on an RTX 4090. The Windows CUDA
+  path was tested with pyke's `efb686cb…` build on the same machine under Windows 11, with the same
+  driver (see "On Windows" under the runtime library contract).
 
 ## The runtime library contract (for the daemon)
 
@@ -189,6 +234,45 @@ dependencies through `LD_LIBRARY_PATH`. The provider has no RUNPATH:
 - **Docker.** The same rules apply. The binary is `/usr/bin/ollaya` and the libraries are in
   `/usr/lib/ollaya/cuda_v13`.
 
+### On Windows
+
+The pack has the same layout, `lib\ollaya\cuda_v13` next to `bin\ollaya.exe`, but ORT finds its
+providers differently:
+
+- **The runtime path is the executable file's directory.** `WindowsEnv::GetRuntimePath()`
+  (`onnxruntime/core/platform/windows/env.cc`) is the directory of
+  `GetModuleFileNameW(&__ImageBase)`: the module that contains ORT, which for a static link is
+  `ollaya.exe` itself. `argv[0]` plays no part, so the Linux trick can't move it.
+- **Providers load with `LoadLibraryExW(path, LOAD_WITH_ALTERED_SEARCH_PATH)`**, so the provider's
+  own imports (`cublas64_13.dll`, `cublasLt64_13.dll`) are looked up in the provider's folder first.
+  The DLLs it loads by name later (`cudnn64_9.dll`, `cufft64_12.dll`, `nvrtc64_130_0.dll`) follow the
+  standard search order, which starts with the application's folder.
+
+So the daemon starts GPU runners from a copy of its own executable inside the pack
+(`crates/ollaya-server/src/launch.rs`):
+
+1. `cuda_dir()` finds the pack as on Linux (`OLLAYA_LIBRARY_PATH`, `<exe dir>\..\lib\ollaya\cuda_v13`,
+   or the executable's own folder for a development build), and keeps the plain drive form of the
+   path: a canonical `\\?\` path would reach ORT's `LoadLibraryExW` calls.
+2. It hard-links `ollaya.exe` into the pack as `ollaya-runner-<first 16 hex digits of its
+   sha256>.exe`, or copies it when a hard link is impossible (another volume, no NTFS). A copy is
+   written under a temporary name and renamed, so a half-written file never has the final name.
+3. Every runner starts from that file. The pack is then the runner's application folder, so ORT finds
+   the providers and Windows finds every NVIDIA DLL and `DirectML.dll` there, before `System32` and
+   `PATH`. No `PATH` change is needed, and nothing in the pack is ever on the user's `PATH`.
+
+- **Why a hash in the name.** The command line and the desktop app, or two versions, may share a
+  pack. Each build gets its own runner file, so none replaces a file another server is using.
+  `install.ps1` deletes the old ones when it keeps a pack across an upgrade.
+- **Why not `PATH`.** `install.ps1` puts `bin` on the user's `PATH`, so NVIDIA DLLs next to
+  `ollaya.exe` would be found by every program, and a per-process `PATH` doesn't cover DLLs loaded
+  with `LOAD_LIBRARY_SEARCH_*` flags, which skip `PATH`.
+- **Fallback.** If the copy can't be made (a read-only install folder), the daemon logs a warning and
+  starts runners from `ollaya.exe`, which then run on the CPU.
+- **Runner self-check.** On Windows the runner looks for `onnxruntime_providers_shared.dll` next to
+  its own executable (`current_exe()`), where ORT will look, and reports
+  `no CUDA runtime in <folder> (install the GPU pack)` when it is missing.
+
 ### Evidence
 
 The real archives were installed into a temporary prefix with `install.sh`, with the `parity` example
@@ -201,6 +285,22 @@ standing in for `bin/ollaya`. The runner was then run under `env -i`, on an RTX 
 | `<prefix>/lib/ollaya/cuda_v13/ollaya` | unset | `…/libonnxruntime_providers_cuda.so with error: libcublasLt.so.13: cannot open shared object file` |
 | `ollaya` (relative), cwd `/` | set | `Failed to load library /libonnxruntime_providers_shared.so` |
 | any | none, CPU device | Works |
+
+**On Windows**, the release archives of a `release.yml` dry run were installed with `install.ps1`
+into a temporary folder on Windows 11 with an RTX 4090 (driver 616.92, CUDA UMD 13.4). The `parity`
+and `bench` examples built by the same run were copied into `lib\ollaya\cuda_v13` so that ORT
+found its providers there, as a GPU runner does:
+
+| Check | Result |
+|---|---|
+| `ollaya run laya:en`, then `ollaya ps` | `cuda:0`, F16, 814 MiB of VRAM; the runner is `lib\ollaya\cuda_v13\ollaya-runner-<hash>.exe`, a hard link |
+| `laya:en` fp32, CUDA | 97 cases, 483 questions, 100% same decisions, max probability difference 2.2e-4, 0 answers outside rounding (the same as Linux) |
+| `laya:en` fp16, CUDA | 1 of 483 decisions differs (99.79%), max difference 4.0e-2. fp16 differs from the fp32 reference on near-ties on any GPU; `docs/api.md` reports 99.1 to 99.6% agreement |
+| `laya:en` fp32, CPU (the new Windows build) | 100% same decisions, max difference 7.4e-5 |
+| `/api/decide`, `laya:en` fp16, 5 questions, warm | 12.7 ms median end to end (11.9 ms in the runner); `bench`: 11.6 ms per full request, 8.7 ms for one question |
+| `parity.exe` outside the pack, CUDA | `Error loading "<its folder>\onnxruntime_providers_shared.dll"` |
+| Pack installed, `CUDA_VISIBLE_DEVICES=-1` | `CUDA unavailable, using CPU` and the model runs on the CPU |
+| No pack, `OLLAYA_DEVICE=auto` | `GPU runtime not installed, using CPU: no CUDA runtime in <folder> (install the GPU pack)` |
 
 ## install.sh
 
@@ -278,18 +378,41 @@ PATH=/tmp/fakebin:$PATH OLLAYA_DOWNLOAD_BASE=http://127.0.0.1:8000 \
 
 ## Windows
 
-`ollaya-windows-amd64.zip` holds `bin/ollaya.exe` (with any DLLs ONNX Runtime needs next to it)
-and `share/`. It runs on the CPU; pyke's Windows build also carries the DirectML provider, which
-is not enabled yet.
+`ollaya-windows-amd64.zip` holds `bin/ollaya.exe` with `DirectML.dll`, which it imports, and
+`share/`. It runs on the CPU. With an NVIDIA GPU, `ollaya-windows-amd64-cuda.zip` adds
+`lib/ollaya/cuda_v13`, the same GPU pack as on Linux (see "On Windows" under the runtime library
+contract). pyke's Windows build also carries the DirectML provider, which is not enabled.
 
-- **Install:** `scripts/install.ps1`, served at `/install.ps1` (`irm https://ollaya.dev/install.ps1 | iex`).
-  It checks the zip against `sha256sum.txt`, unpacks it into `%LOCALAPPDATA%\Programs\Ollaya`, and
-  adds `bin` to the user's `PATH`. No administrator rights.
+```powershell
+irm https://ollaya.dev/install.ps1 | iex
+$env:OLLAYA_NO_CUDA = '1'; irm https://ollaya.dev/install.ps1 | iex   # CPU only, even with a GPU
+```
+
+- **Install:** `scripts/install.ps1`, served at `/install.ps1`. It checks the archives against
+  `sha256sum.txt`, unpacks them into a staging folder inside `%LOCALAPPDATA%\Programs\Ollaya`, moves
+  them into place and adds `bin` to the user's `PATH`. No administrator rights. It takes
+  `OLLAYA_VERSION`, `OLLAYA_REPO`, `OLLAYA_INSTALL_DIR`, `OLLAYA_NO_CUDA` and `OLLAYA_DOWNLOAD_BASE`,
+  as `install.sh` does; `OLLAYA_DOWNLOAD_BASE` also takes a `file:///` URL.
+- **GPU detection:** `nvidia-smi.exe --query-gpu=name,driver_version` and the `nvidia-smi` header's
+  CUDA version, or, without a working `nvidia-smi`, the `Win32_VideoController` with NVIDIA's PCI
+  vendor ID (`VEN_10DE`). Windows driver versions end in NVIDIA's: `32.0.16.1692` is 616.92. The
+  pack needs a driver that supports CUDA 13 (R580 or newer); an older driver, or a GPU without its
+  driver (a "Microsoft Basic Display Adapter"), gets a warning and the CPU. It never installs drivers.
+- **Upgrades:** as on Linux, an installed pack whose libraries match the release's
+  `ollaya-windows-amd64-cuda.sha256` is kept, together with its notices, and the runner copies of
+  earlier versions are deleted. Otherwise `lib\ollaya` is replaced as a whole, or removed when no pack
+  is wanted (`OLLAYA_NO_CUDA=1`). The old server is stopped first, since its runners hold files in
+  the pack.
 - **Processes:** the CLI starts the server detached and without a console window, and the server
   starts runners with `CREATE_NO_WINDOW`. `ollaya stop` checks with `tasklist` that the PID file's
   process is `ollaya.exe`, then ends it and its runners with `taskkill /T /F`. A detached process
-  has no console to receive Ctrl-C, so that stop is not graceful.
-- **CI:** `ci.yml` runs clippy and the tests on `windows-latest`; `release.yml` builds the zip there.
+  has no console to receive Ctrl-C, so that stop is not graceful. GPU runners show up as
+  `ollaya-runner-<hash>.exe`.
+- **CI:** `ci.yml` runs clippy and the tests on `windows-latest`; `release.yml` builds both zips
+  there. It then unpacks the base zip alone and runs `ollaya --version`, and with the pack added
+  starts a server and checks that the runner copy appears (the runner has no GPU). A manual run of
+  `release.yml` also uploads the `parity` and `bench` examples built for Windows (`tools-windows-amd64`),
+  for GPU checks on machines without Rust.
 
 ## Desktop app
 
@@ -305,6 +428,13 @@ separate Cargo workspace, so the engine's builds and CI never pull in the webvie
   `desktop/src-tauri/binaries/ollaya-<target triple>`, which Tauri bundles next to the app
   (`externalBin`). The app runs `ollaya serve` from there, and `ollaya stop` for the server it
   started when it quits.
+- **CPU only.** The engine inside is built without the `cuda` feature on every platform (on Windows
+  with pyke's `directml` set, whose `DirectML.dll` the app bundles), and the installers carry no GPU
+  pack. Using an installed pack would take three things: building the engine with
+  `ollaya-runner/cuda` while leaving the provider DLLs out of the bundle's resources, a pack
+  location the app's engine looks in (its `..\lib\ollaya\cuda_v13` is not the command line's), and
+  a way to get the pack (the command line's `install.ps1`, or a download from the app with the same
+  `FILES.sha256` check). The runner copy is already safe for a pack shared with the command line.
 - **Installers:** `Ollaya-macos-arm64.dmg`, `Ollaya-windows-x64-setup.exe` (NSIS, per-user),
   `Ollaya-windows-x64.msi`, `Ollaya-linux-x86_64.AppImage` and `Ollaya-linux-amd64.deb`. The names are
   stable, so the website links `releases/latest/download/<name>`. A `v*` tag attaches them to its
@@ -428,11 +558,12 @@ volumes:
      `option_env!("OLLAYA_BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))` from
      `ollaya --version`. The release workflow runs that as a smoke test. Alternatively, bump
      `workspace.package.version` before tagging.
-3. **Dry run.** Actions → Release → *Run workflow* (`workflow_dispatch`) builds all three platforms,
+3. **Dry run.** Actions → Release → *Run workflow* (`workflow_dispatch`) builds all four platforms,
    packages them and builds the three images, but publishes nothing.
 4. **Tag.** `git tag v0.1.0 && git push origin v0.1.0` starts the workflow:
-   - **`build`** runs on ubuntu-latest, ubuntu-24.04-arm and macos-latest. It builds, smoke-tests and
-     packages each platform, including `--cuda` on linux-amd64, and uploads the archives.
+   - **`build`** runs on ubuntu-latest, ubuntu-24.04-arm, macos-latest and windows-latest. It builds,
+     smoke-tests and packages each platform, including `--cuda` on linux-amd64 and windows-amd64,
+     and uploads the archives.
    - **`release`** writes `sha256sum.txt` over all archives and creates the GitHub Release. It uses
      `softprops/action-gh-release` with generated notes; a tag with `-` becomes a prerelease and
      doesn't become latest.
@@ -454,13 +585,14 @@ All actions are pinned to full commit SHAs, with the version in a comment.
 - Update `ORT_VERSION` and the two ONNX Runtime notice hashes in `package.sh`.
 - Check which CUDA and cuDNN versions pyke's new CUDA build needs, then update
   `packaging/cuda-requirements.in` and regenerate the `.txt`.
-- Re-run the GPU parity check against an installed layout (see Evidence above).
+- Re-run the GPU parity check against an installed layout (see Evidence above), on Linux and on
+  Windows.
 
 ## Licensing
 
 - **Ollaya** is Apache-2.0. `LICENSE` ships in `share/doc/ollaya/`.
 - **ONNX Runtime 1.28.0** is MIT. It's linked statically into `bin/ollaya`, and the CUDA providers
-  ship as `.so` files. Both archives include the MIT text in `THIRD_PARTY_NOTICES` and ORT's
+  ship as `.so` or `.dll` files. Both archives include the MIT text in `THIRD_PARTY_NOTICES` and ORT's
   `ThirdPartyNotices.txt`, which covers what ORT bundles: protobuf, ONNX, abseil, CUTLASS and more.
   `package.sh` fetches both files from the `v1.28.0` tag and checks their SHA-256.
 - **Rust crates.**
@@ -475,14 +607,17 @@ All actions are pinned to full commit SHAs, with the version in a comment.
   Supplement (CUDA Toolkit EULA, v13.4, last updated 26 January 2026):
   - **Attachment A** lists as distributable, among others, `libcudart.so`, `libcublas.so`,
     `libcublasLt.so`, `libcufft.so`, `libcurand.so`, `libnvrtc.so`, `libnvrtc-builtins.so` and
-    `libnvJitLink.so`, including versioned file names.
+    `libnvJitLink.so`, and on Windows `cudart.dll`, `cublas.dll`, `cublasLt.dll`, `cufft.dll`,
+    `curand.dll`, `nvrtc.dll`, `nvrtc-builtins.dll` and `libnvJitLink.dll`, including versioned
+    file names (its example is `cudart64_90.dll`).
   - **§1.1.2** sets the conditions:
     - the application must add material functionality;
     - the distributed parts may only be accessed by the application;
     - our distribution terms must be consistent with the EULA;
     - NVIDIA must be told of any non-compliance we know of.
   - **§2.3** allows redistributing the Linux libraries "provided that the object code files are not
-    modified in any way (except for unzipping of compressed files)".
+    modified in any way (except for unzipping of compressed files)". The Windows DLLs ship
+    unmodified too.
 - **NVIDIA cuDNN.** The NVIDIA cuDNN Software License Agreement has the same distribution
   requirements. Its supplement makes "the runtime files .so and .dll" distributable and licenses the
   SDK for use only on systems with NVIDIA GPUs.
@@ -492,7 +627,8 @@ All actions are pinned to full commit SHAs, with the version in a comment.
   - They come in a separate, optional archive with each wheel's license text and a notice that they
     are not covered by Apache-2.0.
   - They stay in `lib/ollaya/cuda_v13`: never on the system library path, and loaded only by
-    Ollaya's runner, through a per-process `LD_LIBRARY_PATH`.
+    Ollaya's runner, through a per-process `LD_LIBRARY_PATH` on Linux and the runner's own folder on
+    Windows. The folder is never on `PATH`.
   - Ollama redistributes the same kinds of files in the same way (`lib/ollama/cuda_v12|v13`).
   - This reading is ours, not legal advice. NVIDIA answers licensing questions at
     nvidia-compute-license-questions@nvidia.com.
