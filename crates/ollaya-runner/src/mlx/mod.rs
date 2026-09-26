@@ -24,14 +24,14 @@ use crate::Error;
 use crate::net::{Batch, Head as HeadKind};
 use crate::onnx::ModelFiles;
 
-/// Layouts the MLX engine implements. A model also needs an `arch` layer with a supported
-/// backbone; without one it runs on ONNX Runtime.
-pub const LAYOUTS: &[&str] = &[
-    "laya-markers-v1",
-    "nli-pairs-v1",
-    "gliclass-uni-v1",
-    "von-option-marker-v1",
-];
+/// Layouts `auto` runs on MLX: those whose models pass their parity gate on Metal. A model also
+/// needs an `arch` layer with a supported backbone; without one it runs on ONNX Runtime.
+///
+/// von (`von-option-marker-v1`) is implemented (`heads::OptionMarker`) but stays on ONNX
+/// Runtime: one golden row (`td/agent_trace_observability_000000` `urgency`) amplifies fp32
+/// rounding through the encoder, and on Metal its logits land 2e-3 from the float64 goldens,
+/// over von's 1e-3 gate (ONNX Runtime on this Mac's CPU: 1.1e-3). See the decision record.
+pub const LAYOUTS: &[&str] = &["laya-markers-v1", "nli-pairs-v1", "gliclass-uni-v1"];
 
 /// Where `mlx.metallib` is, first match wins:
 /// 1. `$OLLAYA_LIBRARY_PATH/mlx_metal/`;
