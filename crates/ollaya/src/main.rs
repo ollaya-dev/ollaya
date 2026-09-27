@@ -328,9 +328,16 @@ mod tests {
         else {
             panic!()
         };
-        assert_eq!(r.questions, Some(PathBuf::from("q.json")));
+        assert_eq!(r.questions.as_deref(), Some("q.json"));
         assert_eq!(r.keepalive, Some(ollaya_api::KeepAlive::Forever));
         assert!(r.state.is_empty() && r.state_json);
+
+        let Some(Command::Run(r)) =
+            parse(&["run", "laya", "--questions", r#"{"a":{"type":"noul"}}"#]).command
+        else {
+            panic!()
+        };
+        assert_eq!(r.questions.as_deref(), Some(r#"{"a":{"type":"noul"}}"#));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! `ollaya run MODEL [STATE]`: pull if needed, load, answer; a REPL when no state is given.
 
 use std::io::{IsTerminal, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
@@ -26,9 +26,10 @@ pub struct RunArgs {
     pub model: String,
     /// The state to decide about. Without one, reads piped stdin, or starts a REPL on a terminal.
     pub state: Vec<String>,
-    /// Question schema (JSON file of question id -> question). Overrides the model's own.
-    #[arg(long, value_name = "FILE")]
-    pub questions: Option<PathBuf>,
+    /// Question schema: a JSON file, `@file` (`@-` for stdin), or inline JSON containing a
+    /// quote character (question id -> question). Overrides the model's own.
+    #[arg(long, value_name = "FILE|JSON")]
+    pub questions: Option<String>,
     /// A built-in question set: triage, email, guard, moderation, router, agent.
     #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(presets::NAMES))]
     pub preset: Option<String>,
@@ -74,6 +75,25 @@ fn load_questions(path: &Path) -> Result<Questions> {
         .with_context(|| format!("{}: not a question schema", path.display()))
 }
 
+/// A `--questions` value: `@file` (or `@-` for stdin), inline JSON (detected by a quote
+/// character), or otherwise a file path.
+fn resolve_questions(raw: &str) -> Result<Questions> {
+    if let Some(path) = raw.strip_prefix('@') {
+        if path == "-" {
+            let mut text = String::new();
+            std::io::stdin()
+                .read_to_string(&mut text)
+                .context("reading stdin")?;
+            return serde_json::from_str(&text).context("stdin: not a question schema");
+        }
+        return load_questions(Path::new(path));
+    }
+    if raw.contains(['"', '\'']) {
+        return serde_json::from_str(raw).context("--questions: not a question schema");
+    }
+    load_questions(Path::new(raw))
+}
+
 fn preset(name: &str) -> Result<Questions> {
     let Some(q) = presets::get(name) else {
         bail!(
@@ -92,8 +112,8 @@ const DEFAULT_PRESET: &str = "triage";
 /// Where the questions come from: explicit flags first, then the model's built-in set, then
 /// [`DEFAULT_PRESET`]. `None` means "use the model's own".
 fn choose_questions(args: &RunArgs, has_builtin: bool) -> Result<Option<Questions>> {
-    if let Some(path) = &args.questions {
-        return load_questions(path).map(Some);
+    if let Some(raw) = &args.questions {
+        return resolve_questions(raw).map(Some);
     }
     if let Some(name) = &args.preset {
         return preset(name).map(Some);
@@ -222,7 +242,7 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
 }
 
 const HELP: &str = "Available commands:
-  /set questions <file>   Use the questions in a JSON file
+  /set questions <file|@file|json>   Use the questions in a JSON file, or inline JSON
   /preset <name>          Use a built-in question set (triage, email, guard, moderation, router, agent)
   /show                   Show the model and the current questions
   /clear                  Clear the screen
@@ -237,7 +257,7 @@ enum Command {
     Bye,
     Clear,
     Show,
-    SetQuestions(PathBuf),
+    SetQuestions(String),
     Preset(String),
     Unknown(String),
 }
@@ -247,6 +267,9 @@ fn parse_command(line: &str) -> Option<Command> {
     if !line.starts_with('/') {
         return None;
     }
+    if let Some(rest) = line.strip_prefix("/set questions ") {
+        return Some(Command::SetQuestions(rest.trim().to_owned()));
+    }
     let mut words = line.split_whitespace();
     Some(
         match (words.next().unwrap_or_default(), words.next(), words.next()) {
@@ -254,7 +277,6 @@ fn parse_command(line: &str) -> Option<Command> {
             ("/bye" | "/exit", _, _) => Command::Bye,
             ("/clear", _, _) => Command::Clear,
             ("/show", _, _) => Command::Show,
-            ("/set", Some("questions"), Some(file)) => Command::SetQuestions(PathBuf::from(file)),
             ("/preset", Some(name), _) => Command::Preset(name.to_owned()),
             (other, _, _) => Command::Unknown(other.to_owned()),
         },
@@ -331,10 +353,17 @@ fn repl(rt: &Runtime, mut session: Session) -> Result<()> {
             Some(Command::Help) => eprint!("{HELP}"),
             Some(Command::Clear) => print!("\x1b[2J\x1b[H"),
             Some(Command::Show) => eprint!("{}", describe(&session)),
-            Some(Command::SetQuestions(path)) => match load_questions(&path) {
+            Some(Command::SetQuestions(raw)) => match resolve_questions(&raw) {
                 Ok(q) => {
                     session.questions = Some(q);
-                    eprintln!("Set questions from {}.", path.display());
+                    if raw.contains(['"', '\'']) {
+                        eprintln!("Set questions from inline JSON.");
+                    } else {
+                        eprintln!(
+                            "Set questions from {}.",
+                            raw.strip_prefix('@').unwrap_or(&raw)
+                        );
+                    }
                 }
                 Err(e) => eprintln!("error: {e:#}"),
             },
@@ -382,7 +411,13 @@ mod tests {
         assert!(matches!(parse_command("/bye"), Some(Command::Bye)));
         assert!(matches!(parse_command(" /? "), Some(Command::Help)));
         assert!(
-            matches!(parse_command("/set questions q.json"), Some(Command::SetQuestions(p)) if p == Path::new("q.json"))
+            matches!(parse_command("/set questions q.json"), Some(Command::SetQuestions(s)) if s == "q.json")
+        );
+        assert!(
+            matches!(parse_command("/set questions @q.json"), Some(Command::SetQuestions(s)) if s == "@q.json")
+        );
+        assert!(
+            matches!(parse_command(r#"/set questions {"a": {"type": "noul"}}"#), Some(Command::SetQuestions(s)) if s == r#"{"a": {"type": "noul"}}"#)
         );
         assert!(matches!(parse_command("/preset guard"), Some(Command::Preset(n)) if n == "guard"));
         assert!(matches!(parse_command("/nope"), Some(Command::Unknown(_))));
@@ -390,11 +425,22 @@ mod tests {
     }
 
     #[test]
+    fn questions_resolution() {
+        assert!(resolve_questions("no-such-file.json").is_err());
+        let q = resolve_questions(r#"{"a": {"type": "noul"}}"#).unwrap();
+        assert_eq!(q.len(), 1);
+        assert!(resolve_questions(r#"{bad json"#).is_err());
+        assert!(
+            matches!(resolve_questions("@no-such-file.json"), Err(e) if e.to_string().contains("no-such-file.json"))
+        );
+    }
+
+    #[test]
     fn question_sources() {
         let args = |questions: Option<&str>, preset: Option<&str>| RunArgs {
             model: "m".into(),
             state: vec![],
-            questions: questions.map(PathBuf::from),
+            questions: questions.map(str::to_owned),
             preset: preset.map(str::to_owned),
             format: Format::Text,
             keepalive: None,

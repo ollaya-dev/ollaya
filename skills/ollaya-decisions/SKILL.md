@@ -39,6 +39,7 @@ Check which of these is available, in this order.
    ```sh
    ollaya run laya --preset triage --format json "I was charged twice and want a refund."
    ollaya run laya --questions questions.json --format json "$TEXT"
+   ollaya run laya --questions '{"angry":{"type":"noul"}}' --format json "$TEXT"
    echo '{"subject": "…", "body": "…"}' | ollaya run laya --preset email --format json
    ```
    `--format json` prints the full response. The CLI starts the server if it isn't running and
