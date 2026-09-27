@@ -219,8 +219,9 @@ main() {
     # --- GPU -------------------------------------------------------------------------------
 
     # NVIDIA_STATE: none | nodriver | oldriver | ready. Only linux-amd64 has a CUDA package.
-    # CUDA_PACK: cuda_v13, or cuda_v12 for drivers without CUDA 13 support (R525 to R575), which
-    # releases from 0.7.3 on ship as ollaya-<platform>-cuda12.
+    # CUDA_PACK: cuda_v13, or cuda_v12 for drivers without CUDA 13 support (R525 to R575) and for
+    # pre-Turing cards (the CUDA 13 pack's kernels start at sm_75), which releases from 0.7.3 on
+    # ship as ollaya-<platform>-cuda12.
     NVIDIA_STATE=none
     CUDA_DRIVER=
     CUDA_PACK=cuda_v13
@@ -259,6 +260,18 @@ main() {
                     else
                         NVIDIA_STATE=oldriver
                     fi
+                fi
+                # The CUDA 13 pack's kernels start at sm_75, so Pascal (6.x) and Volta (7.0)
+                # cards need the CUDA 12 pack even on a driver that reports CUDA 13: that
+                # version is the newest runtime the driver supports, not what the cards can
+                # run. The lowest compute capability of the host's cards decides, because a
+                # machine with an old and a new card is only as fast as the oldest. compute_cap
+                # is N/A only on drivers older than about R510, which never match here.
+                min_cap=$("$nvidia_smi" --query-gpu=compute_cap --format=csv,noheader 2>/dev/null |
+                    sed -n 's/^ *\([0-9][0-9]*\)\.\([0-9]\).*/\1\2/p' | sort -n | head -n 1)
+                if [ "$NVIDIA_STATE" = ready ] && [ -n "$min_cap" ] && [ "$min_cap" -lt 75 ] &&
+                    grep -q " ollaya-$PLATFORM-cuda12\.tar\.zst\$" "$TMP/sha256sum.txt"; then
+                    CUDA_PACK=cuda_v12
                 fi
             fi
         fi

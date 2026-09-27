@@ -7,7 +7,8 @@
 # on the user's PATH. With an NVIDIA GPU whose driver supports CUDA 13 (R580 or newer), it also
 # installs the GPU pack, ollaya-windows-amd64-cuda.zip (about 1 GB), into lib\ollaya\cuda_v13;
 # with a CUDA 12 driver (R527 to R576), ollaya-windows-amd64-cuda12.zip into lib\ollaya\cuda_v12
-# (0.7.3 and later). It keeps an installed pack whose libraries are unchanged. No administrator rights. Settings, as
+# (0.7.3 and later), which Pascal and Volta cards also need, because the CUDA 13 pack's kernels
+# start at sm_75. It keeps an installed pack whose libraries are unchanged. No administrator rights. Settings, as
 # environment variables:
 #   OLLAYA_VERSION   a version such as 0.5.0 (default: the latest release)
 #   OLLAYA_REPO      GitHub repository (default: ollaya-dev/ollaya)
@@ -32,8 +33,8 @@ function Invoke-Quiet([string]$exe, [string[]]$arguments) {
 function Test-Enabled([string]$value) { $value -and $value -notin '0', 'false', 'no' }
 
 # The NVIDIA GPU and what its driver supports. State: none, nodriver, oldriver or ready. Pack: the
-# GPU pack the driver can run, cuda_v13 (CUDA 13, drivers from R580 on) or cuda_v12 (CUDA 12,
-# from R527 on).
+# GPU pack the cards can run, cuda_v13 (CUDA 13, drivers from R580 on) or cuda_v12 (CUDA 12, from
+# R527 on, and pre-Turing cards on any driver).
 function Get-NvidiaGpu {
     $gpu = [pscustomobject]@{ State = 'none'; Name = ''; Driver = ''; Cuda = ''; Pack = 'cuda_v13' }
     $smi = Get-Command nvidia-smi.exe -ErrorAction SilentlyContinue |
@@ -77,6 +78,17 @@ function Get-NvidiaGpu {
         $gpu.State = 'oldriver'
     } elseif (($null -ne $cudaMajor -and $cudaMajor -lt 13) -or $driverMajor -lt 580) {
         $gpu.Pack = 'cuda_v12'
+    }
+    # The CUDA 13 pack's kernels start at sm_75, so Pascal (6.x) and Volta (7.0) cards need the
+    # CUDA 12 pack even on a driver that reports CUDA 13: that version is the newest runtime the
+    # driver supports, not what the cards can run. Take the lowest compute capability of the
+    # host's cards, because a machine with an old and a new card is only as fast as the oldest.
+    # compute_cap is N/A only on drivers older than about R510, which are rejected above.
+    if ($gpu.State -eq 'ready' -and $gpu.Pack -eq 'cuda_v13' -and $smi) {
+        $cap = Invoke-Quiet $smi @('--query-gpu=compute_cap', '--format=csv,noheader') |
+            ForEach-Object { if ($_ -match '^\s*([0-9]+)\.([0-9]+)') { [int]$Matches[1] * 10 + [int]$Matches[2] } } |
+            Measure-Object -Minimum
+        if ($null -ne $cap.Minimum -and $cap.Minimum -lt 75) { $gpu.Pack = 'cuda_v12' }
     }
     $gpu
 }
