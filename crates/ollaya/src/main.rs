@@ -101,6 +101,9 @@ enum Command {
         graph_fp32: Option<PathBuf>,
         #[arg(long)]
         graph_fp16: Option<PathBuf>,
+        /// A vision model's image graph
+        #[arg(long)]
+        vision_graph: Option<PathBuf>,
         #[arg(long)]
         tokenizer: Option<PathBuf>,
         /// A GGUF model (llama.cpp) instead of an ONNX graph
@@ -188,6 +191,7 @@ fn main() -> Result<()> {
         Command::Runner {
             graph_fp32,
             graph_fp16,
+            vision_graph,
             tokenizer,
             gguf,
             llama_dir,
@@ -202,6 +206,7 @@ fn main() -> Result<()> {
                 ollaya_runner::server::RunnerConfig {
                     graph_fp32,
                     graph_fp16,
+                    vision_graph,
                     tokenizer,
                     gguf,
                     llama_dir,

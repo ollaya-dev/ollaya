@@ -143,10 +143,10 @@ def graph_bytes(export_dir, checkpoint, prefix, weights_oid):
     return model.SerializeToString(), stats
 
 
-def graph_from_wl(wl_dir, oids):
+def graph_from_wl(wl_dir, oids, name="model.onnx"):
     """A weightless graph from `families/`, its external-data locations renamed from upstream file
     names to the blob names (`sha256-<oid>`) the weights have in the store."""
-    model = onnx.load(os.path.join(wl_dir, "model.onnx"), load_external_data=False)
+    model = onnx.load(os.path.join(wl_dir, name), load_external_data=False)
     n = 0
     for t in model.graph.initializer:
         for kv in t.external_data:
@@ -177,6 +177,12 @@ def package_wl(spec, tag, v, blobs):
     data, stats = graph_from_wl(v["wl_dir"], oids)
     print("  %s:%s fp32 graph %.1f MB %s" % (spec["model"], tag, len(data) / 2**20, stats))
     graph = blobs.put(MEDIA["graph"], data, {"org.ollaya.precision": "fp32"})
+    # A vision model's image graph: a second graph layer, marked so the daemon passes it separately.
+    vision = []
+    if os.path.exists(os.path.join(v["wl_dir"], "vision.onnx")):
+        data, stats = graph_from_wl(v["wl_dir"], oids, "vision.onnx")
+        print("  %s:%s vision graph %.1f MB %s" % (spec["model"], tag, len(data) / 2**20, stats))
+        vision = [blobs.put(MEDIA["graph"], data, {"org.ollaya.precision": "fp32", "org.ollaya.graph": "vision"})]
     # The tokenizer comes from the model's repo, or from another one (a base model's) as a triple.
     t = v["tokenizer"]
     tokenizer = upstream(MEDIA["tokenizer"], *(t if isinstance(t, tuple) else (repo, commit, t)))
@@ -196,7 +202,7 @@ def package_wl(spec, tag, v, blobs):
         "source": "huggingface.co/%s@%s" % (repo, commit), "license": license_id,
         "release_date": hf_commit_date(repo, commit),
     }, indent=2).encode())
-    return config, [graph] + weights + [tokenizer, decision, calibration] + questions + [lic] + arch
+    return config, [graph] + vision + weights + [tokenizer, decision, calibration] + questions + [lic] + arch
 
 
 def package_gguf(spec, tag, v, blobs):

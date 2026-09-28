@@ -30,6 +30,9 @@ pub struct RunArgs {
     /// inline JSON, which starts with `{`. Overrides the model's own.
     #[arg(long, value_name = "FILE|JSON")]
     pub questions: Option<String>,
+    /// An image file (PNG) to decide about, for vision models such as decider:2b-vision.
+    #[arg(long, value_name = "FILE")]
+    pub image: Option<std::path::PathBuf>,
     /// A built-in question set: triage, email, guard, moderation, router, agent.
     #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(presets::NAMES))]
     pub preset: Option<String>,
@@ -139,6 +142,8 @@ struct Session {
     client: Client,
     model: String,
     questions: Option<Questions>,
+    /// Base64 images sent with every state.
+    images: Vec<String>,
     keep_alive: Option<KeepAlive>,
     format: Format,
     verbose: bool,
@@ -148,6 +153,7 @@ struct Session {
 impl Session {
     async fn decide(&self, state: Value) -> Result<DecideResponse> {
         let mut req = DecideRequest::new(&self.model, state, self.questions.clone());
+        req.images = self.images.clone();
         req.keep_alive = self.keep_alive;
         Ok(self.client.decide(&req).await?)
     }
@@ -212,6 +218,15 @@ pub fn run(rt: &Runtime, args: RunArgs) -> Result<()> {
 
 /// Connect (starting the daemon if needed), pull the model if it is missing, load it.
 async fn prepare(args: &RunArgs) -> Result<Session> {
+    let images = match &args.image {
+        Some(path) => {
+            use base64::Engine as _;
+            let bytes =
+                std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+            vec![base64::engine::general_purpose::STANDARD.encode(bytes)]
+        }
+        None => Vec::new(),
+    };
     let client = daemon::client().await?;
     let show = match client.show(&args.model).await {
         Ok(s) => s,
@@ -246,6 +261,7 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
         client,
         model: args.model.clone(),
         questions,
+        images,
         keep_alive: args.keepalive,
         format: args.format,
         verbose: args.verbose,
@@ -461,6 +477,7 @@ mod tests {
             model: "m".into(),
             state: vec![],
             questions: questions.map(str::to_owned),
+            image: None,
             preset: preset.map(str::to_owned),
             format: Format::Text,
             keepalive: None,

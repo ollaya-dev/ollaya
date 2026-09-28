@@ -190,6 +190,8 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, Error> {
 #[derive(Debug, Clone)]
 pub struct ModelFiles {
     pub graph: PathBuf,
+    /// A vision model's image graph (`vision.onnx`).
+    pub vision: Option<PathBuf>,
     pub tokenizer: PathBuf,
     pub decision: PathBuf,
     pub calibration: Option<PathBuf>,
@@ -201,11 +203,13 @@ pub struct ModelFiles {
 
 impl ModelFiles {
     /// `model.onnx`, `tokenizer.json`, `decision.json`, `calibration.json` and, when present,
-    /// `arch.json` in one directory.
+    /// `arch.json` and `vision.onnx` in one directory.
     pub fn dir(dir: &Path) -> Self {
         let arch = dir.join("arch.json");
+        let vision = dir.join("vision.onnx");
         ModelFiles {
             graph: dir.join("model.onnx"),
+            vision: vision.is_file().then_some(vision),
             tokenizer: dir.join("tokenizer.json"),
             decision: dir.join("decision.json"),
             calibration: Some(dir.join("calibration.json")),

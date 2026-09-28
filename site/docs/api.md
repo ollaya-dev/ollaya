@@ -152,6 +152,7 @@ Answers typed questions about a state in one forward pass. The body is the `/v1/
 | `model` | string | yes | Model name |
 | `state` | string, object or array | yes to decide | Without it, the request loads or unloads the model (below) |
 | `questions` | object | yes, unless the model has built-in questions | Replaces the model's own questions entirely |
+| `images` | array of strings | no | For a vision model (`decider:2b-vision`): one PNG image, base64 or a base64 `data:` URL. See [Images](#images) |
 | `keep_alive` | string or number | no | See [keep_alive](#keep-alive) |
 | `extras` | array of strings | no | `["laya"]` adds laya's own confidence and act probability to every answer |
 | `stream` | boolean | no | Reserved; `true` is rejected |
@@ -234,6 +235,29 @@ curl http://localhost:11435/api/decide -d '{
 | `eval_duration` | Nanoseconds in the runner: tokenization, forward pass, calibration |
 
 With `"extras": ["laya"]`, every answer also has a `laya` object: `confidence` (laya's entropy-based confidence) and `act_probability` (from the model's act head, or `null`).
+
+### Images
+
+A vision model (`decider:2b-vision`) answers questions about an image as well as the state. Send the image in `images`, base64-encoded, the way Ollama's `images` works:
+
+```shell
+curl http://localhost:11435/api/decide -d '{
+  "model": "decider:2b-vision",
+  "state": "A photo from the warehouse camera.",
+  "images": ["'"$(base64 -w0 shelf.png)"'"],
+  "questions": {
+    "blocked": {"type": "noul", "instructions": "Is the aisle blocked?"},
+    "fill": {"type": "score", "instructions": "How full is the shelf?", "criteria": ["empty", "half full", "full"]}
+  }
+}'
+```
+
+- One image per request, PNG only. The model's preprocessing is reproduced value for value, so the pixels have to match what the model's authors decode. Rust's JPEG decoders differ from libjpeg-turbo by up to 4 levels on some pixels, so JPEG is not accepted yet: convert it to PNG first.
+- The image is resized to multiples of 32 pixels, as the model expects, and can have at most 4,096 patches of 16x16 pixels after that, about one megapixel (1024x1024). A larger image gets a 422 that says so; scale it down first.
+- Questions take at most 10 options. The same model answers text-only requests too.
+- A model that reads no images answers a request with `images` with a 422.
+
+`/v1/systemone` and `/v1/decisions` stay identical to TypeSafe's API, which has no image field.
 
 **Load and unload.** A request without `state` and `questions` never decides. With no `keep_alive`, or a positive or negative one, it loads the model (every target, for a router) and returns `done_reason: "load"`. With `keep_alive: 0` it unloads it (`"unload"`). `ollaya run` preloads this way, and `ollaya stop` unloads.
 

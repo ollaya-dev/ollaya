@@ -55,6 +55,7 @@ ollaya run laya --preset triage "Your app crashed during checkout and I was char
 | `--keepalive DURATION` | How long to keep the model loaded afterwards: `5m`, `1h`, `0` (unload now), `-1` (keep loaded) |
 | `--verbose` | Also print every option's probability, the routing decision and the timings |
 | `--state-json` | Parse the state as JSON. A state that looks like a JSON object or array is detected anyway |
+| `--image FILE` | A PNG image to decide about, for a vision model (`decider:2b-vision`). It goes with every state, in the REPL too |
 
 Where the questions come from, first match wins: `--questions`, then `--preset`, then questions built into the model (qwen3guard's, or ones added with a Modelfile), then the `triage` preset. When `run` falls back to `triage` it says so on stderr.
 

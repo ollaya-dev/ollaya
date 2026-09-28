@@ -136,12 +136,21 @@ pub struct RunningInfo {
 }
 
 impl Runner {
-    /// Forward a request to the runner process.
-    pub async fn decide(&self, state: &Value, questions: &Value) -> Result<Value, Error> {
+    /// Forward a request to the runner process. `images` are base64 (vision models).
+    pub async fn decide(
+        &self,
+        state: &Value,
+        questions: &Value,
+        images: &[String],
+    ) -> Result<Value, Error> {
+        let mut body = serde_json::json!({"state": state, "questions": questions});
+        if !images.is_empty() {
+            body["images"] = serde_json::json!(images);
+        }
         let resp = self
             .http
             .post(format!("http://127.0.0.1:{}/decide", self.port))
-            .json(&serde_json::json!({"state": state, "questions": questions}))
+            .json(&body)
             .send()
             .await
             .map_err(|e| Error::Runner(format!("{}: {e}", self.name)))?;
@@ -452,6 +461,9 @@ impl Scheduler {
                 }
                 if let Some(g) = &f.graph_fp16 {
                     cmd.arg("--graph-fp16").arg(g);
+                }
+                if let Some(g) = &f.vision_graph {
+                    cmd.arg("--vision-graph").arg(g);
                 }
                 if let (Some(arch), Some(weights)) = (&f.arch, &f.weights) {
                     cmd.arg("--arch").arg(arch).arg("--weights").arg(weights);

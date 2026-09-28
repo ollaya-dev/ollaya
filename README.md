@@ -86,6 +86,7 @@ numbers: [ollaya.dev/search](https://ollaya.dev/search).
 | `laya:multilingual` | 100+ languages (mmBERT-base, 322M) |
 | `laya:typed-decisions` | Fine-tuned on the typed-decisions workflows |
 | `decider`, `decider:4b`, `decider:0.8b` | Mapika's Qwen3.5 decoders, 2B (the default), 4B and 0.8B: 0.680 on typed-decisions for 4B, 0.591 for 2B |
+| `decider:2b-vision` | Mapika's Qwen3.5-2B vision-language decider: questions about an image (`--image`, `images` on `/api/decide`) as well as the state |
 | `kev`, `kev:0.8b`, `kev:9b` | Jared Palmer's Kev: a LoRA and a pointer head on Qwen3.5 (4B by default, 0.8B, 9B), calibrated. `kev:4b` scores 0.669 on typed-decisions and `kev:9b` 0.722, as much as `winnow:e4b` |
 | `decision` | Decision 1.0 Eos by the vLLM Semantic Router contributors: a fine-tuned Qwen3.5-0.8B with an endpoint head, 16k-token rows |
 | `qwen3guard` | Qwen3Guard-Gen-0.6B safety guard with built-in questions: safe, controversial or unsafe, and the category |

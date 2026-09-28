@@ -7,6 +7,7 @@ decider is a family of open decision models by [Mapika](https://huggingface.co/M
 | `decider:latest`, `decider:2b` | Qwen3.5-2B | 1.9B | 0.591 |
 | `decider:4b` | Qwen3.5-4B (v2.1) | 4.2B | **0.680** |
 | `decider:0.8b` | Qwen3.5-0.8B | 0.75B | 0.506 |
+| `decider:2b-vision` | Qwen3.5-2B vision-language (v5 text weights) | 2.2B | reads images; see below |
 
 Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `nli` scores 0.548, `gliclass` 0.477 and `laya:en` 0.361. The labels have low annotator agreement, so compare the numbers against each other rather than reading them as absolutes. On Mapika's own benchmarks `4b` is ahead of `2b` (in-task 0.831 vs 0.805, held-out 0.784 vs 0.755, JevBench hard 0.649 vs 0.459), and the Decision Index scores it 36.6 against 26.1.
 
@@ -18,6 +19,22 @@ Accuracy is the argmax against the majority label on all 400 typed-decisions sta
 ollaya run decider --preset triage "My order never arrived and support ignores me. Refund me today or I'm switching to your competitor."
 ollaya run decider:4b --preset triage "My order never arrived and support ignores me. Refund me today or I'm switching to your competitor."
 ```
+
+## Images: decider:2b-vision
+
+`decider:2b-vision` answers questions about an image as well as the state: a photo, a screenshot, a diagram or a game frame. Pass a PNG with `--image`, or base64 in `images` on `/api/decide`:
+
+```shell
+ollaya run decider:2b-vision --image shelf.png --questions '{"blocked":{"type":"noul","instructions":"Is the aisle blocked?"}}' "A photo from the warehouse camera."
+```
+
+- **One PNG per request**, up to about one megapixel (1024x1024). The model's own preprocessing (Qwen's resize to multiples of 32 pixels, PIL's bicubic filter, normalization) is reproduced value for value, so a JPEG has to be converted to PNG first: Rust's JPEG decoders differ from the one the model's authors use by a few levels on some pixels.
+- **Up to 10 options** per question (v5's lettered prompt, A to J). Text-only requests work too.
+- **Parity.** On 404 test questions, 12 of them with images: identical resized pixels, token ids and positions, the same decision on every question, and option logits within 1.6e-4 of the Python reference, on CPU and CUDA.
+- **Speed.** On an RTX 4090, five questions about a 256x240 image take about 200 ms, and about 0.9 s about a 1000x750 one. On the CPU, 3 to 16 seconds.
+- `/v1/systemone` takes no images: TypeSafe's API has no field for them.
+
+> `decider:2b-vision` needs Ollaya 0.7.5 or newer.
 
 ## Speed
 

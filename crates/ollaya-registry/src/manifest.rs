@@ -35,6 +35,9 @@ pub mod media {
 }
 
 pub const ANNOTATION_PRECISION: &str = "org.ollaya.precision";
+/// What a graph layer computes when a model has more than one: `vision` for a vision model's
+/// image graph. Unset: the model's main graph.
+pub const ANNOTATION_GRAPH: &str = "org.ollaya.graph";
 pub const ANNOTATION_QUANTIZATION: &str = "org.ollaya.quantization";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

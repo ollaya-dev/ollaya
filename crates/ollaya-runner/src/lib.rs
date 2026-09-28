@@ -5,6 +5,7 @@
 
 pub mod clm;
 pub mod decider;
+pub mod decider_vision;
 pub mod decision;
 pub mod engine;
 pub mod gliclass;
@@ -17,6 +18,7 @@ pub mod nli;
 pub mod onnx;
 pub mod qwen3guard;
 pub mod server;
+pub mod vision;
 pub mod von;
 
 pub use engine::Engine;
@@ -66,6 +68,8 @@ pub enum Error {
     Ort(#[from] ort::Error),
     #[error("model files: {0}")]
     Model(String),
+    #[error(transparent)]
+    Image(#[from] vision::ImageError),
 }
 
 // Session builder errors carry the builder for recovery; we only need the message.

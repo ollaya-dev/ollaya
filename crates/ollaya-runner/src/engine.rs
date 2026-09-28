@@ -30,6 +30,25 @@ pub trait Engine: Send + Sync {
     fn preset(&self) -> Option<&Questions> {
         None
     }
+
+    /// The model reads images (`decider-vision-v1`).
+    fn reads_images(&self) -> bool {
+        false
+    }
+
+    /// Answer a request that may come with images (encoded files, as the caller sent them).
+    /// Only vision models read them; the others answer text-only requests.
+    fn run_images(
+        &self,
+        state: &Value,
+        questions: &Value,
+        images: &[Vec<u8>],
+    ) -> Result<Output, Error> {
+        if !images.is_empty() {
+            return Err(Error::Image(crate::vision::ImageError::Unsupported));
+        }
+        self.run_json(state, questions)
+    }
 }
 
 impl Engine for OnnxModel {
@@ -75,6 +94,7 @@ pub const LAYOUTS: &[&str] = &[
     "von-option-marker-v1",
     "decision-endpoint-v1",
     "clm-v1",
+    "decider-vision-v1",
 ];
 
 /// The layout a `decision` layer declares.
@@ -121,6 +141,9 @@ pub fn load(
         "clm-v1" => Ok(Box::new(crate::clm::ClmModel::load_files(
             files, device, threads,
         )?)),
+        "decider-vision-v1" => Ok(Box::new(
+            crate::decider_vision::VisionDeciderModel::load_files(files, device, threads)?,
+        )),
         other => Err(Error::Model(format!(
             "this version of ollaya cannot run layout {other:?} (supported: {}); upgrade ollaya",
             LAYOUTS.join(", ")

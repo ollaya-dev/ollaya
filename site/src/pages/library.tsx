@@ -11,7 +11,7 @@ import {
   type Model,
   type Tag,
 } from '../data/catalog'
-import { usageTabs } from '../data/examples'
+import { usageTabs, visionUsageTabs } from '../data/examples'
 import { readmes } from '../generated/content'
 
 // Pages: /library/<model>, /library/<model>/tags and /library/<model>:<tag>.
@@ -111,7 +111,9 @@ function ModelHeader({ model, tag, crumb }: { model: Model; tag?: Tag; crumb?: s
 }
 
 function Usage({ refName, model, tag }: { refName: string; model: Model; tag: Tag | undefined }) {
-  const tabs = usageTabs(refName, model.exampleState ?? undefined, tag?.builtinQuestions ?? false)
+  const tabs = tag?.capabilities.includes('vision')
+    ? visionUsageTabs(refName)
+    : usageTabs(refName, model.exampleState ?? undefined, tag?.builtinQuestions ?? false)
   return (
     <section class="mt-8" aria-label="Usage">
       <CodeTabs id="usage" label="Usage examples" tabs={tabs} />
@@ -138,7 +140,9 @@ function TagName({ model, tag }: { model: Model; tag: Tag }) {
 }
 
 const inputLabel = (tag: Tag) =>
-  tag.kind === 'router' ? `Text · auto (${(tag.routesTo ?? []).join(' / ')})` : `Text · ${tag.languages}`
+  tag.kind === 'router'
+    ? `Text · auto (${(tag.routesTo ?? []).join(' / ')})`
+    : `${tag.capabilities.includes('vision') ? 'Text, image' : 'Text'} · ${tag.languages}`
 
 function ModelsTable({ model }: { model: Model }) {
   return (

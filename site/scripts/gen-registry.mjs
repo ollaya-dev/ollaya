@@ -70,6 +70,7 @@ async function readTag(ns, model, tag) {
       url: (l.urls ?? [])[0] ?? null,
       precision: l.annotations?.['org.ollaya.precision'] ?? null,
       quantization: l.annotations?.['org.ollaya.quantization'] ?? null,
+      role: l.annotations?.['org.ollaya.graph'] ?? null,
     }
     layers.push(layer)
     if (kind === 'router') router = await readJsonBlob(l.digest)
@@ -136,6 +137,8 @@ const types = `export interface RegistryLayer {
   precision: string | null
   /** A GGUF weights layer's quantization (Q8_0, Q4_0, ...). */
   quantization: string | null
+  /** A second graph's role (vision: a vision model's image graph); null for the main graph. */
+  role: string | null
 }
 
 export interface RegistryTag {

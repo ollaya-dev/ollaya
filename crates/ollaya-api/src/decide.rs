@@ -190,6 +190,9 @@ pub struct DecideRequest {
     pub state: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub questions: Option<Questions>,
+    /// Images for vision models, base64 or base64 data URLs (Ollama's `images`). Ollaya-only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep_alive: Option<KeepAlive>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -202,6 +205,7 @@ impl DecideRequest {
             model: model.into(),
             state: Some(state),
             questions,
+            images: Vec::new(),
             keep_alive: None,
             extras: Vec::new(),
         }
@@ -213,6 +217,7 @@ impl DecideRequest {
             model: model.into(),
             state: None,
             questions: None,
+            images: Vec::new(),
             keep_alive,
             extras: Vec::new(),
         }

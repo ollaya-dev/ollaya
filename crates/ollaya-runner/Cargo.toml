@@ -26,12 +26,14 @@ mlx = ["dep:ollaya-mlx", "ollaya-mlx/build"]
 
 [dependencies]
 axum.workspace = true
+base64.workspace = true
 ollaya-decision.workspace = true
 ollaya-mlx = { workspace = true, optional = true }
 tokio.workspace = true
 tracing.workspace = true
 libloading.workspace = true
 ndarray.workspace = true
+png.workspace = true
 ort = { workspace = true, features = ["download-binaries", "copy-dylibs", "tls-rustls"] }
 serde.workspace = true
 serde_json.workspace = true

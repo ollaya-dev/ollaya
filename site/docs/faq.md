@@ -28,7 +28,7 @@ Open decision models from these families. See [Models](/search), which compares 
 
 - **`winnow`** from EldanRing: Winnow-E4B (`winnow:e4b`, the recommended model) and Winnow-12B (`winnow`), Gemma 4 fine-tunes published as GGUF files. Ollaya runs the author's file on llama.cpp, on an NVIDIA GPU, Apple silicon's GPU or the CPU. `winnow:e4b` scores 0.722 on typed decisions, close to Jev's 0.738, in about 90 ms on an RTX 4090.
 - **`laya`** from Convai Innovations: `laya` (a router), `laya:en`, `laya:multilingual` and `laya:typed-decisions`, each also as `-fp16` and `-fp32`. `laya` sends English text to `laya:en` and other languages, Turkish for example, to `laya:multilingual`. It is the fastest.
-- **`decider`** from Mapika: `decider:4b`, `decider:2b` and `decider:0.8b`, built on Qwen3.5. `decider:4b` scores 0.680 on typed decisions.
+- **`decider`** from Mapika: `decider:4b`, `decider:2b` and `decider:0.8b`, built on Qwen3.5. `decider:4b` scores 0.680 on typed decisions. `decider:2b-vision` also reads an image with the state.
 - **`nli`** from Moritz Laurer: zero-shot NLI classifiers on DeBERTa-v3-large and ModernBERT-large. It is the most accurate encoder.
 - **`gliclass`** from Knowledgator: an instruction-following zero-shot classifier that scores every option in one pass.
 - **`kev`** from Jared Palmer: `kev:4b` (`kev`), `kev:0.8b` and `kev:9b`, a LoRA and a pointer head on Qwen3.5 that scores every option at its own span, calibrated. `kev:9b` scores 0.722 on typed decisions, as much as `winnow:e4b`, but needs a 24 GB GPU and takes about 500 ms.

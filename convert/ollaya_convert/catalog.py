@@ -196,6 +196,13 @@ CATALOG = {
                       "Decoder decision model (Qwen3.5-2B base): reads option-letter logits at an answer slot. "
                       "Highest accuracy of the open models Ollaya ships.",
                       "1.9B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-2b")),
+            # v5 text weights in the Qwen3.5-2B vision-language model: `decider-vision-v1`, two graphs
+            # (vision.onnx, the image tower; model.onnx, the decoder with M-RoPE positions).
+            "2b-vision": _wl("decider-2b-vision", "Mapika/decider-2b-vision", "863e290863655f1d6b69324d77d09ac972d21609",
+                             "Vision decider (Qwen3.5-2B vision-language, v5 text weights): answers questions about an "
+                             "image and a text state, reading option-letter logits at an answer slot. One PNG image per "
+                             "request (`images` in /api/decide, `--image` in the CLI); up to 10 options per question.",
+                             "2.2B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-2b-vision")),
             "0.8b": _wl("decider-0.8b", "Mapika/decider-0.8b", "a0a01d6f8135298f400a8c856b355793012ae971",
                         "Smaller decider (Qwen3.5-0.8B base): faster, less accurate.",
                         "0.75B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-0.8b")),

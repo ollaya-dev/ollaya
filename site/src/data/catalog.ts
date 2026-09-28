@@ -100,6 +100,10 @@ const overlays: Record<string, ModelOverlay> = {
       '4b': { summary: 'Qwen3.5-4B base (v2.1), 0.680 on typed decisions, one fitted temperature per answer type. Best on a GPU.' },
       '2b': { summary: 'Qwen3.5-2B base, 0.591 on typed decisions.' },
       '0.8b': { summary: 'Qwen3.5-0.8B base, 0.506 on typed decisions: smaller and faster.' },
+      '2b-vision': {
+        summary: 'Reads an image as well as the state: Qwen3.5-2B vision-language with v5 text weights. One PNG per request, up to 10 options.',
+        capabilities: ['vision'],
+      },
     },
   },
   clm: {
@@ -479,7 +483,9 @@ export function layersFor(model: Model, tag: Tag): Layer[] {
     let preview: string
     switch (l.kind) {
       case 'graph':
-        preview = `onnx · ${tag.backbone ?? r.config.family} · ${tag.params ?? ''} · ${l.precision ?? ''}`.replace(/ · (?= ·|$)/g, '')
+        preview = l.role
+          ? `onnx · ${l.role} · ${l.precision ?? ''}`.replace(/ · (?= ·|$)/g, '')
+          : `onnx · ${tag.backbone ?? r.config.family} · ${tag.params ?? ''} · ${l.precision ?? ''}`.replace(/ · (?= ·|$)/g, '')
         break
       case 'weights':
       case 'tokenizer':

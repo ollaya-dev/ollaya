@@ -583,6 +583,7 @@ async fn decide(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Json<De
             .questions
             .as_ref()
             .map(ollaya_api::decide::engine_questions),
+        images: req.images.clone(),
         keep_alive: req.keep_alive,
         cancel: None,
     };
@@ -608,6 +609,7 @@ async fn systemone(
             .questions
             .as_ref()
             .map(ollaya_api::decide::engine_questions),
+        images: Vec::new(),
         keep_alive: None,
         cancel: None,
     };

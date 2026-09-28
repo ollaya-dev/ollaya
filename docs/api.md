@@ -491,11 +491,13 @@ The same endpoint loads and unloads models, as Ollama's `/api/generate` does: a 
 | `model` | string | yes | – | [§3](#3-model-names-and-resolution) |
 | `state` | string \| object \| array | no | – | As in [§5.1](#51-request-body-shared-by-the-decision-endpoints). Absent or `null`: a load or unload request. |
 | `questions` | object | with `state`, unless the model has embedded questions | the model's embedded questions | [§5.2](#52-question-schema). Not allowed without `state` (`missing` issue on `state`). |
+| `images` | array of string | no | `[]` | Images for a vision model (`decider:2b-vision`), as Ollama's `images`: base64, or a base64 `data:` URL. Each item must be a non-empty string (`string_type`, `string_too_short`); not allowed without `state`. The runner decodes them: a vision model reads one PNG image per request, and anything else (another format, more than one image, an image over its size limit, a model that reads no images) is a `422 INVALID_REQUEST` with the reason. |
 | `keep_alive` | string \| number | no | `OLLAYA_KEEP_ALIVE` (`5m`) | [§6](#6-keep_alive) |
 | `extras` | array of string | no | `[]` | Closed set: `"laya"`. Each value adds a same-named object to every answer. Unknown values are `enum` issues. |
 | `stream` | boolean | no | `false` | Reserved. `/api/decide` does not stream, and `true` is a `stream_unsupported` issue. It is rejected rather than ignored so that a streaming mode can be added later without changing what existing `stream: true` callers receive. |
 
-Native options are deliberately few. `keep_alive` is Ollama's lifecycle control. `extras` is how
+Native options are deliberately few. `keep_alive` is Ollama's lifecycle control. `images` carries
+what TypeSafe's schema has no field for; `/v1/*` stays TypeSafe-identical and takes no images. `extras` is how
 model-family outputs are exposed without redefining a TypeSafe field. There is no `options` object
 (Ollama's sampling parameters do not apply to decision models); one can be added later as an
 optional field.

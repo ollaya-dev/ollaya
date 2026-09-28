@@ -42,6 +42,8 @@ pub struct DecideInput {
     pub state: Value,
     /// Required unless the model has a baked-in question schema.
     pub questions: Option<Value>,
+    /// Images for vision models, base64 as the caller sent them.
+    pub images: Vec<String>,
     pub keep_alive: Option<KeepAlive>,
     /// Set when the caller has gone away: once the model is loaded, the decision is skipped.
     pub cancel: Option<Arc<AtomicBool>>,
@@ -170,7 +172,9 @@ impl Ollaya {
             return Err(Error::Cancelled);
         }
         let eval_started = Instant::now();
-        let raw = lease.decide(&input.state, &questions_json).await?;
+        let raw = lease
+            .decide(&input.state, &questions_json, &input.images)
+            .await?;
         drop(lease);
         let state_tokens = raw["state_tokens"].as_u64().unwrap_or(0) as usize;
         if state_tokens > ollaya_api::MAX_STATE_TOKENS {

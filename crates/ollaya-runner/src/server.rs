@@ -8,7 +8,7 @@
 //! * On startup, after the model is loaded, the runner prints one JSON line to stdout:
 //!   `{"port":<u16>,"device":"cuda:0"|"cpu"|"metal","precision":"fp16"|"fp32"|"<GGUF type>","engine":"onnx"|"mlx"|"llama"}`.
 //! * `GET /health` -> the same object plus `"status":"ok"`.
-//! * `POST /decide` `{state, questions}` ->
+//! * `POST /decide` `{state, questions, images?}` (images: base64, for vision models) ->
 //!   `{questions:[{logits, act_logits}], input_tokens, state_tokens, state_truncated}`.
 //!   Errors are `{"error":{"code","message"}}` with status 400 (bad request) or 500.
 
@@ -63,6 +63,8 @@ pub struct RunnerConfig {
     pub graph_fp32: Option<PathBuf>,
     /// fp16 graph: preferred on GPU.
     pub graph_fp16: Option<PathBuf>,
+    /// A vision model's image graph.
+    pub vision_graph: Option<PathBuf>,
     /// The tokenizer of an ONNX model.
     pub tokenizer: Option<PathBuf>,
     /// A GGUF model, which runs on llama.cpp instead of ONNX Runtime.
@@ -90,6 +92,9 @@ pub struct Loaded {
 struct DecideRequest {
     state: Value,
     questions: Value,
+    /// Base64 images, for vision models.
+    #[serde(default)]
+    images: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -167,6 +172,7 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
         .ok_or_else(|| Error::Model("no tokenizer given".into()))?;
     let files = |graph: &PathBuf| ModelFiles {
         graph: graph.clone(),
+        vision: config.vision_graph.clone(),
         tokenizer: tokenizer.clone(),
         decision: config.decision.clone(),
         calibration: None,
@@ -399,12 +405,24 @@ fn warm_up(model: &dyn Engine) -> Result<(), Error> {
         Some(preset) => Ok(preset.clone()),
         None => ollaya_decision::parse_questions(&questions),
     };
-    match questions {
-        Ok(q) => model
-            .run(&Value::String("Warm-up request for the runner.".into()), &q)
-            .map(drop),
-        Err(_) => Ok(()),
+    let state = Value::String("Warm-up request for the runner.".into());
+    let Ok(q) = questions else {
+        return Ok(());
+    };
+    model.run(&state, &q)?;
+    // A vision model's image graph pays its own one-off costs.
+    if model.reads_images() {
+        let image = crate::vision::Rgb {
+            width: 64,
+            height: 64,
+            data: vec![128; 64 * 64 * 3],
+        };
+        let png = crate::vision::encode_png(&image);
+        let q =
+            serde_json::json!({"check": {"type": "noul", "instructions": "Is this a warm-up?"}});
+        model.run_images(&state, &q, &[png])?;
     }
+    Ok(())
 }
 
 /// Load, bind, announce the port on stdout, and serve until killed.
@@ -461,7 +479,12 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<Value> {
 
 async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) -> Response {
     let result = tokio::task::spawn_blocking(move || -> Result<Value, Error> {
-        let out = s.model.run_json(&req.state, &req.questions)?;
+        let images = req
+            .images
+            .iter()
+            .map(|i| crate::vision::from_base64(i))
+            .collect::<Result<Vec<_>, _>>()?;
+        let out = s.model.run_images(&req.state, &req.questions, &images)?;
         let questions: Vec<QuestionLogits> = out
             .questions
             .into_iter()
@@ -487,6 +510,7 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
         )
             .into_response(),
         Ok(Err(Error::Decision(e))) => error(StatusCode::BAD_REQUEST, "INVALID_REQUEST", &e.to_string()),
+        Ok(Err(Error::Image(e))) => error(StatusCode::BAD_REQUEST, "INVALID_IMAGE", &e.to_string()),
         Ok(Err(e)) => error(StatusCode::INTERNAL_SERVER_ERROR, "RUNNER_ERROR", &e.to_string()),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, "RUNNER_ERROR", &e.to_string()),
     }
@@ -593,6 +617,21 @@ mod tests {
         fn preset(&self) -> Option<&Questions> {
             self.preset.as_ref()
         }
+    }
+
+    #[test]
+    fn a_text_model_rejects_images() {
+        let model = Recorder {
+            preset: None,
+            asked: Mutex::default(),
+        };
+        let q = json!({"x": {"type": "noul", "instructions": "Is it?"}});
+        let state = json!("s");
+        assert!(matches!(
+            model.run_images(&state, &q, &[vec![1, 2, 3]]),
+            Err(Error::Image(crate::vision::ImageError::Unsupported))
+        ));
+        assert!(model.run_images(&state, &q, &[]).is_ok());
     }
 
     #[test]

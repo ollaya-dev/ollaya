@@ -99,7 +99,11 @@ def main():
         for layer in manifest["layers"]:
             blob = os.path.join(REGISTRY, "blobs", "sha256-" + layer["digest"].split(":", 1)[1])
             kind = layer["mediaType"].rsplit(".", 1)[-1]
-            name = {"onnx": "model-%s.onnx" % layer.get("annotations", {}).get("org.ollaya.precision", "fp32"),
+            ann = layer.get("annotations", {})
+            # A second graph (a vision model's image graph) is named by its role.
+            graph = ("%s-%s.onnx" % (ann["org.ollaya.graph"], ann.get("org.ollaya.precision", "fp32"))
+                     if "org.ollaya.graph" in ann else "model-%s.onnx" % ann.get("org.ollaya.precision", "fp32"))
+            name = {"onnx": graph,
                     "decision": "decision.json", "calibration": "calibration.json",
                     "questions": "questions.json"}.get(kind)
             if name and os.path.exists(blob):

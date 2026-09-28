@@ -77,3 +77,73 @@ ${jsRead}`,
     },
   ]
 }
+
+const VISION_STATE = 'A photo from the warehouse camera.'
+const visionQuestions = {
+  blocked: { type: 'noul', instructions: 'Is the aisle blocked?' },
+  fill: { type: 'score', instructions: 'How full is the shelf?', criteria: ['empty', 'half full', 'full'] },
+}
+
+/** Snippets for a vision model: the same request plus one PNG in `images` (base64). */
+export function visionUsageTabs(ref: string): CodeTab[] {
+  const questions = JSON.stringify(visionQuestions)
+  const q2 = indent(JSON.stringify(visionQuestions, null, 2), '  ')
+  const q4 = indent(JSON.stringify(visionQuestions, null, 4), '        ')
+  return [
+    {
+      key: 'cli',
+      label: 'CLI',
+      code: `ollaya run ${ref} --image shelf.png --questions '${questions}' "${VISION_STATE}"`,
+    },
+    {
+      key: 'curl',
+      label: 'cURL',
+      code: `curl ${LOCAL_API}/api/decide \\
+  -H "Content-Type: application/json" \\
+  -d '{
+  "model": "${ref}",
+  "state": "${VISION_STATE}",
+  "images": ["'"$(base64 -w0 shelf.png)"'"],
+  "questions": ${indent(q2, '  ')}
+}'`,
+    },
+    {
+      key: 'python',
+      label: 'Python',
+      code: `import base64
+import requests
+
+image = base64.b64encode(open("shelf.png", "rb").read()).decode()
+response = requests.post(
+    "${LOCAL_API}/api/decide",
+    json={
+        "model": "${ref}",
+        "state": "${VISION_STATE}",
+        "images": [image],
+        "questions": ${q4},
+    },
+)
+answers = response.json()["answers"]
+print(answers["blocked"]["noul"], answers["fill"]["score"])`,
+    },
+    {
+      key: 'javascript',
+      label: 'JavaScript',
+      code: `import { readFile } from "node:fs/promises";
+
+const image = (await readFile("shelf.png")).toString("base64");
+const response = await fetch("${LOCAL_API}/api/decide", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model: "${ref}",
+    state: "${VISION_STATE}",
+    images: [image],
+    questions: ${indent(JSON.stringify(visionQuestions, null, 2), '    ')},
+  }),
+});
+const { answers } = await response.json();
+console.log(answers.blocked.noul, answers.fill.score);`,
+    },
+  ]
+}

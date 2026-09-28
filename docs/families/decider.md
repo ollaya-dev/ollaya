@@ -5,6 +5,8 @@ forward pass. The readout is **the model's own LM head restricted to option-labe
 `Answer: (` slot. There is no custom scalar head: the "head" is the tied embedding rows of the 255 label
 tokens. Upstream serves them on `POST /v1/systemone` in TypeSafe's wire format.
 
+The vision variant, `Mapika/decider-2b-vision`, has its own layout: [decider-vision.md](decider-vision.md).
+
 | Model | Base | Params | Checkpoint | Upstream temperature | Status in Ollaya |
 |---|---|---|---|---|---|
 | `Mapika/decider-0.8b` (v1) | Qwen3.5-0.8B-Base | 0.75B | 1.5 GB BF16, 1 file | 1.03 | **converted, ONNX** |

@@ -86,6 +86,10 @@ pub fn decide_request(mut obj: Body) -> Result<DecideRequest, Issues> {
             }
         },
     };
+    let images = images(get(&obj, "images"), &mut issues);
+    if get(&obj, "images").is_some() && !has_state {
+        issues.push(ValidationIssue::missing(body_loc(&["state"])));
+    }
     let extras = extras(get(&obj, "extras"), &mut issues);
     match get(&obj, "stream") {
         None | Some(Value::Bool(false)) => {}
@@ -104,6 +108,7 @@ pub fn decide_request(mut obj: Body) -> Result<DecideRequest, Issues> {
         model,
         state: take(&mut obj, "state"),
         questions,
+        images,
         keep_alive,
         extras,
     })
@@ -425,6 +430,32 @@ fn noul_criteria(
     }
 }
 
+/// `images`: a list of non-empty strings (base64 or data URLs; the runner decodes them).
+fn images(value: Option<&Value>, issues: &mut Issues) -> Vec<String> {
+    let base = body_loc(&["images"]);
+    let Some(value) = value else {
+        return Vec::new();
+    };
+    let Value::Array(items) = value else {
+        issues.push(ValidationIssue::wrong_type(base, "list_type"));
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(items.len());
+    for (i, item) in items.iter().enumerate() {
+        match item {
+            Value::String(s) if !s.is_empty() => out.push(s.clone()),
+            Value::String(_) => {
+                issues.push(ValidationIssue::string_too_short(at(&base, [Loc::from(i)])))
+            }
+            _ => issues.push(ValidationIssue::wrong_type(
+                at(&base, [Loc::from(i)]),
+                "string_type",
+            )),
+        }
+    }
+    out
+}
+
 fn extras(value: Option<&Value>, issues: &mut Issues) -> Vec<Extra> {
     let base = body_loc(&["extras"]);
     let Some(value) = value else {
@@ -726,6 +757,27 @@ mod tests {
                 when_false: None
             })
         );
+    }
+
+    #[test]
+    fn decide_request_images() {
+        let req = decide_request(obj(json!({
+            "model": "decider:2b-vision", "state": "s", "images": ["aGk=", "data:image/png;base64,aGk="],
+        })))
+        .unwrap();
+        assert_eq!(req.images, ["aGk=", "data:image/png;base64,aGk="]);
+        let issues = decide_request(obj(json!({"model": "m", "images": ["", 1]}))).unwrap_err();
+        assert_eq!(
+            kinds(&issues),
+            pairs(&[
+                ("images.0", "string_too_short"),
+                ("images.1", "string_type"),
+                ("state", "missing"),
+            ])
+        );
+        let issues =
+            decide_request(obj(json!({"model": "m", "state": "s", "images": "aGk="}))).unwrap_err();
+        assert_eq!(kinds(&issues), pairs(&[("images", "list_type")]));
     }
 
     #[test]

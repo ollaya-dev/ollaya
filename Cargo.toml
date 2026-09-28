@@ -22,6 +22,8 @@ ollaya-runner = { path = "crates/ollaya-runner" }
 ollaya-server = { path = "crates/ollaya-server" }
 
 anyhow = "1.0.104"
+# Images sent to vision models (`/api/decide` `images`).
+base64 = "0.22.1"
 axum = "0.8.9"
 bytes = "1.12.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
@@ -45,6 +47,8 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 indexmap = { version = "2.14.2", features = ["serde"] }
 ndarray = "0.17.2"
+# Decodes PNG images for vision models, as PIL reads them.
+png = "0.18.0"
 serde = { version = "1.0", features = ["derive"] }
 # preserve_order: criteria and answers must keep the caller's key order, as Python dicts do.
 serde_json = { version = "1.0.151", features = ["preserve_order"] }

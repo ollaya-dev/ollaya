@@ -3,7 +3,9 @@
 use std::path::PathBuf;
 
 use ollaya_decision::{Calibration, CalibrationFile};
-use ollaya_registry::manifest::{ANNOTATION_PRECISION, ANNOTATION_QUANTIZATION, media};
+use ollaya_registry::manifest::{
+    ANNOTATION_GRAPH, ANNOTATION_PRECISION, ANNOTATION_QUANTIZATION, media,
+};
 use ollaya_registry::{Entry, ModelConfig, ModelName, Router, Store};
 use serde_json::Value;
 
@@ -20,6 +22,8 @@ pub struct RunnerFiles {
     pub arch: Option<PathBuf>,
     /// The weights file, passed with an arch layer.
     pub weights: Option<PathBuf>,
+    /// A vision model's image graph.
+    pub vision_graph: Option<PathBuf>,
 }
 
 /// Files of a GGUF model, run by a llama.cpp runner.
@@ -149,6 +153,7 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
         decision: blob(media::DECISION)?,
         arch: None,
         weights: None,
+        vision_graph: None,
     };
     // MLX builds its network from one weights file; sharded weights stay on ONNX Runtime.
     let weights: Vec<_> = manifest.layers_of(media::WEIGHTS).collect();
@@ -158,6 +163,10 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
     }
     for g in manifest.layers_of(media::GRAPH_ONNX) {
         let path = store.blob_path(&g.digest)?;
+        if g.annotations.get(ANNOTATION_GRAPH).map(String::as_str) == Some("vision") {
+            files.vision_graph = Some(path);
+            continue;
+        }
         match g.annotations.get(ANNOTATION_PRECISION).map(String::as_str) {
             Some("fp16") => files.graph_fp16 = Some(path),
             _ => files.graph_fp32 = Some(path),
@@ -202,8 +211,13 @@ mod tests {
         }
     }
 
-    /// A model with one fp32 graph, `weights` weights files and, with `arch`, an arch layer.
-    fn resolve_with(weights: usize, arch: bool) -> RunnerFiles {
+    /// A model with one fp32 graph, `weights` weights files and, with `arch`, an arch layer; with
+    /// `vision`, an image graph after the main one.
+    fn resolve_with(
+        weights: usize,
+        arch: bool,
+        vision: bool,
+    ) -> (RunnerFiles, Store, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path()).unwrap();
         let config = br#"{"model_format": "onnx", "family": "laya"}"#;
@@ -222,6 +236,12 @@ mod tests {
         if arch {
             layers.push(blob(&store, media::ARCH, br#"{"schema": 1}"#));
         }
+        if vision {
+            let mut g = blob(&store, media::GRAPH_ONNX, b"vision graph");
+            g.annotations
+                .insert(ANNOTATION_GRAPH.into(), "vision".into());
+            layers.push(g);
+        }
         let manifest = Manifest {
             schema_version: 2,
             media_type: MANIFEST_V2.into(),
@@ -234,7 +254,7 @@ mod tests {
             .unwrap();
         match resolve(&store, &name).unwrap() {
             Resolved::Model(m) => match m.files {
-                EngineFiles::Onnx(f) => f,
+                EngineFiles::Onnx(f) => (f, store, dir),
                 EngineFiles::Llama(_) => panic!("not an ONNX model"),
             },
             Resolved::Router { .. } => panic!("not a router"),
@@ -243,11 +263,31 @@ mod tests {
 
     #[test]
     fn an_arch_layer_passes_the_weights_file_to_mlx() {
-        let files = resolve_with(1, true);
+        let (files, ..) = resolve_with(1, true, false);
         assert!(files.arch.is_some() && files.weights.is_some());
         // Without an arch layer, or with sharded weights, the model stays on ONNX Runtime.
-        for files in [resolve_with(1, false), resolve_with(2, true)] {
+        for (files, ..) in [resolve_with(1, false, false), resolve_with(2, true, false)] {
             assert!(files.arch.is_none() && files.weights.is_none());
         }
+    }
+
+    #[test]
+    fn a_vision_graph_is_passed_on_its_own() {
+        let (files, store, _dir) = resolve_with(1, false, true);
+        let digest = |b: &[u8]| {
+            format!(
+                "sha256:{}",
+                hex::encode(<sha2::Sha256 as sha2::Digest>::digest(b))
+            )
+        };
+        assert_eq!(
+            files.graph_fp32,
+            Some(store.blob_path(&digest(b"graph")).unwrap())
+        );
+        assert_eq!(
+            files.vision_graph,
+            Some(store.blob_path(&digest(b"vision graph")).unwrap())
+        );
+        assert!(resolve_with(1, false, false).0.vision_graph.is_none());
     }
 }
