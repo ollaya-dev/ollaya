@@ -80,7 +80,7 @@ Write the questions to a file:
 ollaya run winnow:e4b --questions questions.json "Hi, I cannot log in since this morning and I have a demo at 3pm."
 ```
 
-Or skip the file and pass the JSON inline, the way `curl -d` does (a value with a quote in it is parsed as JSON, not a file path):
+Or skip the file and pass the JSON inline, the way `curl -d` does (a value that starts with `{` is JSON, not a file path):
 
 ```shell
 ollaya run winnow:e4b --questions '{"angry":{"type":"noul","instructions":"Is the customer angry?"}}' "Hi, I cannot log in since this morning and I have a demo at 3pm."

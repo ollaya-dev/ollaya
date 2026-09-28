@@ -26,8 +26,8 @@ pub struct RunArgs {
     pub model: String,
     /// The state to decide about. Without one, reads piped stdin, or starts a REPL on a terminal.
     pub state: Vec<String>,
-    /// Question schema: a JSON file, `@file` (`@-` for stdin), or inline JSON containing a
-    /// quote character (question id -> question). Overrides the model's own.
+    /// Question schema (question id -> question): a JSON file, `@file` (`@-` for stdin), or
+    /// inline JSON, which starts with `{`. Overrides the model's own.
     #[arg(long, value_name = "FILE|JSON")]
     pub questions: Option<String>,
     /// A built-in question set: triage, email, guard, moderation, router, agent.
@@ -75,8 +75,14 @@ fn load_questions(path: &Path) -> Result<Questions> {
         .with_context(|| format!("{}: not a question schema", path.display()))
 }
 
-/// A `--questions` value: `@file` (or `@-` for stdin), inline JSON (detected by a quote
-/// character), or otherwise a file path.
+/// Whether a `--questions` value is inline JSON: a question schema is a JSON object, so it
+/// starts with `{`, which a file path practically never does.
+fn is_inline_json(raw: &str) -> bool {
+    raw.trim_start().starts_with('{')
+}
+
+/// A `--questions` value: `@file` (or `@-` for stdin), inline JSON (it starts with `{`), or
+/// otherwise a file path.
 fn resolve_questions(raw: &str) -> Result<Questions> {
     if let Some(path) = raw.strip_prefix('@') {
         if path == "-" {
@@ -88,7 +94,7 @@ fn resolve_questions(raw: &str) -> Result<Questions> {
         }
         return load_questions(Path::new(path));
     }
-    if raw.contains(['"', '\'']) {
+    if is_inline_json(raw) {
         return serde_json::from_str(raw).context("--questions: not a question schema");
     }
     load_questions(Path::new(raw))
@@ -175,6 +181,12 @@ impl Session {
 }
 
 pub fn run(rt: &Runtime, args: RunArgs) -> Result<()> {
+    // stdin can carry the questions or the state, not both.
+    if args.questions.as_deref() == Some("@-") && args.state.is_empty() {
+        bail!(
+            "--questions @- reads the questions from stdin, so give the state on the command line"
+        );
+    }
     let session = rt.block_on(prepare(&args))?;
     let piped = !std::io::stdin().is_terminal();
     let state = if !args.state.is_empty() {
@@ -353,10 +365,13 @@ fn repl(rt: &Runtime, mut session: Session) -> Result<()> {
             Some(Command::Help) => eprint!("{HELP}"),
             Some(Command::Clear) => print!("\x1b[2J\x1b[H"),
             Some(Command::Show) => eprint!("{}", describe(&session)),
+            Some(Command::SetQuestions(raw)) if raw == "@-" => {
+                eprintln!("error: stdin is this prompt; give a file or inline JSON")
+            }
             Some(Command::SetQuestions(raw)) => match resolve_questions(&raw) {
                 Ok(q) => {
                     session.questions = Some(q);
-                    if raw.contains(['"', '\'']) {
+                    if is_inline_json(&raw) {
                         eprintln!("Set questions from inline JSON.");
                     } else {
                         eprintln!(
@@ -430,6 +445,11 @@ mod tests {
         let q = resolve_questions(r#"{"a": {"type": "noul"}}"#).unwrap();
         assert_eq!(q.len(), 1);
         assert!(resolve_questions(r#"{bad json"#).is_err());
+        // A path with a quote in it is still a path; only a leading `{` means JSON.
+        assert!(
+            matches!(resolve_questions("tom's questions.json"), Err(e) if e.to_string().contains("tom's questions.json"))
+        );
+        assert_eq!(resolve_questions("  {}").unwrap().len(), 0);
         assert!(
             matches!(resolve_questions("@no-such-file.json"), Err(e) if e.to_string().contains("no-such-file.json"))
         );

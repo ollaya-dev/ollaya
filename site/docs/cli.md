@@ -50,7 +50,7 @@ ollaya run laya --preset triage "Your app crashed during checkout and I was char
 | Flag | Effect |
 |---|---|
 | `--preset NAME` | Use a built-in question set: `triage`, `email`, `guard`, `moderation`, `router` or `agent` |
-| `--questions FILE\|@FILE\|JSON` | Use these questions (question id → question), overriding the model's own: a file path, `@file` (`@-` for stdin), or inline JSON if the value contains a quote character |
+| `--questions FILE\|@FILE\|JSON` | Use these questions (question id → question), overriding the model's own: a file path, `@file` (`@-` for stdin), or inline JSON starting with `{` |
 | `--format text\|json` | `text` (default) prints the table; `json` prints the full [`/api/decide`](/docs/api#decide) response |
 | `--keepalive DURATION` | How long to keep the model loaded afterwards: `5m`, `1h`, `0` (unload now), `-1` (keep loaded) |
 | `--verbose` | Also print every option's probability, the routing decision and the timings |
@@ -58,7 +58,7 @@ ollaya run laya --preset triage "Your app crashed during checkout and I was char
 
 Where the questions come from, first match wins: `--questions`, then `--preset`, then questions built into the model (qwen3guard's, or ones added with a Modelfile), then the `triage` preset. When `run` falls back to `triage` it says so on stderr.
 
-`--questions` takes the JSON straight on the command line too, the way `curl -d` does: a bare value is a file path unless it contains a `'` or `"` character, in which case it's parsed as inline JSON. `@file` is always a file (handy if a path itself contains a quote), and `@-` reads from stdin:
+`--questions` takes the JSON straight on the command line too, the way `curl -d` does: a value that starts with `{` is inline JSON, and anything else is a file path. `@file` is always a file (handy if a file name starts with `{`), and `@-` reads the questions from stdin, in which case the state goes on the command line:
 
 ```shell
 ollaya run winnow:e4b --questions '{"topic":{"type":"choice","criteria":["billing","access","other"]}}' "..."
