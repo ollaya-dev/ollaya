@@ -39,6 +39,25 @@ pub const CUDA_PROVIDERS: [&str; 2] = [
     "libonnxruntime_providers_cuda.so",
 ];
 
+/// The ONNX Runtime provider libraries that make a directory a ROCm runtime pack.
+#[cfg(windows)]
+pub const ROCM_PROVIDERS: [&str; 2] = [
+    "onnxruntime_providers_shared.dll",
+    "onnxruntime_providers_rocm.dll",
+];
+#[cfg(not(windows))]
+pub const ROCM_PROVIDERS: [&str; 2] = [
+    "libonnxruntime_providers_shared.so",
+    "libonnxruntime_providers_rocm.so",
+];
+
+/// The llama.cpp ROCm/HIP backend library name.
+pub const ROCM_BACKEND: &str = if cfg!(windows) {
+    "ggml-hip.dll"
+} else {
+    "libggml-hip.so"
+};
+
 /// ONNX Runtime itself, in a pack built from Microsoft's GPU release.
 #[cfg(windows)]
 pub const ORT_LIBRARY: &str = "onnxruntime.dll";
@@ -52,9 +71,19 @@ pub const CUDA_RUNNER: &str = "ollaya-cuda-runner.exe";
 #[cfg(not(windows))]
 pub const CUDA_RUNNER: &str = "ollaya-cuda-runner";
 
+/// The executable ROCm runners start from when the pack holds [`ORT_LIBRARY`]: ollaya built with
+/// `ollaya-runner/rocm-dynamic`, next to the pack directory (`lib/ollaya/`).
+#[cfg(windows)]
+pub const ROCM_RUNNER: &str = "ollaya-rocm-runner.exe";
+#[cfg(not(windows))]
+pub const ROCM_RUNNER: &str = "ollaya-rocm-runner";
+
 /// The pack directories, in order of preference: CUDA 13, then CUDA 12 (for drivers older than
 /// R580). An install has at most one of them.
 pub const CUDA_PACKS: [&str; 2] = ["cuda_v13", "cuda_v12"];
+
+/// The ROCm pack directories (`lib/ollaya/rocm`).
+pub const ROCM_PACKS: [&str; 1] = ["rocm"];
 
 /// How runner processes are started.
 #[derive(Debug, Clone)]
@@ -113,6 +142,26 @@ pub fn cuda_dir(exe: &Path) -> Option<PathBuf> {
         .map(|d| resolve(&d))
 }
 
+/// Directory holding the ROCm runtime pack, if this install has one.
+///
+/// First match wins: `$OLLAYA_LIBRARY_PATH/<pack>`, `<exe dir>/../lib/ollaya/<pack>`,
+/// each pack of [`ROCM_PACKS`] in turn, then the executable's own directory.
+pub fn rocm_dir(exe: &Path) -> Option<PathBuf> {
+    let has_providers = |d: &Path| {
+        ROCM_PROVIDERS.iter().all(|p| d.join(p).is_file()) || d.join(ROCM_BACKEND).is_file()
+    };
+    let exe_dir = exe.parent()?;
+    let library_path = std::env::var_os("OLLAYA_LIBRARY_PATH").map(PathBuf::from);
+    let roots = [library_path, Some(exe_dir.join("../lib/ollaya"))];
+    roots
+        .iter()
+        .flatten()
+        .flat_map(|root| ROCM_PACKS.map(|pack| root.join(pack)))
+        .chain(std::iter::once(exe_dir.to_path_buf()))
+        .find(|d| has_providers(d))
+        .map(|d| resolve(&d))
+}
+
 /// For a pack that holds its own ONNX Runtime: the runner executable and the library it loads.
 /// `None` for a pack of provider libraries only, which the statically linked executable loads.
 fn dynamic_runner(dir: &Path) -> std::io::Result<Option<(PathBuf, String)>> {
@@ -120,13 +169,28 @@ fn dynamic_runner(dir: &Path) -> std::io::Result<Option<(PathBuf, String)>> {
     if !library.is_file() {
         return Ok(None);
     }
+    let runner_name = if dir.ends_with("rocm") || dir.join(ROCM_BACKEND).is_file() {
+        ROCM_RUNNER
+    } else {
+        CUDA_RUNNER
+    };
     let runner = dir
         .parent()
-        .map(|p| p.join(CUDA_RUNNER))
+        .map(|p| p.join(runner_name))
         .filter(|r| r.is_file())
+        .or_else(|| {
+            dir.parent()
+                .map(|p| p.join(CUDA_RUNNER))
+                .filter(|r| r.is_file())
+        })
+        .or_else(|| {
+            dir.parent()
+                .map(|p| p.join(ROCM_RUNNER))
+                .filter(|r| r.is_file())
+        })
         .ok_or_else(|| {
             std::io::Error::other(format!(
-                "the GPU pack needs {CUDA_RUNNER} next to it; reinstall ollaya"
+                "the GPU pack needs {runner_name} next to it; reinstall ollaya"
             ))
         })?;
     Ok(Some((resolve(&runner), library.display().to_string())))
@@ -172,7 +236,13 @@ pub fn llama_dir(exe: &Path) -> Option<PathBuf> {
 
 /// How to start runners for the executable `exe`.
 pub fn runner_launch(exe: &Path) -> RunnerLaunch {
-    match cuda_dir(exe) {
+    let want_rocm = std::env::var("OLLAYA_DEVICE").is_ok_and(|d| d.starts_with("rocm"));
+    let pack = if want_rocm {
+        rocm_dir(exe).or_else(|| cuda_dir(exe))
+    } else {
+        cuda_dir(exe).or_else(|| rocm_dir(exe))
+    };
+    match pack {
         Some(dir) => gpu_launch(exe, &dir).unwrap_or_else(|e| {
             tracing::warn!(
                 "cannot use the GPU runtime in {}, runners will use the CPU: {e}",
@@ -426,5 +496,38 @@ mod tests {
             env["ORT_DYLIB_PATH"],
             dir.join(ORT_LIBRARY).display().to_string()
         );
+    }
+
+    #[test]
+    fn finds_a_rocm_pack() {
+        let root = tempfile::tempdir().unwrap();
+        let exe = install(root.path());
+        let lib = root.path().join("lib/ollaya/rocm");
+        std::fs::create_dir_all(&lib).unwrap();
+        for p in ROCM_PROVIDERS {
+            std::fs::write(lib.join(p), b"provider").unwrap();
+        }
+        assert_eq!(rocm_dir(&exe), Some(resolve(&lib)));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn rocm_pack_with_its_own_onnx_runtime_starts_the_rocm_runner() {
+        let root = tempfile::tempdir().unwrap();
+        let exe = install(root.path());
+        let lib = root.path().join("lib/ollaya/rocm");
+        std::fs::create_dir_all(&lib).unwrap();
+        for p in ROCM_PROVIDERS {
+            std::fs::write(lib.join(p), b"provider").unwrap();
+        }
+        std::fs::write(lib.join(ORT_LIBRARY), b"ort").unwrap();
+        let dir = resolve(&lib);
+
+        let runner = root.path().join("lib/ollaya").join(ROCM_RUNNER);
+        std::fs::write(&runner, b"rocm runner").unwrap();
+        let launch = runner_launch(&exe);
+        assert_eq!(launch.exe, resolve(&runner));
+        assert_eq!(launch.arg0, Some(dir.join("ollaya")));
+        assert_eq!(launch.cpu_exe, Some(exe.clone()));
     }
 }

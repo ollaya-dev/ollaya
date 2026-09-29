@@ -259,7 +259,7 @@ def error_class(layout, lay, state, questions, e):
 
 
 def device_class(device):
-    return "cuda" if device.startswith("CUDA") else "metal" if device.startswith("MTL") else "cpu"
+    return "cuda" if device.startswith("CUDA") else "metal" if device.startswith("MTL") else "rocm" if device.startswith("ROCm") else "cpu"
 
 
 def server_version(binary):

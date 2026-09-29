@@ -29,6 +29,8 @@ pub enum Device {
     Cpu,
     /// CUDA device ordinal.
     Cuda(i32),
+    /// ROCm (AMD GPU) device ordinal.
+    Rocm(i32),
     /// The Apple GPU, through MLX (the `mlx` feature), not ONNX Runtime.
     Metal,
 }
@@ -136,6 +138,9 @@ pub fn session_for(
     if let Device::Cuda(id) = device {
         builder = with_cuda(builder, id, arena)?;
     }
+    if let Device::Rocm(id) = device {
+        builder = with_rocm(builder, id, arena)?;
+    }
     Ok(configure(builder)?.commit_from_file(graph)?)
 }
 
@@ -164,6 +169,30 @@ fn with_cuda(
 ) -> Result<ort::session::builder::SessionBuilder, Error> {
     Err(Error::Model(
         "this build of ollaya has no CUDA support".into(),
+    ))
+}
+
+#[cfg(feature = "rocm")]
+fn with_rocm(
+    builder: ort::session::builder::SessionBuilder,
+    device_id: i32,
+    arena: CudaArena,
+) -> Result<ort::session::builder::SessionBuilder, Error> {
+    let mut ep = ort::ep::ROCm::default().with_device_id(device_id);
+    if arena == CudaArena::SameAsRequested {
+        ep = ep.with_arena_extend_strategy(ort::ep::ArenaExtendStrategy::SameAsRequested);
+    }
+    Ok(builder.with_execution_providers([ep.build().error_on_failure()])?)
+}
+
+#[cfg(not(feature = "rocm"))]
+fn with_rocm(
+    _builder: ort::session::builder::SessionBuilder,
+    _device_id: i32,
+    _arena: CudaArena,
+) -> Result<ort::session::builder::SessionBuilder, Error> {
+    Err(Error::Model(
+        "this build of ollaya has no ROCm support".into(),
     ))
 }
 

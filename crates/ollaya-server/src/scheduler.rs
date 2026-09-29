@@ -567,7 +567,7 @@ impl Scheduler {
         if launch.device == "auto" && hello.device == "cpu" && self.config.has_gpu_pack() {
             tracing::warn!(
                 "{} runs on the CPU although a GPU pack is installed: no usable GPU for it (see \
-                 the runner's warnings above, or set OLLAYA_DEVICE=cuda to see the error)",
+                 the runner's warnings above, or set OLLAYA_DEVICE=cuda or OLLAYA_DEVICE=rocm to see the error)",
                 model.name
             );
         }
@@ -654,6 +654,8 @@ mod tests {
         assert_eq!(plan("auto", true, true), Plan::GpuThenCpu);
         assert_eq!(plan("cuda", true, true), Plan::Configured);
         assert_eq!(plan("cuda:1", true, true), Plan::Configured);
+        assert_eq!(plan("rocm", true, true), Plan::Configured);
+        assert_eq!(plan("rocm:1", true, true), Plan::Configured);
         // GGUF models run on llama.cpp and keep the configured runner.
         assert_eq!(plan("cpu", false, true), Plan::Configured);
         assert_eq!(plan("auto", false, true), Plan::Configured);

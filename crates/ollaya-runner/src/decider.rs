@@ -300,7 +300,7 @@ impl DeciderModel {
 pub(crate) fn configure(builder: SessionBuilder, device: Device) -> Result<SessionBuilder, Error> {
     match device {
         Device::Cpu | Device::Metal => Ok(builder),
-        Device::Cuda(_) => Ok(builder
+        Device::Cuda(_) | Device::Rocm(_) => Ok(builder
             .with_parallel_execution(true)?
             .with_inter_threads(2)?),
     }

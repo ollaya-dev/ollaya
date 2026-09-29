@@ -12,17 +12,21 @@
 #   ollaya-linux-amd64-cuda.tar.zst  lib/ollaya/cuda_v13/ (Microsoft's ONNX Runtime CUDA build +
 #                                    NVIDIA CUDA/cuDNN libraries + libggml-cuda.so, llama.cpp's
 #                                    CUDA backend) + share/doc/ollaya/cuda_v13/ (notices, licenses)
+#   ollaya-linux-amd64-rocm.tar.zst  lib/ollaya/rocm/ (ONNX Runtime ROCm build + libggml-hip.so,
+#                                    llama.cpp's ROCm/HIP backend) + share/doc/ollaya/rocm/ (notices)
 #   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
 #   ollaya-darwin-arm64-mlx.tar.zst  lib/ollaya/mlx_metal/ (mlx.metallib, the MLX engine's Metal
 #                                    kernels) + share/doc/ollaya/mlx_metal/ (notices); also .tgz
 #   ollaya-windows-amd64.zip         bin/ollaya.exe (with the DLLs it links), lib/ollaya/llama/ (CPU),
 #                                    share/
 #   ollaya-windows-amd64-cuda.zip    the same GPU pack as the Linux one, with the Windows DLLs
+#   ollaya-windows-amd64-rocm.zip    the same ROCm pack as the Linux one, with Windows DLLs
 #   ollaya-<platform>-cuda12.*       the CUDA 12 pack, lib/ollaya/cuda_v12/, for drivers older than
 #                                    R580: the same files built for CUDA 12 (.tar.zst or .zip)
 #   ollaya-<platform>-cuda.sha256    sha256 of every library in the CUDA archive (FILES.sha256),
 #                                    which the installers use to skip an unchanged CUDA download
 #   ollaya-<platform>-cuda12.sha256  the same for the CUDA 12 archive
+#   ollaya-<platform>-rocm.sha256    the same for the ROCm archive
 #   ollaya-darwin-arm64-mlx.sha256   the same for the MLX archive
 #   sha256sum.txt                    over every archive in --out, and the files above
 #
@@ -33,6 +37,8 @@
 #                 runner is the base archive's lib/ollaya/ollaya-cuda-runner.
 #   --cuda12      also build the CUDA 12 archive (same platforms), with Microsoft's cuda12 build.
 #                 The same runner loads either pack.
+#   --rocm        also build the ROCm archive (linux-amd64 and windows-amd64). Its runner is the
+#                 base archive's lib/ollaya/ollaya-rocm-runner.
 #   --mlx         also build the MLX archive (darwin-arm64 only). The binary must have been built
 #                 with `--features ollaya-runner/mlx`, whose build script puts mlx.metallib in
 #                 <target-dir> (docs/decisions/0001-mlx-engine.md).
@@ -127,7 +133,7 @@ write_checksums() {
         : >sha256sum.txt.tmp
         for f in *; do
             case $f in
-                *.tar.zst | *.tgz | *.zip | *-cuda.sha256 | *-cuda12.sha256 | *-mlx.sha256) [ -f "$f" ] || continue ;;
+                *.tar.zst | *.tgz | *.zip | *-cuda.sha256 | *-cuda12.sha256 | *-rocm.sha256 | *-mlx.sha256) [ -f "$f" ] || continue ;;
                 *) continue ;;
             esac
             printf '%s  %s\n' "$(sha256_of "$f")" "$f" >>sha256sum.txt.tmp
@@ -152,13 +158,14 @@ fetch() {
 
 # --- arguments ---------------------------------------------------------------------------------
 
-PLATFORM='' CUDA=0 CUDA12=0 MLX=0 BASE=1 STAGE='' OUT=dist
+PLATFORM='' CUDA=0 CUDA12=0 ROCM=0 MLX=0 BASE=1 STAGE='' OUT=dist
 while [ $# -gt 0 ]; do
     case $1 in
         --platform) [ $# -ge 2 ] || usage; PLATFORM=$2; shift 2 ;;
         --platform=*) PLATFORM=${1#*=}; shift ;;
         --cuda) CUDA=1; shift ;;
         --cuda12) CUDA12=1; shift ;;
+        --rocm) ROCM=1; shift ;;
         --mlx) MLX=1; shift ;;
         --no-base) BASE=0; shift ;;
         --stage) [ $# -ge 2 ] || usage; STAGE=$2; shift 2 ;;
@@ -197,11 +204,11 @@ esac
 FEATURES=${OLLAYA_CARGO_FEATURES-$DEFAULT_FEATURES}
 case $PLATFORM in
     linux-amd64 | windows-amd64) ;;
-    *) [ "$CUDA$CUDA12" = 00 ] || die "--cuda and --cuda12 are only supported for linux-amd64 and windows-amd64" ;;
+    *) [ "$CUDA$CUDA12$ROCM" = 000 ] || die "--cuda, --cuda12 and --rocm are only supported for linux-amd64 and windows-amd64" ;;
 esac
 [ "$MLX" = 0 ] || [ "$PLATFORM" = darwin-arm64 ] || die "--mlx is only supported for darwin-arm64"
-[ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || [ "$CUDA12" = 1 ] || [ "$MLX" = 1 ] ||
-    die "--no-base without --cuda, --cuda12 or --mlx leaves nothing to do"
+[ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || [ "$CUDA12" = 1 ] || [ "$ROCM" = 1 ] || [ "$MLX" = 1 ] ||
+    die "--no-base without --cuda, --cuda12, --rocm or --mlx leaves nothing to do"
 # The `mlx` feature links MLX into bin/ollaya, so its notices go into the base archive too.
 case ",$FEATURES," in *mlx,*) LINKS_MLX=1 ;; *) LINKS_MLX=0 ;; esac
 
@@ -439,6 +446,13 @@ stage_base() {
             mkdir -p "$root/lib/ollaya"
             cp "$runner" "$root/lib/ollaya/ollaya-cuda-runner$EXE"
             chmod 0755 "$root/lib/ollaya/ollaya-cuda-runner$EXE"
+            runner_rocm=${OLLAYA_ROCM_RUNNER:-}
+            if [ -n "$runner_rocm" ] && [ -f "$runner_rocm" ]; then
+                cp "$runner_rocm" "$root/lib/ollaya/ollaya-rocm-runner$EXE"
+                chmod 0755 "$root/lib/ollaya/ollaya-rocm-runner$EXE"
+            elif [ "$ROCM" = 1 ]; then
+                die "set OLLAYA_ROCM_RUNNER to ollaya built with --features ollaya-runner/rocm-dynamic"
+            fi
             ;;
     esac
     # Windows: the DLLs ollaya.exe links (DirectML) sit next to it (copy-dylibs). ORT's provider
@@ -465,6 +479,10 @@ stage_base() {
         if [ -f "$root/lib/ollaya/ollaya-cuda-runner$EXE" ]; then
             printf 'lib/ollaya/ollaya-cuda-runner%s is the same program built to load ONNX Runtime from\n' "$EXE"
             printf 'the CUDA pack instead of linking it; it contains the Rust crates listed below.\n\n'
+        fi
+        if [ -f "$root/lib/ollaya/ollaya-rocm-runner$EXE" ]; then
+            printf 'lib/ollaya/ollaya-rocm-runner%s is the same program built to load ONNX Runtime from\n' "$EXE"
+            printf 'the ROCm pack instead of linking it; it contains the Rust crates listed below.\n\n'
         fi
         printf '1. '
         ort_notice "Linked into bin/ollaya$EXE."
@@ -618,6 +636,73 @@ EOF
     say "Staged $name ($(du -sk "$lib" | awk '{ printf "%.0f MiB", $1 / 1024 }') of libraries)"
 }
 
+stage_rocm() {
+    name=ollaya-$PLATFORM-rocm
+    root=$TREES/$name
+    lib=$root/lib/ollaya/rocm
+    doc=$root/share/doc/ollaya/rocm
+    rm -rf "$root"
+    mkdir -p "$lib" "$doc"
+
+    # llama.cpp's ROCm/HIP backend (GGUF models)
+    LLAMA_ROCM=
+    case $PLATFORM in
+        linux-amd64) LLAMA_ROCM=libggml-hip.so ;;
+        windows-amd64) LLAMA_ROCM=ggml-hip.dll ;;
+    esac
+    if [ -n "$LLAMA_ROCM" ]; then
+        OLLAYA_CACHE=$CACHE "$ROOT/scripts/llama-cpp.sh" "$PLATFORM-rocm" "$WORK/llama-rocm" \
+            "$doc/llama.cpp-THIRD_PARTY_NOTICES"
+        for f in "$WORK/llama-rocm"/*; do
+            [ -f "$f" ] || continue
+            cp "$f" "$lib/${f##*/}"
+        done
+    fi
+
+    # ONNX Runtime ROCm provider: from OLLAYA_ORT_ROCM_DIR or pyke/system if provided
+    if [ -n "${OLLAYA_ORT_ROCM_DIR:-}" ] && [ -d "$OLLAYA_ORT_ROCM_DIR" ]; then
+        say "Copying ONNX Runtime ROCm libraries from $OLLAYA_ORT_ROCM_DIR"
+        for f in "$OLLAYA_ORT_ROCM_DIR"/*; do
+            [ -f "$f" ] || continue
+            cp "$f" "$lib/${f##*/}"
+        done
+    fi
+
+    # Additional ROCm runtime libraries if specified
+    if [ -n "${OLLAYA_ROCM_LIBS:-}" ] && [ -d "$OLLAYA_ROCM_LIBS" ]; then
+        say "Copying ROCm libraries from $OLLAYA_ROCM_LIBS"
+        for f in "$OLLAYA_ROCM_LIBS"/*; do
+            [ -f "$f" ] || continue
+            cp "$f" "$lib/${f##*/}"
+        done
+    fi
+
+    # FILES.sha256 fingerprints the libraries themselves
+    (
+        cd "$lib"
+        LC_ALL=C
+        export LC_ALL
+        for f in *; do
+            [ "$f" = FILES.sha256 ] || printf '%s  %s\n' "$(sha256_of "$f")" "$f"
+        done
+    ) >"$WORK/FILES.sha256"
+    mv "$WORK/FILES.sha256" "$lib/FILES.sha256"
+
+    {
+        printf 'Ollaya %s ROCm accelerator package (%s): third-party notices\n\n' "$VERSION" "$PLATFORM"
+        printf 'Everything in lib/ollaya/rocm is third-party software. None of it is covered by\n'
+        printf "Ollaya's Apache-2.0 license.\n\n"
+        if [ -n "$LLAMA_ROCM" ]; then
+            printf '1. llama.cpp %s ROCm/HIP backend (MIT), %s: see llama.cpp-THIRD_PARTY_NOTICES.\n\n' \
+                "$LLAMA_CPP_BUILD" "$LLAMA_ROCM"
+        fi
+        if [ -f "$doc/onnxruntime-ThirdPartyNotices.txt" ]; then
+            printf '2. ONNX Runtime ROCm build: see onnxruntime-ThirdPartyNotices.txt.\n'
+        fi
+    } >"$doc/THIRD_PARTY_NOTICES"
+    say "Staged $name ($(du -sk "$lib" | awk '{ printf "%.0f MiB", $1 / 1024 }') of libraries)"
+}
+
 stage_mlx() {
     name=ollaya-$PLATFORM-mlx
     root=$TREES/$name
@@ -693,6 +778,7 @@ archive() {
 [ "$BASE" = 0 ] || stage_base
 [ "$CUDA" = 0 ] || stage_cuda 13
 [ "$CUDA12" = 0 ] || stage_cuda 12
+[ "$ROCM" = 0 ] || stage_rocm
 [ "$MLX" = 0 ] || stage_mlx
 
 if [ -n "$STAGE" ]; then
@@ -708,6 +794,10 @@ fi
 if [ "$CUDA12" = 1 ]; then
     archive "ollaya-$PLATFORM-cuda12" lib share
     cp "$TREES/ollaya-$PLATFORM-cuda12/lib/ollaya/cuda_v12/FILES.sha256" "$OUT/ollaya-$PLATFORM-cuda12.sha256"
+fi
+if [ "$ROCM" = 1 ]; then
+    archive "ollaya-$PLATFORM-rocm" lib share
+    cp "$TREES/ollaya-$PLATFORM-rocm/lib/ollaya/rocm/FILES.sha256" "$OUT/ollaya-$PLATFORM-rocm.sha256"
 fi
 if [ "$MLX" = 1 ]; then
     archive "ollaya-$PLATFORM-mlx" lib share

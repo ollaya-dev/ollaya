@@ -14,6 +14,7 @@
 #   OLLAYA_REPO      GitHub repository (default: ollaya-dev/ollaya)
 #   OLLAYA_INSTALL_DIR  where to install (default: %LOCALAPPDATA%\Programs\Ollaya)
 #   OLLAYA_NO_CUDA   1 skips the GPU pack (and removes an installed one), even with an NVIDIA GPU
+#   OLLAYA_NO_ROCM   1 skips the ROCm GPU pack, even with an AMD GPU
 #   OLLAYA_DOWNLOAD_BASE  a URL holding the archives and sha256sum.txt instead of GitHub (testing)
 #
 # The desktop app (Ollaya-windows-x64-setup.exe) carries its own copy of the engine; this script is
@@ -97,6 +98,40 @@ function Get-NvidiaGpu {
     $gpu
 }
 
+# The AMD GPU and its architecture. State: none, nodriver, unsupported, or ready.
+function Get-AmdGpu {
+    $gpu = [pscustomobject]@{ State = 'none'; Name = ''; Driver = ''; Arch = ''; Pack = 'rocm'; MiB = 0 }
+    $adapter = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+        Where-Object { $_.PNPDeviceID -like 'PCI\VEN_1002*' } | Select-Object -First 1
+    if (-not $adapter) { return $gpu }
+    $gpu.Name = $adapter.Name
+    if ($adapter.ConfigManagerErrorCode -ne 0) {
+        $gpu.State = 'nodriver'
+        return $gpu
+    }
+    $gpu.Driver = $adapter.DriverVersion
+    if ($adapter.AdapterRAM) {
+        $gpu.MiB = [int]([math]::Round($adapter.AdapterRAM / 1MB))
+    }
+    # Check architecture compatibility: RDNA 4 (RX 9000), RDNA 3 (RX 7000 / gfx1100-gfx1102), RDNA 3.5 (gfx1150), Instinct
+    $name = $adapter.Name
+    if ($name -match 'RX\s*9\d{3}' -or $name -match '9070' -or $name -match '9080') {
+        $gpu.Arch = 'rdna4'
+        $gpu.State = 'ready'
+    } elseif ($name -match 'RX\s*7\d{3}' -or $name -match 'PRO\s*W7\d{3}' -or $name -match '7900' -or $name -match '7800' -or $name -match '7700' -or $name -match '7600') {
+        $gpu.Arch = 'rdna3'
+        $gpu.State = 'ready'
+    } elseif ($name -match 'Instinct' -or $name -match 'MI[123]\d{2}') {
+        $gpu.Arch = 'instinct'
+        $gpu.State = 'ready'
+    } elseif ($name -match 'Radeon') {
+        $gpu.State = 'unsupported'
+    } else {
+        $gpu.State = 'ready'
+    }
+    $gpu
+}
+
 function Install-Ollaya {
     if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
         throw 'Ollaya for Windows needs a 64-bit x86 PC. On ARM, use WSL 2 with the Linux installer.'
@@ -133,6 +168,30 @@ function Install-Ollaya {
         'nodriver' {
             Write-Warning "$($gpu.Name) found, but the NVIDIA driver is not installed. Ollaya will use the CPU."
             Write-Warning 'Install the NVIDIA driver (R580 or newer, https://www.nvidia.com/drivers), then run this script again.'
+        }
+    }
+
+    $amdGpu = Get-AmdGpu
+    $rocmArchive = "ollaya-windows-amd64-rocm.zip"
+    $rocmFiles = "ollaya-windows-amd64-rocm.sha256"
+    $rocmDir = Join-Path $dest "lib\ollaya\rocm"
+    $wantRocm = $false
+    if (-not $wantCuda -and $amdGpu.State -ne 'none') {
+        switch ($amdGpu.State) {
+            'ready' {
+                if (Test-Enabled $env:OLLAYA_NO_ROCM) {
+                    Write-Host ">>> AMD GPU found; skipping the ROCm pack (OLLAYA_NO_ROCM is set)"
+                } else {
+                    $wantRocm = $true
+                }
+            }
+            'unsupported' {
+                Write-Warning "$($amdGpu.Name) found, but ROCm requires RDNA 3 (RX 7000 series), RDNA 4 (RX 9000 series) or Instinct GPUs."
+                Write-Warning 'Ollaya will use the CPU.'
+            }
+            'nodriver' {
+                Write-Warning "$($amdGpu.Name) found, but the AMD driver is not installed or reporting an error. Ollaya will use the CPU."
+            }
         }
     }
 
@@ -192,6 +251,26 @@ function Install-Ollaya {
             }
         }
 
+        $downloadRocm = $false
+        $keepRocm = $false
+        if ($wantRocm -and -not $sums.ContainsKey($rocmArchive)) {
+            Write-Warning 'This release has no ROCm GPU pack for Windows; Ollaya will use the CPU.'
+        } elseif ($wantRocm) {
+            if ((Test-Path "$rocmDir\FILES.sha256") -and $sums.ContainsKey($rocmFiles)) {
+                Get-Verified $rocmFiles
+                $same = [IO.File]::ReadAllText("$tmp\$rocmFiles") -ceq [IO.File]::ReadAllText("$rocmDir\FILES.sha256")
+                if ($same -and (Test-PackIntact $rocmDir)) {
+                    $keepRocm = $true
+                    Write-Host '>>> The ROCm pack is unchanged; keeping the installed copy'
+                }
+            }
+            if (-not $keepRocm) {
+                Write-Host '>>> Downloading the ROCm pack (AMD ROCm / HIP libraries)'
+                Get-Verified $rocmArchive
+                $downloadRocm = $true
+            }
+        }
+
         # A running server keeps ollaya.exe and its runners open; stop the one this user started.
         $old = Join-Path $dest 'bin\ollaya.exe'
         if (Test-Path $old) { Invoke-Quiet $old @('stop') | Out-Null }
@@ -209,6 +288,10 @@ function Install-Ollaya {
                 throw "$cudaArchive does not contain lib\ollaya\$($gpu.Pack)"
             }
         }
+        if ($downloadRocm) {
+            Expand-Archive -Path "$tmp\$rocmArchive" -DestinationPath $stage -Force
+            Remove-Item -Force "$tmp\$rocmArchive"
+        }
         if (-not (Test-Path "$stage\bin\ollaya.exe")) { throw "$archive does not contain bin\ollaya.exe" }
 
         # GPU libraries never outlive the binary they match, unless they are byte for byte the
@@ -222,7 +305,15 @@ function Install-Ollaya {
             if ((Test-Path $notices) -and -not (Test-Path "$stage\share\doc\ollaya\$($gpu.Pack)")) {
                 Move-Item $notices "$stage\share\doc\ollaya\$($gpu.Pack)"
             }
-        } elseif (Test-Path $libOllaya) {
+        }
+        if ($keepRocm) {
+            Get-ChildItem -LiteralPath $rocmDir -Filter 'ollaya-runner-*' -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+            $notices = Join-Path $dest "share\doc\ollaya\rocm"
+            if ((Test-Path $notices) -and -not (Test-Path "$stage\share\doc\ollaya\rocm")) {
+                Move-Item $notices "$stage\share\doc\ollaya\rocm"
+            }
+        } elseif (-not $keepCuda -and (Test-Path $libOllaya)) {
             try {
                 Remove-Item -Recurse -Force $libOllaya
             } catch {
@@ -234,7 +325,7 @@ function Install-Ollaya {
             Move-Item (Join-Path $stage $part) (Join-Path $dest $part)
         }
         # lib\ollaya holds llama.cpp's libraries (llama), which run GGUF models, and the GPU pack
-        # (cuda_v13 or cuda_v12). A kept GPU pack stays; everything else there is replaced.
+        # (cuda_v13, cuda_v12, or rocm). A kept GPU pack stays; everything else there is replaced.
         if (Test-Path "$stage\lib\ollaya") {
             New-Item -ItemType Directory -Force -Path $libOllaya | Out-Null
             foreach ($item in Get-ChildItem -LiteralPath "$stage\lib\ollaya") {
@@ -260,12 +351,16 @@ function Install-Ollaya {
     Write-Host ">>> Installed Ollaya $version`: $bin\ollaya.exe"
     if ($downloadCuda -or $keepCuda) {
         Write-Host ">>> NVIDIA GPU support: $cudaDir ($($gpu.Name), driver $($gpu.Driver)$(if ($gpu.Cuda) { ", CUDA $($gpu.Cuda)" }))"
-    } elseif ($gpu.State -eq 'none') {
-        Write-Host '>>> No NVIDIA GPU found; Ollaya will run on the CPU'
+    } elseif ($downloadRocm -or $keepRocm) {
+        Write-Host ">>> AMD GPU support: $rocmDir ($($amdGpu.Name)$(if ($amdGpu.Driver) { ", driver $($amdGpu.Driver)" }))"
+    } elseif ($gpu.State -eq 'none' -and $amdGpu.State -eq 'none') {
+        Write-Host '>>> No supported GPU found; Ollaya will run on the CPU'
     }
     # winnow:e4b (the recommended model, 8 GB) with the GPU pack and a GPU that holds it; laya, which
     # is fast on any CPU and on small GPUs, otherwise.
-    Write-Host ">>> Get started:  ollaya run $(if (($downloadCuda -or $keepCuda) -and $gpu.MiB -ge 10240) { 'winnow:e4b' } else { 'laya' })"
+    $gpuMiB = if ($downloadCuda -or $keepCuda) { $gpu.MiB } elseif ($downloadRocm -or $keepRocm) { $amdGpu.MiB } else { 0 }
+    $hasGpu = ($downloadCuda -or $keepCuda -or $downloadRocm -or $keepRocm)
+    Write-Host ">>> Get started:  ollaya run $(if ($hasGpu -and $gpuMiB -ge 10240) { 'winnow:e4b' } else { 'laya' })"
 }
 
 Install-Ollaya

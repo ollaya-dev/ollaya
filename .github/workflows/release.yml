@@ -35,7 +35,7 @@ jobs:
           - platform: linux-amd64
             runner: ubuntu-latest
             features: ollaya-runner/cuda
-            package-args: --cuda --cuda12
+            package-args: --cuda --cuda12 --rocm
           - platform: linux-arm64
             runner: ubuntu-24.04-arm
             features: ''
@@ -47,7 +47,7 @@ jobs:
           - platform: windows-amd64
             runner: windows-latest
             features: ollaya-runner/cuda
-            package-args: --cuda --cuda12
+            package-args: --cuda --cuda12 --rocm
     runs-on: ${{ matrix.runner }}
     env:
       # darwin-arm64 builds the MLX engine.
@@ -118,6 +118,14 @@ jobs:
         run: |
           cargo build --release --locked -p ollaya --features ollaya-runner/cuda-dynamic \
             --target-dir target/cuda-dynamic
+      - name: Build the ROCm runner
+        if: contains(matrix.package-args, '--rocm')
+        shell: bash
+        env:
+          OLLAYA_BUILD_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cargo build --release --locked -p ollaya --features ollaya-runner/rocm-dynamic \
+            --target-dir target/rocm-dynamic
       - name: Smoke test
         run: target/release/ollaya --version
       - name: Minimum macOS version
@@ -133,8 +141,14 @@ jobs:
         run: |
           export OLLAYA_CARGO_FEATURES=$FEATURES
           case $PLATFORM in
-            linux-amd64) export OLLAYA_CUDA_RUNNER=target/cuda-dynamic/release/ollaya ;;
-            windows-amd64) export OLLAYA_CUDA_RUNNER=target/cuda-dynamic/release/ollaya.exe ;;
+            linux-amd64)
+              export OLLAYA_CUDA_RUNNER=target/cuda-dynamic/release/ollaya
+              export OLLAYA_ROCM_RUNNER=target/rocm-dynamic/release/ollaya
+              ;;
+            windows-amd64)
+              export OLLAYA_CUDA_RUNNER=target/cuda-dynamic/release/ollaya.exe
+              export OLLAYA_ROCM_RUNNER=target/rocm-dynamic/release/ollaya.exe
+              ;;
           esac
           # shellcheck disable=SC2086 # PACKAGE_ARGS is a list of flags
           scripts/package.sh --platform "$PLATFORM" $PACKAGE_ARGS target/release "$VERSION"
@@ -201,11 +215,12 @@ jobs:
           ls -l "$d/lib/ollaya/llama"
           "$d/bin/ollaya$exe" llama-devices | tee "$d/devices.json"
           grep -q '"type": "cpu"' "$d/devices.json"
-          for pack in cuda:cuda_v13 cuda12:cuda_v12; do
+          for pack in cuda:cuda_v13 cuda12:cuda_v12 rocm:rocm; do
             archive=dist/ollaya-$PLATFORM-${pack%%:*}.tar.zst dir=$d/lib/ollaya/${pack#*:}
             [ -f "$archive" ] || continue
             zstd -dc "$archive" | tar -xf - -C "$d"
             (cd "$dir" && sha256sum -c --quiet FILES.sha256)
+            [ "${pack%%:*}" != "rocm" ] || continue
             # Everything libggml-cuda.so links is in the pack, except the driver's libcuda.so.1 and
             # libggml-base, which the runner has already loaded from lib/ollaya/llama. GPU runners
             # start with the pack on LD_LIBRARY_PATH (the CUDA 12 build has no $ORIGIN RUNPATH).
@@ -222,6 +237,7 @@ jobs:
             dist/*.zip
             dist/*-cuda.sha256
             dist/*-cuda12.sha256
+            dist/*-rocm.sha256
             dist/*-mlx.sha256
           if-no-files-found: error
           compression-level: 0
@@ -266,6 +282,7 @@ jobs:
           - { target: cpu, arch: arm64, runner: ubuntu-24.04-arm }
           - { target: cuda, arch: amd64, runner: ubuntu-latest }
           - { target: cuda12, arch: amd64, runner: ubuntu-latest }
+          - { target: rocm, arch: amd64, runner: ubuntu-latest }
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -282,8 +299,8 @@ jobs:
           [ "$PUBLISH" = true ] || version=0.0.0-dev.${GITHUB_SHA::7}
           echo "version=$version" >>"$GITHUB_OUTPUT"
       - name: Free disk space
-        if: startsWith(matrix.target, 'cuda')
-        # The CUDA images stage 2.4 (cuda) or 3.4 GB (cuda12) of libraries on top of the Rust build.
+        if: startsWith(matrix.target, 'cuda') || matrix.target == 'rocm'
+        # The GPU images stage several GB of libraries on top of the Rust build.
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -349,17 +366,22 @@ jobs:
           mapfile -t cpu_refs < <(refs digests/digests-cpu-*/*)
           mapfile -t cuda_refs < <(refs digests/digests-cuda-*/*)
           mapfile -t cuda12_refs < <(refs digests/digests-cuda12-*/*)
+          mapfile -t rocm_refs < <(refs digests/digests-rocm-*/*)
           cpu_tags=(-t "$image:$version")
           cuda_tags=(-t "$image:$version-cuda")
           cuda12_tags=(-t "$image:$version-cuda12")
+          rocm_tags=(-t "$image:$version-rocm")
           if [[ $version != *-* ]]; then
             cpu_tags+=(-t "$image:latest")
             cuda_tags+=(-t "$image:cuda")
             cuda12_tags+=(-t "$image:cuda12")
+            rocm_tags+=(-t "$image:rocm")
           fi
           docker buildx imagetools create "${cpu_tags[@]}" "${cpu_refs[@]}"
           docker buildx imagetools create "${cuda_tags[@]}" "${cuda_refs[@]}"
           docker buildx imagetools create "${cuda12_tags[@]}" "${cuda12_refs[@]}"
+          docker buildx imagetools create "${rocm_tags[@]}" "${rocm_refs[@]}"
           docker buildx imagetools inspect "$image:$version"
           docker buildx imagetools inspect "$image:$version-cuda"
           docker buildx imagetools inspect "$image:$version-cuda12"
+          docker buildx imagetools inspect "$image:$version-rocm"
