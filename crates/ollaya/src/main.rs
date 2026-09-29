@@ -120,7 +120,7 @@ enum Command {
         /// The weights file, for the MLX engine
         #[arg(long)]
         weights: Option<PathBuf>,
-        /// auto, cpu, cuda, cuda:<n> or metal
+        /// auto, cpu, cuda, cuda:<n>, rocm, rocm:<n> or metal
         #[arg(long, default_value = "auto")]
         device: ollaya_runner::server::DeviceRequest,
         #[arg(long)]
@@ -231,8 +231,11 @@ fn main() -> Result<()> {
             let cuda = ollaya_server::launch::cuda_dir(&exe)
                 .map(|d| d.join(ollaya_runner::llama::CUDA_BACKEND))
                 .filter(|p| p.is_file());
+            let rocm = ollaya_server::launch::rocm_dir(&exe)
+                .map(|d| d.join(ollaya_runner::llama::ROCM_BACKEND))
+                .filter(|p| p.is_file());
             let found =
-                ollaya_runner::llama::probe(&ollaya_runner::llama::Libraries { dir, cuda })?;
+                ollaya_runner::llama::probe(&ollaya_runner::llama::Libraries { dir, cuda, rocm })?;
             println!("{}", serde_json::to_string_pretty(&found)?);
         }
         Command::Serve => {

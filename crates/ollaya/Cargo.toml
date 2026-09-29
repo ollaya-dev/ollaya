@@ -16,6 +16,9 @@ default = []
 cuda = ["ollaya-runner/cuda"]
 # The GPU pack's runner (ollaya-cuda-runner): ONNX Runtime loaded from the pack at run time.
 cuda-dynamic = ["ollaya-runner/cuda-dynamic"]
+rocm = ["ollaya-runner/rocm"]
+# The ROCm GPU pack's runner (ollaya-rocm-runner): ONNX Runtime loaded from the pack at run time.
+rocm-dynamic = ["ollaya-runner/rocm-dynamic"]
 coreml = ["ollaya-runner/coreml"]
 # The MLX engine on the Apple GPU (aarch64-apple-darwin; builds MLX with CMake).
 mlx = ["ollaya-runner/mlx"]

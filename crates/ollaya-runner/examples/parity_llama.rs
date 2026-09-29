@@ -110,9 +110,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|pack| lib.join(pack).join(ollaya_runner::llama::CUDA_BACKEND))
         .into_iter()
         .find(|p| p.is_file());
+    let rocm = lib.join("rocm").join(ollaya_runner::llama::ROCM_BACKEND);
+    let rocm = if rocm.is_file() { Some(rocm) } else { None };
     let libs = Libraries {
         dir: lib.join("llama"),
         cuda,
+        rocm,
     };
     let calibration: CalibrationFile =
         serde_json::from_str(&std::fs::read_to_string(dir.join("calibration.json"))?)?;

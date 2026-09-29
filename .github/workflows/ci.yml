@@ -35,6 +35,7 @@ jobs:
       - run: cargo fmt --all --check
       # Default features only: the CPU build. CUDA and CoreML builds run in release.yml.
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo clippy -p ollaya --features ollaya-runner/rocm-dynamic --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
   windows:
@@ -52,6 +53,7 @@ jobs:
         with:
           cache-directories: ~\AppData\Local\ort.pyke.io
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo clippy -p ollaya --features ollaya-runner/rocm-dynamic --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
   mlx:

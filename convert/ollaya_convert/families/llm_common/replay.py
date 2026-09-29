@@ -34,7 +34,7 @@ def post_to(url):
 
 
 def device_class(device):
-    return "cuda" if device.startswith("CUDA") else "metal" if device.startswith("MTL") else "cpu"
+    return "cuda" if device.startswith("CUDA") else "metal" if device.startswith("MTL") else "rocm" if device.startswith("ROCm") else "cpu"
 
 
 def main():
@@ -43,15 +43,16 @@ def main():
     ap.add_argument("--server", required=True)
     ap.add_argument("--gguf", required=True)
     ap.add_argument("--from", dest="source", default="goldens-cuda.jsonl")
-    ap.add_argument("--device", required=True, help="llama.cpp device (CUDA0, MTL0), or cpu")
+    ap.add_argument("--device", required=True, help="llama.cpp device (CUDA0, MTL0, ROCm0), or cpu")
     ap.add_argument("--port", type=int, default=8096)
+    ap.add_argument("--out", help="base name for output (default: goldens-<device_class>)")
     a = ap.parse_args()
 
     decision = json.load(open(os.path.join(a.model_dir, "decision.json")))
     llama = decision["llama"]
     dev = None if a.device == "cpu" else a.device
     argv = server_args(llama["n_ctx"], llama.get("swa_full", False), dev)
-    name = "goldens-%s" % device_class(a.device)
+    name = a.out if a.out else ("goldens-%s" % device_class(a.device))
     if os.path.join(a.model_dir, name + ".jsonl") == os.path.join(a.model_dir, a.source):
         raise SystemExit("the source and the output are the same file")
     srv = LlamaServer.start(a.server, a.gguf, port=a.port, argv=argv,

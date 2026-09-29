@@ -26,7 +26,7 @@ pub struct ServerConfig {
     pub max_queue: usize,
     /// `OLLAYA_LOAD_TIMEOUT`.
     pub load_timeout: Duration,
-    /// `OLLAYA_DEVICE`: `auto`, `cpu`, `cuda`, `cuda:<n>` or `metal`, passed to runners.
+    /// `OLLAYA_DEVICE`: `auto`, `cpu`, `cuda`, `cuda:<n>`, `rocm`, `rocm:<n>` or `metal`, passed to runners.
     pub device: String,
     /// `OLLAYA_API_KEY`: when set, requests need `Authorization: Bearer <key>`.
     pub api_key: Option<String>,
@@ -117,15 +117,18 @@ impl ServerConfig {
             },
         };
         let device = var("OLLAYA_DEVICE").unwrap_or_else(|| "auto".into());
-        let known = matches!(device.as_str(), "auto" | "cpu" | "cuda" | "metal")
+        let known = matches!(device.as_str(), "auto" | "cpu" | "cuda" | "rocm" | "metal")
             || device
                 .strip_prefix("cuda:")
+                .is_some_and(|n| n.parse::<u32>().is_ok())
+            || device
+                .strip_prefix("rocm:")
                 .is_some_and(|n| n.parse::<u32>().is_ok());
         if !known {
             return Err(invalid(
                 "OLLAYA_DEVICE",
                 &device,
-                "use auto, cpu, cuda, cuda:<n> or metal".into(),
+                "use auto, cpu, cuda, cuda:<n>, rocm, rocm:<n> or metal".into(),
             ));
         }
         Ok(ServerConfig {
@@ -222,5 +225,14 @@ mod tests {
     #[test]
     fn metal_is_a_device() {
         assert_eq!(with(&[("OLLAYA_DEVICE", "metal")]).unwrap().device, "metal");
+    }
+
+    #[test]
+    fn rocm_is_a_device() {
+        assert_eq!(with(&[("OLLAYA_DEVICE", "rocm")]).unwrap().device, "rocm");
+        assert_eq!(
+            with(&[("OLLAYA_DEVICE", "rocm:1")]).unwrap().device,
+            "rocm:1"
+        );
     }
 }

@@ -35,6 +35,7 @@ pub enum DeviceRequest {
     Auto,
     Cpu,
     Cuda(i32),
+    Rocm(i32),
     Metal,
 }
 
@@ -45,14 +46,25 @@ impl std::str::FromStr for DeviceRequest {
             "auto" => Ok(DeviceRequest::Auto),
             "cpu" => Ok(DeviceRequest::Cpu),
             "cuda" => Ok(DeviceRequest::Cuda(0)),
+            "rocm" => Ok(DeviceRequest::Rocm(0)),
             "metal" => Ok(DeviceRequest::Metal),
-            s => s
+            s if s.starts_with("cuda:") => s
                 .strip_prefix("cuda:")
                 .and_then(|n| n.parse().ok())
                 .map(DeviceRequest::Cuda)
                 .ok_or_else(|| {
-                    format!("unknown device {s:?}; use auto, cpu, cuda, cuda:<n> or metal")
+                    format!("unknown device {s:?}; use auto, cpu, cuda, cuda:<n>, rocm, rocm:<n> or metal")
                 }),
+            s if s.starts_with("rocm:") => s
+                .strip_prefix("rocm:")
+                .and_then(|n| n.parse().ok())
+                .map(DeviceRequest::Rocm)
+                .ok_or_else(|| {
+                    format!("unknown device {s:?}; use auto, cpu, cuda, cuda:<n>, rocm, rocm:<n> or metal")
+                }),
+            s => Err(format!(
+                "unknown device {s:?}; use auto, cpu, cuda, cuda:<n>, rocm, rocm:<n> or metal"
+            )),
         }
     }
 }
@@ -115,7 +127,7 @@ fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Lo
         .llama_dir
         .clone()
         .ok_or_else(|| Error::Model("a GGUF model needs --llama-dir".into()))?;
-    // The CUDA backend sits in the CUDA pack, where the daemon points argv[0] (as for ORT).
+    // The GPU backend sits in the pack, where the daemon points argv[0] (as for ORT).
     let cuda = std::env::args_os()
         .next()
         .map(PathBuf::from)
@@ -125,15 +137,32 @@ fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Lo
                 .map(|d| d.join(crate::llama::CUDA_BACKEND))
         })
         .filter(|p| p.is_file());
+    let rocm = std::env::args_os()
+        .next()
+        .map(PathBuf::from)
+        .and_then(|a| {
+            a.parent()
+                .filter(|d| d.is_absolute())
+                .map(|d| d.join(crate::llama::ROCM_BACKEND))
+        })
+        .filter(|p| p.is_file());
     let target = match config.device {
         DeviceRequest::Auto => Target::Auto,
         DeviceRequest::Cpu => Target::Cpu,
         DeviceRequest::Cuda(id) => Target::Device(format!("CUDA{id}")),
+        DeviceRequest::Rocm(id) => Target::Device(format!("ROCM{id}")),
         // llama.cpp's own Metal backend (not MLX): ggml names the Apple GPU `MTL0`.
         DeviceRequest::Metal => Target::Device("MTL0".into()),
     };
-    let libs = Libraries { dir, cuda };
-    let mut model = LlamaModel::load(gguf, &config.decision, &libs, &target, config.threads)?;
+    let libs = Libraries { dir, cuda, rocm };
+    let mut model = match LlamaModel::load(gguf, &config.decision, &libs, &target, config.threads) {
+        Ok(m) => m,
+        Err(e) if config.device == DeviceRequest::Auto && libs.rocm.is_some() => {
+            tracing::warn!("WARN: HIP initialization failed, falling back to CPU runner: {e}");
+            LlamaModel::load(gguf, &config.decision, &libs, &Target::Cpu, config.threads)?
+        }
+        Err(e) => return Err(e),
+    };
     // As on the ONNX GPU path: the first evaluation pays one-off costs (kernels, graphs,
     // buffers), and a GPU that fails it moves an `auto` model to the CPU. (`run` warms up models
     // on the CPU.)
@@ -146,10 +175,14 @@ fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Lo
                 model.device
             )));
         }
-        tracing::warn!(
-            "{} failed its first request, using the CPU: {e}",
-            model.device
-        );
+        if model.device.starts_with("rocm") {
+            tracing::warn!("WARN: HIP initialization failed, falling back to CPU runner: {e}");
+        } else {
+            tracing::warn!(
+                "{} failed its first request, using the CPU: {e}",
+                model.device
+            );
+        }
         drop(model);
         model = LlamaModel::load(gguf, &config.decision, &libs, &Target::Cpu, config.threads)?;
     }
@@ -210,14 +243,30 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
             Err(e) => return Err(e),
         }
     }
-    let device = onnx_device(config.device, cfg!(feature = "cuda-dynamic"));
+    let device = onnx_device(
+        config.device,
+        cfg!(feature = "cuda-dynamic") || cfg!(feature = "rocm-dynamic"),
+    );
     let gpu = match device {
         DeviceRequest::Cpu | DeviceRequest::Metal => None,
-        DeviceRequest::Auto => Some(0),
-        DeviceRequest::Cuda(id) => Some(id),
+        DeviceRequest::Auto => {
+            if cfg!(feature = "rocm") || cfg!(feature = "rocm-dynamic") {
+                Some((Device::Rocm(0), 0))
+            } else {
+                Some((Device::Cuda(0), 0))
+            }
+        }
+        DeviceRequest::Cuda(id) => Some((Device::Cuda(id), id)),
+        DeviceRequest::Rocm(id) => Some((Device::Rocm(id), id)),
     };
-    if let Some(id) = gpu {
-        match cuda_providers_present() {
+    if let Some((target_dev, id)) = gpu {
+        let is_rocm = matches!(target_dev, Device::Rocm(_));
+        let check = if is_rocm {
+            rocm_providers_present()
+        } else {
+            cuda_providers_present()
+        };
+        match check {
             Err(why) if device == DeviceRequest::Auto => {
                 tracing::info!("GPU runtime not installed, using CPU: {why}");
             }
@@ -228,19 +277,24 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
                     (None, Some(g)) => (g, "fp32"),
                     (None, None) => return Err(Error::Model("no graph given".into())),
                 };
-                match engine::load(&files(graph), Device::Cuda(id), config.threads) {
-                    // A session can load on a GPU whose architecture this build has no CUDA
-                    // kernels for (RTX 50-series with an ONNX Runtime built before sm_120), and
-                    // then fail on its first request. Warm up here so `auto` can fall back to
-                    // the CPU instead of failing every request.
+                match engine::load(&files(graph), target_dev, config.threads) {
+                    // A session can load on a GPU whose architecture this build has no CUDA/HIP
+                    // kernels for, and then fail on its first request. Warm up here so `auto` can
+                    // fall back to the CPU instead of failing every request.
                     Ok(model) => {
                         let warmed = warm_up(model.as_ref());
                         match after_gpu_warm_up(&warmed, device) {
                             AfterWarmUp::FallBackToCpu => {
                                 if let Err(e) = warmed {
-                                    tracing::warn!(
-                                        "GPU {id} failed its first request, using CPU: {e}"
-                                    );
+                                    if is_rocm {
+                                        tracing::warn!(
+                                            "WARN: HIP initialization failed, falling back to CPU runner: {e}"
+                                        );
+                                    } else {
+                                        tracing::warn!(
+                                            "GPU {id} failed its first request, using CPU: {e}"
+                                        );
+                                    }
                                 }
                             }
                             AfterWarmUp::Fail => {
@@ -256,7 +310,11 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
                                 return Ok((
                                     model,
                                     Loaded {
-                                        device: format!("cuda:{id}"),
+                                        device: if is_rocm {
+                                            format!("rocm:{id}")
+                                        } else {
+                                            format!("cuda:{id}")
+                                        },
                                         precision: precision.into(),
                                         engine: "onnx",
                                     },
@@ -265,7 +323,13 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
                         }
                     }
                     Err(e) if device == DeviceRequest::Auto => {
-                        tracing::info!("CUDA unavailable, using CPU: {e}");
+                        if is_rocm {
+                            tracing::warn!(
+                                "WARN: HIP initialization failed, falling back to CPU runner: {e}"
+                            );
+                        } else {
+                            tracing::info!("CUDA unavailable, using CPU: {e}");
+                        }
                     }
                     Err(e) => return Err(e),
                 }
@@ -326,21 +390,50 @@ fn cuda_providers_present() -> Result<(), String> {
     }
 }
 
-/// The device an ONNX model asks ONNX Runtime for. The GPU pack's runner (`cuda-dynamic`) turns
+/// ONNX Runtime loads its ROCm provider from its runtime path (see [`ort_runtime_dir`]), which
+/// the daemon points at the ROCm runtime pack. Check before asking ORT, for a clear message.
+fn rocm_providers_present() -> Result<(), String> {
+    if !cfg!(feature = "rocm") {
+        return Err("this build of ollaya has no ROCm support".into());
+    }
+    let dir = ort_runtime_dir()?;
+    if dir.join(PROVIDERS_SHARED).is_file() {
+        Ok(())
+    } else {
+        Err(format!(
+            "no ROCm runtime in {} (install the GPU pack)",
+            dir.display()
+        ))
+    }
+}
+
+/// The device an ONNX model asks ONNX Runtime for. The GPU pack's runner (`cuda-dynamic` or `rocm-dynamic`) turns
 /// `auto` into the first GPU: it never falls back to the CPU itself, because its ONNX Runtime is
 /// not the one CPU runners use. The daemon starts a CPU runner from the statically linked build
 /// when it fails (`ollaya_server::scheduler`).
 fn onnx_device(requested: DeviceRequest, gpu_runner: bool) -> DeviceRequest {
     match requested {
-        DeviceRequest::Auto if gpu_runner => DeviceRequest::Cuda(0),
+        DeviceRequest::Auto if gpu_runner => {
+            if cfg!(feature = "rocm") || cfg!(feature = "rocm-dynamic") {
+                DeviceRequest::Rocm(0)
+            } else {
+                DeviceRequest::Cuda(0)
+            }
+        }
         other => other,
     }
 }
 
-/// An error that came from the CUDA provider rather than from the request: ONNX Runtime names
-/// CUDA in those messages ("CUDA error cudaErrorNoKernelImageForDevice ...").
-fn is_cuda_failure(e: &Error) -> bool {
-    e.to_string().contains("CUDA")
+/// An error that came from the GPU (CUDA or HIP/ROCm) provider rather than from the request:
+/// ONNX Runtime names CUDA/HIP in those messages.
+fn is_gpu_failure(e: &Error) -> bool {
+    let s = e.to_string();
+    s.contains("CUDA")
+        || s.contains("HIP")
+        || s.contains("ROCM")
+        || s.contains("rocm")
+        || s.contains("hipError")
+        || s.contains("OutOfMemory")
 }
 
 /// What a model that loaded on a GPU does after its warm-up request.
@@ -351,12 +444,12 @@ enum AfterWarmUp {
     Fail,
 }
 
-/// A CUDA failure on the first request moves an `auto` model to the CPU and fails an explicit
-/// `cuda` one; anything else keeps the GPU, as before.
+/// A GPU (CUDA/HIP) failure on the first request moves an `auto` model to the CPU and fails an explicit
+/// GPU request; anything else keeps the GPU, as before.
 fn after_gpu_warm_up(warmed: &Result<(), Error>, device: DeviceRequest) -> AfterWarmUp {
     match warmed {
-        Err(e) if is_cuda_failure(e) && device == DeviceRequest::Auto => AfterWarmUp::FallBackToCpu,
-        Err(e) if is_cuda_failure(e) => AfterWarmUp::Fail,
+        Err(e) if is_gpu_failure(e) && device == DeviceRequest::Auto => AfterWarmUp::FallBackToCpu,
+        Err(e) if is_gpu_failure(e) => AfterWarmUp::Fail,
         _ => AfterWarmUp::KeepGpu,
     }
 }
@@ -555,6 +648,21 @@ mod tests {
             after_gpu_warm_up(&other, DeviceRequest::Auto),
             AfterWarmUp::KeepGpu
         );
+
+        // A HIP / ROCm failure also moves auto to the CPU and fails an explicit rocm request.
+        let hip_oom = || {
+            Err(crate::Error::Model(
+                "HIP error: out of memory (hipErrorOutOfMemory)".into(),
+            ))
+        };
+        assert_eq!(
+            after_gpu_warm_up(&hip_oom(), DeviceRequest::Auto),
+            AfterWarmUp::FallBackToCpu
+        );
+        assert_eq!(
+            after_gpu_warm_up(&hip_oom(), DeviceRequest::Rocm(0)),
+            AfterWarmUp::Fail
+        );
     }
 
     #[test]
@@ -562,13 +670,21 @@ mod tests {
         use super::{DeviceRequest, onnx_device};
         assert_eq!(
             onnx_device(DeviceRequest::Auto, true),
-            DeviceRequest::Cuda(0)
+            if cfg!(feature = "rocm") || cfg!(feature = "rocm-dynamic") {
+                DeviceRequest::Rocm(0)
+            } else {
+                DeviceRequest::Cuda(0)
+            }
         );
         assert_eq!(onnx_device(DeviceRequest::Auto, false), DeviceRequest::Auto);
         assert_eq!(onnx_device(DeviceRequest::Cpu, true), DeviceRequest::Cpu);
         assert_eq!(
             onnx_device(DeviceRequest::Cuda(1), true),
             DeviceRequest::Cuda(1)
+        );
+        assert_eq!(
+            onnx_device(DeviceRequest::Rocm(1), true),
+            DeviceRequest::Rocm(1)
         );
     }
 
@@ -587,6 +703,8 @@ mod tests {
             ("cpu", DeviceRequest::Cpu),
             ("cuda", DeviceRequest::Cuda(0)),
             ("cuda:2", DeviceRequest::Cuda(2)),
+            ("rocm", DeviceRequest::Rocm(0)),
+            ("rocm:1", DeviceRequest::Rocm(1)),
             ("metal", DeviceRequest::Metal),
         ] {
             assert_eq!(s.parse::<DeviceRequest>(), Ok(want));
