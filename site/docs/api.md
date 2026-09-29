@@ -152,6 +152,7 @@ Answers typed questions about a state in one forward pass. The body is the `/v1/
 | `model` | string | yes | Model name |
 | `state` | string, object or array | yes to decide | Without it, the request loads or unloads the model (below) |
 | `questions` | object | yes, unless the model has built-in questions | Replaces the model's own questions entirely |
+| `preset` | string | no | A [preset](#presets)'s name, built-in or custom, in place of `questions` |
 | `images` | array of strings | no | For a vision model (`decider:2b-vision`): one PNG image, base64 or a base64 `data:` URL. See [Images](#images) |
 | `keep_alive` | string or number | no | See [keep_alive](#keep-alive) |
 | `extras` | array of strings | no | `["laya"]` adds laya's own confidence and act probability to every answer |
@@ -267,6 +268,31 @@ curl http://localhost:11435/api/decide -d '{"model": "laya:en", "keep_alive": 0}
 ```
 
 A decision has no side effect on stored data, so it is safe to retry.
+
+## Presets
+
+A preset is a named question set. Six are built in (`triage`, `email`, `guard`, `moderation`, `router`, `agent`), and you can save your own. Send `"preset": "NAME"` to `/api/decide` in place of `questions`.
+
+```shell
+curl http://localhost:11435/api/presets/create -d '{
+  "name": "billing-check",
+  "description": "Billing, and how upset the customer is",
+  "questions": {
+    "billing": {"type": "noul", "instructions": "The message is about a charge, an invoice or a refund."},
+    "tone": {"type": "choice", "instructions": "How does the customer sound?", "criteria": {"calm": null, "annoyed": null, "angry": null}}
+  }
+}'
+curl http://localhost:11435/api/decide -d '{"model": "winnow:e4b", "state": "I was charged twice this month.", "preset": "billing-check"}'
+```
+
+| Endpoint | Body | Effect |
+|---|---|---|
+| `GET /api/presets` | – | Built-in presets, then custom ones: `name`, `builtin`, `description`, question ids, `modified_at` |
+| `POST /api/presets/create` | `name`, `questions`, `description` (optional) | Save a custom preset, replacing one with the same name |
+| `POST /api/presets/show` | `name` | One preset with its questions |
+| `DELETE /api/presets/delete` | `name` | Delete a custom preset |
+
+Names are 1 to 64 characters of lowercase letters, digits, `-` and `_`. A built-in name can't be reused (422) or deleted (403), and an unknown name is a 404. Custom presets are stored next to the models, so every client of the server sees the same ones.
 
 ## Routers
 

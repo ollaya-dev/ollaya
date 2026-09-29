@@ -317,6 +317,60 @@ pub async fn create(client: &Client, name: &str, file: &Path) -> Result<()> {
     Ok(())
 }
 
+pub async fn preset_list(client: &Client) -> Result<()> {
+    let list = client.presets().await?;
+    let rows: Vec<Vec<String>> = list
+        .presets
+        .iter()
+        .map(|p| {
+            vec![
+                p.name.clone(),
+                if p.builtin { "built-in" } else { "custom" }.to_owned(),
+                p.questions.join(", "),
+                p.modified_at.map(render::ago).unwrap_or_default(),
+            ]
+        })
+        .collect();
+    print!(
+        "{}",
+        render::table(&["NAME", "KIND", "QUESTIONS", "MODIFIED"], &rows)
+    );
+    Ok(())
+}
+
+pub async fn preset_show(client: &Client, name: &str) -> Result<()> {
+    let p = client.show_preset(name).await?;
+    if let Some(d) = &p.description {
+        eprintln!("{}: {d}", p.name);
+    }
+    println!("{}", serde_json::to_string_pretty(&p.questions)?);
+    Ok(())
+}
+
+pub async fn preset_create(
+    client: &Client,
+    name: &str,
+    questions: &str,
+    description: Option<String>,
+) -> Result<()> {
+    let req = ollaya_api::CreatePresetRequest {
+        name: name.to_owned(),
+        questions: crate::run::resolve_questions(questions)?,
+        description,
+    };
+    client.create_preset(&req).await?;
+    eprintln!("Saved preset {name}. Use it with `ollaya run MODEL --preset {name}`.");
+    Ok(())
+}
+
+pub async fn preset_rm(client: &Client, names: &[String]) -> Result<()> {
+    for name in names {
+        client.delete_preset(name).await?;
+        println!("deleted preset '{name}'");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

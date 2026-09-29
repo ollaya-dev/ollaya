@@ -83,6 +83,9 @@ enum Command {
         #[arg(long, value_name = "ADDR", num_args = 0..=1, default_missing_value = "127.0.0.1:11436")]
         http: Option<String>,
     },
+    /// Manage presets: named question sets for `run --preset` and `/api/decide`
+    #[command(subcommand)]
+    Preset(PresetCommand),
     /// Create a model from a Modelfile
     Create {
         name: String,
@@ -284,6 +287,16 @@ async fn client_command(command: Command) -> Result<()> {
         } => commands::cp(&client, &source, &destination).await,
         Command::Stop { model: Some(model) } => commands::stop(&client, &model).await,
         Command::Create { name, file } => commands::create(&client, &name, &file).await,
+        Command::Preset(cmd) => match cmd {
+            PresetCommand::List => commands::preset_list(&client).await,
+            PresetCommand::Show { name } => commands::preset_show(&client, &name).await,
+            PresetCommand::Create {
+                name,
+                questions,
+                description,
+            } => commands::preset_create(&client, &name, &questions, description).await,
+            PresetCommand::Rm { names } => commands::preset_rm(&client, &names).await,
+        },
         Command::Serve
         | Command::Run(_)
         | Command::Runner { .. }
@@ -293,6 +306,30 @@ async fn client_command(command: Command) -> Result<()> {
             unreachable!("handled in main")
         }
     }
+}
+
+#[derive(Subcommand)]
+enum PresetCommand {
+    /// List built-in and custom presets
+    #[command(visible_alias = "ls")]
+    List,
+    /// Print a preset's questions (JSON)
+    Show { name: String },
+    /// Create or replace a custom preset
+    Create {
+        name: String,
+        /// The questions: a JSON file, `@file` (`@-` for stdin), or inline JSON starting with `{`
+        #[arg(long, value_name = "FILE|JSON")]
+        questions: String,
+        /// One line on what the preset decides
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Delete custom presets (built-in ones cannot be deleted)
+    Rm {
+        #[arg(required = true)]
+        names: Vec<String>,
+    },
 }
 
 #[cfg(test)]
@@ -409,7 +446,10 @@ mod tests {
             Cli::try_parse_from(std::iter::once("ollaya").chain(args.iter().copied())).is_err()
         };
         assert!(bad(&["run"]));
-        assert!(bad(&["run", "laya", "--preset", "nope"]));
+        // Any preset name parses: custom presets are resolved by the daemon at run time.
+        assert!(!bad(&["run", "laya", "--preset", "my-preset"]));
+        assert!(bad(&["preset", "rm"]));
+        assert!(bad(&["preset", "create", "x"]));
         assert!(bad(&["run", "laya", "--keepalive", "soon"]));
         assert!(bad(&["run", "laya", "--format", "yaml"]));
         assert!(bad(&["rm"]));

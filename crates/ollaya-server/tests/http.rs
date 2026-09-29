@@ -1168,6 +1168,75 @@ macro_rules! tests {
     };
 }
 
+async fn presets_create_show_decide_delete() {
+    let d = Daemon::laya().await;
+    let builtin = d.client.presets().await.unwrap().presets;
+    assert_eq!(builtin.len(), ollaya_api::presets::NAMES.len());
+    assert!(builtin.iter().all(|p| p.builtin));
+
+    let create = |name: &str| ollaya_api::CreatePresetRequest {
+        name: name.into(),
+        questions: serde_json::from_value(triage()).unwrap(),
+        description: Some("Ticket routing".into()),
+    };
+    d.client.create_preset(&create("my-triage")).await.unwrap();
+    // A built-in name, or one that is not a file name, is a 422 on `name`.
+    for bad in ["triage", "../x", "Mine"] {
+        let (status, body) = api_err(d.client.create_preset(&create(bad)).await.unwrap_err());
+        assert_eq!(
+            (status, body.detail.unwrap()[0].path()),
+            (422, "name".into()),
+            "{bad}"
+        );
+    }
+    let list = d.client.presets().await.unwrap().presets;
+    let mine = list.last().unwrap();
+    assert_eq!((mine.name.as_str(), mine.builtin), ("my-triage", false));
+    assert_eq!(mine.questions, ["department", "urgency", "refund"]);
+    assert!(mine.modified_at.is_some());
+    let shown = d.client.show_preset("my-triage").await.unwrap();
+    assert_eq!(shown.description.as_deref(), Some("Ticket routing"));
+    assert!(d.client.show_preset("triage").await.unwrap().builtin);
+
+    // A preset stands in for `questions`, and answers the same.
+    let state = json!("Hi, how much would we save by switching to the annual plan?");
+    let mut req = DecideRequest::new("laya", state.clone(), None);
+    req.preset = Some("my-triage".into());
+    let by_preset = d.client.decide(&req).await.unwrap();
+    let by_questions = d
+        .client
+        .decide(&DecideRequest::new(
+            "laya",
+            state.clone(),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&by_preset.answers).unwrap(),
+        serde_json::to_value(&by_questions.answers).unwrap()
+    );
+    let mut both = DecideRequest::new("laya", state.clone(), serde_json::from_value(triage()).ok());
+    both.preset = Some("my-triage".into());
+    assert_eq!(api_err(d.client.decide(&both).await.unwrap_err()).0, 422);
+    req.preset = Some("nope".into());
+    let (status, body) = api_err(d.client.decide(&req).await.unwrap_err());
+    assert_eq!((status, body.code), (404, ollaya_api::ErrorCode::NotFound));
+
+    let (status, _) = api_err(d.client.delete_preset("triage").await.unwrap_err());
+    assert_eq!(status, 403);
+    d.client.delete_preset("my-triage").await.unwrap();
+    assert_eq!(
+        api_err(d.client.delete_preset("my-triage").await.unwrap_err()).0,
+        404
+    );
+    assert_eq!(
+        d.client.presets().await.unwrap().presets.len(),
+        ollaya_api::presets::NAMES.len()
+    );
+    d.stop().await;
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("runner") {
@@ -1189,6 +1258,7 @@ fn main() {
         queue_bound_and_cancellation,
         pull_streams_ndjson,
         create_copy_delete,
+        presets_create_show_decide_delete,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mut passed, mut failed) = (0, Vec::new());

@@ -20,6 +20,7 @@ use crate::models::{
     CopyRequest, CreateRequest, DeleteRequest, ModelList, ProgressResponse, PsResponse,
     PullRequest, ShowRequest, ShowResponse, TagsResponse, VersionResponse,
 };
+use crate::presets::{CreatePresetRequest, PresetRequest, PresetResponse, PresetsResponse};
 
 pub const API_KEY_ENV: &str = "OLLAYA_API_KEY";
 
@@ -170,6 +171,36 @@ impl Client {
             destination: destination.to_owned(),
         };
         self.send(Method::POST, "/api/copy", Some(&req))
+            .await
+            .map(drop)
+    }
+
+    /// `GET /api/presets`.
+    pub async fn presets(&self) -> Result<PresetsResponse> {
+        self.get_json("/api/presets").await
+    }
+
+    /// `POST /api/presets/show`.
+    pub async fn show_preset(&self, name: &str) -> Result<PresetResponse> {
+        let req = PresetRequest {
+            name: name.to_owned(),
+        };
+        self.post_json("/api/presets/show", &req).await
+    }
+
+    /// `POST /api/presets/create`: create or replace a custom preset.
+    pub async fn create_preset(&self, req: &CreatePresetRequest) -> Result<()> {
+        self.send(Method::POST, "/api/presets/create", Some(req))
+            .await
+            .map(drop)
+    }
+
+    /// `DELETE /api/presets/delete`.
+    pub async fn delete_preset(&self, name: &str) -> Result<()> {
+        let req = PresetRequest {
+            name: name.to_owned(),
+        };
+        self.send(Method::DELETE, "/api/presets/delete", Some(&req))
             .await
             .map(drop)
     }

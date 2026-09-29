@@ -68,8 +68,9 @@ pub struct DecideParams {
     /// questions.
     #[serde(default)]
     pub questions: Option<Value>,
-    /// A built-in question set to use instead of `questions`: "triage", "email", "guard",
-    /// "moderation", "router" or "agent". Read ollaya://presets/<name> to see what each one asks.
+    /// A preset (a named question set) to use instead of `questions`: built-in "triage", "email",
+    /// "guard", "moderation", "router" or "agent", or a custom one saved with `ollaya preset
+    /// create`. Read ollaya://presets/<name> to see what each one asks.
     #[serde(default)]
     pub preset: Option<String>,
 }
@@ -109,12 +110,16 @@ noul, the probability that the statement is true. The response is exactly TypeSa
             (Some(q), None) => Some(q),
             (None, Some(name)) => match presets::get(name) {
                 Some(q) => Some(q),
-                None => {
-                    return Ok(tool_error(&format!(
-                        "unknown preset {name:?}; the presets are {}",
-                        presets::NAMES.join(", ")
-                    )));
-                }
+                None => match custom_preset(name).await {
+                    Some(q) => Some(q),
+                    None => {
+                        return Ok(tool_error(&format!(
+                            "unknown preset {name:?}; the built-in presets are {}, and \
+                             `ollaya preset list` shows the custom ones",
+                            presets::NAMES.join(", ")
+                        )));
+                    }
+                },
             },
             (None, None) => None,
         };
@@ -276,6 +281,11 @@ impl ServerHandler for OllayaMcp {
                 .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
         } else if let Some(q) = uri.strip_prefix(PRESETS_URI).and_then(presets::get) {
             q
+        } else if let Some(q) = match uri.strip_prefix(PRESETS_URI) {
+            Some(name) => custom_preset(name).await,
+            None => None,
+        } {
+            q
         } else {
             return Err(ErrorData::resource_not_found(
                 format!("no resource {uri}"),
@@ -336,4 +346,11 @@ pub async fn serve_http(addr: &str) -> anyhow::Result<()> {
         })
         .await?;
     Ok(())
+}
+
+/// A custom preset's questions from the daemon, or `None` if there is none (or no daemon).
+async fn custom_preset(name: &str) -> Option<Value> {
+    let client = connect().await.ok()?;
+    let p = client.show_preset(name).await.ok()?;
+    serde_json::to_value(p.questions).ok()
 }

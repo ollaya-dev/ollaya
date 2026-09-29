@@ -4,6 +4,7 @@ pub mod config;
 pub mod http;
 pub mod launch;
 pub mod models;
+pub mod presets;
 pub mod scheduler;
 pub mod service;
 mod views;
@@ -47,6 +48,12 @@ pub enum Error {
     Cancelled,
     #[error("corrupt model: {0}")]
     Corrupt(String),
+    /// No built-in or custom preset has this name.
+    #[error("preset {0:?} not found; list presets with GET /api/presets")]
+    PresetNotFound(String),
+    /// Built-in presets cannot be changed or deleted.
+    #[error("{0:?} is a built-in preset, which cannot be changed or deleted")]
+    BuiltinPreset(String),
     #[error(transparent)]
     Registry(#[from] ollaya_registry::Error),
 }

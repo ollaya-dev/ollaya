@@ -26,9 +26,9 @@ use indexmap::IndexMap;
 use ollaya_api::error::{Loc, ValidationIssue, body_loc};
 use ollaya_api::host::Host;
 use ollaya_api::{
-    DecideResponse, DoneReason, ErrorBody, ErrorCode, Extra, KeepAlive, ModelList,
-    ProgressResponse, PsResponse, Question, Questions, TagsResponse, Usage, VersionResponse,
-    validate,
+    DecideResponse, DoneReason, ErrorBody, ErrorCode, Extra, KeepAlive, ModelList, PresetResponse,
+    PresetsResponse, ProgressResponse, PsResponse, Question, Questions, TagsResponse, Usage,
+    VersionResponse, validate,
 };
 use ollaya_registry::{ModelName, Store};
 use tokio::net::{TcpListener, TcpStream};
@@ -101,6 +101,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/copy", post(copy))
         .route("/api/create", post(create))
         .route("/api/decide", post(decide))
+        .route("/api/presets", get(presets))
+        .route("/api/presets/create", post(create_preset))
+        .route("/api/presets/show", post(show_preset))
+        .route("/api/presets/delete", delete(delete_preset))
         .route("/api/push", post(reserved))
         .route("/api/blobs/{digest}", post(reserved).head(reserved))
         .route("/v1/systemone", post(systemone))
@@ -179,6 +183,8 @@ pub fn error_body(e: &Error, pulling: bool) -> ErrorBody {
         Error::Busy(n) => ErrorBody::operation_in_progress(n),
         Error::Cancelled => ErrorBody::new(ErrorCode::InferenceFailed, "request cancelled"),
         Error::Corrupt(m) => ErrorBody::new(ErrorCode::StorageError, format!("corrupt model: {m}")),
+        Error::PresetNotFound(_) => ErrorBody::new(ErrorCode::NotFound, e.to_string()),
+        Error::BuiltinPreset(_) => ErrorBody::new(ErrorCode::Forbidden, e.to_string()),
         Error::Registry(r) => match r {
             R::InvalidName(s) => ErrorBody::invalid_request(vec![ValidationIssue::model_name(
                 body_loc(&["model"]),
@@ -336,6 +342,38 @@ async fn copy(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<StatusCod
         .copy(&req.source, &req.destination)
         .map_err(|e| api_error(&e))?;
     Ok(StatusCode::OK)
+}
+
+async fn presets(State(s): State<Arc<AppState>>) -> ApiResult<Json<PresetsResponse>> {
+    let presets = s.ollaya.presets.list().map_err(|e| api_error(&e))?;
+    Ok(Json(PresetsResponse { presets }))
+}
+
+async fn create_preset(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<StatusCode> {
+    let req = parse(body, validate::create_preset_request).await?;
+    s.ollaya.presets.put(&req).map_err(|e| api_error(&e))?;
+    Ok(StatusCode::OK)
+}
+
+async fn show_preset(
+    State(s): State<Arc<AppState>>,
+    body: Body,
+) -> ApiResult<Json<PresetResponse>> {
+    let req = parse(body, validate::preset_request).await?;
+    match s.ollaya.presets.get(&req.name) {
+        Ok(Some(p)) => Ok(Json(p)),
+        Ok(None) => Err(api_error(&Error::PresetNotFound(req.name))),
+        Err(e) => Err(api_error(&e)),
+    }
+}
+
+async fn delete_preset(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<StatusCode> {
+    let req = parse(body, validate::preset_request).await?;
+    match s.ollaya.presets.delete(&req.name) {
+        Ok(true) => Ok(StatusCode::OK),
+        Ok(false) => Err(api_error(&Error::PresetNotFound(req.name))),
+        Err(e) => Err(api_error(&e)),
+    }
 }
 
 async fn reserved(uri: Uri) -> ApiError {
@@ -576,20 +614,26 @@ async fn decide(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Json<De
         }));
     };
 
+    // A preset stands in for `questions` (validation allows one or the other).
+    let questions = match &req.preset {
+        Some(name) => match s.ollaya.presets.get(name) {
+            Ok(Some(p)) => Some(p.questions),
+            Ok(None) => return Err(api_error(&Error::PresetNotFound(name.clone()))),
+            Err(e) => return Err(api_error(&e)),
+        },
+        None => req.questions.clone(),
+    };
     let input = DecideInput {
         model: req.model.clone(),
         state,
-        questions: req
-            .questions
-            .as_ref()
-            .map(ollaya_api::decide::engine_questions),
+        questions: questions.as_ref().map(ollaya_api::decide::engine_questions),
         images: req.images.clone(),
         keep_alive: req.keep_alive,
         cancel: None,
     };
     let out = run_decision(&s, input)
         .await
-        .map_err(|e| decision_error(&e, req.questions.as_ref()))?;
+        .map_err(|e| decision_error(&e, questions.as_ref()))?;
     let resp = views::decide_response(out, req.wants(Extra::Laya)).map_err(|e| api_error(&e))?;
     Ok(Json(resp))
 }

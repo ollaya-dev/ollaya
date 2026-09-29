@@ -34,6 +34,9 @@ pub use models::{
     LocalModel, ModelDetails, ModelList, ModelMetadata, ProgressResponse, PsResponse, PullRequest,
     RouterInfo, RunningModel, ShowRequest, ShowResponse, TagsResponse, VersionResponse,
 };
+pub use presets::{
+    CreatePresetRequest, PresetInfo, PresetRequest, PresetResponse, PresetsResponse,
+};
 
 /// Port the daemon listens on by default (Ollama's 11434, plus one).
 pub const DEFAULT_PORT: u16 = 11435;

@@ -33,8 +33,9 @@ pub struct RunArgs {
     /// An image file (PNG) to decide about, for vision models such as decider:2b-vision.
     #[arg(long, value_name = "FILE")]
     pub image: Option<std::path::PathBuf>,
-    /// A built-in question set: triage, email, guard, moderation, router, agent.
-    #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(presets::NAMES))]
+    /// A preset: built-in (triage, email, guard, moderation, router, agent) or custom
+    /// (`ollaya preset list`).
+    #[arg(long)]
     pub preset: Option<String>,
     /// Output format.
     #[arg(long, value_enum, default_value_t = Format::Text)]
@@ -86,7 +87,7 @@ fn is_inline_json(raw: &str) -> bool {
 
 /// A `--questions` value: `@file` (or `@-` for stdin), inline JSON (it starts with `{`), or
 /// otherwise a file path.
-fn resolve_questions(raw: &str) -> Result<Questions> {
+pub fn resolve_questions(raw: &str) -> Result<Questions> {
     if let Some(path) = raw.strip_prefix('@') {
         if path == "-" {
             let mut text = String::new();
@@ -111,6 +112,21 @@ fn preset(name: &str) -> Result<Questions> {
         );
     };
     Ok(serde_json::from_value(q)?)
+}
+
+/// A preset by name: built-in ones from this binary, custom ones from the daemon.
+async fn any_preset(client: &Client, name: &str) -> Result<Questions> {
+    if presets::is_builtin(name) {
+        return preset(name);
+    }
+    match client.show_preset(name).await {
+        Ok(p) => Ok(p.questions),
+        Err(e) if e.code() == Some(&ollaya_api::ErrorCode::NotFound) => bail!(
+            "unknown preset {name:?}; the built-in ones are {}, and `ollaya preset list` shows the custom ones",
+            presets::NAMES.join(", ")
+        ),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// The preset `ollaya run` uses for a model without built-in questions when neither
@@ -236,7 +252,10 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
         }
         Err(e) => return Err(e.into()),
     };
-    let questions = choose_questions(args, show.questions.is_some())?;
+    let questions = match (&args.questions, &args.preset) {
+        (None, Some(name)) if !presets::is_builtin(name) => Some(any_preset(&client, name).await?),
+        _ => choose_questions(args, show.questions.is_some())?,
+    };
     if uses_default_preset(args, show.questions.is_some()) {
         eprintln!(
             "{} has no built-in questions, so it answers the {DEFAULT_PRESET} preset. \
@@ -271,7 +290,7 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
 
 const HELP: &str = "Available commands:
   /set questions <file|@file|json>   Use the questions in a JSON file, or inline JSON
-  /preset <name>          Use a built-in question set (triage, email, guard, moderation, router, agent)
+  /preset <name>          Use a preset: built-in (triage, email, guard, moderation, router, agent) or custom
   /show                   Show the model and the current questions
   /clear                  Clear the screen
   /bye                    Exit
@@ -398,7 +417,7 @@ fn repl(rt: &Runtime, mut session: Session) -> Result<()> {
                 }
                 Err(e) => eprintln!("error: {e:#}"),
             },
-            Some(Command::Preset(name)) => match preset(&name) {
+            Some(Command::Preset(name)) => match rt.block_on(any_preset(&session.client, &name)) {
                 Ok(q) => {
                     session.questions = Some(q);
                     eprintln!("Set questions to the {name} preset.");

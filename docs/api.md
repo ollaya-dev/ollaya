@@ -47,6 +47,10 @@ through the matching type in `ollaya-api`, and request examples pass boundary va
 | `DELETE` | `/api/delete` | Remove a local model | no |
 | `POST` | `/api/copy` | Copy a local model to a new name | no |
 | `POST` | `/api/create` | Create a model from another one (Modelfile) | yes (default) |
+| `GET` | `/api/presets` | Built-in and custom presets | no |
+| `POST` | `/api/presets/create` | Create or replace a custom preset | no |
+| `POST` | `/api/presets/show` | One preset's questions | no |
+| `DELETE` | `/api/presets/delete` | Delete a custom preset | no |
 | `POST` | `/api/push` | Reserved: `501 NOT_IMPLEMENTED` | – |
 | `HEAD`, `POST` | `/api/blobs/:digest` | Reserved: `501 NOT_IMPLEMENTED` | – |
 | `POST` | `/v1/systemone` | TypeSafe System One, wire-identical | no |
@@ -491,6 +495,7 @@ The same endpoint loads and unloads models, as Ollama's `/api/generate` does: a 
 | `model` | string | yes | – | [§3](#3-model-names-and-resolution) |
 | `state` | string \| object \| array | no | – | As in [§5.1](#51-request-body-shared-by-the-decision-endpoints). Absent or `null`: a load or unload request. |
 | `questions` | object | with `state`, unless the model has embedded questions | the model's embedded questions | [§5.2](#52-question-schema). Not allowed without `state` (`missing` issue on `state`). |
+| `preset` | string | no | – | A preset's name ([§7.11](#711-presets)), built-in or custom, in place of `questions`: giving both is a `value_error` issue on `preset`, and it needs `state`. An unknown name is `404 NOT_FOUND`. Ollaya-only. |
 | `images` | array of string | no | `[]` | Images for a vision model (`decider:2b-vision`), as Ollama's `images`: base64, or a base64 `data:` URL. Each item must be a non-empty string (`string_type`, `string_too_short`); not allowed without `state`. The runner decodes them: a vision model reads one PNG image per request, and anything else (another format, more than one image, an image over its size limit, a model that reads no images) is a `422 INVALID_REQUEST` with the reason. |
 | `keep_alive` | string \| number | no | `OLLAYA_KEEP_ALIVE` (`5m`) | [§6](#6-keep_alive) |
 | `extras` | array of string | no | `[]` | Closed set: `"laya"`. Each value adds a same-named object to every answer. Unknown values are `enum` issues. |
@@ -1150,7 +1155,91 @@ curl http://localhost:11435/api/ps
 
 Safe to retry.
 
-### 7.11 Reserved endpoints
+### 7.11 Presets
+
+A preset is a named question set: `/api/decide` takes `preset` in place of `questions`, and
+`ollaya run --preset` takes its name. Six presets are built in (`triage`, `email`, `guard`,
+`moderation`, `router`, `agent`); they cannot be changed or deleted. Custom presets live in the
+model store (`$OLLAYA_MODELS/presets/<name>.json`), so every client of the daemon sees the same
+ones. A custom preset is not a model: unlike a Modelfile's `QUESTIONS`, it works with any model.
+
+Names are 1 to 64 characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit. A bad
+name, or a built-in one on create, is a `422 INVALID_REQUEST` issue on `name`.
+
+**`GET /api/presets`** lists the built-in presets in their fixed order, then the custom ones by name.
+`questions` holds the question ids; `modified_at` is set for custom presets only.
+
+<!-- json: PresetsResponse -->
+```json
+{
+  "presets": [
+    {
+      "name": "triage",
+      "builtin": true,
+      "description": "Support tickets: intent, urgency, frustration, refund request, churn risk",
+      "questions": ["intent", "is_urgent", "frustration", "refund_requested", "churn_risk"]
+    },
+    {
+      "name": "billing-check",
+      "builtin": false,
+      "description": "Is this about billing, and how upset is the customer?",
+      "questions": ["billing", "tone"],
+      "modified_at": "2026-09-30T01:12:44.108Z"
+    }
+  ]
+}
+```
+
+**`POST /api/presets/create`** creates a custom preset, or replaces the one with that name.
+`questions` follows [§5.2](#52-question-schema); `description` is optional. Response: `200` with an
+empty body.
+
+<!-- curl: CreatePresetRequest -->
+```shell
+curl http://localhost:11435/api/presets/create -d '{
+  "name": "billing-check",
+  "description": "Is this about billing, and how upset is the customer?",
+  "questions": {
+    "billing": {"type": "noul", "instructions": "The message is about a charge, an invoice or a refund."},
+    "tone": {"type": "choice", "instructions": "How does the customer sound?", "criteria": {"calm": null, "annoyed": null, "angry": null}}
+  }
+}'
+```
+
+**`POST /api/presets/show`** returns one preset, built-in or custom, with its questions.
+
+<!-- curl: PresetRequest -->
+```shell
+curl http://localhost:11435/api/presets/show -d '{"name": "billing-check"}'
+```
+
+<!-- json: PresetResponse -->
+```json
+{
+  "name": "billing-check",
+  "builtin": false,
+  "description": "Is this about billing, and how upset is the customer?",
+  "questions": {
+    "billing": {"type": "noul", "instructions": "The message is about a charge, an invoice or a refund."},
+    "tone": {"type": "choice", "instructions": "How does the customer sound?", "criteria": {"calm": null, "annoyed": null, "angry": null}}
+  },
+  "modified_at": "2026-09-30T01:12:44.108Z"
+}
+```
+
+**`DELETE /api/presets/delete`** deletes a custom preset: `200` with an empty body.
+
+<!-- curl: PresetRequest -->
+```shell
+curl -X DELETE http://localhost:11435/api/presets/delete -d '{"name": "billing-check"}'
+```
+
+Errors: `404 NOT_FOUND` for a name no preset has (show, delete, and `preset` on `/api/decide`),
+`403 FORBIDDEN` for deleting a built-in preset, `422 INVALID_REQUEST`, `500 STORAGE_ERROR`.
+Create is idempotent (the same request leaves the same file); delete behaves like
+[`/api/delete`](#77-delete-apidelete): a repeat gets `404`.
+
+### 7.12 Reserved endpoints
 
 `POST /api/push`, `HEAD /api/blobs/:digest` and `POST /api/blobs/:digest` return
 `501 NOT_IMPLEMENTED`. The registry is static (manifests are files published with the site), so

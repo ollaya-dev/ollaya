@@ -25,6 +25,7 @@ use crate::models::{
     CalibrationSpec, CopyRequest, CreateParameters, CreateRequest, DeleteRequest, License,
     PullRequest, ShowRequest,
 };
+use crate::presets::{CreatePresetRequest, PresetRequest};
 use crate::{
     MAX_BODY_BYTES, MAX_CHOICE_OPTIONS, MAX_QUESTIONS, MAX_SCORE_LEVELS, MIN_CHOICE_OPTIONS,
     MIN_QUESTIONS, MIN_SCORE_LEVELS,
@@ -73,6 +74,22 @@ pub fn decide_request(mut obj: Body) -> Result<DecideRequest, Issues> {
         }
         None => None,
     };
+    let preset = match get(&obj, "preset") {
+        None => None,
+        Some(v) => {
+            if !has_state {
+                issues.push(ValidationIssue::missing(body_loc(&["state"])));
+            }
+            if get(&obj, "questions").is_some() {
+                issues.push(ValidationIssue::new(
+                    body_loc(&["preset"]),
+                    "value_error",
+                    "give either 'questions' or 'preset', not both",
+                ));
+            }
+            preset_name(Some(v), body_loc(&["preset"]), &mut issues)
+        }
+    };
     let keep_alive = match get(&obj, "keep_alive") {
         None => None,
         Some(v) => match KeepAlive::from_json(v) {
@@ -108,10 +125,83 @@ pub fn decide_request(mut obj: Body) -> Result<DecideRequest, Issues> {
         model,
         state: take(&mut obj, "state"),
         questions,
+        preset,
         images,
         keep_alive,
         extras,
     })
+}
+
+/// A preset name: a string that is a built-in preset's name or a valid custom one.
+fn preset_name(value: Option<&Value>, loc: Vec<Loc>, issues: &mut Issues) -> Option<String> {
+    match value {
+        None => {
+            issues.push(ValidationIssue::missing(loc));
+            None
+        }
+        Some(Value::String(s)) if crate::presets::valid_name(s) => Some(s.clone()),
+        Some(Value::String(_)) => {
+            issues.push(ValidationIssue::new(
+                loc,
+                "value_error",
+                "a preset name is 1 to 64 characters of a-z, 0-9, '-' and '_', starting with a \
+                 letter or digit",
+            ));
+            None
+        }
+        Some(_) => {
+            issues.push(ValidationIssue::wrong_type(loc, "string_type"));
+            None
+        }
+    }
+}
+
+/// `POST /api/presets/create`.
+pub fn create_preset_request(obj: Body) -> Result<CreatePresetRequest, Issues> {
+    let mut issues = Issues::new();
+    let name = preset_name(get(&obj, "name"), body_loc(&["name"]), &mut issues);
+    if name.as_deref().is_some_and(crate::presets::is_builtin) {
+        issues.push(ValidationIssue::new(
+            body_loc(&["name"]),
+            "value_error",
+            "a built-in preset has this name; choose another",
+        ));
+    }
+    let questions = match get(&obj, "questions") {
+        None => {
+            issues.push(ValidationIssue::missing(body_loc(&["questions"])));
+            None
+        }
+        Some(v) => questions(v, body_loc(&["questions"]), &mut issues),
+    };
+    let description = match get(&obj, "description") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            issues.push(ValidationIssue::wrong_type(
+                body_loc(&["description"]),
+                "string_type",
+            ));
+            None
+        }
+    };
+    match (name, questions, issues.is_empty()) {
+        (Some(name), Some(questions), true) => Ok(CreatePresetRequest {
+            name,
+            questions,
+            description,
+        }),
+        _ => Err(issues),
+    }
+}
+
+/// `POST /api/presets/show` and `DELETE /api/presets/delete`.
+pub fn preset_request(obj: Body) -> Result<PresetRequest, Issues> {
+    let mut issues = Issues::new();
+    match preset_name(get(&obj, "name"), body_loc(&["name"]), &mut issues) {
+        Some(name) => Ok(PresetRequest { name }),
+        None => Err(issues),
+    }
 }
 
 /// `POST /v1/systemone` and `POST /v1/decisions`. Native fields are ignored.

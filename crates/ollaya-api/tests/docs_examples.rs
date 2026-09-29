@@ -11,9 +11,10 @@
 use ollaya_api::decide::{Answer, LayaExtra};
 use ollaya_api::validate::{self, Body, Issues};
 use ollaya_api::{
-    CopyRequest, CreateRequest, DecideRequest, DecideResponse, DeleteRequest, ErrorBody, ErrorCode,
-    ModelList, ProgressResponse, PsResponse, PullRequest, RouterInfo, ShowResponse,
-    SystemOneRequest, SystemOneResponse, TagsResponse, VersionResponse,
+    CopyRequest, CreatePresetRequest, CreateRequest, DecideRequest, DecideResponse, DeleteRequest,
+    ErrorBody, ErrorCode, ModelList, PresetRequest, PresetResponse, PresetsResponse,
+    ProgressResponse, PsResponse, PullRequest, RouterInfo, ShowResponse, SystemOneRequest,
+    SystemOneResponse, TagsResponse, VersionResponse,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -235,6 +236,8 @@ fn every_example_matches_the_contract() {
             ("json", "RouterInfo") => drop(exact::<RouterInfo>(&ex.text, &ctx)),
             ("json", "PsResponse") => drop(exact::<PsResponse>(&ex.text, &ctx)),
             ("json", "ModelList") => drop(exact::<ModelList>(&ex.text, &ctx)),
+            ("json", "PresetsResponse") => drop(exact::<PresetsResponse>(&ex.text, &ctx)),
+            ("json", "PresetResponse") => drop(exact::<PresetResponse>(&ex.text, &ctx)),
             ("json", "ProgressResponse") => drop(exact::<ProgressResponse>(&ex.text, &ctx)),
             ("ndjson", "ProgressResponse") => {
                 let lines: Vec<&str> = ex.text.lines().collect();
@@ -261,6 +264,10 @@ fn every_example_matches_the_contract() {
                     "DeleteRequest" => request::<DeleteRequest>(ex, validate::delete_request),
                     "CopyRequest" => request::<CopyRequest>(ex, validate::copy_request),
                     "CreateRequest" => request::<CreateRequest>(ex, validate::create_request),
+                    "CreatePresetRequest" => {
+                        request::<CreatePresetRequest>(ex, validate::create_preset_request)
+                    }
+                    "PresetRequest" => request::<PresetRequest>(ex, validate::preset_request),
                     other => panic!("{ctx}: unknown request type {other}"),
                 };
                 if let Some(e) = err {

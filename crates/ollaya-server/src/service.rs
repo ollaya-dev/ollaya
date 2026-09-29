@@ -13,6 +13,7 @@ use tokio::sync::broadcast;
 
 use crate::Error;
 use crate::models::{Loadable, Resolved, resolve, resolve_entry};
+use crate::presets::PresetStore;
 use crate::scheduler::{KeepAlive, RunningInfo, Scheduler};
 
 /// TypeSafe's limits, enforced for every model.
@@ -23,6 +24,8 @@ pub struct Ollaya {
     pub store: Store,
     puller: Puller,
     pub scheduler: Arc<Scheduler>,
+    /// Custom presets, in the model store.
+    pub presets: PresetStore,
     /// In-flight pulls by model name: a second pull of the same model joins the first.
     pulls: Mutex<HashMap<String, broadcast::Sender<PullEvent>>>,
     /// Model names a create is writing. Lock order: `pulls`, then `creating`.
@@ -102,6 +105,7 @@ impl Ollaya {
     pub fn new(store: Store, scheduler: Arc<Scheduler>) -> Result<Arc<Self>, Error> {
         let puller = Puller::new(store.clone())?.with_check(scheduler.run_check());
         Ok(Arc::new(Ollaya {
+            presets: PresetStore::new(store.root()),
             store,
             puller,
             scheduler,

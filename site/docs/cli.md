@@ -49,7 +49,7 @@ ollaya run laya --preset triage "Your app crashed during checkout and I was char
 
 | Flag | Effect |
 |---|---|
-| `--preset NAME` | Use a built-in question set: `triage`, `email`, `guard`, `moderation`, `router` or `agent` |
+| `--preset NAME` | Use a preset: built-in (`triage`, `email`, `guard`, `moderation`, `router` or `agent`) or one you saved with [`ollaya preset create`](#ollaya-preset) |
 | `--questions FILE\|@FILE\|JSON` | Use these questions (question id → question), overriding the model's own: a file path, `@file` (`@-` for stdin), or inline JSON starting with `{` |
 | `--format text\|json` | `text` (default) prints the table; `json` prints the full [`/api/decide`](/docs/api#decide) response |
 | `--keepalive DURATION` | How long to keep the model loaded afterwards: `5m`, `1h`, `0` (unload now), `-1` (keep loaded) |
@@ -157,6 +157,24 @@ ollaya rm my-guardrail
 ```
 
 `rm` also deletes the blobs no other model uses. Removing a router keeps the models it routes to. `cp` overwrites an existing destination.
+
+## ollaya preset
+
+A preset is a named question set you can reuse with any model: `ollaya run MODEL --preset NAME`, or `"preset": "NAME"` on [`/api/decide`](/docs/api#presets). Six are built in. Save your own:
+
+```shell
+ollaya preset create billing-check --questions billing.json --description "Billing, and how upset the customer is"
+ollaya run winnow:e4b --preset billing-check "I was charged twice this month."
+```
+
+| Command | Effect |
+|---|---|
+| `ollaya preset list` | Built-in and custom presets, with their question ids |
+| `ollaya preset show NAME` | A preset's questions, as JSON |
+| `ollaya preset create NAME --questions FILE\|@FILE\|JSON [--description TEXT]` | Save a custom preset, replacing one with the same name. `--questions` takes the same forms as in `ollaya run` |
+| `ollaya preset rm NAME...` | Delete custom presets. Built-in presets cannot be deleted |
+
+Names are lowercase letters, digits, `-` and `_`. Custom presets are stored by the server (in `presets/` next to the models), so the CLI, the API and the MCP server all see them. A preset differs from a model made with a Modelfile's `QUESTIONS`: it isn't bound to one model, and it copies nothing.
 
 ## ollaya create
 
