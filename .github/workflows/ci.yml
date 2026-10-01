@@ -95,8 +95,13 @@ jobs:
           ls -l target/release/ollaya target/release/mlx.metallib
 
   desktop:
-    name: Desktop app (typecheck, clippy)
-    runs-on: ubuntu-24.04
+    name: Desktop app on ${{ matrix.os }} (typecheck, clippy)
+    # macOS too: the menu bar (src-tauri/src/tray.rs) is compiled only there.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -114,6 +119,7 @@ jobs:
         with:
           workspaces: desktop/src-tauri -> target
       - name: Linux webview dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
@@ -124,7 +130,7 @@ jobs:
         working-directory: desktop/src-tauri
         run: |
           # Tauri checks that the bundled engine exists; a placeholder is enough for clippy.
-          mkdir -p binaries && touch binaries/ollaya-x86_64-unknown-linux-gnu
+          mkdir -p binaries && touch "binaries/ollaya-$(rustc -vV | sed -n 's/^host: //p')"
           cargo fmt --check
           cargo clippy --all-targets --locked -- -D warnings
 

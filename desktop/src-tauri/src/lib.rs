@@ -27,10 +27,15 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent};
 /// Where the model library is listed: the website's search index.
 const LIBRARY_URL: &str = "https://ollaya.dev/search.json";
 
+/// Where a newer release is downloaded (the page picks the right installer for this system).
+const DOWNLOAD_URL: &str = "https://ollaya.dev/download";
+
 #[derive(Default)]
 struct AppState {
     /// This app started the server, so it stops it when it quits.
     started_server: AtomicBool,
+    /// The last release check: when, and the newer version it found (`None`: up to date).
+    release: Mutex<Option<(Instant, Option<String>)>>,
     /// Downloads in progress: model → (bytes done, bytes in total).
     pulling: Mutex<HashMap<String, (u64, u64)>>,
     /// Wakes the menu bar to redraw now rather than at its next poll.
@@ -62,8 +67,10 @@ struct PullProgress {
 
 #[derive(Serialize)]
 struct Preset {
-    name: &'static str,
+    name: String,
     questions: Value,
+    /// Built into Ollaya, as against one saved with `ollaya preset create` (0.8.0 and newer).
+    builtin: bool,
 }
 
 fn client() -> Result<Client, String> {
@@ -91,6 +98,85 @@ fn ollaya_command() -> std::process::Command {
     #[cfg(windows)]
     std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
     cmd
+}
+
+/// A newer Ollaya release than this app, if there is one. GitHub redirects `/releases/latest` to
+/// `/releases/tag/v<version>`, which `ollaya update` and the install scripts read too: no API
+/// call and no rate limit. Checked at most every six hours; a failed check says nothing.
+async fn newer_release(app: &AppHandle) -> Option<String> {
+    let state = app.state::<AppState>();
+    if let Some((at, found)) = state.release.lock().expect("release lock").clone()
+        && at.elapsed() < Duration::from_secs(6 * 3600)
+    {
+        return found;
+    }
+    let found = latest_release()
+        .await
+        .filter(|v| newer(v, env!("CARGO_PKG_VERSION")));
+    *state.release.lock().expect("release lock") = Some((Instant::now(), found.clone()));
+    found
+}
+
+async fn latest_release() -> Option<String> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(concat!("ollaya-desktop/", env!("CARGO_PKG_VERSION")))
+        .timeout(Duration::from_secs(10))
+        .build()
+        .ok()?;
+    let resp = client
+        .head("https://github.com/ollaya-dev/ollaya/releases/latest")
+        .send()
+        .await
+        .ok()?;
+    let location = resp
+        .headers()
+        .get(reqwest::header::LOCATION)?
+        .to_str()
+        .ok()?;
+    let (_, tag) = location.rsplit_once("/releases/tag/")?;
+    Some(tag.trim_start_matches('v').to_owned())
+}
+
+/// Whether version `a` is newer than `b`, comparing `major.minor.patch` as numbers.
+fn newer(a: &str, b: &str) -> bool {
+    let parse = |s: &str| -> Option<Vec<u64>> {
+        s.split(['-', '+'])
+            .next()?
+            .split('.')
+            .map(|n| n.parse().ok())
+            .collect()
+    };
+    matches!((parse(a), parse(b)), (Some(x), Some(y)) if x > y)
+}
+
+/// Open `url` in the default browser.
+fn open_url(url: &str) {
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(windows)]
+    let _ = windows_start(url);
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+}
+
+#[cfg(windows)]
+fn windows_start(url: &str) -> std::io::Result<std::process::Child> {
+    let mut cmd = std::process::Command::new("cmd");
+    cmd.args(["/C", "start", "", url]);
+    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
+    cmd.spawn()
+}
+
+/// The newer release the window offers, if any.
+#[tauri::command]
+async fn update_available(app: AppHandle) -> Option<String> {
+    newer_release(&app).await
+}
+
+#[tauri::command]
+fn open_download() {
+    open_url(DOWNLOAD_URL);
 }
 
 async fn status_now() -> Status {
@@ -324,15 +410,32 @@ async fn remove(model: String) -> Result<(), String> {
     client()?.delete(&model).await.map_err(|e| e.to_string())
 }
 
+/// The built-in presets, then the custom ones the server has saved (`/api/presets`). A server
+/// older than 0.8.0 has no custom presets, and the built-in ones are listed alone.
 #[tauri::command]
-fn preset_list() -> Vec<Preset> {
-    presets::NAMES
+async fn preset_list() -> Vec<Preset> {
+    let mut list: Vec<Preset> = presets::NAMES
         .iter()
         .map(|&name| Preset {
-            name,
+            name: name.to_owned(),
             questions: presets::get(name).unwrap_or(Value::Null),
+            builtin: true,
         })
-        .collect()
+        .collect();
+    let Ok(c) = client() else { return list };
+    let Ok(saved) = c.presets().await else {
+        return list;
+    };
+    for p in saved.presets.into_iter().filter(|p| !p.builtin) {
+        if let Ok(full) = c.show_preset(&p.name).await {
+            list.push(Preset {
+                name: full.name,
+                questions: serde_json::to_value(full.questions).unwrap_or(Value::Null),
+                builtin: false,
+            });
+        }
+    }
+    list
 }
 
 /// The questions `model` asks by itself (`/api/show`'s `questions`, from the manifest's questions
@@ -373,16 +476,24 @@ async fn decide(
     preset: Option<String>,
     questions: Option<String>,
 ) -> Result<DecideResponse, String> {
-    let questions = request_questions(preset.as_deref(), questions.as_deref())?;
+    // A built-in preset's questions are sent as questions, so any server answers them; a custom
+    // preset lives on the server, which resolves it by name (`preset` on /api/decide).
+    let custom = preset
+        .as_deref()
+        .filter(|p| presets::get(p).is_none())
+        .map(str::to_owned);
+    let questions = match custom {
+        Some(_) => None,
+        None => request_questions(preset.as_deref(), questions.as_deref())?,
+    };
     let trimmed = state.trim();
     let state = match serde_json::from_str::<Value>(trimmed) {
         Ok(v @ (Value::Object(_) | Value::Array(_))) if trimmed.starts_with(['{', '[']) => v,
         _ => Value::String(state),
     };
-    client()?
-        .decide(&DecideRequest::new(model, state, questions))
-        .await
-        .map_err(|e| e.to_string())
+    let mut request = DecideRequest::new(model, state, questions);
+    request.preset = custom;
+    client()?.decide(&request).await.map_err(|e| e.to_string())
 }
 
 pub fn run() {
@@ -418,6 +529,8 @@ pub fn run() {
             remove,
             preset_list,
             builtin_questions,
+            update_available,
+            open_download,
             decide
         ])
         .build(tauri::generate_context!())
@@ -438,6 +551,15 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn newer_compares_versions_as_numbers() {
+        assert!(newer("0.8.1", "0.8.0"));
+        assert!(newer("0.10.0", "0.9.9"));
+        assert!(!newer("0.8.0", "0.8.0"));
+        assert!(!newer("0.7.5", "0.8.0"));
+        assert!(!newer("garbage", "0.8.0"));
+    }
 
     #[test]
     fn questions_come_from_a_preset_the_custom_box_or_the_model() {

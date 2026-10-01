@@ -26,7 +26,8 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{ActivationPolicy, AppHandle, Manager, Wry};
 
 use crate::{
-    AppState, client, library_now, pull_now, start_server_now, status_now, stop_server_now,
+    AppState, DOWNLOAD_URL, client, library_now, newer_release, open_url, pull_now,
+    start_server_now, status_now, stop_server_now,
 };
 
 const TRAY: &str = "ollaya";
@@ -47,6 +48,8 @@ struct Snapshot {
     /// Downloads in progress: (model, percent).
     pulling: Vec<(String, u32)>,
     open_at_login: bool,
+    /// A newer release than this app.
+    update: Option<String>,
 }
 
 impl Snapshot {
@@ -58,6 +61,7 @@ impl Snapshot {
             && self.url == other.url
             && self.installed == other.installed
             && self.available == other.available
+            && self.update == other.update
     }
 }
 
@@ -151,6 +155,7 @@ async fn snapshot(app: &AppHandle, library: &[String]) -> Snapshot {
         version: status.version.unwrap_or_default(),
         url: status.url,
         open_at_login: login_item().exists(),
+        update: newer_release(app).await,
         ..Default::default()
     };
     if s.running
@@ -336,9 +341,16 @@ fn build_menu(app: &AppHandle, s: &Snapshot) -> tauri::Result<(Menu<Wry>, Items)
     let login = CheckMenuItemBuilder::with_id("login", "Open at Login")
         .checked(s.open_at_login)
         .build(app)?;
+    menu = menu.item(&models.build()?).separator();
+    if let Some(version) = &s.update {
+        menu = menu
+            .item(
+                &MenuItemBuilder::with_id("update", format!("Download Ollaya {version}…"))
+                    .build(app)?,
+            )
+            .separator();
+    }
     menu = menu
-        .item(&models.build()?)
-        .separator()
         .item(
             &MenuItemBuilder::with_id("open", "Open Ollaya…")
                 .accelerator("CmdOrCtrl+O")
@@ -369,6 +381,7 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
             }
             "copy-url" => copy(&status_now().await.url),
             "open" => show_window(&app),
+            "update" => open_url(DOWNLOAD_URL),
             "login" => set_open_at_login(!login_item().exists()),
             other => {
                 if let Some(model) = other.strip_prefix("model:") {

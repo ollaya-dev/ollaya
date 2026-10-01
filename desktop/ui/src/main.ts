@@ -44,6 +44,8 @@ const state = {
   status: null as Status | null,
   statusBusy: false,
   statusError: '',
+  /** A newer Ollaya release than this app. */
+  update: null as string | null,
   library: [] as LibraryModel[],
   libraryError: '',
   installed: new Set<string>(),
@@ -236,6 +238,17 @@ function header(): HTMLElement {
       'div',
       { class: 'flex items-center gap-3' },
       state.statusError ? h('span', { class: 'max-w-80 truncate text-xs text-bad', title: state.statusError }, state.statusError) : null,
+      state.update
+        ? h(
+            'button',
+            {
+              class: 'rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-fg hover:bg-fill',
+              title: 'Opens the download page',
+              onClick: () => void backend.openDownload(),
+            },
+            `Ollaya ${state.update} is available`,
+          )
+        : null,
       h(
         'span',
         { class: 'flex items-center gap-2 text-[13px] text-muted' },
@@ -410,7 +423,7 @@ function runPanel(m: LibraryModel): HTMLElement {
               h(
                 'select',
                 { class: selectCls, onChange: (e) => ((state.preset = (e.target as HTMLSelectElement).value), render()) },
-                ...state.presets.map((p) => option(p.name, `${p.name} preset`, p.name === state.preset)),
+                ...state.presets.map((p) => option(p.name, p.builtin ? `${p.name} preset` : `${p.name} (your preset)`, p.name === state.preset)),
                 option('custom', 'Custom JSON', state.preset === 'custom'),
               ),
             )
@@ -530,6 +543,10 @@ async function boot() {
   render()
   // Like Ollama's app: the server runs while the app is open.
   if (!state.status?.running) await toggleServer()
+  // Custom presets live on the server, which may only have started just now.
+  state.presets = await backend.presets().catch(() => state.presets)
+  state.update = await backend.updateAvailable().catch(() => null)
+  render()
   setInterval(() => void refreshStatus(), 5000)
   // Preview only (npm run preview): #result shows a finished run, #pull a download in progress.
   if (__MOCK__ && location.hash === '#result') {

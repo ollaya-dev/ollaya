@@ -3,6 +3,17 @@ import type { Backend, DecideResponse, LibraryModel, LocalModel, PullProgress, Q
 
 const library: LibraryModel[] = [
   {
+    name: 'winnow',
+    description:
+      "Decision models by EldanRing, fine-tuned from Google's Gemma 4 and published as GGUF. Winnow reads the answer labels' logits after its own prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Apple silicon or the CPU.",
+    caps: ['decision', 'multilingual', 'fine-tuned', 'gguf'],
+    tags: [
+      { name: 'winnow:latest', summary: 'Same as winnow:12b.' },
+      { name: 'winnow:e4b', summary: 'Gemma 4 E4B, Q8_0: the recommended model, close to Jev in about 90 ms on a GPU.' },
+      { name: 'winnow:12b', summary: 'Gemma 4 12B, Q8_0.' },
+    ],
+  },
+  {
     name: 'laya',
     description:
       'Open decision models from Convai Innovations. Typed, calibrated answers to choice, score and yes/no questions in a single forward pass, in English and 100+ languages.',
@@ -17,7 +28,7 @@ const library: LibraryModel[] = [
   },
   {
     name: 'decider',
-    description: 'Decoder decision models by Mapika on Qwen3.5. The most accurate open decision model Ollaya ships.',
+    description: 'Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass.',
     caps: ['decoder'],
     tags: [
       { name: 'decider:latest', summary: 'decider:2b.' },
@@ -75,9 +86,14 @@ export function mock(): Backend {
     remove: async (model) => {
       local = local.filter((m) => m.name !== model)
     },
-    presets: async () =>
-      ['triage', 'email', 'guard', 'moderation', 'router', 'agent'].map((name) => ({ name, questions: { intent: { type: 'choice' } } })),
+    presets: async () => [
+      ...['triage', 'email', 'guard', 'moderation', 'router', 'agent'].map((name) => ({ name, questions: { intent: { type: 'choice' } }, builtin: true })),
+      { name: 'billing-check', questions: { billing: { type: 'noul' } }, builtin: false },
+    ],
     builtinQuestions: async (model) => builtin(model),
+    // Preview only: #update shows the notice of a newer release.
+    updateAvailable: async () => (location.hash === '#update' ? '0.9.0' : null),
+    openDownload: async () => {},
     decide: async (model, _state, preset, questions): Promise<DecideResponse> => {
       await wait(200)
       // As the server (422): a model with built-in questions refuses any other, and a model
