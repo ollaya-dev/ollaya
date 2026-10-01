@@ -7,6 +7,8 @@ export interface Status {
   running: boolean
   version: string | null
   url: string
+  /** Where the server this app started runs models (Windows and Linux): "GPU" or "CPU only". */
+  device: string | null
 }
 
 export interface LibraryTag {

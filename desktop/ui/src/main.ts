@@ -221,6 +221,14 @@ const btnPrimary =
 const btnSecondary =
   'inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-line-strong px-4 text-[13px] font-medium text-fg hover:bg-fill disabled:opacity-50'
 
+/** What the server's device means, for the status line's tooltip (#44). */
+function deviceHint(device: string | null): string {
+  if (device === 'CPU only')
+    return "The app's built-in server runs every model on the CPU. Install the command-line Ollaya with its GPU pack (install.ps1 or install.sh) and the app starts the server from there, on your NVIDIA GPU."
+  if (device === 'GPU') return 'The server runs from the command-line install, which has the GPU pack.'
+  return ''
+}
+
 function header(): HTMLElement {
   const s = state.status
   const running = !!s?.running
@@ -251,9 +259,9 @@ function header(): HTMLElement {
         : null,
       h(
         'span',
-        { class: 'flex items-center gap-2 text-[13px] text-muted' },
+        { class: 'flex items-center gap-2 text-[13px] text-muted', title: running ? deviceHint(s?.device ?? null) : '' },
         h('span', { class: `size-2 rounded-full ${running ? 'bg-ok' : 'bg-faint'}` }),
-        s === null ? 'Checking…' : running ? `Running · ${s.version ?? ''}` : 'Stopped',
+        s === null ? 'Checking…' : running ? ['Running', s.version, s.device].filter(Boolean).join(' · ') : 'Stopped',
       ),
       h(
         'button',

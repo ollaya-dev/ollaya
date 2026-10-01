@@ -59,7 +59,7 @@ const guardQuestions: Questions = {
 const builtin = (model: string) => (model.startsWith('qwen3guard') ? guardQuestions : null)
 
 export function mock(): Backend {
-  let status: Status = { running: true, version: '0.8.0', url: 'http://127.0.0.1:11435' }
+  let status: Status = { running: true, version: '0.8.0', url: 'http://127.0.0.1:11435', device: null }
   let local: LocalModel[] = [
     { name: 'laya:latest', size: 11_000 },
     { name: 'laya:en', size: 854_000_000 },

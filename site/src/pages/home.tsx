@@ -818,7 +818,7 @@ function Platforms() {
         </a>
         <p class="max-w-md text-[13px] text-muted sm:text-right">
           NVIDIA GPUs need driver R525 or newer; the install scripts fetch the CUDA libraries only when they find one.
-          On a Mac, laya and nli run on the Apple GPU through MLX; other models, AMD and Intel GPUs, and the Windows and Linux desktop apps use the CPU.
+          On a Mac, laya and nli run on the Apple GPU through MLX; other models, AMD and Intel GPUs, and the Windows and Linux desktop apps without the command line installed use the CPU.
         </p>
       </div>
     </Section>
