@@ -1644,6 +1644,9 @@ These are the variables that change API behaviour.
 | `OLLAYA_LOAD_TIMEOUT` | `5m` | Load deadline before `500 MODEL_LOAD_FAILED` |
 | `OLLAYA_MODELS` | `~/.ollaya/models` | Model store |
 | `OLLAYA_REGISTRY` | `ollaya.dev` | Default registry host in names |
+| `OLLAYA_HF_ENDPOINT` | unset | Base URL of a Hugging Face endpoint (mirror or enterprise instance) that weight downloads are fetched from instead of `huggingface.co`; falls back to `HF_ENDPOINT`. Blobs are still verified by sha256, so a mirror serving identical bytes cannot corrupt a model. |
+| `OLLAYA_HF_TOKEN` | unset | Hugging Face access token, sent as `Authorization: Bearer` only on weight downloads from a Hugging Face repository (never to the registry or a self-hosted blob host); falls back to `HF_TOKEN`. Needed for private/gated repos. |
+
 | `OLLAYA_LOG` | `info` | Log levels, a [tracing filter](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html): `debug` logs every request with its status and duration |
 | `OLLAYA_LOG_DIR` | unset | Log to `<dir>/server.log` instead of stderr (created if missing; appended, never rotated) |
 
