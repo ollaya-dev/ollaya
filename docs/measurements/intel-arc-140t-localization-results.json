@@ -1,0 +1,115 @@
+{
+  "diagnostic_only": true,
+  "source_base": "7fe450e19305b828c199d602c23a8337aaa1f03b",
+  "compiler": "MSVC 19.51 / shaderc 2026.3",
+  "cuda_gate_passed": false,
+  "first_matmul": {
+    "diagnostic_only": true,
+    "reference": "local MSVC CPU",
+    "candidate": "local MSVC Vulkan",
+    "case": "td/customer_service_000080/churn_risk",
+    "results": [
+      {
+        "phase": "prefix",
+        "weights_identical": true,
+        "weight_sha256": [
+          "9d84354b1cbad6addb7507fc55588e0d8efe8414b5e5e4c6faa24d53d26fb1e8",
+          "9d84354b1cbad6addb7507fc55588e0d8efe8414b5e5e4c6faa24d53d26fb1e8"
+        ],
+        "input_max_error": 6.103515625e-05,
+        "input_mean_error": 3.25470983111502e-07,
+        "output_max_error": 0.12191331386566162,
+        "output_mean_error": 0.007136453075975581
+      },
+      {
+        "phase": "suffix",
+        "weights_identical": true,
+        "weight_sha256": [
+          "9d84354b1cbad6addb7507fc55588e0d8efe8414b5e5e4c6faa24d53d26fb1e8",
+          "9d84354b1cbad6addb7507fc55588e0d8efe8414b5e5e4c6faa24d53d26fb1e8"
+        ],
+        "input_max_error": 6.103515625e-05,
+        "input_mean_error": 3.718087761874565e-07,
+        "output_max_error": 0.11547553539276123,
+        "output_mean_error": 0.008677164143543208
+      }
+    ]
+  },
+  "isolated_replay": {
+    "scope": "isolated Qcur-0, identical CPU-captured input and weights; CPU diagnostic, not CUDA gate",
+    "weight_sha256": "9d84354b1cbad6addb7507fc55588e0d8efe8414b5e5e4c6faa24d53d26fb1e8",
+    "input_sha256": "a249e58720be33cc0630f18632dfd34216a2638df9b61814ad01b743ddd1b550",
+    "cpu_replay_vs_traced_max": 0.0,
+    "variants": [
+      {
+        "mode": "control",
+        "output_sha256": "50a7cab93656f8c60133403593258aa811629e73ca081048e9ab2bb2ab929612",
+        "max_abs_error_vs_cpu": 0.2340259552001953,
+        "mean_abs_error_vs_cpu": 0.004051346790924816,
+        "rms_error_vs_cpu": 0.008326537566271169
+      },
+      {
+        "mode": "fp32",
+        "output_sha256": "7175a1231cf8331cf9a3b5122bc426eaed169cc77b4b6f0abdd4b7e50cd956a2",
+        "max_abs_error_vs_cpu": 0.23292064666748047,
+        "mean_abs_error_vs_cpu": 0.005507018317961053,
+        "rms_error_vs_cpu": 0.00894018822269872
+      },
+      {
+        "mode": "fp32-exact",
+        "output_sha256": "9d70508fda65e6021e5dedcec147cdbf8b542d928ff186879321429ef5e01034",
+        "max_abs_error_vs_cpu": 0.24636459350585938,
+        "mean_abs_error_vs_cpu": 0.009509622571713498,
+        "rms_error_vs_cpu": 0.015169854494199133
+      }
+    ]
+  },
+  "quantizer_screens": [
+    {
+      "variant": "fp32-cuda-quantizer-targeted",
+      "mode": "no-coopmat",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1"
+      },
+      "fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "vulkan_library_sha256": "a39502eec2bdd9e774dd987cc40ccd0eb8fbba54a0d005e13fe63fc5d7174170",
+      "decisions_agree": 13,
+      "questions": 15,
+      "logit_max": 0.1488,
+      "probability_max": 0.0151,
+      "exit_code": 1
+    },
+    {
+      "variant": "fp32-cuda-quantizer-targeted",
+      "mode": "no-coopmat-force-mmvq",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1",
+        "GGML_VK_FORCE_MMVQ": "1"
+      },
+      "fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "vulkan_library_sha256": "a39502eec2bdd9e774dd987cc40ccd0eb8fbba54a0d005e13fe63fc5d7174170",
+      "decisions_agree": 13,
+      "questions": 15,
+      "logit_max": 0.1505,
+      "probability_max": 0.01497,
+      "exit_code": 1
+    },
+    {
+      "variant": "fp32-cuda-quantizer-exact-targeted",
+      "mode": "no-coopmat",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1"
+      },
+      "fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "vulkan_library_sha256": "d486ab512957d50b4bb7093899a48de5d7134237edaca752b2acb7aa2b7de436",
+      "decisions_agree": 14,
+      "questions": 15,
+      "logit_max": 0.2428,
+      "probability_max": 0.01921,
+      "exit_code": 1
+    }
+  ]
+}

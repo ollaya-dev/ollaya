@@ -177,7 +177,7 @@ sha256 (llama.cpp v0.5.0, build b11146):
 | `lib/ollaya/cuda_v13/ggml-cuda.dll` (windows-amd64) | the CUDA backend | `llama-b11146-bin-win-cuda-13.4-x64.zip`. The Windows CUDA 12 pack has none: ggml-org's CUDA 12.4 build would take that zip past GitHub's 2 GiB limit per release asset |
 | `lib/ollaya/llama/` (linux-arm64) | the same set, arm64 CPU variants | `llama-b11146-bin-ubuntu-arm64.tar.gz` |
 | `lib/ollaya/llama/` (darwin-arm64) | `libllama.0.dylib`, `libggml*.0.dylib` (Metal built in, shaders embedded, macOS 13.3 or newer) | `llama-b11146-bin-macos-arm64.tar.gz` |
-| `lib/ollaya/llama/` (windows-amd64) | `llama.dll`, `ggml.dll`, `ggml-base.dll`, the `ggml-cpu-*.dll` variants and `libomp.dll` | `llama-b11146-bin-win-cpu-x64.zip` |
+| `lib/ollaya/llama/` (windows-amd64) | `llama.dll`, `ggml.dll`, `ggml-base.dll`, `ggml-vulkan.dll`, the `ggml-cpu-*.dll` variants and `libomp.dll` | `llama-b11146-bin-win-vulkan-x64.zip` |
 
 - **Nothing else.** No `llama-server`, no tools, no symbolic links: each library is stored once,
   under the name the loader asks for.
@@ -185,6 +185,13 @@ sha256 (llama.cpp v0.5.0, build b11146):
   `<exe dir>/../lib/ollaya/llama`). ggml loads the best CPU variant for the machine. The CUDA backend
   is found next to a GPU runner's `argv[0]`, the CUDA pack, where it links the pack's `libcudart`,
   `libcublas` and `libcublasLt` through its `$ORIGIN` RUNPATH.
+- **Windows Vulkan.** `ggml-vulkan.dll` lives beside the CPU libraries and is loaded by llama.cpp's
+  backend discovery. With `OLLAYA_DEVICE=auto`, GGUF models prefer CUDA when its optional pack is
+  installed, then a discrete Vulkan GPU, then an integrated Vulkan GPU. If loading or warm-up
+  fails, they fall back to the CPU. `OLLAYA_DEVICE=vulkan` (or `vulkan:<n>`) selects it explicitly.
+  Vulkan fails the measured Winnow-E4B CUDA parity gate on the Arc 140T; successful loading does not establish
+  matching decisions across backends. See the [Arc 140T measurements](measurements/intel-arc-140t-parity.md).
+  ONNX models still use CPU or CUDA; DirectML is not registered.
 - **Build check.** The runner refuses a llama.cpp whose version or default parameter structs
   differ from the ones `crates/ollaya-runner/src/llama/ffi.rs` was written for.
 - **`ollaya llama-devices`** (hidden) loads the libraries the way a runner does and prints the

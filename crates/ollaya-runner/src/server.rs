@@ -35,6 +35,7 @@ pub enum DeviceRequest {
     Auto,
     Cpu,
     Cuda(i32),
+    Vulkan(i32),
     Metal,
 }
 
@@ -45,13 +46,19 @@ impl std::str::FromStr for DeviceRequest {
             "auto" => Ok(DeviceRequest::Auto),
             "cpu" => Ok(DeviceRequest::Cpu),
             "cuda" => Ok(DeviceRequest::Cuda(0)),
+            "vulkan" => Ok(DeviceRequest::Vulkan(0)),
             "metal" => Ok(DeviceRequest::Metal),
             s => s
                 .strip_prefix("cuda:")
                 .and_then(|n| n.parse().ok())
                 .map(DeviceRequest::Cuda)
+                .or_else(|| {
+                    s.strip_prefix("vulkan:")
+                        .and_then(|n| n.parse().ok())
+                        .map(DeviceRequest::Vulkan)
+                })
                 .ok_or_else(|| {
-                    format!("unknown device {s:?}; use auto, cpu, cuda, cuda:<n> or metal")
+                    format!("unknown device {s:?}; use auto, cpu, cuda, cuda:<n>, vulkan, vulkan:<n> or metal")
                 }),
         }
     }
@@ -129,6 +136,7 @@ fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Lo
         DeviceRequest::Auto => Target::Auto,
         DeviceRequest::Cpu => Target::Cpu,
         DeviceRequest::Cuda(id) => Target::Device(format!("CUDA{id}")),
+        DeviceRequest::Vulkan(id) => Target::Device(format!("Vulkan{id}")),
         // llama.cpp's own Metal backend (not MLX): ggml names the Apple GPU `MTL0`.
         DeviceRequest::Metal => Target::Device("MTL0".into()),
     };
@@ -165,6 +173,11 @@ fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Lo
 pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
     if let Some(gguf) = &config.gguf {
         return load_llama(config, gguf);
+    }
+    if matches!(config.device, DeviceRequest::Vulkan(_)) {
+        return Err(Error::Model(
+            "Vulkan currently runs GGUF models only; use auto or cpu for ONNX models".into(),
+        ));
     }
     let tokenizer = config
         .tokenizer
@@ -212,7 +225,7 @@ pub fn load(config: &RunnerConfig) -> Result<(Box<dyn Engine>, Loaded), Error> {
     }
     let device = onnx_device(config.device, cfg!(feature = "cuda-dynamic"));
     let gpu = match device {
-        DeviceRequest::Cpu | DeviceRequest::Metal => None,
+        DeviceRequest::Cpu | DeviceRequest::Metal | DeviceRequest::Vulkan(_) => None,
         DeviceRequest::Auto => Some(0),
         DeviceRequest::Cuda(id) => Some(id),
     };
@@ -587,6 +600,8 @@ mod tests {
             ("cpu", DeviceRequest::Cpu),
             ("cuda", DeviceRequest::Cuda(0)),
             ("cuda:2", DeviceRequest::Cuda(2)),
+            ("vulkan", DeviceRequest::Vulkan(0)),
+            ("vulkan:2", DeviceRequest::Vulkan(2)),
             ("metal", DeviceRequest::Metal),
         ] {
             assert_eq!(s.parse::<DeviceRequest>(), Ok(want));

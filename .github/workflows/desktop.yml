@@ -115,7 +115,7 @@ jobs:
             cp "$dll" desktop/src-tauri/
             resources="${resources:+$resources,}\"$name\":\"$name\""
           done
-          # llama.cpp's libraries for GGUF models (CPU; Metal and CPU on macOS), which the app
+          # llama.cpp's libraries for GGUF models (CPU and Vulkan on Windows; Metal and CPU on macOS), which the app
           # points `ollaya serve` at with OLLAYA_LIBRARY_PATH=<resources>/lib/ollaya.
           case "${{ matrix.triple }}" in
             aarch64-apple-darwin) kind=darwin-arm64 ;;

@@ -1,0 +1,137 @@
+{
+  "measured_on": "2026-09-28",
+  "llama_base_commit": "7fe450e19305b828c199d602c23a8337aaa1f03b",
+  "compiler": "MSVC 19.51; shaderc 2026.3",
+  "hardware": "Intel Arc 140T, Vulkan0, driver 32.0.101.8860",
+  "gate_logit_tolerance": 0.001,
+  "experiment_is_validated_correction": false,
+  "winnow_scope": "4 selected CUDA regression requests, 15 questions; not the full 505-question gate",
+  "jevk5_scope": "10 selected CPU diagnostic requests, 50 questions; not a CUDA gate",
+  "operation_tests": {
+    "supported_passed_control": 24,
+    "supported_passed_fp32": 24,
+    "types": [
+      "Q8_0",
+      "Q4_1"
+    ],
+    "upstream_tolerance_only": true
+  },
+  "runs": [
+    {
+      "model": "Winnow-E4B",
+      "build": "control",
+      "mode": "no-coopmat",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1"
+      },
+      "source_fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "input_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "runner_sha256": "1d9dc3b4d285bb5e960a32792a67334665869b5fab94b4aff7ddb9cd3ef55827",
+      "vulkan_library_sha256": "3165247c5f3e85fac19cf036a4aa41c780a9d9479caf9dd8dcbd305eb6a2b1e5",
+      "decisions_agree": 13,
+      "questions": 15,
+      "logit_max": 0.1517,
+      "probability_max": 0.02258,
+      "exit_code": 1,
+      "summary": "4 cases (0 rejected), 15 questions on vulkan:0 in 26.3s: decisions 13/15 (86.67%), option logits max 1.517e-1 p99 1.517e-1, probabilities max 2.258e-2 p99 2.258e-2"
+    },
+    {
+      "model": "Winnow-E4B",
+      "build": "control",
+      "mode": "no-coopmat-force-mmvq",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1",
+        "GGML_VK_FORCE_MMVQ": "1"
+      },
+      "source_fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "input_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "runner_sha256": "1d9dc3b4d285bb5e960a32792a67334665869b5fab94b4aff7ddb9cd3ef55827",
+      "vulkan_library_sha256": "3165247c5f3e85fac19cf036a4aa41c780a9d9479caf9dd8dcbd305eb6a2b1e5",
+      "decisions_agree": 12,
+      "questions": 15,
+      "logit_max": 0.1414,
+      "probability_max": 0.02262,
+      "exit_code": 1,
+      "summary": "4 cases (0 rejected), 15 questions on vulkan:0 in 37.4s: decisions 12/15 (80.00%), option logits max 1.414e-1 p99 1.414e-1, probabilities max 2.262e-2 p99 2.262e-2"
+    },
+    {
+      "model": "Winnow-E4B",
+      "build": "fp32",
+      "mode": "no-coopmat",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1"
+      },
+      "source_fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "input_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "runner_sha256": "1d9dc3b4d285bb5e960a32792a67334665869b5fab94b4aff7ddb9cd3ef55827",
+      "vulkan_library_sha256": "7fdffed7d2727c7a84147791c1e5d4d4f67d65a17eaec1cbd774279945541cca",
+      "decisions_agree": 14,
+      "questions": 15,
+      "logit_max": 0.1337,
+      "probability_max": 0.01088,
+      "exit_code": 1,
+      "summary": "4 cases (0 rejected), 15 questions on vulkan:0 in 28.6s: decisions 14/15 (93.33%), option logits max 1.337e-1 p99 1.337e-1, probabilities max 1.088e-2 p99 1.088e-2"
+    },
+    {
+      "model": "Winnow-E4B",
+      "build": "fp32",
+      "mode": "no-coopmat-force-mmvq",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1",
+        "GGML_VK_FORCE_MMVQ": "1"
+      },
+      "source_fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "input_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "runner_sha256": "1d9dc3b4d285bb5e960a32792a67334665869b5fab94b4aff7ddb9cd3ef55827",
+      "vulkan_library_sha256": "7fdffed7d2727c7a84147791c1e5d4d4f67d65a17eaec1cbd774279945541cca",
+      "decisions_agree": 14,
+      "questions": 15,
+      "logit_max": 0.1428,
+      "probability_max": 0.01103,
+      "exit_code": 1,
+      "summary": "4 cases (0 rejected), 15 questions on vulkan:0 in 25.3s: decisions 14/15 (93.33%), option logits max 1.428e-1 p99 1.428e-1, probabilities max 1.103e-2 p99 1.103e-2"
+    },
+    {
+      "model": "JevK5",
+      "build": "control",
+      "mode": "no-coopmat",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1"
+      },
+      "source_fixture_sha256": "035b4c149439cf9eb477913b8fdf7cc3d2e04b1ca215fd859117241a9d2a9410",
+      "input_sha256": "035b4c149439cf9eb477913b8fdf7cc3d2e04b1ca215fd859117241a9d2a9410",
+      "runner_sha256": "1d9dc3b4d285bb5e960a32792a67334665869b5fab94b4aff7ddb9cd3ef55827",
+      "vulkan_library_sha256": "3165247c5f3e85fac19cf036a4aa41c780a9d9479caf9dd8dcbd305eb6a2b1e5",
+      "decisions_agree": 47,
+      "questions": 50,
+      "logit_max": 0.2072,
+      "probability_max": 0.02863,
+      "exit_code": 1,
+      "summary": "10 cases (0 rejected), 50 questions on vulkan:0 in 69.9s: decisions 47/50 (94.00%), option logits max 2.072e-1 p99 2.072e-1, probabilities max 2.863e-2 p99 2.863e-2"
+    },
+    {
+      "model": "JevK5",
+      "build": "fp32",
+      "mode": "no-coopmat",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1"
+      },
+      "source_fixture_sha256": "035b4c149439cf9eb477913b8fdf7cc3d2e04b1ca215fd859117241a9d2a9410",
+      "input_sha256": "035b4c149439cf9eb477913b8fdf7cc3d2e04b1ca215fd859117241a9d2a9410",
+      "runner_sha256": "1d9dc3b4d285bb5e960a32792a67334665869b5fab94b4aff7ddb9cd3ef55827",
+      "vulkan_library_sha256": "7fdffed7d2727c7a84147791c1e5d4d4f67d65a17eaec1cbd774279945541cca",
+      "decisions_agree": 48,
+      "questions": 50,
+      "logit_max": 0.1716,
+      "probability_max": 0.03094,
+      "exit_code": 1,
+      "summary": "10 cases (0 rejected), 50 questions on vulkan:0 in 67.4s: decisions 48/50 (96.00%), option logits max 1.716e-1 p99 1.716e-1, probabilities max 3.094e-2 p99 3.094e-2"
+    }
+  ]
+}

@@ -34,6 +34,8 @@ def post_to(url):
 
 
 def device_class(device):
+    if device.startswith("Vulkan"):
+        return "vulkan"
     return "cuda" if device.startswith("CUDA") else "metal" if device.startswith("MTL") else "cpu"
 
 
@@ -43,7 +45,7 @@ def main():
     ap.add_argument("--server", required=True)
     ap.add_argument("--gguf", required=True)
     ap.add_argument("--from", dest="source", default="goldens-cuda.jsonl")
-    ap.add_argument("--device", required=True, help="llama.cpp device (CUDA0, MTL0), or cpu")
+    ap.add_argument("--device", required=True, help="llama.cpp device (CUDA0, MTL0, Vulkan0), or cpu")
     ap.add_argument("--port", type=int, default=8096)
     a = ap.parse_args()
 

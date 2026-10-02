@@ -183,7 +183,7 @@ const overlays: Record<string, ModelOverlay> = {
     stats: { tag: 'winnow:e4b', accuracy: 0.722, latencyMs: 89 },
     title: 'Winnow',
     description:
-      "Decision models by EldanRing, fine-tuned from Google's Gemma 4 and published as GGUF. Winnow reads the answer labels' logits after its own prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Apple silicon or the CPU.",
+      "Decision models by EldanRing, fine-tuned from Google's Gemma 4 and published as GGUF. Winnow reads the answer labels' logits after its own prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Vulkan GPUs on Windows, Apple silicon or the CPU.",
     publisher: { name: 'EldanRing', url: 'https://huggingface.co/EldanRing' },
     capabilities: ['decision', 'multilingual', 'fine-tuned', 'gguf'],
     keywords: ['winnow', 'gemma', 'gemma 4', 'gguf', 'llama.cpp', 'llm', 'decision', 'classification', 'typesafe', 'jev', 'system one'],
@@ -256,7 +256,7 @@ const overlays: Record<string, ModelOverlay> = {
     stats: { tag: 'jevk5:4b', accuracy: 0.625, latencyMs: 105 },
     title: 'JevK5',
     description:
-      "Decision model by alibiserikbay, fine-tuned from Qwen3.5-4B and published as GGUF. JevK5 reads the answer letters' logits after its own JSON prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Apple silicon or the CPU.",
+      "Decision model by alibiserikbay, fine-tuned from Qwen3.5-4B and published as GGUF. JevK5 reads the answer letters' logits after its own JSON prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Vulkan GPUs on Windows, Apple silicon or the CPU.",
     publisher: { name: 'alibiserikbay', url: 'https://huggingface.co/alibiserikbay' },
     capabilities: ['decision', 'fine-tuned', 'gguf'],
     keywords: ['jevk5', 'qwen', 'qwen3.5', 'gguf', 'llama.cpp', 'llm', 'decision', 'classification', 'typesafe', 'jev', 'system one'],

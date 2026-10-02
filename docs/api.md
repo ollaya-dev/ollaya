@@ -1103,7 +1103,7 @@ request body. Not paginated: the list is bounded by `OLLAYA_MAX_LOADED_MODELS`.
 | `models[].expires_at` | string \| `null` | When the model unloads if no further request arrives. While a request is running, the current time: the timer starts when the last request finishes. `null` when kept forever (`keep_alive` < 0). Ollama sends a far-future date instead; `null` is explicit. |
 | `models[].size_vram` | integer | Part of `size` in GPU memory; `0` on CPU |
 | `models[].context_length` | integer | The model's `max_len` in tokens |
-| `models[].device` | string | Where the runner computes: `cpu`, `cuda:0`, `metal` (GGUF models on Apple silicon), … |
+| `models[].device` | string | Where the runner computes: `cpu`, `cuda:0`, `vulkan:0` (GGUF models on Windows), `metal` (GGUF models on Apple silicon), … |
 
 ```shell
 curl http://localhost:11435/api/ps
@@ -1639,7 +1639,7 @@ These are the variables that change API behaviour.
 | `OLLAYA_ORIGINS` | unset | Extra allowed browser origins |
 | `OLLAYA_KEEP_ALIVE` | `5m` | Default `keep_alive` ([§6](#6-keep_alive)) |
 | `OLLAYA_MAX_LOADED_MODELS` | `3` | Loaded-model limit |
-| `OLLAYA_DEVICE` | `auto` | Runner device: `auto` (MLX on the Apple GPU for models with an arch layer in builds with the `mlx` feature, else CUDA if available, else CPU), `cpu`, `cuda`, `cuda:<n>`, `metal` |
+| `OLLAYA_DEVICE` | `auto` | Runner device: `auto` (GGUF uses an available GPU, including Vulkan on Windows; ONNX uses MLX on supported Apple builds, else CUDA if available, else CPU), `cpu`, `cuda`, `cuda:<n>`, `vulkan`, `vulkan:<n>` (GGUF only), `metal` |
 | `OLLAYA_MAX_QUEUE` | `512` | Queue bound before `503 QUEUE_FULL` |
 | `OLLAYA_LOAD_TIMEOUT` | `5m` | Load deadline before `500 MODEL_LOAD_FAILED` |
 | `OLLAYA_MODELS` | `~/.ollaya/models` | Model store |

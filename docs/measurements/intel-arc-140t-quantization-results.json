@@ -1,0 +1,214 @@
+{
+  "measured_on": "2026-09-28",
+  "cuda_gate_passed": false,
+  "cpu_activation_quantization": {
+    "cpu_vec_dot_type": 8,
+    "cpu_vs_numpy_even_differing_values": 0,
+    "even_vs_away_differing_values": 524,
+    "blocks": 27600,
+    "activation_values": 883200
+  },
+  "mathematical_controls": {
+    "scope": "Float64 mathematical references; CUDA-source formula is not a CUDA execution",
+    "cpu_quantized_reference_max_vs_actual": 5.880036042071879e-05,
+    "models": [
+      {
+        "formula": "vk-half-even",
+        "comparisons": {
+          "control": {
+            "max": 0.24785609159152955,
+            "mean": 0.0049132150145760455
+          },
+          "fp32": {
+            "max": 0.25108904752414674,
+            "mean": 0.006266540347210878
+          },
+          "fp32-exact": {
+            "max": 0.250955646391958,
+            "mean": 0.00974905320117515
+          }
+        }
+      },
+      {
+        "formula": "vk-half-away",
+        "comparisons": {
+          "control": {
+            "max": 0.17173883540090173,
+            "mean": 0.00881360138468034
+          },
+          "fp32": {
+            "max": 0.167751046246849,
+            "mean": 0.009683388850165961
+          },
+          "fp32-exact": {
+            "max": 0.1640818094892893,
+            "mean": 0.00615862822145915
+          }
+        }
+      },
+      {
+        "formula": "vk-float-even",
+        "comparisons": {
+          "control": {
+            "max": 0.2445910610827191,
+            "mean": 0.006242770678347717
+          },
+          "fp32": {
+            "max": 0.2478240170153363,
+            "mean": 0.0049129342031646915
+          },
+          "fp32-exact": {
+            "max": 0.2520327501687021,
+            "mean": 0.008860791001511936
+          }
+        }
+      },
+      {
+        "formula": "vk-float-away",
+        "comparisons": {
+          "control": {
+            "max": 0.17568755478568931,
+            "mean": 0.009633894534053188
+          },
+          "fp32": {
+            "max": 0.17169976563163658,
+            "mean": 0.008812929142728307
+          },
+          "fp32-exact": {
+            "max": 0.16519688171288038,
+            "mean": 0.00478916483844585
+          }
+        }
+      },
+      {
+        "formula": "cuda-source-float-away",
+        "comparisons": {
+          "control": {
+            "max": 0.17568701494895222,
+            "mean": 0.008845170232396813
+          },
+          "fp32": {
+            "max": 0.1716992257948995,
+            "mean": 0.007945781836808804
+          },
+          "fp32-exact": {
+            "max": 0.16519907261636035,
+            "mean": 0.002871716049072947
+          }
+        }
+      }
+    ],
+    "f32_cpu_vulkan_max": 0.00054931640625,
+    "cpu_q8_vs_f32_max": 1.0240669250488281
+  },
+  "gpu_quantization_before_refinement": {
+    "scope": "Actual GPU activation bytes and Float64 quantized dot reference; no CUDA execution",
+    "host_division_matches_float64_then_float32": true,
+    "observer_preserves_output_bytes": true,
+    "gpu_vs_correctly_rounded_host_formula_quantized_values": 192,
+    "gpu_vs_host_scale_max_error": 2.384185791015625e-07,
+    "gpu_accumulation_vs_own_quantized_float64_max": 0.00010700006816932728,
+    "gpu_accumulation_vs_own_quantized_float64_mean": 2.8289030002474166e-06,
+    "mismatching_values_distance_to_half_max": 7.62939453125e-06,
+    "quantized_value_max_delta": 1
+  },
+  "gpu_quantization_after_refinement": {
+    "scope": "Actual GPU activation bytes and Float64 quantized dot reference; no CUDA execution",
+    "host_division_matches_float64_then_float32": true,
+    "observer_preserves_output_bytes": true,
+    "gpu_vs_correctly_rounded_host_formula_quantized_values": 0,
+    "gpu_vs_host_scale_max_error": 0.0,
+    "gpu_accumulation_vs_own_quantized_float64_max": 0.0001072666759682761,
+    "gpu_accumulation_vs_own_quantized_float64_mean": 2.8250286766819787e-06,
+    "mismatching_values_distance_to_half_max": null,
+    "quantized_value_max_delta": 0
+  },
+  "cuda_repro": {
+    "url": "https://gist.github.com/MauricioPerera/722b4878ada7d8836e52d64760ce601a",
+    "manifest": {
+      "scope": "Isolated Q8_0 multiplication diagnostic; not the CUDA final-logit gate",
+      "llama_commit": "7fe450e19305b828c199d602c23a8337aaa1f03b",
+      "model": "EldanRing/Winnow-E4B@734302fe5fbfeb3f21a7ece62653c9539be4aaf3 gguf/Winnow-E4B-Q8_0.gguf",
+      "weights_sha256": "9d84354b1cbad6addb7507fc55588e0d8efe8414b5e5e4c6faa24d53d26fb1e8",
+      "input_sha256": "5bc014513ae789802b97d1b7040c0facbb73ad18744d5a364e9045852fc906b7",
+      "shape": {
+        "m": 2048,
+        "n": 64,
+        "k": 2560
+      },
+      "capture": "Captured prefix rows 184..247; original worst row 216",
+      "expected_sha256": {
+        "cpu": "e5798ea7b2fd3984146adbf5d51e15fb7307ca5c6fe1c17a609ce581beae8826",
+        "vulkan-control": "49202008dc16ce4b88cd6354e6232391c01d22aa5e5970311bed27aa6a7f7ae3",
+        "vulkan-refined": "23ba7e90fc609cbb2a33badc4f3ad0dfe7d6be750034bc09ed0b73828e513682"
+      }
+    },
+    "cuda_execution_pending": true
+  },
+  "cuda_selected_screens": [
+    {
+      "mode": "no-coopmat",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1"
+      },
+      "fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "vulkan_library_sha256": "ebd5c4c3499cd73ec3ef56729b8cb5b7f9fa76323cc479b468df4cc93798d450",
+      "cases": 4,
+      "decisions_agree": 13,
+      "questions": 15,
+      "logit_max": 0.1731,
+      "probability_max": 0.0168,
+      "exit_code": 1
+    },
+    {
+      "mode": "no-coopmat-no-fusion",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1",
+        "GGML_VK_DISABLE_FUSION": "1"
+      },
+      "fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "vulkan_library_sha256": "ebd5c4c3499cd73ec3ef56729b8cb5b7f9fa76323cc479b468df4cc93798d450",
+      "cases": 4,
+      "decisions_agree": 14,
+      "questions": 15,
+      "logit_max": 0.1202,
+      "probability_max": 0.01627,
+      "exit_code": 1
+    },
+    {
+      "mode": "no-coopmat-force-mmvq-no-fusion",
+      "environment": {
+        "GGML_VK_DISABLE_COOPMAT": "1",
+        "GGML_VK_DISABLE_COOPMAT2": "1",
+        "GGML_VK_FORCE_MMVQ": "1",
+        "GGML_VK_DISABLE_FUSION": "1"
+      },
+      "fixture_sha256": "1253f4099d15b9e76ce6c48df85af8abb5d0901e6359e71b047c754f2a58f711",
+      "vulkan_library_sha256": "ebd5c4c3499cd73ec3ef56729b8cb5b7f9fa76323cc479b468df4cc93798d450",
+      "cases": 4,
+      "decisions_agree": 14,
+      "questions": 15,
+      "logit_max": 0.1269,
+      "probability_max": 0.01616,
+      "exit_code": 1
+    }
+  ],
+  "main075_stock_selected_baseline": {
+    "revision": "067bfbd5949ec830b3dd9ed575894c9dbd75fe3b",
+    "runner_sha256": "2da125366d000a963f09c8051d8f639e22a2730fded1d9cf2388a944c6f22df1",
+    "scope": "4 selected cases, 15 questions after merging main v0.7.5; not a new full 505-question run",
+    "runs": [
+      {
+        "mode": "default",
+        "exit_code": 1,
+        "summary": "4 cases (0 rejected), 15 questions on vulkan:0 in 11.5s: decisions 12/15 (80.00%), option logits max 3.261e-1 p99 3.261e-1, probabilities max 1.785e-2 p99 1.785e-2",
+        "decisions_agree": 12,
+        "questions": 15,
+        "logit_max": 0.3261,
+        "probability_max": 0.01785
+      }
+    ]
+  }
+}

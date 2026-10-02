@@ -74,8 +74,8 @@ numbers: [ollaya.dev/search](https://ollaya.dev/search).
   Then run `ollaya create triage -f Modelfile` and `ollaya run triage "…"`.
 - **Fast and exact.**
   - **Hardware:** ONNX Runtime on CPU, and CUDA on NVIDIA GPUs. GGUF models run on llama.cpp:
-    CPU, CUDA, and Metal on Apple silicon.
-  - **Precision:** fp16 on GPU and fp32 on CPU, chosen when the model loads.
+    CPU, Vulkan on Windows (including Intel Arc), CUDA on NVIDIA GPUs, and Metal on Apple silicon.
+  - **Precision:** ONNX uses fp16 on GPU and fp32 on CPU when available; GGUF keeps its model quantization on either device.
   - **Accuracy:** fp32 exports give the same decision as the PyTorch reference on 100% of 2,383
     questions per checkpoint.
 

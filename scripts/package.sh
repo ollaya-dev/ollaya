@@ -15,7 +15,7 @@
 #   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
 #   ollaya-darwin-arm64-mlx.tar.zst  lib/ollaya/mlx_metal/ (mlx.metallib, the MLX engine's Metal
 #                                    kernels) + share/doc/ollaya/mlx_metal/ (notices); also .tgz
-#   ollaya-windows-amd64.zip         bin/ollaya.exe (with the DLLs it links), lib/ollaya/llama/ (CPU),
+#   ollaya-windows-amd64.zip         bin/ollaya.exe (with the DLLs it links), lib/ollaya/llama/ (CPU and Vulkan),
 #                                    share/
 #   ollaya-windows-amd64-cuda.zip    the same GPU pack as the Linux one, with the Windows DLLs
 #   ollaya-<platform>-cuda12.*       the CUDA 12 pack, lib/ollaya/cuda_v12/, for drivers older than

@@ -7,10 +7,11 @@
 #   linux-amd64       libllama, libggml, libggml-base and the 14 CPU backends
 #   linux-amd64-cuda  libggml-cuda.so, the CUDA backend (for the CUDA pack, lib/ollaya/cuda_v13)
 #   linux-amd64-cuda12  libggml-cuda.so built with CUDA 12.8 (for the CUDA 12 pack, lib/ollaya/cuda_v12)
-#   windows-amd64-cuda  ggml-cuda.dll, the CUDA 13.4 backend (for the Windows CUDA pack, lib/ollaya/cuda_v13)
+#   linux-arm64       libllama, libggml, libggml-base and the CPU backends
 #   linux-arm64-cuda  libggml-cuda.so built with CUDA 13.4 for aarch64 (DGX Spark / GB10, Grace);
 #                     not in a release pack yet: staged for parity checks on such machines (#32)
-#   linux-arm64, windows-amd64   libllama, libggml, libggml-base and the CPU backends
+#   windows-amd64     the same libraries plus the Vulkan backend (CPU remains available)
+#   windows-amd64-cuda  ggml-cuda.dll, the CUDA 13.4 backend (for the Windows CUDA pack, lib/ollaya/cuda_v13)
 #   darwin-arm64      libllama and libggml with its CPU, BLAS, Metal and RPC backends
 #
 # The files are ggml-org's own release build of llama.cpp v0.5.0 (build b11146), byte for byte,
@@ -65,7 +66,7 @@ case $KIND in
     linux-arm64-cuda)
         ASSET=$b-ubuntu-cuda-13.4-arm64.tar.gz SUM=4e00496ab6cdee9c00afb11de3cb9d10f9da7e17147d8ed14ca3af05209b400f ;;
     darwin-arm64) ASSET=$b-macos-arm64.tar.gz SUM=1ad3f9eff80edb9dbef4259ad564d1720612ef7eea48fa4afed0e54f5f3d5711 ;;
-    windows-amd64) ASSET=$b-win-cpu-x64.zip SUM=14cf1303ca9ac3abd94816850532f9f9a69ac66fbaca3776fc6f9061c2fac1d1 ;;
+    windows-amd64) ASSET=$b-win-vulkan-x64.zip SUM=55a378aa095b466979d85075234f66d7655c7a7483222af0c006c0e55b4d7bd6 ;;
     windows-amd64-cuda)
         ASSET=$b-win-cuda-13.4-x64.zip SUM=b1866c0ce76bc7bfb0c24b33e9a37e9669f1be18539b12c74ce361f81c41f047 ;;
     *) die "unknown kind: $KIND" ;;
@@ -148,6 +149,7 @@ case $KIND in
     *) need=llama.dll ;;
 esac
 [ -f "$DEST/$need" ] || die "$ASSET has no $need"
+[ "$KIND" != windows-amd64 ] || [ -f "$DEST/ggml-vulkan.dll" ] || die "$ASSET has no ggml-vulkan.dll"
 
 if [ -n "$NOTICES" ]; then
     mkdir -p "$(dirname "$NOTICES")"

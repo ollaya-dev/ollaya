@@ -369,7 +369,7 @@ A router is shown as itself, not resolved to a target.
 GET /api/ps
 ```
 
-The loaded models, sorted by name. Routers never appear; their loaded targets do. Each entry has `name`, `model`, `size` (memory, RAM plus VRAM), `digest`, `details` (with the precision actually loaded: `F16` or `F32`, or a GGUF model's quantization), `expires_at` (when it will unload, or `null` when kept loaded), `size_vram`, `context_length` and `device` (`cpu`, `cuda:0`, `metal`, …).
+The loaded models, sorted by name. Routers never appear; their loaded targets do. Each entry has `name`, `model`, `size` (memory, RAM plus VRAM), `digest`, `details` (with the precision actually loaded: `F16` or `F32`, or a GGUF model's quantization), `expires_at` (when it will unload, or `null` when kept loaded), `size_vram`, `context_length` and `device` (`cpu`, `cuda:0`, `vulkan:0`, `metal`, …).
 
 ## Pull a model
 
