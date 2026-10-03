@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+  "config": {
+    "mediaType": "application/vnd.ollaya.config.v1+json",
+    "digest": "sha256:ARBITER_CONFIG_PLACEHOLDER",
+    "size": 0,
+    "urls": [
+      "https://ollaya.dev/blobs/sha256-ARBITER_CONFIG_PLACEHOLDER"
+    ]
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.ollaya.graph.onnx",
+      "digest": "sha256:ARBITER_GRAPH_PLACEHOLDER",
+      "size": 0,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-ARBITER_GRAPH_PLACEHOLDER"
+      ],
+      "annotations": {
+        "org.ollaya.precision": "fp32"
+      }
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:eb5fd5e97ddd07b56778733e9653c07312529cb00980a318fc3e1c4e3b5a8f1f",
+      "size": 4961251752,
+      "urls": [
+        "https://huggingface.co/unsloth/gemma-3-4b-it/resolve/bf46152c47f5dd20b896357cb51abc4c03b8ee8c/model-00001-of-00002.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:fdde0e5aa5ced0fa203b3d50f4ab78168b7e3a3e08c6349f5cc9326666e1bb13",
+      "size": 3639026128,
+      "urls": [
+        "https://huggingface.co/unsloth/gemma-3-4b-it/resolve/bf46152c47f5dd20b896357cb51abc4c03b8ee8c/model-00002-of-00002.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:6fa1ba188d5e945ce056afb207e49dad27dc06c8fad0edba04b7cda6d54d27b2",
+      "size": 131252288,
+      "urls": [
+        "https://huggingface.co/hiteshluke/arbiter-4b/resolve/0c44271c59f89758e3cae17b032e98a9140093e9/adapter_model.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:df6c17f252eb25afabebc145f53763f84d987e16462cf0814771817fb1b19a8e",
+      "size": 124372,
+      "urls": [
+        "https://huggingface.co/hiteshluke/arbiter-4b/resolve/0c44271c59f89758e3cae17b032e98a9140093e9/head.pt"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.tokenizer",
+      "digest": "sha256:b666c93e2af84a2d4735d0fab2f73823e9ce65dda4c5dfd58829ba18f73f18c7",
+      "size": 33384666,
+      "urls": [
+        "https://huggingface.co/hiteshluke/arbiter-4b/resolve/0c44271c59f89758e3cae17b032e98a9140093e9/tokenizer.json"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.decision",
+      "digest": "sha256:ARBITER_DECISION_PLACEHOLDER",
+      "size": 0,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-ARBITER_DECISION_PLACEHOLDER"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.calibration",
+      "digest": "sha256:ARBITER_CALIBRATION_PLACEHOLDER",
+      "size": 0,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-ARBITER_CALIBRATION_PLACEHOLDER"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.license",
+      "digest": "sha256:ARBITER_LICENSE_PLACEHOLDER",
+      "size": 0,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-ARBITER_LICENSE_PLACEHOLDER"
+      ]
+    }
+  ]
+}
