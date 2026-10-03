@@ -69,6 +69,8 @@ pub struct RunnerConfig {
     pub tokenizer: Option<PathBuf>,
     /// A GGUF model, which runs on llama.cpp instead of ONNX Runtime.
     pub gguf: Option<PathBuf>,
+    /// Matching multimodal projector, for Winnow GGUF image input.
+    pub mmproj: Option<PathBuf>,
     /// Where llama.cpp's libraries are (`lib/ollaya/llama`), for a GGUF model.
     pub llama_dir: Option<PathBuf>,
     pub decision: PathBuf,
@@ -133,32 +135,51 @@ fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Lo
         DeviceRequest::Metal => Target::Device("MTL0".into()),
     };
     let libs = Libraries { dir, cuda };
-    let mut model = LlamaModel::load(gguf, &config.decision, &libs, &target, config.threads)?;
-    // As on the ONNX GPU path: the first evaluation pays one-off costs (kernels, graphs,
-    // buffers), and a GPU that fails it moves an `auto` model to the CPU. (`run` warms up models
-    // on the CPU.)
-    if model.device != "cpu"
-        && let Err(e) = warm_up(&model)
-    {
-        if config.device != DeviceRequest::Auto {
-            return Err(Error::Model(format!(
-                "{} failed its first request: {e}",
-                model.device
-            )));
-        }
-        tracing::warn!(
-            "{} failed its first request, using the CPU: {e}",
-            model.device
-        );
-        drop(model);
-        model = LlamaModel::load(gguf, &config.decision, &libs, &Target::Cpu, config.threads)?;
-    }
+    let model = LlamaModel::load(gguf, &config.decision, &libs, &target, config.threads)?;
+    let allow_fallback = config.device == DeviceRequest::Auto && model.device != "cpu";
+    let model = initialize_with_cpu_fallback(
+        model,
+        allow_fallback,
+        |model| {
+            if let Some(projector) = &config.mmproj {
+                model.load_projector(projector, &libs, config.threads)?;
+            }
+            if model.device != "cpu" {
+                warm_up(model).map_err(|e| {
+                    Error::Model(format!("{} failed its first request: {e}", model.device))
+                })?;
+            }
+            Ok(())
+        },
+        || LlamaModel::load(gguf, &config.decision, &libs, &Target::Cpu, config.threads),
+    )?;
     let loaded = Loaded {
         device: model.device.clone(),
         precision: model.precision.clone(),
         engine: "llama",
     };
     Ok((Box::new(model), loaded))
+}
+
+/// Include projector loading and warm-up in the same fallback boundary. Drop the failed
+/// model before allocating its CPU replacement, so a partially loaded projector releases VRAM.
+fn initialize_with_cpu_fallback<T>(
+    mut model: T,
+    allow_fallback: bool,
+    mut initialize: impl FnMut(&mut T) -> Result<(), Error>,
+    reload_cpu: impl FnOnce() -> Result<T, Error>,
+) -> Result<T, Error> {
+    if let Err(error) = initialize(&mut model) {
+        if !allow_fallback {
+            return Err(error);
+        }
+        tracing::warn!(%error, "GPU model initialization failed, using the CPU");
+        drop(model);
+        let mut cpu = reload_cpu()?;
+        initialize(&mut cpu)?;
+        return Ok(cpu);
+    }
+    Ok(model)
 }
 
 /// Load the model on the best available device.
@@ -527,6 +548,91 @@ fn error(status: StatusCode, code: &str, message: &str) -> Response {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn projector_failure_drops_gpu_before_cpu_retry() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+        struct Model {
+            gpu: bool,
+            dropped: Rc<Cell<bool>>,
+        }
+        impl Drop for Model {
+            fn drop(&mut self) {
+                if self.gpu {
+                    self.dropped.set(true);
+                }
+            }
+        }
+        let dropped = Rc::new(Cell::new(false));
+        let calls = Cell::new(0);
+        let model = initialize_with_cpu_fallback(
+            Model {
+                gpu: true,
+                dropped: dropped.clone(),
+            },
+            true,
+            |model| {
+                calls.set(calls.get() + 1);
+                if model.gpu {
+                    Err(Error::Model("projector allocation failed".into()))
+                } else {
+                    Ok(())
+                }
+            },
+            || {
+                assert!(dropped.get());
+                Ok(Model {
+                    gpu: false,
+                    dropped: dropped.clone(),
+                })
+            },
+        )
+        .unwrap();
+        assert!(!model.gpu);
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[test]
+    fn explicit_device_projector_failure_does_not_retry() {
+        let result = initialize_with_cpu_fallback(
+            true,
+            false,
+            |_| Err(Error::Model("projector allocation failed".into())),
+            || panic!("explicit GPU requests must not silently use CPU"),
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("projector allocation failed")
+        );
+    }
+
+    #[test]
+    fn cpu_initialization_failure_is_returned_without_another_retry() {
+        let result = initialize_with_cpu_fallback(
+            true,
+            true,
+            |gpu| {
+                Err(Error::Model(
+                    if *gpu {
+                        "GPU projector failed"
+                    } else {
+                        "CPU projector failed"
+                    }
+                    .into(),
+                ))
+            },
+            || Ok(false),
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("CPU projector failed")
+        );
+    }
+
+    #[test]
     fn a_cuda_failure_on_the_first_request_moves_auto_to_the_cpu() {
         use super::{AfterWarmUp, DeviceRequest, after_gpu_warm_up};
         // The message ONNX Runtime gives on an RTX 5090 with kernels only up to sm_90 (issue #10).
@@ -577,7 +683,7 @@ mod tests {
     use ollaya_decision::{Questions, parse_questions};
     use serde_json::{Value, json};
 
-    use super::{DeviceRequest, warm_up};
+    use super::{DeviceRequest, initialize_with_cpu_fallback, warm_up};
     use crate::{Engine, Error, Output};
 
     #[test]

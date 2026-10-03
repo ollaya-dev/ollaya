@@ -31,6 +31,8 @@ pub mod media {
     pub const ARCH: &str = "application/vnd.ollaya.arch";
     /// A GGUF file (weights, tokenizer and chat template) that llama.cpp loads. It comes unmodified
     /// from the author's repository; `org.ollaya.quantization` names its type (`Q4_0`, `Q8_0`).
+    /// Matching multimodal projector for a GGUF text model.
+    pub const MMPROJ: &str = "application/vnd.ollaya.projector.gguf";
     pub const GGUF: &str = "application/vnd.ollaya.weights.gguf";
 }
 

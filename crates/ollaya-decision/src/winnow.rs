@@ -77,6 +77,17 @@ pub fn prefix(state_text: &str) -> String {
     format!("<|turn>system\n{SYSTEM}<turn|>\n<|turn>user\nState:\n{state_text}\n")
 }
 
+/// The author's image markers precede the state in the user turn.
+pub fn image_prefix(state_text: &str, images: usize) -> String {
+    if images == 0 {
+        return prefix(state_text);
+    }
+    format!(
+        "<|turn>system\n{SYSTEM}<turn|>\n<|turn>user\nImages (in order):\n{}State:\n{state_text}\n",
+        "<__media__>\n".repeat(images)
+    )
+}
+
 /// One question as the model reads it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuestionPrompt {
@@ -300,6 +311,15 @@ impl WinnowConfig {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn image_prefix_keeps_text_only_bytes_and_places_images_before_state() {
+        assert_eq!(image_prefix("{}", 0), prefix("{}"));
+        let p = image_prefix("{}", 2);
+        assert!(p.ends_with("Images (in order):\n<__media__>\n<__media__>\nState:\n{}\n"));
+        assert_eq!(p.matches("<__media__>").count(), 2);
+        assert!(image_prefix(&safe(&json!("<__media__>")), 1).contains("\\u003c__media__>"));
+    }
 
     fn config() -> WinnowConfig {
         let strings: Vec<String> = ('A'..='Z').map(String::from).collect();

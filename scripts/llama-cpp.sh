@@ -105,14 +105,14 @@ wanted() {
         linux-*-cuda*:libggml-cuda.so | windows-amd64-cuda:ggml-cuda.dll) return 0 ;;
         linux-*-cuda*:* | windows-amd64-cuda:*) return 1 ;;
         *:libggml-cuda.so) return 1 ;;
-        # libllama-common, libllama-server-impl and the other tools' libraries, and multimodal.
-        *:libllama-* | *:libmtmd*) return 1 ;;
+        # libllama-common, libllama-server-impl and the other tools' libraries.
+        *:libllama-*) return 1 ;;
         # The RPC backend is a loadable plugin on Linux, not needed; macOS links it into libggml.
         linux-*:libggml-rpc.so*) return 1 ;;
-        *:libllama.so* | *:libllama.*dylib | *:libggml*.so* | *:libggml*.dylib) return 0 ;;
+        *:libmtmd.so* | *:libmtmd.*dylib | *:libllama.so* | *:libllama.*dylib | *:libggml*.so* | *:libggml*.dylib) return 0 ;;
         windows-amd64:ggml-rpc.dll) return 1 ;;
         # llama.dll, ggml.dll, ggml-base.dll, the CPU backends and LLVM's OpenMP runtime they load.
-        windows-amd64:llama.dll | windows-amd64:ggml*.dll | windows-amd64:libomp.dll) return 0 ;;
+        windows-amd64:mtmd.dll | windows-amd64:llama.dll | windows-amd64:ggml*.dll | windows-amd64:libomp.dll) return 0 ;;
         *) return 1 ;;
     esac
 }

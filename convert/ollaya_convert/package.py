@@ -22,11 +22,9 @@ import hashlib
 import json
 import os
 import urllib.request
-
-import onnx
+from pathlib import Path
 
 from . import arch as mlx_arch
-from . import weightless
 from .catalog import CATALOG
 
 REPO_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -47,6 +45,7 @@ MEDIA = {
     # A GGUF file (weights, tokenizer and chat template) that llama.cpp loads, unmodified from the
     # author's repository.
     "gguf": "application/vnd.ollaya.weights.gguf",
+    "mmproj": "application/vnd.ollaya.projector.gguf",
 }
 HF = "https://huggingface.co"
 
@@ -135,6 +134,8 @@ def write_manifest(namespace, model, tag, config, layers):
 
 def graph_bytes(export_dir, checkpoint, prefix, weights_oid):
     """The exported graph, rewritten to reference the weights blob, serialized."""
+    import onnx
+    from . import weightless
     model = onnx.load(os.path.join(export_dir, "model.onnx"), load_external_data=True)
     stats = weightless.rewrite(model, checkpoint, prefix, "sha256-" + weights_oid)
     big = [k for k in ("inline",) if stats.get(k, 0) > 64]
@@ -146,6 +147,7 @@ def graph_bytes(export_dir, checkpoint, prefix, weights_oid):
 def graph_from_wl(wl_dir, oids, name="model.onnx"):
     """A weightless graph from `families/`, its external-data locations renamed from upstream file
     names to the blob names (`sha256-<oid>`) the weights have in the store."""
+    import onnx
     model = onnx.load(os.path.join(wl_dir, name), load_external_data=False)
     n = 0
     for t in model.graph.initializer:
@@ -211,7 +213,7 @@ def package_gguf(spec, tag, v, blobs):
     repo, commit = v["repo"], v["commit"]
     gguf = upstream(MEDIA["gguf"], repo, commit, v["gguf"])
     oid = gguf["digest"].split(":", 1)[1]
-    decision_bytes = open(os.path.join(v["export_dir"], "decision.json"), "rb").read()
+    decision_bytes = Path(v["export_dir"], "decision.json").read_bytes()
     dj = json.loads(decision_bytes)
     pin = dj["gguf"]
     if (pin["repo"], pin["revision"], pin["path"], pin["sha256"]) != (repo, commit, v["gguf"], oid):
@@ -219,7 +221,7 @@ def package_gguf(spec, tag, v, blobs):
             v["export_dir"], pin["repo"], pin["revision"], pin["path"], pin["sha256"], repo, commit, v["gguf"], oid))
     gguf["annotations"] = {"org.ollaya.quantization": pin["quantization"]}
     decision = blobs.put(MEDIA["decision"], decision_bytes)
-    calibration = blobs.put(MEDIA["calibration"], open(os.path.join(v["export_dir"], "calibration.json"), "rb").read())
+    calibration = blobs.put(MEDIA["calibration"], Path(v["export_dir"], "calibration.json").read_bytes())
     text = v.get("license_text") or spec["license_text"]
     if v.get("notice"):  # the author's NOTICE, as the pinned commit has it
         with urllib.request.urlopen("%s/%s/resolve/%s/%s" % (HF, repo, commit, v["notice"])) as r:
@@ -233,7 +235,10 @@ def package_gguf(spec, tag, v, blobs):
         "release_date": hf_commit_date(repo, commit),
     }, indent=2).encode())
     print("  %s:%s %s %.2f GB (%s)" % (spec["model"], tag, pin["quantization"], gguf["size"] / 1e9, v["gguf"]))
-    return config, [gguf, decision, calibration, lic]
+    layers = [gguf, decision, calibration, lic]
+    if v.get("mmproj"):
+        layers.append(upstream(MEDIA["mmproj"], repo, commit, v["mmproj"]))
+    return config, layers
 
 
 def package_model(spec, blobs):

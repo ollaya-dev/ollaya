@@ -119,6 +119,9 @@ enum Command {
         /// A GGUF model (llama.cpp) instead of an ONNX graph
         #[arg(long)]
         gguf: Option<PathBuf>,
+        /// Matching multimodal projector for a Winnow GGUF model
+        #[arg(long)]
+        mmproj: Option<PathBuf>,
         /// llama.cpp's libraries, for a GGUF model
         #[arg(long)]
         llama_dir: Option<PathBuf>,
@@ -204,6 +207,7 @@ fn main() -> Result<()> {
             vision_graph,
             tokenizer,
             gguf,
+            mmproj,
             llama_dir,
             decision,
             arch,
@@ -219,6 +223,7 @@ fn main() -> Result<()> {
                     vision_graph,
                     tokenizer,
                     gguf,
+                    mmproj,
                     llama_dir,
                     decision,
                     arch,

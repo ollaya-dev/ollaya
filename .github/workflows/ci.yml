@@ -162,6 +162,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: GGUF packaging tests (no weights or ML dependencies)
+        run: python3 -m unittest discover -s convert/tests -v
       - name: ShellCheck
         run: shellcheck scripts/install.sh scripts/package.sh scripts/llama-cpp.sh packaging/docker-healthcheck.sh
       - name: install.sh parses under dash

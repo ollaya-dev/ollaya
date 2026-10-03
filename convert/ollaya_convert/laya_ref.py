@@ -12,6 +12,7 @@ import torch
 from laya.common import QTYPES, build_sequence, collate_items, render_options
 
 from .families.von.ref import fp64_rotary
+from .model_paths import DEFAULT_ROOT
 
 # Checkpoint name -> subfolder of the bundled Laya repo (None = repo root).
 CHECKPOINTS = {
@@ -19,8 +20,6 @@ CHECKPOINTS = {
     "multilingual": "multilingual",
     "typed-decisions": "typed-decisions",
 }
-
-DEFAULT_ROOT = os.environ.get("LAYA_ROOT", os.path.expanduser("~/models/laya"))
 
 
 def load(name: str, root: str = DEFAULT_ROOT, device: str = "cpu") -> laya.Agent:

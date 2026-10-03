@@ -493,6 +493,9 @@ impl Scheduler {
                         model.name
                     ))
                 })?;
+                if let Some(mmproj) = &f.mmproj {
+                    cmd.arg("--mmproj").arg(mmproj);
+                }
                 cmd.arg("--gguf")
                     .arg(&f.gguf)
                     .arg("--decision")

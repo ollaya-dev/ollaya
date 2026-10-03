@@ -29,6 +29,7 @@ pub struct RunnerFiles {
 /// Files of a GGUF model, run by a llama.cpp runner.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlamaFiles {
+    pub mmproj: Option<PathBuf>,
     pub gguf: PathBuf,
     pub decision: PathBuf,
     /// The GGUF's type (`Q4_0`), from the layer's annotation.
@@ -132,6 +133,10 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
             .cloned()
             .unwrap_or_default();
         let files = EngineFiles::Llama(LlamaFiles {
+            mmproj: manifest
+                .layer(media::MMPROJ)
+                .map(|d| store.blob_path(&d.digest))
+                .transpose()?,
             gguf: blob(media::GGUF)?,
             decision: blob(media::DECISION)?,
             quantization,
@@ -258,6 +263,50 @@ mod tests {
                 EngineFiles::Llama(_) => panic!("not an ONNX model"),
             },
             Resolved::Router { .. } => panic!("not a router"),
+        }
+    }
+
+    #[test]
+    fn gguf_projector_is_optional_and_resolves_to_its_own_blob() {
+        for vision in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = Store::open(dir.path()).unwrap();
+            let mut layers = vec![
+                blob(&store, media::GGUF, b"text weights"),
+                blob(&store, media::DECISION, b"{}"),
+            ];
+            let projector = blob(&store, media::MMPROJ, b"projector weights");
+            if vision {
+                layers.push(projector.clone());
+            }
+            let manifest = Manifest {
+                schema_version: 2,
+                media_type: MANIFEST_V2.into(),
+                config: blob(
+                    &store,
+                    media::CONFIG,
+                    br#"{"model_format":"gguf","family":"winnow"}"#,
+                ),
+                layers,
+            };
+            let name = ModelName::parse("winnow:e4b-vision").unwrap();
+            store
+                .write_manifest(&name, &serde_json::to_vec(&manifest).unwrap())
+                .unwrap();
+            let Resolved::Model(model) = resolve(&store, &name).unwrap() else {
+                panic!("expected model");
+            };
+            let EngineFiles::Llama(files) = model.files else {
+                panic!("expected llama");
+            };
+            assert_eq!(
+                files.mmproj,
+                if vision {
+                    Some(store.blob_path(&projector.digest).unwrap())
+                } else {
+                    None
+                }
+            );
         }
     }
 
