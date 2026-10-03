@@ -1097,12 +1097,53 @@ async fn pull_streams_ndjson() {
 }
 
 async fn create_copy_delete() {
-    let d = Daemon::laya().await;
+    let d = Daemon::start(
+        |dir| {
+            laya_store(dir);
+            let store = Store::open(dir).unwrap();
+            let name = ModelName::parse("laya:en").unwrap();
+            let mut entry = store.read_manifest(&name).unwrap().unwrap();
+            let calibration = json!({
+                "temperature": [6.08, 3.0, 40.0],
+                "temperature_map": {"kind": "von-entropy-length-v1", "bias": 0.2056},
+                "temperature_range": [0.5, 50.0]
+            });
+            entry.manifest.layers.push(blob(
+                &store,
+                media::CALIBRATION,
+                calibration.to_string().as_bytes(),
+                None,
+            ));
+            store
+                .write_manifest(&name, &serde_json::to_vec(&entry.manifest).unwrap())
+                .unwrap();
+        },
+        |_| {},
+    )
+    .await;
+    d.client
+        .create(
+            &serde_json::from_value(json!({"model": "inherited", "from": "laya:en"})).unwrap(),
+            |_| {},
+        )
+        .await
+        .unwrap();
+    let inherited = d.client.show("inherited").await.unwrap();
+    assert!(inherited.modelfile.contains("FROM laya:en"));
+    assert!(
+        !inherited.modelfile.contains("CALIBRATION"),
+        "calibration outside the create API must stay inherited"
+    );
+    let calibration = json!({
+        "temperature": [1.6, 1.25, 1.98],
+        "temperature_by_options": {"choice:2": 1.9, "score:3-5": 1.25}
+    });
     let r = http()
         .post(d.url("/api/create"))
         .body(
             json!({"model": "triage", "from": "laya:en",
                    "questions": {"department": {"type": "choice", "criteria": ["billing", "technical"]}},
+                   "calibration": calibration,
                    "parameters": {"precision": "fp32"}, "license": ["MIT", "Apache-2.0"],
                    "description": "Ticket triage"})
             .to_string(),
@@ -1145,6 +1186,18 @@ async fn create_copy_delete() {
     assert_eq!(show.license, "MIT\n\nApache-2.0");
     assert!(show.questions.as_ref().unwrap().contains_key("department"));
     assert!(show.modelfile.contains("FROM laya:en") && show.modelfile.contains("QUESTIONS"));
+    let exported_calibration = show
+        .modelfile
+        .split_once("CALIBRATION \"\"\"\n")
+        .expect("the Modelfile must preserve custom calibration")
+        .1
+        .split_once("\n\"\"\"")
+        .unwrap()
+        .0;
+    assert_eq!(
+        serde_json::from_str::<Value>(exported_calibration).unwrap(),
+        calibration
+    );
     let models = d.client.models().await.unwrap();
     assert_eq!(
         models
