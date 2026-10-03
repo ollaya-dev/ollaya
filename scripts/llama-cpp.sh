@@ -8,8 +8,8 @@
 #   linux-amd64-cuda  libggml-cuda.so, the CUDA backend (for the CUDA pack, lib/ollaya/cuda_v13)
 #   linux-amd64-cuda12  libggml-cuda.so built with CUDA 12.8 (for the CUDA 12 pack, lib/ollaya/cuda_v12)
 #   windows-amd64-cuda  ggml-cuda.dll, the CUDA 13.4 backend (for the Windows CUDA pack, lib/ollaya/cuda_v13)
-#   linux-arm64-cuda  libggml-cuda.so built with CUDA 13.4 for aarch64 (DGX Spark / GB10, Grace);
-#                     not in a release pack yet: staged for parity checks on such machines (#32)
+#   linux-arm64-cuda  libggml-cuda.so built with CUDA 13.4 for aarch64 (DGX Spark / GB10, Grace),
+#                     for the linux-arm64 CUDA pack, lib/ollaya/cuda_v13 (docs/decisions/0005-arm64-cuda-pack.md)
 #   linux-arm64, windows-amd64   libllama, libggml, libggml-base and the CPU backends
 #   darwin-arm64      libllama and libggml with its CPU, BLAS, Metal and RPC backends
 #
@@ -18,10 +18,11 @@
 # (docs/decisions/0003-llama-cpp-runtime.md). Both linux-amd64 kinds come from the CUDA 13.4
 # archive, so the CPU and CUDA backends are one build. linux-amd64-cuda12 takes only the CUDA
 # backend from the same build's CUDA 12.8 archive: same commit and ggml backend interface, loaded
-# next to the CPU libraries of the 13.4 archive. Nothing else from the archives is staged
-# (no llama-server, no tools), and never as a symbolic link: each library is stored once, under
-# the name the loader asks for (libllama.so.0, libllama.0.dylib). <notices-file> receives the
-# third-party notices.
+# next to the CPU libraries of the 13.4 archive. linux-arm64-cuda does the same with the arm64 CUDA
+# 13.4 archive, next to the CPU libraries of the plain arm64 archive. Nothing else from the
+# archives is staged (no llama-server, no tools), and never as a symbolic link: each library is
+# stored once, under the name the loader asks for (libllama.so.0, libllama.0.dylib).
+# <notices-file> receives the third-party notices.
 #
 # Environment: OLLAYA_CACHE, the download cache (default ${XDG_CACHE_HOME:-~/.cache}/ollaya-package).
 #

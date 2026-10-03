@@ -26,7 +26,8 @@ Each release on GitHub (`ollaya-dev/ollaya`, set with `OLLAYA_REPO`) carries:
 | `ollaya-linux-amd64-cuda.sha256` | The sha256 of every library in `lib/ollaya/cuda_v13/`, also installed there as `FILES.sha256` | 2 KiB |
 | `ollaya-linux-amd64-cuda12.tar.zst` | `lib/ollaya/cuda_v12/` (21 libraries, llama.cpp's CUDA 12.8 `libggml-cuda.so` included), `share/doc/ollaya/cuda_v12/`, for drivers without CUDA 13 support | 1568 MiB (3370 MiB unpacked) |
 | `ollaya-linux-amd64-cuda12.sha256` | The same for `lib/ollaya/cuda_v12/` | 2 KiB |
-| `ollaya-linux-arm64.tar.zst` | `bin/ollaya`, `lib/ollaya/llama/`, `share/doc/ollaya/` (CPU only) | |
+| `ollaya-linux-arm64.tar.zst` | `bin/ollaya` (CPU only), `lib/ollaya/llama/`, `lib/ollaya/ollaya-cuda-runner` (the GPU runner), `share/doc/ollaya/` | |
+| `ollaya-linux-arm64-cuda.tar.zst`, `ollaya-linux-arm64-cuda.sha256` | `lib/ollaya/cuda_v13/` for aarch64 (DGX Spark; see "The linux-arm64 pack" below), `share/doc/ollaya/cuda_v13/`, and its checksums | |
 | `ollaya-darwin-arm64.tar.zst` | `bin/ollaya`, `lib/ollaya/llama/` (llama.cpp with Metal), `share/doc/ollaya/` (CPU and CoreML) | |
 | `ollaya-darwin-arm64.tgz` | The same as the darwin `.tar.zst`. Stock macOS has no `zstd`, so `install.sh` falls back to it | |
 | `ollaya-windows-amd64.zip` | `bin/ollaya.exe`, `bin/DirectML.dll`, `share/` | 21.8 MiB |
@@ -41,7 +42,9 @@ Notes on the archives:
 - **One binary per x86-64 OS.** linux-amd64 and windows-amd64 are built with
   `--features ollaya-runner/cuda`, which puts ORT's provider bridge into the binary. The same
   binary runs on the CPU and only uses the GPU when the `-cuda` archive is installed next to it,
-  as Ollama's is.
+  as Ollama's is. linux-arm64's `bin/ollaya` has no provider bridge (pyke has no aarch64 GPU
+  build); there only `lib/ollaya/ollaya-cuda-runner` uses the GPU
+  ([ADR 0005](decisions/0005-arm64-cuda-pack.md)).
 - **Deterministic.** The tarballs are built with GNU tar (`--sort=name`, owner 0, `SOURCE_DATE_EPOCH`
   set to the last commit). Two runs of `package.sh` produce the same SHA-256. The Windows zips
   (7-Zip) keep file times, so they are not byte-reproducible; `FILES.sha256` still is.
@@ -87,9 +90,9 @@ releases before 0.4.0, which have no such file, they download the archive as bef
   in `package.sh`.
 - **Updating the pins.** Edit the pins in `packaging/cuda-requirements.in`. Then regenerate the hash
   lock with the `uv pip compile` command in that file's header. The lock is universal: it holds the
-  hashes of every platform's wheels, so one file serves Linux and Windows.
+  hashes of every platform's wheels, so one file serves Linux (x86-64 and aarch64) and Windows.
 - **Download.** `package.sh` fetches the wheels with `pip download --require-hashes`, for the
-  manylinux x86-64 platforms or for `win_amd64`. It falls back to `uvx pip` when there's no `pip`;
+  manylinux x86-64 or aarch64 platforms or for `win_amd64`. It falls back to `uvx pip` when there's no `pip`;
   `uv pip download` doesn't exist. The wheels are cached in `~/.cache/ollaya-package/wheels`, about
   1.2 GB per platform.
 
@@ -162,6 +165,32 @@ stay on those). The installers pick it when the driver's CUDA version is 12.x; t
   pack no longer carries a copy: GPU runners start from `ollaya-cuda-runner.exe`, which links no
   ONNX Runtime and so imports no DirectML.
 
+### The linux-arm64 pack (DGX Spark)
+
+`ollaya-linux-arm64-cuda.tar.zst` installs `lib/ollaya/cuda_v13` on aarch64, with the same file
+names as the x86-64 CUDA 13 pack ([ADR 0005](decisions/0005-arm64-cuda-pack.md)):
+
+| File | Source |
+|---|---|
+| `libonnxruntime.so.1`, `libonnxruntime_providers_shared.so`, `libonnxruntime_providers_cuda.so` | Microsoft's `onnxruntime_gpu-1.29.0-cp312-cp312-manylinux_2_34_aarch64.whl` from PyPI, unmodified (`onnxruntime/capi/`; the core library is stored under its soname) |
+| the NVIDIA libraries | the aarch64 builds of the same wheels and versions as the x86-64 pack |
+| `libggml-cuda.so` | `llama-b11146-bin-ubuntu-cuda-13.4-arm64.tar.gz`, the same llama.cpp build as `lib/ollaya/llama` |
+
+- **ONNX Runtime 1.29.0, not 1.28.2.** Microsoft publishes no aarch64 GPU archive on GitHub, and
+  the `onnxruntime-gpu` wheel has aarch64 builds only from 1.29.0. This is the one platform whose
+  GPU version differs from `ORT_GPU_VERSION` (`ORT_GPU_ARM64_VERSION` in `package.sh`).
+- **GPUs.** The ONNX Runtime provider has SASS for sm_89, sm_90a, sm_120a and sm_121a and no PTX.
+  It targets GB10 (sm_121a, the DGX Spark), the only aarch64 GPU this pack was tested on;
+  Grace-Hopper GH200 (sm_90a) has matching SASS but is untested. On other aarch64 GPUs, such as
+  Jetson Orin (sm_87) or GB200 and GB300 (sm_100a, sm_103a), the GPU runner is expected to fail to
+  start for ONNX models, which then run on the CPU under `auto`. llama.cpp's backend has the same
+  kernels as on x86-64, PTX included, so GGUF models can reach more of those GPUs.
+- **The runner.** `bin/ollaya` on linux-arm64 links pyke's CPU-only ONNX Runtime. GPU runners
+  start from `lib/ollaya/ollaya-cuda-runner`, which the base archive carries since this pack
+  exists. The Docker arm64 image has neither.
+- **No CUDA 12 pack.** The aarch64 wheel links `libcudart.so.13`; a driver older than R580 runs on
+  the CPU.
+
 ### llama.cpp (GGUF models)
 
 GGUF models (`winnow`, `llm-logits-v1`) run on llama.cpp's own release build, loaded by the runner
@@ -176,6 +205,7 @@ sha256 (llama.cpp v0.5.0, build b11146):
 | `lib/ollaya/cuda_v12/libggml-cuda.so` | the CUDA backend for CUDA 12 drivers | `llama-b11146-bin-ubuntu-cuda-12.8-x64.tar.gz`, the same build (commit and ggml backend interface) |
 | `lib/ollaya/cuda_v13/ggml-cuda.dll` (windows-amd64) | the CUDA backend | `llama-b11146-bin-win-cuda-13.4-x64.zip`. The Windows CUDA 12 pack has none: ggml-org's CUDA 12.4 build would take that zip past GitHub's 2 GiB limit per release asset |
 | `lib/ollaya/llama/` (linux-arm64) | the same set, arm64 CPU variants | `llama-b11146-bin-ubuntu-arm64.tar.gz` |
+| `lib/ollaya/cuda_v13/libggml-cuda.so` (linux-arm64) | the CUDA 13.4 backend | `llama-b11146-bin-ubuntu-cuda-13.4-arm64.tar.gz`, the same build (commit and ggml backend interface) |
 | `lib/ollaya/llama/` (darwin-arm64) | `libllama.0.dylib`, `libggml*.0.dylib` (Metal built in, shaders embedded, macOS 13.3 or newer) | `llama-b11146-bin-macos-arm64.tar.gz` |
 | `lib/ollaya/llama/` (windows-amd64) | `llama.dll`, `ggml.dll`, `ggml-base.dll`, the `ggml-cpu-*.dll` variants and `libomp.dll` | `llama-b11146-bin-win-cpu-x64.zip` |
 
@@ -199,7 +229,7 @@ sha256 (llama.cpp v0.5.0, build b11146):
 | | Requirement | Why |
 |---|---|---|
 | Linux | glibc 2.38 or newer: Ubuntu 24.04, Debian 13, Fedora 39, RHEL 10 or newer | pyke's `libonnxruntime.a` references `__isoc23_strtol` and related symbols (`GLIBC_2.38`) and `GLIBCXX_3.4.31`. The provider `.so` needs glibc 2.38 too. `install.sh` checks this. Older hosts can use the Docker image. |
-| Linux, GPU | NVIDIA driver R580 or newer (CUDA 13), or R525 or newer (CUDA 12), on x86-64 | The CUDA 13 pack runs Microsoft's ONNX Runtime 1.28.2 CUDA 13 build (Turing to Blackwell, sm_75 to sm_120; ADR 0004); minor-version compatibility covers the 13.4 runtime. From 0.7.3 a driver whose CUDA version is 12.x gets the CUDA 12 pack instead (Pascal to Blackwell; Blackwell needs R570), and so do Pascal and Volta cards on any driver (compute capability below 7.5, read with `nvidia-smi --query-gpu=compute_cap`; the lowest card decides). |
+| Linux, GPU | NVIDIA driver R580 or newer (CUDA 13), or R525 or newer (CUDA 12), on x86-64; R580 or newer on aarch64 | The CUDA 13 pack runs Microsoft's ONNX Runtime 1.28.2 CUDA 13 build (Turing to Blackwell, sm_75 to sm_120; ADR 0004); minor-version compatibility covers the 13.4 runtime. From 0.7.3 a driver whose CUDA version is 12.x gets the CUDA 12 pack instead (Pascal to Blackwell; Blackwell needs R570), and so do Pascal and Volta cards on any driver (compute capability below 7.5, read with `nvidia-smi --query-gpu=compute_cap`; the lowest card decides). On aarch64 the CUDA 13 pack runs ONNX Runtime 1.29.0 and targets the DGX Spark (GB10, sm_121); there is no CUDA 12 pack (ADR 0005). |
 | WSL 2 | Windows NVIDIA driver with CUDA 13 or 12 | The driver's `libcuda.so.1` comes from `/usr/lib/wsl/lib`. Never install a Linux driver inside WSL. |
 | Windows | 10 or 11 on x64 | pyke's Windows build. `ollaya.exe` imports the Microsoft Visual C++ runtime (`VCRUNTIME140.dll`, `MSVCP140.dll`), as the CUDA provider does. |
 | Windows, GPU | NVIDIA driver R580 or newer (CUDA 13), or R527 or newer (CUDA 12) | Microsoft's ONNX Runtime 1.28.2 CUDA 13 or CUDA 12 build, as on Linux. `install.ps1` reads the driver from `nvidia-smi`, or from WMI. |
@@ -422,7 +452,9 @@ What it does:
      password prompt when there's a terminal.
    - Otherwise it falls back to `~/.local` with a message.
    - An explicit `OLLAYA_INSTALL_DIR` never falls back.
-3. **Detects NVIDIA hardware** (Linux x86-64).
+3. **Detects NVIDIA hardware** (Linux). It installs a GPU pack only when the release lists one for
+   the platform in `sha256sum.txt` (linux-arm64 has one in newer releases only); otherwise it warns
+   and installs CPU only.
    - WSL 2: `/usr/lib/wsl/lib/libcuda.so.1` and the `nvidia-smi` next to it.
    - Elsewhere, in order: `nvidia-smi`, `/proc/driver/nvidia/version`, `lspci -d 10de:`, or a scan of
      `/sys/bus/pci/devices` for a display device (class `0x03`) with vendor `0x10de`.
@@ -663,8 +695,8 @@ volumes:
    packages them and builds the four images, but publishes nothing.
 4. **Tag.** `git tag v0.1.0 && git push origin v0.1.0` starts the workflow:
    - **`build`** runs on ubuntu-latest, ubuntu-24.04-arm, macos-latest and windows-latest. It builds,
-     smoke-tests and packages each platform, including `--cuda --cuda12` on linux-amd64 and windows-amd64,
-     and uploads the archives.
+     smoke-tests and packages each platform, including `--cuda --cuda12` on linux-amd64 and windows-amd64
+     and `--cuda` on linux-arm64, and uploads the archives.
    - **`release`** writes `sha256sum.txt` over all archives and creates the GitHub Release. It uses
      `softprops/action-gh-release` with generated notes; a tag with `-` becomes a prerelease and
      doesn't become latest.
@@ -688,6 +720,8 @@ All actions are pinned to full commit SHAs, with the version in a comment.
 - Check which CUDA and cuDNN versions Microsoft's new CUDA 13 and CUDA 12 builds need, then update
   `packaging/cuda-requirements.in` and `packaging/cuda12-requirements.in` and regenerate the `.txt`
   files.
+- Move the linux-arm64 pack to the matching `onnxruntime-gpu` aarch64 wheel (`ORT_GPU_ARM64_*` in
+  `package.sh`, ADR 0005).
 - Re-run the GPU parity check against an installed layout (see Evidence above), on Linux and on
   Windows.
 

@@ -32,6 +32,9 @@ jobs:
         include:
           # One binary per x86-64 OS with ORT's CUDA provider bridge; it runs on the CPU unless the
           # libraries of the -cuda (CUDA 13) or -cuda12 archive are installed next to it.
+          # linux-arm64 is different: pyke publishes no aarch64 GPU build of ONNX Runtime, so its
+          # base binary has no CUDA support at all and only the GPU runner, built below with
+          # cuda-dynamic, uses the -cuda archive (docs/decisions/0005-arm64-cuda-pack.md).
           - platform: linux-amd64
             runner: ubuntu-latest
             features: ollaya-runner/cuda
@@ -39,7 +42,7 @@ jobs:
           - platform: linux-arm64
             runner: ubuntu-24.04-arm
             features: ''
-            package-args: ''
+            package-args: --cuda
           - platform: darwin-arm64
             runner: macos-latest
             features: ollaya-runner/coreml,ollaya-runner/mlx
@@ -133,7 +136,7 @@ jobs:
         run: |
           export OLLAYA_CARGO_FEATURES=$FEATURES
           case $PLATFORM in
-            linux-amd64) export OLLAYA_CUDA_RUNNER=target/cuda-dynamic/release/ollaya ;;
+            linux-amd64 | linux-arm64) export OLLAYA_CUDA_RUNNER=target/cuda-dynamic/release/ollaya ;;
             windows-amd64) export OLLAYA_CUDA_RUNNER=target/cuda-dynamic/release/ollaya.exe ;;
           esac
           # shellcheck disable=SC2086 # PACKAGE_ARGS is a list of flags
@@ -204,14 +207,19 @@ jobs:
           for pack in cuda:cuda_v13 cuda12:cuda_v12; do
             archive=dist/ollaya-$PLATFORM-${pack%%:*}.tar.zst dir=$d/lib/ollaya/${pack#*:}
             [ -f "$archive" ] || continue
+            # Without the GPU runner from the base archive, the daemon ignores the pack.
+            test -x "$d/lib/ollaya/ollaya-cuda-runner"
             zstd -dc "$archive" | tar -xf - -C "$d"
             (cd "$dir" && sha256sum -c --quiet FILES.sha256)
-            # Everything libggml-cuda.so links is in the pack, except the driver's libcuda.so.1 and
-            # libggml-base, which the runner has already loaded from lib/ollaya/llama. GPU runners
-            # start with the pack on LD_LIBRARY_PATH (the CUDA 12 build has no $ORIGIN RUNPATH).
-            missing=$(LD_LIBRARY_PATH="$d/lib/ollaya/llama:$dir" ldd "$dir/libggml-cuda.so" |
-              grep 'not found' | grep -v 'libcuda\.so\.1' || true)
-            [ -z "$missing" ] || { echo "$missing"; exit 1; }
+            # Everything libggml-cuda.so and the ONNX Runtime CUDA provider link is in the pack,
+            # except the driver's libcuda.so.1 and libggml-base, which the runner has already
+            # loaded from lib/ollaya/llama. GPU runners start with the pack on LD_LIBRARY_PATH
+            # (the CUDA 12 build has no $ORIGIN RUNPATH).
+            for so in libggml-cuda.so libonnxruntime_providers_cuda.so; do
+              missing=$(LD_LIBRARY_PATH="$d/lib/ollaya/llama:$dir" ldd "$dir/$so" |
+                grep 'not found' | grep -v 'libcuda\.so\.1' || true)
+              [ -z "$missing" ] || { echo "$so: $missing"; exit 1; }
+            done
           done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

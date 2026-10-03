@@ -221,7 +221,8 @@ main() {
 
     # --- GPU -------------------------------------------------------------------------------
 
-    # NVIDIA_STATE: none | nodriver | oldriver | ready. Only linux-amd64 has a CUDA package.
+    # NVIDIA_STATE: none | nodriver | oldriver | ready. Whether the release has a CUDA package for
+    # this platform is checked below, against its sha256sum.txt.
     # CUDA_PACK: cuda_v13, or cuda_v12 for drivers without CUDA 13 support (R525 to R575) and for
     # pre-Turing cards (the CUDA 13 pack's kernels start at sm_75), which releases from 0.7.3 on
     # ship as ollaya-<platform>-cuda12.
@@ -285,12 +286,15 @@ main() {
     fi
 
     WANT_CUDA=false
+    CUDA_SUFFIX=''
+    [ "$CUDA_PACK" = cuda_v13 ] || CUDA_SUFFIX=12
     case $NVIDIA_STATE in
         ready)
             if enabled "${OLLAYA_NO_CUDA:-}"; then
                 status "NVIDIA GPU found; skipping the CUDA libraries (OLLAYA_NO_CUDA is set)"
-            elif [ "$ARCH" != amd64 ]; then
-                warn "NVIDIA GPU found, but GPU acceleration is only packaged for x86-64 so far; Ollaya will use the CPU"
+            elif ! grep -q " ollaya-$PLATFORM-cuda$CUDA_SUFFIX\.tar\.zst\$" "$TMP/sha256sum.txt"; then
+                # linux-arm64 has a CUDA package only in newer releases, and other platforms none.
+                warn "NVIDIA GPU found, but Ollaya $VERSION has no GPU package for $PLATFORM; Ollaya will use the CPU"
             else
                 WANT_CUDA=true
             fi
@@ -324,8 +328,8 @@ main() {
         # The release lists the sha256 of every CUDA library (ollaya-<platform>-cuda.sha256, also
         # installed as FILES.sha256). When the installed libraries match it, keep them instead of
         # downloading the same ~1 GB again. Releases before 0.4.0 have no such file.
-        CUDA_SUFFIX='' CUDA_SIZE="about 1 GB"
-        [ "$CUDA_PACK" = cuda_v13 ] || CUDA_SUFFIX=12 CUDA_SIZE="about 1.6 GB"
+        CUDA_SIZE="about 1 GB"
+        [ "$CUDA_PACK" = cuda_v13 ] || CUDA_SIZE="about 1.6 GB"
         CUDA_DIR=$PREFIX/lib/ollaya/$CUDA_PACK
         CUDA_FILES=ollaya-$PLATFORM-cuda$CUDA_SUFFIX.sha256
         if [ -f "$CUDA_DIR/FILES.sha256" ] && grep -q " $CUDA_FILES\$" "$TMP/sha256sum.txt" &&

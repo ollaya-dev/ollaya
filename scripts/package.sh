@@ -7,11 +7,14 @@
 # Archives, written to --out (default: ./dist):
 #   ollaya-<platform>.tar.zst        bin/ollaya + lib/ollaya/llama/ (llama.cpp's libraries: CPU, and Metal
 #                                    on macOS) + share/doc/ollaya/ (LICENSE, THIRD_PARTY_NOTICES)
-#                                    and on x86-64 Linux and Windows lib/ollaya/ollaya-cuda-runner
-#                                    (the GPU runner, see OLLAYA_CUDA_RUNNER)
+#                                    and on x86-64 Linux and Windows, and on linux-arm64 with --cuda,
+#                                    lib/ollaya/ollaya-cuda-runner (the GPU runner, see
+#                                    OLLAYA_CUDA_RUNNER)
 #   ollaya-linux-amd64-cuda.tar.zst  lib/ollaya/cuda_v13/ (Microsoft's ONNX Runtime CUDA build +
 #                                    NVIDIA CUDA/cuDNN libraries + libggml-cuda.so, llama.cpp's
 #                                    CUDA backend) + share/doc/ollaya/cuda_v13/ (notices, licenses)
+#   ollaya-linux-arm64-cuda.tar.zst  the same for aarch64 (DGX Spark), with ONNX Runtime from the
+#                                    onnxruntime-gpu wheel (docs/decisions/0005-arm64-cuda-pack.md)
 #   ollaya-darwin-arm64.tgz          same content as the darwin .tar.zst; stock macOS has no zstd
 #   ollaya-darwin-arm64-mlx.tar.zst  lib/ollaya/mlx_metal/ (mlx.metallib, the MLX engine's Metal
 #                                    kernels) + share/doc/ollaya/mlx_metal/ (notices); also .tgz
@@ -28,11 +31,12 @@
 #
 # Options:
 #   --platform P  linux-amd64 | linux-arm64 | darwin-arm64 | windows-amd64 (default: this host)
-#   --cuda        also build the CUDA archive (linux-amd64 and windows-amd64), with Microsoft's
-#                 ONNX Runtime GPU release (docs/decisions/0004-cuda-onnxruntime-builds.md). Its
-#                 runner is the base archive's lib/ollaya/ollaya-cuda-runner.
-#   --cuda12      also build the CUDA 12 archive (same platforms), with Microsoft's cuda12 build.
-#                 The same runner loads either pack.
+#   --cuda        also build the CUDA archive (linux-amd64, linux-arm64 and windows-amd64), with
+#                 Microsoft's ONNX Runtime GPU build (docs/decisions/0004-cuda-onnxruntime-builds.md,
+#                 0005-arm64-cuda-pack.md). Its runner is the base archive's
+#                 lib/ollaya/ollaya-cuda-runner.
+#   --cuda12      also build the CUDA 12 archive (linux-amd64 and windows-amd64), with Microsoft's
+#                 cuda12 build. The same runner loads either pack.
 #   --mlx         also build the MLX archive (darwin-arm64 only). The binary must have been built
 #                 with `--features ollaya-runner/mlx`, whose build script puts mlx.metallib in
 #                 <target-dir> (docs/decisions/0001-mlx-engine.md).
@@ -47,7 +51,7 @@
 #   OLLAYA_CUDA_RUNNER     ollaya built with `--features ollaya-runner/cuda-dynamic`; the base
 #                          archive ships it as lib/ollaya/ollaya-cuda-runner, which GPU runners
 #                          start from (required for the base archive of linux-amd64 and
-#                          windows-amd64)
+#                          windows-amd64, and of linux-arm64 with --cuda)
 #   OLLAYA_CARGO_PACKAGE   package whose dependency tree is listed in the notices (default: ollaya)
 #   OLLAYA_CARGO_FEATURES  cargo features of the build (default: ollaya-runner/cuda on linux-amd64
 #                          and windows-amd64, ollaya-runner/coreml on darwin-arm64, plus
@@ -68,12 +72,18 @@ ORT_LICENSE_SHA256=2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a489
 ORT_NOTICES_SHA256=0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2
 # The CUDA pack runs Microsoft's ONNX Runtime GPU release instead, unmodified: pyke's CUDA build
 # has no kernels for sm_120 (docs/decisions/0004-cuda-onnxruntime-builds.md). Same minor version
-# as ORT_VERSION; bump together.
+# as ORT_VERSION; bump together. The one exception is linux-arm64, pinned below.
 ORT_GPU_VERSION=1.28.2
 ORT_GPU_LINUX_SHA256=118ca8dbc4e4bb9b3b7fea137d796a89d957c9aa70e1dc3a5199a302cdd5bb32
 ORT_GPU_WINDOWS_SHA256=4b7a2d01a3cc96b12d06c8266af2c8f42c96365c4a0100d45fd874c71b4a2e19
 ORT_GPU12_LINUX_SHA256=e172d4d52bc4399ca36553bd9705389adae900b1f1e08ade50078db1c84b6c1f
 ORT_GPU12_WINDOWS_SHA256=5b5ceb06e90405c7de9acdaf5aa06d288768e6a1e5dc54337281e09c03fc60f9
+# linux-arm64 (DGX Spark): Microsoft ships no aarch64 GPU archive, so the pack takes the same three
+# libraries from the onnxruntime-gpu wheel on PyPI, whose aarch64 builds start at 1.29.0
+# (docs/decisions/0005-arm64-cuda-pack.md).
+ORT_GPU_ARM64_VERSION=1.29.0
+ORT_GPU_ARM64_URL=https://files.pythonhosted.org/packages/fa/96/1be0b9711a614861fbf5c0c85c4da3aa2321f9da0b4734a717eb606f70ab/onnxruntime_gpu-1.29.0-cp312-cp312-manylinux_2_34_aarch64.whl
+ORT_GPU_ARM64_SHA256=545d2966dd11208bbc98e67be4d92e54ecd793acc45c0532cc7bfd36f50692fa
 
 # MLX (docs/decisions/0001-mlx-engine.md): the pins in crates/ollaya-mlx-sys/build.rs, and the
 # notices of what the `mlx` feature links into bin/ollaya. MLX's ACKNOWLEDGMENTS.md carries the
@@ -197,7 +207,10 @@ esac
 FEATURES=${OLLAYA_CARGO_FEATURES-$DEFAULT_FEATURES}
 case $PLATFORM in
     linux-amd64 | windows-amd64) ;;
-    *) [ "$CUDA$CUDA12" = 00 ] || die "--cuda and --cuda12 are only supported for linux-amd64 and windows-amd64" ;;
+    # The only aarch64 ONNX Runtime GPU build is one onnxruntime-gpu wheel per version, and it links
+    # libcudart.so.13: there is no CUDA 12 pack for linux-arm64.
+    linux-arm64) [ "$CUDA12" = 0 ] || die "--cuda12 is not supported for linux-arm64 (there is no aarch64 CUDA 12 build of ONNX Runtime); use --cuda" ;;
+    *) [ "$CUDA$CUDA12" = 00 ] || die "--cuda is only supported for linux-amd64, linux-arm64 and windows-amd64, --cuda12 for linux-amd64 and windows-amd64" ;;
 esac
 [ "$MLX" = 0 ] || [ "$PLATFORM" = darwin-arm64 ] || die "--mlx is only supported for darwin-arm64"
 [ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || [ "$CUDA12" = 1 ] || [ "$MLX" = 1 ] ||
@@ -215,21 +228,29 @@ EXE=
 # nvrtc .alt builds) is dropped. The TensorRT and NV TensorRT RTX providers are left out: they need
 # TensorRT 10 (libnvinfer, nvinfer_10.dll), which is not shipped, and the runner only registers the
 # CUDA execution provider.
-if [ "$PLATFORM" = windows-amd64 ]; then
-    ORT_LIBRARY=onnxruntime.dll
-    ORT_PROVIDERS="onnxruntime_providers_shared.dll onnxruntime_providers_cuda.dll"
-    WHEEL_TAG=win_amd64
-    WHEEL_PLATFORMS=win_amd64
-    # Windows wheels keep their DLLs in nvidia/*/bin/, Linux wheels in nvidia/*/lib/.
-    WHEEL_LIB_DIR=bin
-else
-    ORT_LIBRARY=libonnxruntime.so.1
-    ORT_PROVIDERS="libonnxruntime_providers_shared.so libonnxruntime_providers_cuda.so"
-    WHEEL_TAG=x86_64
-    WHEEL_PLATFORMS="manylinux_2_28_x86_64 manylinux_2_27_x86_64 manylinux_2_17_x86_64
+ORT_LIBRARY=libonnxruntime.so.1
+ORT_PROVIDERS="libonnxruntime_providers_shared.so libonnxruntime_providers_cuda.so"
+WHEEL_LIB_DIR=lib
+case $PLATFORM in
+    windows-amd64)
+        ORT_LIBRARY=onnxruntime.dll
+        ORT_PROVIDERS="onnxruntime_providers_shared.dll onnxruntime_providers_cuda.dll"
+        WHEEL_TAG=win_amd64
+        WHEEL_PLATFORMS=win_amd64
+        # Windows wheels keep their DLLs in nvidia/*/bin/, Linux wheels in nvidia/*/lib/.
+        WHEEL_LIB_DIR=bin
+        ;;
+    linux-arm64)
+        WHEEL_TAG=aarch64
+        WHEEL_PLATFORMS="manylinux_2_28_aarch64 manylinux_2_27_aarch64 manylinux_2_17_aarch64
+manylinux2014_aarch64"
+        ;;
+    *)
+        WHEEL_TAG=x86_64
+        WHEEL_PLATFORMS="manylinux_2_28_x86_64 manylinux_2_27_x86_64 manylinux_2_17_x86_64
 manylinux2014_x86_64 manylinux_2_12_x86_64 manylinux2010_x86_64"
-    WHEEL_LIB_DIR=lib
-fi
+        ;;
+esac
 
 # cuda_pack MAJOR: set up the variables of the CUDA MAJOR pack (13 or 12). cuFFT's soname runs one
 # major behind CUDA's (cufft 12 in CUDA 13, cufft 11 in CUDA 12).
@@ -243,19 +264,44 @@ cuda_pack() {
             CUDA_REQUIREMENTS=$ROOT/packaging/cuda12-requirements.txt ;;
         *) die "no CUDA $M pack" ;;
     esac
-    if [ "$PLATFORM" = windows-amd64 ]; then
-        ORT_GPU_ARCHIVE=onnxruntime-win-x64-gpu_cuda$M-$ORT_GPU_VERSION.zip
-        ORT_GPU_SHA256=$ORT_GPU_WINDOWS_SHA256
-        [ "$M" = 13 ] || ORT_GPU_SHA256=$ORT_GPU12_WINDOWS_SHA256
-        CUDA_LIBS_REQUIRED="cudart64_$M.dll cublas64_$M.dll cublasLt64_$M.dll cufft64_$CUFFT.dll curand64_10.dll
-nvrtc64_${M}0_0.dll nvJitLink_${M}0_0.dll cudnn64_9.dll cudnn_graph64_9.dll"
-    else
-        ORT_GPU_ARCHIVE=onnxruntime-linux-x64-gpu_cuda$M-$ORT_GPU_VERSION.tgz
-        ORT_GPU_SHA256=$ORT_GPU_LINUX_SHA256
-        [ "$M" = 13 ] || ORT_GPU_SHA256=$ORT_GPU12_LINUX_SHA256
-        CUDA_LIBS_REQUIRED="libcudart.so.$M libcublas.so.$M libcublasLt.so.$M libcufft.so.$CUFFT libcurand.so.10
+    # ORT_GPU_URL: where the ONNX Runtime GPU build comes from. ORT_GPU_VER: its version.
+    # ORT_GPU_DIR: the directory it unpacks to, which holds LICENSE and ThirdPartyNotices.txt.
+    # ORT_GPU_LIBS: the directory of its libraries. ORT_GPU_CORE: the core library's name there,
+    # copied to ORT_LIBRARY. Microsoft's GitHub archive, unless the platform says otherwise below.
+    ORT_GPU_VER=$ORT_GPU_VERSION
+    ORT_GPU_CORE=$ORT_LIBRARY
+    CUDA_LIBS_REQUIRED="libcudart.so.$M libcublas.so.$M libcublasLt.so.$M libcufft.so.$CUFFT libcurand.so.10
 libnvrtc.so.$M libnvJitLink.so.$M libcudnn.so.9 libcudnn_graph.so.9"
-    fi
+    case $PLATFORM in
+        windows-amd64)
+            ORT_GPU_ARCHIVE=onnxruntime-win-x64-gpu_cuda$M-$ORT_GPU_VER.zip
+            ORT_GPU_SHA256=$ORT_GPU_WINDOWS_SHA256
+            [ "$M" = 13 ] || ORT_GPU_SHA256=$ORT_GPU12_WINDOWS_SHA256
+            CUDA_LIBS_REQUIRED="cudart64_$M.dll cublas64_$M.dll cublasLt64_$M.dll cufft64_$CUFFT.dll curand64_10.dll
+nvrtc64_${M}0_0.dll nvJitLink_${M}0_0.dll cudnn64_9.dll cudnn_graph64_9.dll"
+            ;;
+        linux-arm64)
+            # Microsoft's aarch64 GPU build ships only as a wheel (a zip), with the libraries in
+            # onnxruntime/capi/ and the core one under its full version (libonnxruntime.so.1.29.0);
+            # the loader asks for its soname (docs/decisions/0005-arm64-cuda-pack.md).
+            ORT_GPU_VER=$ORT_GPU_ARM64_VERSION
+            ORT_GPU_URL=$ORT_GPU_ARM64_URL
+            ORT_GPU_ARCHIVE=${ORT_GPU_URL##*/}
+            ORT_GPU_SHA256=$ORT_GPU_ARM64_SHA256
+            ORT_GPU_DIR=onnxruntime
+            ORT_GPU_LIBS=onnxruntime/capi
+            ORT_GPU_CORE=libonnxruntime.so.$ORT_GPU_VER
+            return
+            ;;
+        *)
+            ORT_GPU_ARCHIVE=onnxruntime-linux-x64-gpu_cuda$M-$ORT_GPU_VER.tgz
+            ORT_GPU_SHA256=$ORT_GPU_LINUX_SHA256
+            [ "$M" = 13 ] || ORT_GPU_SHA256=$ORT_GPU12_LINUX_SHA256
+            ;;
+    esac
+    ORT_GPU_URL=https://github.com/microsoft/onnxruntime/releases/download/v$ORT_GPU_VER/$ORT_GPU_ARCHIVE
+    ORT_GPU_DIR=${ORT_GPU_ARCHIVE%.*}
+    ORT_GPU_LIBS=$ORT_GPU_DIR/lib
 }
 
 # is_cuda_lib NAME: whether the wheel file NAME goes into the pack cuda_pack set up.
@@ -403,6 +449,17 @@ rust_notices() {
 
 # --- staging -----------------------------------------------------------------------------------
 
+# stage_runner ROOT: put OLLAYA_CUDA_RUNNER in ROOT/lib/ollaya/ollaya-cuda-runner.
+stage_runner() {
+    runner=${OLLAYA_CUDA_RUNNER:-}
+    if [ -z "$runner" ] || [ ! -f "$runner" ]; then
+        die "set OLLAYA_CUDA_RUNNER to ollaya built with --features ollaya-runner/cuda-dynamic"
+    fi
+    mkdir -p "$1/lib/ollaya"
+    cp "$runner" "$1/lib/ollaya/ollaya-cuda-runner$EXE"
+    chmod 0755 "$1/lib/ollaya/ollaya-cuda-runner$EXE"
+}
+
 stage_base() {
     name=ollaya-$PLATFORM
     root=$TREES/$name
@@ -430,16 +487,11 @@ stage_base() {
     chmod 0755 "$root/bin/ollaya$EXE"
     # The GPU runner: the same program, loading ONNX Runtime from the CUDA pack at run time. It is
     # here rather than in the pack so the pack keeps its FILES.sha256 from release to release.
+    # linux-arm64 needs it only alongside a CUDA pack: the Dockerfile stages a CPU-only arm64 base
+    # without one (its bin/ollaya has no ONNX Runtime CUDA support at all, ADR 0005).
     case $PLATFORM in
-        linux-amd64 | windows-amd64)
-            runner=${OLLAYA_CUDA_RUNNER:-}
-            if [ -z "$runner" ] || [ ! -f "$runner" ]; then
-                die "set OLLAYA_CUDA_RUNNER to ollaya built with --features ollaya-runner/cuda-dynamic"
-            fi
-            mkdir -p "$root/lib/ollaya"
-            cp "$runner" "$root/lib/ollaya/ollaya-cuda-runner$EXE"
-            chmod 0755 "$root/lib/ollaya/ollaya-cuda-runner$EXE"
-            ;;
+        linux-amd64 | windows-amd64) stage_runner "$root" ;;
+        linux-arm64) [ "$CUDA" = 0 ] || stage_runner "$root" ;;
     esac
     # Windows: the DLLs ollaya.exe links (DirectML) sit next to it (copy-dylibs). ORT's provider
     # DLLs are loaded only on demand: the CUDA ones ship in the GPU pack, the others not at all.
@@ -510,17 +562,19 @@ stage_cuda() {
     have unzip || die "missing tool: unzip"
 
     # Microsoft's ONNX Runtime, byte for byte. The TensorRT provider in the archive is left out.
-    fetch "https://github.com/microsoft/onnxruntime/releases/download/v$ORT_GPU_VERSION/$ORT_GPU_ARCHIVE" \
-        "$CACHE/$ORT_GPU_ARCHIVE" "$ORT_GPU_SHA256"
+    fetch "$ORT_GPU_URL" "$CACHE/$ORT_GPU_ARCHIVE" "$ORT_GPU_SHA256"
     case $ORT_GPU_ARCHIVE in
-        *.zip) unzip -q "$CACHE/$ORT_GPU_ARCHIVE" -d "$WORK" ;;
+        *.zip | *.whl) unzip -q "$CACHE/$ORT_GPU_ARCHIVE" -d "$WORK" ;;
         *) tar -xzf "$CACHE/$ORT_GPU_ARCHIVE" -C "$WORK" ;;
     esac
-    ort=$WORK/${ORT_GPU_ARCHIVE%.*}
-    for p in $ORT_LIBRARY $ORT_PROVIDERS; do
-        [ -e "$ort/lib/$p" ] || die "$p not found in $ORT_GPU_ARCHIVE"
-        cp -L "$ort/lib/$p" "$lib/$p"
+    ort=$WORK/$ORT_GPU_DIR
+    ort_libs=$WORK/$ORT_GPU_LIBS
+    for p in $ORT_PROVIDERS; do
+        [ -e "$ort_libs/$p" ] || die "$p not found in $ORT_GPU_ARCHIVE"
+        cp -L "$ort_libs/$p" "$lib/$p"
     done
+    [ -e "$ort_libs/$ORT_GPU_CORE" ] || die "$ORT_GPU_CORE not found in $ORT_GPU_ARCHIVE"
+    cp -L "$ort_libs/$ORT_GPU_CORE" "$lib/$ORT_LIBRARY"
 
     wheels=$CACHE/wheels
     mkdir -p "$wheels"
@@ -559,12 +613,13 @@ stage_cuda() {
     builtins=
     for f in "$lib"/*nvrtc-builtins*; do [ ! -f "$f" ] || builtins=$f; done
     [ -n "$builtins" ] || die "the NVRTC builtins library was not found in the NVIDIA wheels"
-    # llama.cpp's CUDA backend (GGUF models), which finds the CUDA libraries next to it. The
-    # Windows CUDA 12 pack has none: ggml-org's CUDA 12.4 build would take the zip past GitHub's
-    # 2 GiB limit per release asset, so GGUF models use Vulkan or the CPU there.
+    # llama.cpp's CUDA backend (GGUF models), which finds the CUDA libraries next to it. Every
+    # pack has one except the Windows CUDA 12 pack: ggml-org's CUDA 12.4 build would take the zip
+    # past GitHub's 2 GiB limit per release asset, so GGUF models use Vulkan or the CPU there.
+    # linux-arm64 takes ggml-org's CUDA 13.4 arm64 build, with the same kernels as the x86-64 one.
     LLAMA_CUDA=
     case $LLAMA_CUDA_KIND in
-        linux-amd64-cuda | linux-amd64-cuda12) LLAMA_CUDA=libggml-cuda.so ;;
+        linux-amd64-cuda | linux-amd64-cuda12 | linux-arm64-cuda) LLAMA_CUDA=libggml-cuda.so ;;
         windows-amd64-cuda) LLAMA_CUDA=ggml-cuda.dll ;;
     esac
     if [ -n "$LLAMA_CUDA" ]; then
@@ -591,7 +646,7 @@ stage_cuda() {
         printf 'Everything in lib/ollaya/%s is third-party software. None of it is covered by\n' "$CUDA_PACK"
         printf "Ollaya's Apache-2.0 license.\n\n"
         printf '1. ONNX Runtime %s (https://github.com/microsoft/onnxruntime), Microsoft'"'"'s\n' \
-            "$ORT_GPU_VERSION"
+            "$ORT_GPU_VER"
         printf '%s, unmodified: %s.\n' "$ORT_GPU_ARCHIVE" "$ORT_LIBRARY $ORT_PROVIDERS"
         printf 'License: MIT. The components ONNX Runtime bundles are listed in\n'
         printf 'onnxruntime-ThirdPartyNotices.txt next to this file.\n\n'
