@@ -54,13 +54,19 @@ impl Progress {
 /// runs it before downloading any layer, so nothing large is fetched for a model that cannot run.
 pub type RunCheck = Arc<dyn Fn(&ModelName, &ModelConfig) -> Result<(), String> + Send + Sync>;
 
-#[derive(Clone)]
 pub struct Puller {
-    /// The HTTPS client, or why there is none: building it loads the system CA certificates,
-    /// which a host that only serves pulled models may not have. Only pulls need it.
+    /// The HTTPS client, or why its construction failed: building it loads the system CA
+    /// certificates, which a host that only serves pulled models may not have. Only pulls need it.
     http: Result<reqwest::Client, String>,
     store: Store,
     check: Option<RunCheck>,
+    /// Hugging Face endpoint override (`OLLAYA_HF_ENDPOINT`, else `HF_ENDPOINT`): swaps
+    /// `huggingface.co` for a mirror or an enterprise instance when downloading weights. `None`
+    /// keeps the URLs minted by `convert/` (the author's repositories).
+    hf_endpoint: Option<String>,
+    /// Hugging Face access token (`OLLAYA_HF_TOKEN`, else `HF_TOKEN`), sent as `Authorization:
+    /// Bearer` on weight downloads from a Hugging Face repository. `None`: anonymous access.
+    hf_token: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -86,6 +92,13 @@ impl Puller {
             http,
             store,
             check: None,
+            hf_endpoint: env("OLLAYA_HF_ENDPOINT")
+                .or_else(|| env("HF_ENDPOINT"))
+                .map(|s| s.trim_end_matches('/').to_owned())
+                .filter(|s| !s.is_empty()),
+            hf_token: env("OLLAYA_HF_TOKEN")
+                .or_else(|| env("HF_TOKEN"))
+                .filter(|s| !s.is_empty()),
         })
     }
 
@@ -171,11 +184,17 @@ impl Puller {
         Ok(manifest)
     }
 
-    fn blob_source(&self, name: &ModelName, d: &Descriptor) -> String {
-        d.urls
-            .first()
-            .cloned()
-            .unwrap_or_else(|| name.blob_url(&d.digest))
+    /// The URL a descriptor's first layer comes from, rewritten to the Hugging Face mirror when
+    /// `OLLAYA_HF_ENDPOINT`/`HF_ENDPOINT` is set. Returns whether the URL is a Hugging Face
+    /// repository download (the only ones the mirror and the access token apply to).
+    fn blob_source(&self, name: &ModelName, d: &Descriptor) -> (String, bool) {
+        rewrite_hf(
+            d.urls
+                .first()
+                .cloned()
+                .unwrap_or_else(|| name.blob_url(&d.digest)),
+            self.hf_endpoint.as_deref(),
+        )
     }
 
     async fn download(
@@ -184,7 +203,10 @@ impl Puller {
         d: &Descriptor,
         progress: &(dyn Fn(Progress) + Send + Sync),
     ) -> Result<(), Error> {
-        let url = self.blob_source(name, d);
+        let (url, is_hf) = self.blob_source(name, d);
+        // The bearer token is sent only to Hugging Face repositories, never to the registry
+        // (`ollaya.dev`) or a self-hosted blob host, so it cannot leak to them.
+        let bearer = is_hf.then_some(self.hf_token.as_deref()).flatten();
         let final_path = self.store.blob_path(&d.digest)?;
         let partial = PathBuf::from(format!("{}-partial", final_path.display()));
         let state_path = PathBuf::from(format!("{}-partial.json", final_path.display()));
@@ -199,11 +221,12 @@ impl Puller {
         report(0);
 
         let parts = if d.size <= SINGLE_STREAM_MAX {
-            self.fetch_whole(&url, &partial, d.size, &report).await?;
+            self.fetch_whole(&url, &partial, d.size, bearer, &report)
+                .await?;
             None
         } else {
             Some(
-                self.fetch_ranges(&url, &partial, &state_path, d.size, &report)
+                self.fetch_ranges(&url, &partial, &state_path, d.size, bearer, &report)
                     .await?,
             )
         };
@@ -230,11 +253,12 @@ impl Puller {
         url: &str,
         path: &Path,
         size: u64,
+        bearer: Option<&str>,
         report: &(dyn Fn(u64) + Send + Sync),
     ) -> Result<(), Error> {
         let mut attempt = 0;
         loop {
-            match self.try_fetch_whole(url, path, report).await {
+            match self.try_fetch_whole(url, path, bearer, report).await {
                 Ok(n) if n == size => return Ok(()),
                 Ok(n) => {
                     return Err(Error::Corrupt(format!(
@@ -254,9 +278,14 @@ impl Puller {
         &self,
         url: &str,
         path: &Path,
+        bearer: Option<&str>,
         report: &(dyn Fn(u64) + Send + Sync),
     ) -> Result<u64, Error> {
-        let resp = self.http()?.get(url).send().await?.error_for_status()?;
+        let mut req = self.http()?.get(url);
+        if let Some(token) = bearer {
+            req = req.bearer_auth(token);
+        }
+        let resp = req.send().await?.error_for_status()?;
         let mut file = tokio::fs::File::create(path).await?;
         let mut stream = resp.bytes_stream();
         let mut n = 0u64;
@@ -276,6 +305,7 @@ impl Puller {
         path: &Path,
         state_path: &Path,
         size: u64,
+        bearer: Option<&str>,
         report: &(dyn Fn(u64) + Send + Sync),
     ) -> Result<Vec<PartState>, Error> {
         // Resume from a previous attempt when its plan still matches the blob.
@@ -321,7 +351,19 @@ impl Puller {
             let counters = counters.clone();
             let http = client.clone();
             let (url, path) = (url.to_owned(), path.to_owned());
-            async move { fetch_part(&http, &url, &path, offset, psize, &counters[i]).await }
+            let bearer = bearer.map(str::to_owned);
+            async move {
+                fetch_part(
+                    &http,
+                    &url,
+                    &path,
+                    offset,
+                    psize,
+                    bearer.as_deref(),
+                    &counters[i],
+                )
+                .await
+            }
         });
         let mut running = futures_util::stream::iter(jobs).buffer_unordered(CONCURRENCY);
 
@@ -371,6 +413,7 @@ async fn fetch_part(
     path: &Path,
     offset: u64,
     size: u64,
+    bearer: Option<&str>,
     done: &AtomicU64,
 ) -> Result<(), Error> {
     let mut attempt = 0;
@@ -381,12 +424,12 @@ async fn fetch_part(
             return Ok(());
         }
         let result: Result<(), Error> = async {
-            let resp = http
-                .get(url)
-                .header(reqwest::header::RANGE, format!("bytes={start}-{end}"))
-                .send()
-                .await?
-                .error_for_status()?;
+            let mut req = http.get(url);
+            req = req.header(reqwest::header::RANGE, format!("bytes={start}-{end}"));
+            if let Some(token) = bearer {
+                req = req.bearer_auth(token);
+            }
+            let resp = req.send().await?.error_for_status()?;
             if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
                 return Err(Error::Corrupt(format!(
                     "{url}: server ignored the range request"
@@ -460,5 +503,67 @@ pub fn verify_bytes(bytes: &[u8], digest: &str) -> Result<(), Error> {
             expected: digest.to_owned(),
             got: format!("sha256:{}", sha256_hex(bytes)),
         })
+    }
+}
+
+fn env(key: &str) -> Option<String> {
+    std::env::var(key).ok()
+}
+
+/// Swap `huggingface.co` for `endpoint` in a weight URL, when one is configured and the URL is
+/// actually a Hugging Face repository download. Other URLs (self-hosted registries, the registry
+/// itself) pass through untouched. Returns whether the original was a Hugging Face download.
+fn rewrite_hf(url: String, endpoint: Option<&str>) -> (String, bool) {
+    let is_hf = url.starts_with("https://huggingface.co/");
+    let url = match endpoint.filter(|e| !e.is_empty()) {
+        Some(endpoint) if is_hf => {
+            url.replacen("https://huggingface.co", endpoint.trim_end_matches('/'), 1)
+        }
+        _ => url,
+    };
+    (url, is_hf)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rewrite_hf;
+
+    #[test]
+    fn rewrites_hf_urls_to_the_endpoint() {
+        let (url, is_hf) = rewrite_hf(
+            "https://huggingface.co/convaiinnovations/laya/resolve/abc/model.safetensors".into(),
+            Some("https://hf-mirror.example/"),
+        );
+        assert!(is_hf);
+        assert_eq!(
+            url,
+            "https://hf-mirror.example/convaiinnovations/laya/resolve/abc/model.safetensors"
+        );
+    }
+
+    #[test]
+    fn leaves_non_hf_urls_alone() {
+        let (url, is_hf) = rewrite_hf(
+            "https://my-registry.example/v2/library/laya/blobs/sha256:abc".into(),
+            Some("https://hf-mirror.example"),
+        );
+        assert!(!is_hf);
+        assert_eq!(
+            url,
+            "https://my-registry.example/v2/library/laya/blobs/sha256:abc"
+        );
+    }
+
+    #[test]
+    fn without_an_endpoint_keeps_the_author_url() {
+        let (url, is_hf) = rewrite_hf(
+            "https://huggingface.co/convaiinnovations/laya/resolve/abc/f.bin".into(),
+            None,
+        );
+        assert!(is_hf);
+        assert_eq!(
+            url,
+            "https://huggingface.co/convaiinnovations/laya/resolve/abc/f.bin"
+        );
     }
 }
