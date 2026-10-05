@@ -64,9 +64,13 @@ pub struct Puller {
     /// `huggingface.co` for a mirror or an enterprise instance when downloading weights. `None`
     /// keeps the URLs minted by `convert/` (the author's repositories).
     hf_endpoint: Option<String>,
-    /// Hugging Face access token (`OLLAYA_HF_TOKEN`, else `HF_TOKEN`), sent as `Authorization:
-    /// Bearer` on weight downloads from a Hugging Face repository. `None`: anonymous access.
+    /// Hugging Face access token from `OLLAYA_HF_TOKEN`, sent as `Authorization: Bearer` on weight
+    /// downloads from a Hugging Face repository, including a mirror or enterprise endpoint it is
+    /// rewritten to. `None`: not set.
     hf_token: Option<String>,
+    /// `HF_TOKEN` fallback, from the environment shared with Python tooling: sent only on direct
+    /// `huggingface.co` downloads, never to a mirror. Overridden by `OLLAYA_HF_TOKEN` when set.
+    hf_token_env: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,9 +100,8 @@ impl Puller {
                 .or_else(|| env("HF_ENDPOINT"))
                 .map(|s| s.trim_end_matches('/').to_owned())
                 .filter(|s| !s.is_empty()),
-            hf_token: env("OLLAYA_HF_TOKEN")
-                .or_else(|| env("HF_TOKEN"))
-                .filter(|s| !s.is_empty()),
+            hf_token: env("OLLAYA_HF_TOKEN").filter(|s| !s.is_empty()),
+            hf_token_env: env("HF_TOKEN").filter(|s| !s.is_empty()),
         })
     }
 
@@ -185,16 +188,17 @@ impl Puller {
     }
 
     /// The URL a descriptor's first layer comes from, rewritten to the Hugging Face mirror when
-    /// `OLLAYA_HF_ENDPOINT`/`HF_ENDPOINT` is set. Returns whether the URL is a Hugging Face
-    /// repository download (the only ones the mirror and the access token apply to).
-    fn blob_source(&self, name: &ModelName, d: &Descriptor) -> (String, bool) {
-        rewrite_hf(
-            d.urls
-                .first()
-                .cloned()
-                .unwrap_or_else(|| name.blob_url(&d.digest)),
-            self.hf_endpoint.as_deref(),
-        )
+    /// `OLLAYA_HF_ENDPOINT`/`HF_ENDPOINT` is set. Returns the URL, whether it is a Hugging Face
+    /// repository download, and whether it was rewritten to a mirror.
+    fn blob_source(&self, name: &ModelName, d: &Descriptor) -> (String, bool, bool) {
+        let url = d
+            .urls
+            .first()
+            .cloned()
+            .unwrap_or_else(|| name.blob_url(&d.digest));
+        let is_hf = url.starts_with("https://huggingface.co/");
+        let (url, rewritten) = rewrite_hf(url, self.hf_endpoint.as_deref());
+        (url, is_hf, rewritten)
     }
 
     async fn download(
@@ -203,10 +207,17 @@ impl Puller {
         d: &Descriptor,
         progress: &(dyn Fn(Progress) + Send + Sync),
     ) -> Result<(), Error> {
-        let (url, is_hf) = self.blob_source(name, d);
-        // The bearer token is sent only to Hugging Face repositories, never to the registry
-        // (`ollaya.dev`) or a self-hosted blob host, so it cannot leak to them.
-        let bearer = is_hf.then_some(self.hf_token.as_deref()).flatten();
+        let (url, is_hf, mirrored) = self.blob_source(name, d);
+        // A token travels only on Hugging Face downloads: `OLLAYA_HF_TOKEN` anywhere Hugging Face
+        // serves (a mirror included), the `HF_TOKEN` fallback only on huggingface.co itself, so a
+        // token shared with Python tooling is never sent to a third-party mirror. Never on the
+        // registry (`ollaya.dev`) or a self-hosted blob host.
+        let bearer = hf_bearer(
+            is_hf,
+            mirrored,
+            self.hf_token.as_deref(),
+            self.hf_token_env.as_deref(),
+        );
         let final_path = self.store.blob_path(&d.digest)?;
         let partial = PathBuf::from(format!("{}-partial", final_path.display()));
         let state_path = PathBuf::from(format!("{}-partial.json", final_path.display()));
@@ -512,29 +523,46 @@ fn env(key: &str) -> Option<String> {
 
 /// Swap `huggingface.co` for `endpoint` in a weight URL, when one is configured and the URL is
 /// actually a Hugging Face repository download. Other URLs (self-hosted registries, the registry
-/// itself) pass through untouched. Returns whether the original was a Hugging Face download.
+/// itself) pass through untouched. Returns the URL and whether it was rewritten to a mirror.
 fn rewrite_hf(url: String, endpoint: Option<&str>) -> (String, bool) {
     let is_hf = url.starts_with("https://huggingface.co/");
-    let url = match endpoint.filter(|e| !e.is_empty()) {
-        Some(endpoint) if is_hf => {
-            url.replacen("https://huggingface.co", endpoint.trim_end_matches('/'), 1)
-        }
-        _ => url,
+    let (url, rewritten) = match endpoint.filter(|e| !e.is_empty()) {
+        Some(endpoint) if is_hf => (
+            url.replacen("https://huggingface.co", endpoint.trim_end_matches('/'), 1),
+            true,
+        ),
+        _ => (url, false),
     };
-    (url, is_hf)
+    (url, rewritten)
+}
+
+/// Which bearer token to send on a Hugging Face download. `OLLAYA_HF_TOKEN` (`hf_token`) is sent
+/// to any Hugging Face origin, a mirror included; the `HF_TOKEN` fallback (`hf_token_env`) goes
+/// only to `huggingface.co` itself (`!mirrored`), so a token shared with Python tooling is never
+/// forwarded to a third-party mirror.
+fn hf_bearer<'a>(
+    is_hf: bool,
+    mirrored: bool,
+    hf_token: Option<&'a str>,
+    hf_token_env: Option<&'a str>,
+) -> Option<&'a str> {
+    if !is_hf {
+        return None;
+    }
+    hf_token.or_else(|| (!mirrored).then_some(hf_token_env).flatten())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::rewrite_hf;
+    use super::{hf_bearer, rewrite_hf};
 
     #[test]
     fn rewrites_hf_urls_to_the_endpoint() {
-        let (url, is_hf) = rewrite_hf(
+        let (url, rewritten) = rewrite_hf(
             "https://huggingface.co/convaiinnovations/laya/resolve/abc/model.safetensors".into(),
             Some("https://hf-mirror.example/"),
         );
-        assert!(is_hf);
+        assert!(rewritten);
         assert_eq!(
             url,
             "https://hf-mirror.example/convaiinnovations/laya/resolve/abc/model.safetensors"
@@ -543,11 +571,11 @@ mod tests {
 
     #[test]
     fn leaves_non_hf_urls_alone() {
-        let (url, is_hf) = rewrite_hf(
+        let (url, rewritten) = rewrite_hf(
             "https://my-registry.example/v2/library/laya/blobs/sha256:abc".into(),
             Some("https://hf-mirror.example"),
         );
-        assert!(!is_hf);
+        assert!(!rewritten);
         assert_eq!(
             url,
             "https://my-registry.example/v2/library/laya/blobs/sha256:abc"
@@ -556,14 +584,42 @@ mod tests {
 
     #[test]
     fn without_an_endpoint_keeps_the_author_url() {
-        let (url, is_hf) = rewrite_hf(
+        let (url, rewritten) = rewrite_hf(
             "https://huggingface.co/convaiinnovations/laya/resolve/abc/f.bin".into(),
             None,
         );
-        assert!(is_hf);
+        assert!(!rewritten);
         assert_eq!(
             url,
             "https://huggingface.co/convaiinnovations/laya/resolve/abc/f.bin"
+        );
+    }
+
+    // The three token cases from the review: no endpoint, a mirror with only HF_TOKEN, and a
+    // mirror with OLLAYA_HF_TOKEN.
+    #[test]
+    fn no_endpoint_sends_the_fallback_token_to_huggingface_co() {
+        assert_eq!(hf_bearer(true, false, None, Some("hf-env")), Some("hf-env"));
+    }
+
+    #[test]
+    fn a_mirror_never_gets_the_fallback_token() {
+        assert_eq!(hf_bearer(true, true, None, Some("hf-env")), None);
+    }
+
+    #[test]
+    fn a_mirror_gets_the_ollaya_token() {
+        assert_eq!(
+            hf_bearer(true, true, Some("ollaya-token"), Some("hf-env")),
+            Some("ollaya-token")
+        );
+    }
+
+    #[test]
+    fn non_huggingface_hosts_get_no_token() {
+        assert_eq!(
+            hf_bearer(false, false, Some("ollaya-token"), Some("hf-env")),
+            None
         );
     }
 }
