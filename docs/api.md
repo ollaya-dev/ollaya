@@ -1645,8 +1645,8 @@ These are the variables that change API behaviour.
 | `OLLAYA_MODELS` | `~/.ollaya/models` | Model store |
 | `OLLAYA_REGISTRY` | `ollaya.dev` | Default registry host in names |
 | `OLLAYA_HF_ENDPOINT` | unset | Base URL of a Hugging Face endpoint (mirror or enterprise instance) that weight downloads are fetched from instead of `huggingface.co`; falls back to `HF_ENDPOINT`. Blobs are still verified by sha256, so a mirror serving identical bytes cannot corrupt a model. |
-| `OLLAYA_HF_TOKEN` | unset | OLLAYA's own Hugging Face access token, sent as `Authorization: Bearer` on weight downloads from a Hugging Face repository, a mirror or an enterprise endpoint included. Never sent to the registry (`ollaya.dev`) or a self-hosted blob host. Needed for private/gated repos. |
-| `HF_TOKEN` | unset | Fallback for `OLLAYA_HF_TOKEN`, from the environment shared with Python tooling. Sent only to `huggingface.co` itself; it is never forwarded to `OLLAYA_HF_ENDPOINT` (a mirror) unless `OLLAYA_HF_TOKEN` is also set, so a shared token cannot be handed to a third-party mirror. |
+| `OLLAYA_HF_TOKEN` | unset | Ollaya's own Hugging Face access token, sent as `Authorization: Bearer` on weight downloads from a Hugging Face repository, a mirror or an enterprise endpoint included. Never sent to the registry (`ollaya.dev`) or a self-hosted blob host. Needed for private or gated repositories. |
+| `HF_TOKEN` | unset | Used when `OLLAYA_HF_TOKEN` is unset, so a token already set for Python tools works. Sent only to `huggingface.co` itself, never to a mirror (`OLLAYA_HF_ENDPOINT`), so a token shared with other tools is not handed to a third party. |
 | `OLLAYA_LOG` | `info` | Log levels, a [tracing filter](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html): `debug` logs every request with its status and duration |
 | `OLLAYA_LOG_DIR` | unset | Log to `<dir>/server.log` instead of stderr (created if missing; appended, never rotated) |
 
