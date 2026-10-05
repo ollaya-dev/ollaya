@@ -1197,6 +1197,48 @@ async fn create_copy_delete() {
     d.stop().await;
 }
 
+async fn show_modelfile_keeps_a_multi_line_description() {
+    let d = Daemon::laya().await;
+    let description = "Ticket triage\nRoutes billing and technical tickets.";
+    d.client
+        .create(
+            &serde_json::from_value(
+                json!({"model": "triage", "from": "laya:en", "description": description}),
+            )
+            .unwrap(),
+            |_| {},
+        )
+        .await
+        .unwrap();
+    let show = d.client.show("triage").await.unwrap();
+    // A Modelfile reads a multi-line value only from a `"""` block; on one line, the second
+    // line would be parsed as a directive.
+    assert!(
+        show.modelfile
+            .contains(&format!("\nDESCRIPTION \"\"\"\n{description}\n\"\"\"\n")),
+        "{}",
+        show.modelfile
+    );
+
+    d.client
+        .create(
+            &serde_json::from_value(
+                json!({"model": "short", "from": "laya:en", "description": "Ticket triage"}),
+            )
+            .unwrap(),
+            |_| {},
+        )
+        .await
+        .unwrap();
+    let show = d.client.show("short").await.unwrap();
+    assert!(
+        show.modelfile.contains("\nDESCRIPTION Ticket triage\n"),
+        "{}",
+        show.modelfile
+    );
+    d.stop().await;
+}
+
 // ------------------------------------------------------------------------------------------------
 // Harness
 
@@ -1326,6 +1368,7 @@ fn main() {
         queue_bound_and_cancellation,
         pull_streams_ndjson,
         create_copy_delete,
+        show_modelfile_keeps_a_multi_line_description,
         gguf_runner_that_dies_on_the_gpu_restarts_on_the_cpu,
         presets_create_show_decide_delete,
     ];

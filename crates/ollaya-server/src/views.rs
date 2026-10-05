@@ -247,7 +247,10 @@ pub fn show(store: &Store, info: &ModelInfo) -> ShowResponse {
             modelfile.push_str(&format!("PARAMETER precision {p}\n"));
         }
         let description = text(&c["description"]);
-        if !description.is_empty() {
+        if description.contains('\n') {
+            // A `"""` block, as it was written: on one line, the rest would read as directives.
+            modelfile.push_str(&format!("DESCRIPTION \"\"\"\n{description}\n\"\"\"\n"));
+        } else if !description.is_empty() {
             modelfile.push_str(&format!("DESCRIPTION {description}\n"));
         }
     }
