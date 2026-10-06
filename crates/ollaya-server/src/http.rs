@@ -880,6 +880,7 @@ pub fn build(config: ServerConfig, runner: RunnerLaunch) -> Result<Arc<AppState>
         keep_alive: config.keep_alive,
         max_loaded: config.max_loaded,
         device: config.device.clone(),
+        threads: config.threads,
         load_timeout: config.load_timeout,
         exe: runner.exe,
         arg0: runner.arg0,

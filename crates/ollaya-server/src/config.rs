@@ -28,6 +28,9 @@ pub struct ServerConfig {
     pub load_timeout: Duration,
     /// `OLLAYA_DEVICE`: `auto`, `cpu`, `cuda`, `cuda:<n>` or `metal`, passed to runners.
     pub device: String,
+    /// `OLLAYA_THREADS`: CPU threads per runner, passed to runners; `None` keeps each engine's
+    /// default.
+    pub threads: Option<usize>,
     /// `OLLAYA_API_KEY`: when set, requests need `Authorization: Bearer <key>`.
     pub api_key: Option<String>,
     /// `OLLAYA_ORIGINS`: browser origins allowed on top of the local defaults.
@@ -83,15 +86,18 @@ impl ServerConfig {
             value: value.to_owned(),
             reason,
         };
+        let positive = |name: &'static str| -> Result<Option<usize>, ConfigError> {
+            var(name)
+                .map(|v| {
+                    v.parse::<usize>()
+                        .ok()
+                        .filter(|n| *n > 0)
+                        .ok_or_else(|| invalid(name, &v, "expected a positive integer".into()))
+                })
+                .transpose()
+        };
         let count = |name: &'static str, default: usize| -> Result<usize, ConfigError> {
-            match var(name) {
-                None => Ok(default),
-                Some(v) => v
-                    .parse::<usize>()
-                    .ok()
-                    .filter(|n| *n > 0)
-                    .ok_or_else(|| invalid(name, &v, "expected a positive integer".into())),
-            }
+            Ok(positive(name)?.unwrap_or(default))
         };
         let host = Host::parse(&var("OLLAYA_HOST").unwrap_or_default())?;
         let models = var("OLLAYA_MODELS")
@@ -136,6 +142,7 @@ impl ServerConfig {
             max_queue: count("OLLAYA_MAX_QUEUE", ollaya_api::DEFAULT_MAX_QUEUE)?,
             load_timeout,
             device,
+            threads: positive("OLLAYA_THREADS")?,
             api_key: var("OLLAYA_API_KEY"),
             origins: var("OLLAYA_ORIGINS")
                 .map(|v| {
@@ -172,6 +179,7 @@ mod tests {
         assert_eq!((c.max_loaded, c.max_queue), (3, 512));
         assert_eq!(c.load_timeout, Duration::from_secs(300));
         assert_eq!(c.device, "auto");
+        assert_eq!(c.threads, None);
         assert!(c.api_key.is_none() && c.origins.is_empty());
         assert!(c.log_dir.is_none());
     }
@@ -186,6 +194,7 @@ mod tests {
             ("OLLAYA_MAX_QUEUE", "8"),
             ("OLLAYA_LOAD_TIMEOUT", "30s"),
             ("OLLAYA_DEVICE", "cuda:1"),
+            ("OLLAYA_THREADS", "6"),
             ("OLLAYA_API_KEY", " secret "),
             (
                 "OLLAYA_ORIGINS",
@@ -200,6 +209,7 @@ mod tests {
         assert_eq!((c.max_loaded, c.max_queue), (1, 8));
         assert_eq!(c.load_timeout, Duration::from_secs(30));
         assert_eq!(c.device, "cuda:1");
+        assert_eq!(c.threads, Some(6));
         assert_eq!(c.api_key.as_deref(), Some("secret"));
         assert_eq!(c.origins, ["https://*.example.com", "chrome-extension://*"]);
         assert_eq!(c.log_dir, Some(PathBuf::from("/var/log/ollaya")));
@@ -214,6 +224,8 @@ mod tests {
             ("OLLAYA_MAX_LOADED_MODELS", "many"),
             ("OLLAYA_LOAD_TIMEOUT", "0"),
             ("OLLAYA_DEVICE", "tpu"),
+            ("OLLAYA_THREADS", "0"),
+            ("OLLAYA_THREADS", "six"),
         ] {
             assert!(with(&[(k, v)]).is_err(), "{k}={v}");
         }

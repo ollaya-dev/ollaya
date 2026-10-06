@@ -106,6 +106,7 @@ It is configured with environment variables:
 | `OLLAYA_MAX_QUEUE` | `512` | Decision requests in flight before `503 QUEUE_FULL` |
 | `OLLAYA_LOAD_TIMEOUT` | `5m` | How long a model may take to load |
 | `OLLAYA_DEVICE` | `auto` | `auto` (an NVIDIA GPU when the installer added the CUDA libraries, else the CPU), `cpu`, `cuda` or `cuda:<n>` |
+| `OLLAYA_THREADS` | unset | CPU threads for each loaded model. Unset: ONNX Runtime's default, and for GGUF models half the CPUs on x86-64, all of them on arm64 |
 | `OLLAYA_API_KEY` | unset | Require `Authorization: Bearer <key>`; the CLI sends it too |
 | `OLLAYA_ORIGINS` | unset | Extra browser origins to allow, comma-separated |
 | `OLLAYA_REGISTRY` | `{{SITE_HOST}}` | Default registry host in model names |

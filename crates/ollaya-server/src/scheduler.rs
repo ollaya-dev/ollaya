@@ -32,6 +32,8 @@ pub struct SchedulerConfig {
     pub max_loaded: usize,
     /// `auto`, `cpu`, `cuda`, `cuda:<n>` or `metal`, passed to runners.
     pub device: String,
+    /// CPU threads per runner (`--threads`); `None` keeps each engine's default.
+    pub threads: Option<usize>,
     pub load_timeout: Duration,
     /// The executable to spawn as `<exe> runner ...`: the running binary, or on Windows with a GPU
     /// pack, its copy inside the pack (see [`crate::launch`]).
@@ -307,7 +309,8 @@ impl Scheduler {
             .unwrap()
             .insert(model.digest.clone(), runner.clone());
         tracing::info!(model = %model.name, device = %runner.device, precision = %runner.precision,
-            engine = %runner.engine, load_ms = started.elapsed().as_millis() as u64, "loaded model");
+            engine = %runner.engine, threads = self.config.threads,
+            load_ms = started.elapsed().as_millis() as u64, "loaded model");
         Ok((Lease { runner, keep_alive }, started.elapsed()))
     }
 
@@ -506,6 +509,9 @@ impl Scheduler {
             }
         }
         cmd.arg("--device").arg(launch.device);
+        if let Some(n) = self.config.threads {
+            cmd.arg("--threads").arg(n.to_string());
+        }
         #[cfg(unix)]
         if let Some(arg0) = launch.arg0 {
             cmd.arg0(arg0);

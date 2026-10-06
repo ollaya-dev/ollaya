@@ -497,5 +497,6 @@ The server binds to `127.0.0.1:11435` and, like Ollama, trusts local callers. Bi
 | `OLLAYA_MAX_QUEUE` | `512` | Requests in flight before `503 QUEUE_FULL` |
 | `OLLAYA_LOAD_TIMEOUT` | `5m` | Load deadline before `500 MODEL_LOAD_FAILED` |
 | `OLLAYA_DEVICE` | `auto` | `auto`, `cpu`, `cuda` or `cuda:<n>` |
+| `OLLAYA_THREADS` | unset | CPU threads for each loaded model; unset keeps each engine's default |
 | `OLLAYA_MODELS` | `~/.ollaya/models` | Model store |
 | `OLLAYA_REGISTRY` | `{{SITE_HOST}}` | Default registry host in names |
