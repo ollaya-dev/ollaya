@@ -236,10 +236,21 @@ impl Puller {
                 .await?;
             None
         } else {
-            Some(
-                self.fetch_ranges(&url, &partial, &state_path, d.size, bearer, &report)
-                    .await?,
-            )
+            match self
+                .fetch_ranges(&url, &partial, &state_path, d.size, bearer, &report)
+                .await
+            {
+                Ok(parts) => Some(parts),
+                // A mirror that ignores `Range:` (e.g. Artifactory's `/resolve/`) returns the
+                // whole body as `200`. Ranges are only a download strategy, so stream it once.
+                Err(Error::NoRanges(_)) => {
+                    let _ = tokio::fs::remove_file(&state_path).await;
+                    self.fetch_whole(&url, &partial, d.size, bearer, &report)
+                        .await?;
+                    None
+                }
+                Err(e) => return Err(e),
+            }
         };
 
         let got = hash_file(&partial).await?;
@@ -442,9 +453,9 @@ async fn fetch_part(
             }
             let resp = req.send().await?.error_for_status()?;
             if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-                return Err(Error::Corrupt(format!(
-                    "{url}: server ignored the range request"
-                )));
+                // Not corrupt data: some mirrors ignore `Range:` and return the whole body with
+                // 200. Signal the caller to fall back to a single stream instead.
+                return Err(Error::NoRanges(url.to_owned()));
             }
             let mut file = tokio::fs::OpenOptions::new().write(true).open(path).await?;
             file.seek(std::io::SeekFrom::Start(start)).await?;

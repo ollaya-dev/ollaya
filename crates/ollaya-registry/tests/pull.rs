@@ -1,6 +1,6 @@
 //! Pull against a real HTTP server: a static registry plus a range-capable blob host.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use ollaya_registry::manifest::{Descriptor, MANIFEST_V2, Manifest, media};
 use ollaya_registry::store::sha256_hex;
@@ -63,6 +63,41 @@ fn pseudo_random(n: usize) -> Vec<u8> {
             x as u8
         })
         .collect()
+}
+
+#[tokio::test]
+async fn falls_back_to_a_single_stream_when_the_server_ignores_range() {
+    // A mirror (like Artifactory's `/resolve/`) answers `Range:` with the whole body as `200`
+    // instead of `206`. The puller must stream the blob once, not fail.
+    let weights = Arc::new(pseudo_random(40 << 20)); // above the single-stream limit
+    let remote = tempfile::tempdir().unwrap();
+    let app = {
+        let weights = weights.clone();
+        axum::Router::new()
+            .route(
+                "/hf/model.safetensors",
+                axum::routing::get(move || {
+                    let weights = weights.clone();
+                    async move { weights.as_ref().clone() }
+                }),
+            )
+            .fallback_service(tower_http::services::ServeDir::new(remote.path()))
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    // Republish with the real base so the manifest references the live server.
+    publish(remote.path(), &base, "latest", &weights, None);
+    let local = tempfile::tempdir().unwrap();
+    let store = Store::open(local.path()).unwrap();
+    let puller = Puller::new(store.clone()).unwrap();
+    let name = ModelName::parse(&format!("{base}/library/test")).unwrap();
+    let digest = format!("sha256:{}", sha256_hex(&weights));
+
+    puller.pull(&name, &|_| {}).await.unwrap();
+    let blob = store.blob_path(&digest).unwrap();
+    assert_eq!(std::fs::read(&blob).unwrap(), weights.as_ref());
 }
 
 #[tokio::test]
