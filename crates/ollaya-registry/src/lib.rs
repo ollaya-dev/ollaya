@@ -54,6 +54,7 @@ impl Error {
                 e.is_timeout()
                     || e.is_connect()
                     || e.is_body()
+                    || e.status() == Some(reqwest::StatusCode::REQUEST_TIMEOUT)
                     || e.status().is_some_and(|s| s.is_server_error())
             }
             _ => false,

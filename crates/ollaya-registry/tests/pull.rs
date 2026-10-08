@@ -1,5 +1,6 @@
 //! Pull against a real HTTP server: a static registry plus a range-capable blob host.
 
+use axum::response::IntoResponse;
 use std::sync::{Arc, Mutex};
 
 use ollaya_registry::manifest::{Descriptor, MANIFEST_V2, Manifest, media};
@@ -88,6 +89,48 @@ async fn falls_back_to_a_single_stream_when_the_server_ignores_range() {
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
     // Republish with the real base so the manifest references the live server.
+    publish(remote.path(), &base, "latest", &weights, None);
+    let local = tempfile::tempdir().unwrap();
+    let store = Store::open(local.path()).unwrap();
+    let puller = Puller::new(store.clone()).unwrap();
+    let name = ModelName::parse(&format!("{base}/library/test")).unwrap();
+    let digest = format!("sha256:{}", sha256_hex(&weights));
+
+    puller.pull(&name, &|_| {}).await.unwrap();
+    let blob = store.blob_path(&digest).unwrap();
+    assert_eq!(std::fs::read(&blob).unwrap(), weights.as_ref());
+}
+
+#[tokio::test]
+async fn retries_a_408_timeout_and_completes() {
+    // A mirror (or proxy) that answers one 408 Request Timeout before serving the blob must not
+    // fail the pull: 408 is transient, so the single-stream path retries with backoff.
+    let weights = Arc::new(pseudo_random(40 << 20)); // above the single-stream limit
+    let remote = tempfile::tempdir().unwrap();
+    let app = {
+        let weights = weights.clone();
+        let first = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        axum::Router::new()
+            .route(
+                "/hf/model.safetensors",
+                axum::routing::get(move || {
+                    let weights = weights.clone();
+                    let first = first.clone();
+                    async move {
+                        if first.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                            (axum::http::StatusCode::REQUEST_TIMEOUT, "").into_response()
+                        } else {
+                            weights.as_ref().clone()
+                        }
+                    }
+                }),
+            )
+            .fallback_service(tower_http::services::ServeDir::new(remote.path()))
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
     publish(remote.path(), &base, "latest", &weights, None);
     let local = tempfile::tempdir().unwrap();
     let store = Store::open(local.path()).unwrap();
