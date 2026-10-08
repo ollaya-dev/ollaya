@@ -244,14 +244,14 @@ pub fn show(store: &Store, info: &ModelInfo) -> ShowResponse {
             modelfile.push_str(&format!("QUESTIONS \"\"\"\n{q}\n\"\"\"\n"));
         }
         // A calibration layer the model shares with its parent is inherited: FROM brings it back.
-        let parent_calibration = ModelName::parse(&from)
+        let parent_manifest = ModelName::parse(&from)
             .ok()
-            .and_then(|n| store.read_manifest(&n).ok().flatten())
-            .and_then(|p| {
-                p.manifest
-                    .layer(media::CALIBRATION)
-                    .map(|d| d.digest.clone())
-            });
+            .and_then(|n| store.read_manifest(&n).ok().flatten());
+        let parent_calibration = parent_manifest.as_ref().and_then(|p| {
+            p.manifest
+                .layer(media::CALIBRATION)
+                .map(|d| d.digest.clone())
+        });
         if let Some(calibration) = manifest
             .layer(media::CALIBRATION)
             .filter(|d| parent_calibration.as_ref() != Some(&d.digest))
@@ -268,6 +268,15 @@ pub fn show(store: &Store, info: &ModelInfo) -> ShowResponse {
         }
         if let Some(p) = &precision {
             modelfile.push_str(&format!("PARAMETER precision {p}\n"));
+        }
+        let parent_license = parent_manifest
+            .as_ref()
+            .and_then(|p| p.manifest.layer(media::LICENSE));
+        if manifest
+            .layer(media::LICENSE)
+            .is_some_and(|l| parent_license.is_none_or(|p| p.digest != l.digest))
+        {
+            modelfile.push_str(&format!("LICENSE \"\"\"\n{license}\n\"\"\"\n"));
         }
         let description = text(&c["description"]);
         if description.contains('\n') {

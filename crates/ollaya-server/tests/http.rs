@@ -1266,6 +1266,43 @@ async fn create_copy_delete() {
     d.stop().await;
 }
 
+async fn show_modelfile_keeps_a_custom_license() {
+    let d = Daemon::laya().await;
+    for (model, license) in [("short", "MIT"), ("long", "MIT\n\nApache-2.0")] {
+        d.client
+            .create(
+                &serde_json::from_value(
+                    json!({"model": model, "from": "laya:en", "license": license}),
+                )
+                .unwrap(),
+                |_| {},
+            )
+            .await
+            .unwrap();
+        let show = d.client.show(model).await.unwrap();
+        // Even a one-line license goes in a `"""` block: a bare LICENSE value is read as a path.
+        assert!(
+            show.modelfile
+                .contains(&format!("\nLICENSE \"\"\"\n{license}\n\"\"\"\n")),
+            "{}",
+            show.modelfile
+        );
+    }
+
+    // A license the model shares with its parent is inherited: FROM brings it back.
+    d.client
+        .create(
+            &serde_json::from_value(json!({"model": "child", "from": "long"})).unwrap(),
+            |_| {},
+        )
+        .await
+        .unwrap();
+    let show = d.client.show("child").await.unwrap();
+    assert_eq!(show.license, "MIT\n\nApache-2.0");
+    assert!(!show.modelfile.contains("LICENSE"), "{}", show.modelfile);
+    d.stop().await;
+}
+
 async fn show_modelfile_keeps_a_multi_line_description() {
     let d = Daemon::laya().await;
     let description = "Ticket triage\nRoutes billing and technical tickets.";
@@ -1437,6 +1474,7 @@ fn main() {
         queue_bound_and_cancellation,
         pull_streams_ndjson,
         create_copy_delete,
+        show_modelfile_keeps_a_custom_license,
         show_modelfile_keeps_a_multi_line_description,
         gguf_runner_that_dies_on_the_gpu_restarts_on_the_cpu,
         presets_create_show_decide_delete,
