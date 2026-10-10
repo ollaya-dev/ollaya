@@ -1,0 +1,1122 @@
+{
+  "tokenizations": {
+    "yes": [
+      11683
+    ],
+    "Yes": [
+      12447
+    ],
+    "YES": [
+      65,
+      2020
+    ],
+    "no": [
+      2243
+    ],
+    "No": [
+      4547
+    ],
+    "NO": [
+      19598
+    ],
+    "A": [
+      41
+    ],
+    "B": [
+      42
+    ],
+    "C": [
+      43
+    ],
+    " A": [
+      334
+    ],
+    " B": [
+      378
+    ],
+    " C": [
+      340
+    ],
+    "0": [
+      24
+    ],
+    "1": [
+      25
+    ],
+    "2": [
+      26
+    ],
+    "D": [
+      44
+    ],
+    "E": [
+      45
+    ],
+    "F": [
+      46
+    ],
+    "G": [
+      47
+    ],
+    "H": [
+      48
+    ],
+    "I": [
+      49
+    ],
+    "J": [
+      50
+    ],
+    "K": [
+      51
+    ],
+    "L": [
+      52
+    ],
+    "M": [
+      53
+    ],
+    "N": [
+      54
+    ],
+    "O": [
+      55
+    ],
+    "P": [
+      56
+    ],
+    "Q": [
+      57
+    ],
+    "R": [
+      58
+    ],
+    "S": [
+      59
+    ],
+    "T": [
+      60
+    ],
+    "U": [
+      61
+    ],
+    "V": [
+      62
+    ],
+    "W": [
+      63
+    ],
+    "X": [
+      64
+    ],
+    "Y": [
+      65
+    ],
+    "Z": [
+      66
+    ],
+    " D": [
+      388
+    ],
+    " E": [
+      407
+    ],
+    " F": [
+      410
+    ],
+    " G": [
+      417
+    ],
+    " H": [
+      403
+    ],
+    " I": [
+      358
+    ],
+    " J": [
+      461
+    ],
+    " K": [
+      483
+    ],
+    " L": [
+      402
+    ],
+    " M": [
+      356
+    ],
+    " N": [
+      427
+    ],
+    " O": [
+      480
+    ],
+    " P": [
+      372
+    ],
+    " Q": [
+      1392
+    ],
+    " R": [
+      408
+    ],
+    " S": [
+      325
+    ],
+    " T": [
+      336
+    ],
+    " U": [
+      502
+    ],
+    " V": [
+      518
+    ],
+    " W": [
+      422
+    ],
+    " X": [
+      1549
+    ],
+    " Y": [
+      766
+    ],
+    " Z": [
+      895
+    ],
+    "00": [
+      555
+    ],
+    "01": [
+      4040
+    ],
+    "02": [
+      5342
+    ],
+    "03": [
+      5634
+    ],
+    "04": [
+      5825
+    ],
+    "05": [
+      3153
+    ],
+    "06": [
+      5967
+    ],
+    "07": [
+      4471
+    ],
+    "08": [
+      4027
+    ],
+    "09": [
+      4404
+    ],
+    "10": [
+      654
+    ],
+    "11": [
+      1131
+    ],
+    "12": [
+      873
+    ],
+    "13": [
+      1031
+    ],
+    "14": [
+      1035
+    ],
+    "15": [
+      885
+    ],
+    "16": [
+      942
+    ],
+    "17": [
+      916
+    ],
+    "18": [
+      632
+    ],
+    "19": [
+      412
+    ],
+    "20": [
+      397
+    ],
+    "21": [
+      1696
+    ],
+    "22": [
+      1518
+    ],
+    "23": [
+      1467
+    ],
+    "24": [
+      1325
+    ],
+    "25": [
+      1197
+    ],
+    "26": [
+      1616
+    ],
+    " 00": [
+      229,
+      555
+    ],
+    " 01": [
+      229,
+      4040
+    ],
+    " 02": [
+      229,
+      5342
+    ],
+    " 03": [
+      229,
+      5634
+    ],
+    " 04": [
+      229,
+      5825
+    ],
+    " 05": [
+      229,
+      3153
+    ],
+    " 06": [
+      229,
+      5967
+    ],
+    " 07": [
+      229,
+      4471
+    ],
+    " 08": [
+      229,
+      4027
+    ],
+    " 09": [
+      229,
+      4404
+    ],
+    " 10": [
+      229,
+      654
+    ],
+    " 11": [
+      229,
+      1131
+    ],
+    " 12": [
+      229,
+      873
+    ],
+    " 13": [
+      229,
+      1031
+    ],
+    " 14": [
+      229,
+      1035
+    ],
+    " 15": [
+      229,
+      885
+    ],
+    " 16": [
+      229,
+      942
+    ],
+    " 17": [
+      229,
+      916
+    ],
+    " 18": [
+      229,
+      632
+    ],
+    " 19": [
+      229,
+      412
+    ],
+    " 20": [
+      229,
+      397
+    ],
+    " 21": [
+      229,
+      1696
+    ],
+    " 22": [
+      229,
+      1518
+    ],
+    " 23": [
+      229,
+      1467
+    ],
+    " 24": [
+      229,
+      1325
+    ],
+    " 25": [
+      229,
+      1197
+    ],
+    " 26": [
+      229,
+      1616
+    ],
+    "27": [
+      1641
+    ],
+    "28": [
+      1637
+    ],
+    "29": [
+      1734
+    ],
+    "30": [
+      1163
+    ],
+    "31": [
+      2498
+    ],
+    "32": [
+      2424
+    ],
+    "33": [
+      2124
+    ],
+    "34": [
+      2432
+    ],
+    "35": [
+      2036
+    ],
+    "36": [
+      2523
+    ],
+    "37": [
+      2591
+    ],
+    "38": [
+      2481
+    ],
+    "39": [
+      2687
+    ],
+    " 27": [
+      229,
+      1641
+    ],
+    " 28": [
+      229,
+      1637
+    ],
+    " 29": [
+      229,
+      1734
+    ],
+    " 30": [
+      229,
+      1163
+    ],
+    " 31": [
+      229,
+      2498
+    ],
+    " 32": [
+      229,
+      2424
+    ],
+    " 33": [
+      229,
+      2124
+    ],
+    " 34": [
+      229,
+      2432
+    ],
+    " 35": [
+      229,
+      2036
+    ],
+    " 36": [
+      229,
+      2523
+    ],
+    " 37": [
+      229,
+      2591
+    ],
+    " 38": [
+      229,
+      2481
+    ],
+    " 39": [
+      229,
+      2687
+    ],
+    "a": [
+      73
+    ],
+    "b": [
+      74
+    ],
+    "é": [
+      359
+    ],
+    " a": [
+      267
+    ],
+    " b": [
+      293
+    ],
+    " é": [
+      1024
+    ]
+  },
+  "fixtures": [
+    {
+      "qid": "n",
+      "question": {
+        "type": "noul",
+        "instructions": "Is this positive?"
+      },
+      "suffix": "Is this positive?\n\nReply with yes or no only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          2243,
+          4547,
+          19598
+        ],
+        [
+          11683,
+          12447
+        ]
+      ]
+    },
+    {
+      "qid": "c",
+      "question": {
+        "type": "choice",
+        "instructions": "Sentiment?",
+        "criteria": {
+          "positive": "positive sentiment",
+          "negative": "negative sentiment",
+          "neutral": null
+        }
+      },
+      "suffix": "Sentiment?\n\nOptions:\nA positive sentiment\nB negative sentiment\nC neutral\n\nReply with the option code only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          41,
+          334
+        ],
+        [
+          42,
+          378
+        ],
+        [
+          43,
+          340
+        ]
+      ]
+    },
+    {
+      "qid": "s",
+      "question": {
+        "type": "score",
+        "instructions": "Intensity?",
+        "criteria": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      "suffix": "Intensity?\n\n0 low\n1 medium\n2 high\n\nReply with a single digit 0-2 only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          24
+        ],
+        [
+          25
+        ],
+        [
+          26
+        ]
+      ]
+    },
+    {
+      "qid": "q",
+      "question": {
+        "type": "choice",
+        "instructions": "Choose",
+        "criteria": {
+          "option_0": null
+        }
+      },
+      "suffix": "Choose\n\nOptions:\nA option 0\n\nReply with the option code only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          41,
+          334
+        ]
+      ]
+    },
+    {
+      "qid": "q",
+      "question": {
+        "type": "choice",
+        "instructions": "Choose",
+        "criteria": {
+          "option_0": null,
+          "option_1": null
+        }
+      },
+      "suffix": "Choose\n\nOptions:\nA option 0\nB option 1\n\nReply with the option code only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          41,
+          334
+        ],
+        [
+          42,
+          378
+        ]
+      ]
+    },
+    {
+      "qid": "q",
+      "question": {
+        "type": "choice",
+        "instructions": "Choose",
+        "criteria": {
+          "option_0": null,
+          "option_1": null,
+          "option_2": null,
+          "option_3": null,
+          "option_4": null,
+          "option_5": null,
+          "option_6": null,
+          "option_7": null,
+          "option_8": null,
+          "option_9": null,
+          "option_10": null,
+          "option_11": null,
+          "option_12": null,
+          "option_13": null,
+          "option_14": null,
+          "option_15": null,
+          "option_16": null,
+          "option_17": null,
+          "option_18": null,
+          "option_19": null,
+          "option_20": null,
+          "option_21": null,
+          "option_22": null,
+          "option_23": null,
+          "option_24": null,
+          "option_25": null
+        }
+      },
+      "suffix": "Choose\n\nOptions:\nA option 0\nB option 1\nC option 2\nD option 3\nE option 4\nF option 5\nG option 6\nH option 7\nI option 8\nJ option 9\nK option 10\nL option 11\nM option 12\nN option 13\nO option 14\nP option 15\nQ option 16\nR option 17\nS option 18\nT option 19\nU option 20\nV option 21\nW option 22\nX option 23\nY option 24\nZ option 25\n\nReply with the option code only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          41,
+          334
+        ],
+        [
+          42,
+          378
+        ],
+        [
+          43,
+          340
+        ],
+        [
+          44,
+          388
+        ],
+        [
+          45,
+          407
+        ],
+        [
+          46,
+          410
+        ],
+        [
+          47,
+          417
+        ],
+        [
+          48,
+          403
+        ],
+        [
+          49,
+          358
+        ],
+        [
+          50,
+          461
+        ],
+        [
+          51,
+          483
+        ],
+        [
+          52,
+          402
+        ],
+        [
+          53,
+          356
+        ],
+        [
+          54,
+          427
+        ],
+        [
+          55,
+          480
+        ],
+        [
+          56,
+          372
+        ],
+        [
+          57,
+          1392
+        ],
+        [
+          58,
+          408
+        ],
+        [
+          59,
+          325
+        ],
+        [
+          60,
+          336
+        ],
+        [
+          61,
+          502
+        ],
+        [
+          62,
+          518
+        ],
+        [
+          63,
+          422
+        ],
+        [
+          64,
+          1549
+        ],
+        [
+          65,
+          766
+        ],
+        [
+          66,
+          895
+        ]
+      ]
+    },
+    {
+      "qid": "q",
+      "question": {
+        "type": "choice",
+        "instructions": "Choose",
+        "criteria": {
+          "option_0": null,
+          "option_1": null,
+          "option_2": null,
+          "option_3": null,
+          "option_4": null,
+          "option_5": null,
+          "option_6": null,
+          "option_7": null,
+          "option_8": null,
+          "option_9": null,
+          "option_10": null,
+          "option_11": null,
+          "option_12": null,
+          "option_13": null,
+          "option_14": null,
+          "option_15": null,
+          "option_16": null,
+          "option_17": null,
+          "option_18": null,
+          "option_19": null,
+          "option_20": null,
+          "option_21": null,
+          "option_22": null,
+          "option_23": null,
+          "option_24": null,
+          "option_25": null,
+          "option_26": null
+        }
+      },
+      "suffix": "Choose\n\nOptions:\n00 option 0\n01 option 1\n02 option 2\n03 option 3\n04 option 4\n05 option 5\n06 option 6\n07 option 7\n08 option 8\n09 option 9\n10 option 10\n11 option 11\n12 option 12\n13 option 13\n14 option 14\n15 option 15\n16 option 16\n17 option 17\n18 option 18\n19 option 19\n20 option 20\n21 option 21\n22 option 22\n23 option 23\n24 option 24\n25 option 25\n26 option 26\n\nReply with the option code only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          555
+        ],
+        [
+          4040
+        ],
+        [
+          5342
+        ],
+        [
+          5634
+        ],
+        [
+          5825
+        ],
+        [
+          3153
+        ],
+        [
+          5967
+        ],
+        [
+          4471
+        ],
+        [
+          4027
+        ],
+        [
+          4404
+        ],
+        [
+          654
+        ],
+        [
+          1131
+        ],
+        [
+          873
+        ],
+        [
+          1031
+        ],
+        [
+          1035
+        ],
+        [
+          885
+        ],
+        [
+          942
+        ],
+        [
+          916
+        ],
+        [
+          632
+        ],
+        [
+          412
+        ],
+        [
+          397
+        ],
+        [
+          1696
+        ],
+        [
+          1518
+        ],
+        [
+          1467
+        ],
+        [
+          1325
+        ],
+        [
+          1197
+        ],
+        [
+          1616
+        ]
+      ]
+    },
+    {
+      "qid": "q",
+      "question": {
+        "type": "choice",
+        "instructions": "Choose",
+        "criteria": {
+          "option_0": null,
+          "option_1": null,
+          "option_2": null,
+          "option_3": null,
+          "option_4": null,
+          "option_5": null,
+          "option_6": null,
+          "option_7": null,
+          "option_8": null,
+          "option_9": null,
+          "option_10": null,
+          "option_11": null,
+          "option_12": null,
+          "option_13": null,
+          "option_14": null,
+          "option_15": null,
+          "option_16": null,
+          "option_17": null,
+          "option_18": null,
+          "option_19": null,
+          "option_20": null,
+          "option_21": null,
+          "option_22": null,
+          "option_23": null,
+          "option_24": null,
+          "option_25": null,
+          "option_26": null,
+          "option_27": null,
+          "option_28": null,
+          "option_29": null,
+          "option_30": null,
+          "option_31": null,
+          "option_32": null,
+          "option_33": null,
+          "option_34": null,
+          "option_35": null,
+          "option_36": null,
+          "option_37": null,
+          "option_38": null,
+          "option_39": null
+        }
+      },
+      "suffix": "Choose\n\nOptions:\n00 option 0\n01 option 1\n02 option 2\n03 option 3\n04 option 4\n05 option 5\n06 option 6\n07 option 7\n08 option 8\n09 option 9\n10 option 10\n11 option 11\n12 option 12\n13 option 13\n14 option 14\n15 option 15\n16 option 16\n17 option 17\n18 option 18\n19 option 19\n20 option 20\n21 option 21\n22 option 22\n23 option 23\n24 option 24\n25 option 25\n26 option 26\n27 option 27\n28 option 28\n29 option 29\n30 option 30\n31 option 31\n32 option 32\n33 option 33\n34 option 34\n35 option 35\n36 option 36\n37 option 37\n38 option 38\n39 option 39\n\nReply with the option code only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          555
+        ],
+        [
+          4040
+        ],
+        [
+          5342
+        ],
+        [
+          5634
+        ],
+        [
+          5825
+        ],
+        [
+          3153
+        ],
+        [
+          5967
+        ],
+        [
+          4471
+        ],
+        [
+          4027
+        ],
+        [
+          4404
+        ],
+        [
+          654
+        ],
+        [
+          1131
+        ],
+        [
+          873
+        ],
+        [
+          1031
+        ],
+        [
+          1035
+        ],
+        [
+          885
+        ],
+        [
+          942
+        ],
+        [
+          916
+        ],
+        [
+          632
+        ],
+        [
+          412
+        ],
+        [
+          397
+        ],
+        [
+          1696
+        ],
+        [
+          1518
+        ],
+        [
+          1467
+        ],
+        [
+          1325
+        ],
+        [
+          1197
+        ],
+        [
+          1616
+        ],
+        [
+          1641
+        ],
+        [
+          1637
+        ],
+        [
+          1734
+        ],
+        [
+          1163
+        ],
+        [
+          2498
+        ],
+        [
+          2424
+        ],
+        [
+          2124
+        ],
+        [
+          2432
+        ],
+        [
+          2036
+        ],
+        [
+          2523
+        ],
+        [
+          2591
+        ],
+        [
+          2481
+        ],
+        [
+          2687
+        ]
+      ]
+    },
+    {
+      "qid": "q",
+      "question": {
+        "type": "choice",
+        "instructions": "Choose",
+        "criteria": {
+          "a": null,
+          "b": null,
+          "é": null
+        }
+      },
+      "suffix": "Choose\n\nOptions:\na a\nb b\né é\n\nReply with the option code only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          73,
+          267
+        ],
+        [
+          74,
+          293
+        ],
+        [
+          359,
+          1024
+        ]
+      ]
+    },
+    {
+      "qid": "q",
+      "question": {
+        "type": "noul",
+        "instructions": "Accept?",
+        "criteria": {
+          "true": "approved",
+          "false": "rejected"
+        }
+      },
+      "suffix": "Accept?\nYes: approved\nNo: rejected\n\nReply with yes or no only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          2243,
+          4547,
+          19598
+        ],
+        [
+          11683,
+          12447
+        ]
+      ]
+    },
+    {
+      "qid": "q",
+      "question": {
+        "type": "noul",
+        "instructions": "Accept?",
+        "criteria": {
+          "true": "approved"
+        }
+      },
+      "suffix": "Accept?\nYes: approved\nNo: None\n\nReply with yes or no only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          2243,
+          4547,
+          19598
+        ],
+        [
+          11683,
+          12447
+        ]
+      ]
+    },
+    {
+      "qid": "b",
+      "question": {
+        "type": "noul",
+        "instructions": "Is this negative?"
+      },
+      "suffix": "Is this negative?\n\nReply with yes or no only.<|im_end|>\n<|im_start|>assistant\n",
+      "groups": [
+        [
+          2243,
+          4547,
+          19598
+        ],
+        [
+          11683,
+          12447
+        ]
+      ]
+    }
+  ]
+}

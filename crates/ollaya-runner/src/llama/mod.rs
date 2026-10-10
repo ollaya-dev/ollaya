@@ -27,6 +27,7 @@ use std::sync::Mutex;
 
 use ollaya_decision::Questions;
 use ollaya_decision::cygnet::{self, CygnetConfig};
+use ollaya_decision::d1::{self, D1Config};
 use ollaya_decision::jebadiah::{self, JebadiahConfig};
 use ollaya_decision::jevk5::{self, JevK5Config};
 use ollaya_decision::llm_logits::{self, LlmLogitsConfig};
@@ -46,6 +47,7 @@ pub const LAYOUTS: &[&str] = &[
     jebadiah::LAYOUT,
     cygnet::LAYOUT,
     snap::LAYOUT,
+    d1::LAYOUT,
 ];
 
 /// Tokens per `llama_decode` call and per physical batch: llama-server's defaults, which the
@@ -107,6 +109,7 @@ pub enum Target {
 }
 
 enum Layout {
+    D1(D1Config),
     LlmLogits {
         cfg: Box<LlmLogitsConfig>,
         /// Tokens of the template pieces and the system message, fixed per model.
@@ -147,6 +150,8 @@ pub struct Row {
     pub candidates: Vec<Token>,
     /// Prompt position of each wire option.
     pub wire_order: Vec<usize>,
+    /// Optional max-pooling groups over flattened candidates (d1 only).
+    pub groups: Option<Vec<Vec<usize>>>,
 }
 
 /// A request's questions as the engine evaluates them.
@@ -577,6 +582,14 @@ fn prepare(vocab: &Vocab, decision: &Value) -> Result<Layout, Error> {
                 bos,
             }
         }
+        Some(d1::LAYOUT) => {
+            let cfg: D1Config = serde_json::from_value(decision.clone()).map_err(parse_error)?;
+            cfg.validate().map_err(bad)?;
+            if decision["llama"]["plan"] != "cold" {
+                return Err(model_error("d1 requires the cold evaluation plan"));
+            }
+            Layout::D1(cfg)
+        }
         Some(snap::LAYOUT) => {
             let cfg: SnapConfig = serde_json::from_value(decision.clone()).map_err(parse_error)?;
             cfg.validate().map_err(bad)?;
@@ -596,6 +609,7 @@ fn prepare(vocab: &Vocab, decision: &Value) -> Result<Layout, Error> {
         }
     };
     let tables: Vec<&llm_logits::LabelTable> = match &layout {
+        Layout::D1(_) => vec![],
         Layout::LlmLogits { cfg, .. } => {
             vec![&cfg.labels.choice, &cfg.labels.score, &cfg.labels.noul]
         }
@@ -737,8 +751,10 @@ impl LlamaModel {
         libs: &Libraries,
         threads: Option<usize>,
     ) -> Result<(), Error> {
-        if !matches!(self.layout, Layout::Winnow(_)) {
-            return Err(model_error("GGUF image support requires winnow-v1"));
+        if !matches!(self.layout, Layout::Winnow(_) | Layout::D1(_)) {
+            return Err(model_error(
+                "GGUF image support requires winnow-v1 or d1-v1",
+            ));
         }
         self.vision = Some(vision::Vision::load(
             &libs.dir,
@@ -748,6 +764,102 @@ impl LlamaModel {
             threads.map_or_else(default_threads, |t| t as i32),
         )?);
         Ok(())
+    }
+
+    fn run_d1_images(
+        &self,
+        state: &Value,
+        questions: &Value,
+        images: &[Vec<u8>],
+    ) -> Result<Output, Error> {
+        let vision = self
+            .vision
+            .as_ref()
+            .ok_or(crate::vision::ImageError::Unsupported)?;
+        let prompts = d1::questions(questions, |s| {
+            self.vocab
+                .tokenize(s, false, false)
+                .map(|v| v.into_iter().map(|i| i as u32).collect())
+                .map_err(|e| ollaya_decision::Error::invalid(e.to_string()))
+        })?;
+        let state = d1::state_text(state);
+        let state_tokens = self.vocab.tokenize(&state, false, false)?.len();
+        let mut ctx = self
+            .handles
+            .context
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let result = (|| {
+            let mut output = Vec::new();
+            let mut input_tokens = 0;
+            for (_, q) in prompts {
+                let body = state.clone() + q.suffix.strip_suffix(d1::POST).unwrap();
+                // mtmd parses control tokens for image delimiters. Reject control spellings
+                // in user text rather than accidentally promoting them to template tokens.
+                if body.contains("<|") || body.contains("<__media__>") || body.contains("<image>") {
+                    return Err(ollaya_decision::Error::invalid(
+                        "d1 image text contains a reserved control marker",
+                    )
+                    .into());
+                }
+                let prefix = format!(
+                    "{}{}{}{}",
+                    d1::PRE,
+                    "<__media__>".repeat(images.len()),
+                    body,
+                    d1::POST
+                );
+                let chunks = vision.prefix(&prefix, images)?;
+                if chunks.positions() >= self.settings.n_ctx {
+                    return Err(ollaya_decision::Error::invalid(
+                        "d1 image prompt exceeds context; resize the image or shorten the prompt",
+                    )
+                    .into());
+                }
+                let (head, tail) = chunks.tail()?;
+                // LFM2 has recurrent convolution state: never truncate or reuse an image
+                // prefix between questions. Every decision starts with fresh memory.
+                self.clear(&mut ctx);
+                chunks.evaluate_head(ctx.ptr.as_ptr())?;
+                self.decode(&mut ctx, &tail, head, true)?;
+                // SAFETY: final decode produced a live vocabulary-logit row; the context
+                // mutex remains held until all answer-form groups have been read.
+                let ptr = unsafe { (self.handles.api.llama_get_logits_ith)(ctx.ptr.as_ptr(), -1) };
+                if ptr.is_null() {
+                    return Err(model_error("llama.cpp returned no logits"));
+                }
+                // SAFETY: the row has n_tokens entries and no decode occurs during the read.
+                let logits = unsafe { std::slice::from_raw_parts(ptr, self.vocab.n_tokens) };
+                let selected = q
+                    .groups
+                    .iter()
+                    .map(|g| {
+                        g.iter()
+                            .map(|&id| {
+                                logits
+                                    .get(id as usize)
+                                    .copied()
+                                    .ok_or_else(|| model_error("label outside vocabulary"))
+                            })
+                            .collect::<Result<Vec<_>, _>>()
+                            .map(|v| v.into_iter().fold(f32::NEG_INFINITY, f32::max))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                output.push(QuestionOutput {
+                    logits: selected,
+                    act_logits: None,
+                });
+                input_tokens += head + tail.len();
+            }
+            Ok(Output {
+                questions: output,
+                input_tokens,
+                state_tokens,
+                state_truncated: false,
+            })
+        })();
+        self.clear(&mut ctx);
+        result
     }
 
     fn run_winnow_images(
@@ -922,6 +1034,7 @@ impl LlamaModel {
                             p,
                             candidates: q.label_ids.iter().map(|&t| t as Token).collect(),
                             wire_order: q.wire_order,
+                            groups: None,
                         },
                     ));
                 }
@@ -947,6 +1060,7 @@ impl LlamaModel {
                             ids,
                             p: pre.len(),
                             wire_order: (0..q.label_ids.len()).collect(),
+                            groups: None,
                             candidates: q.label_ids.iter().map(|&t| t as Token).collect(),
                         },
                     ));
@@ -984,6 +1098,7 @@ impl LlamaModel {
                             p: 0,
                             candidates: q.label_ids.iter().map(|&t| t as Token).collect(),
                             wire_order: q.wire_order,
+                            groups: None,
                         },
                     ));
                 }
@@ -1035,6 +1150,51 @@ impl LlamaModel {
                             p: 0,
                             candidates: q.label_ids.iter().map(|&t| t as Token).collect(),
                             wire_order: q.wire_order,
+                            groups: None,
+                        },
+                    ));
+                }
+                Ok(Encoded {
+                    rows,
+                    state_tokens,
+                    state_truncated: false,
+                })
+            }
+            Layout::D1(cfg) => {
+                cfg.validate().map_err(|e| model_error(e.to_string()))?;
+                let prompts = d1::questions(questions, |s| {
+                    self.vocab
+                        .tokenize(s, false, false)
+                        .map(|v| v.into_iter().map(|i| i as u32).collect())
+                        .map_err(|e| ollaya_decision::Error::invalid(e.to_string()))
+                })?;
+                let state = d1::state_text(state);
+                let state_tokens = self.vocab.tokenize(&state, false, false)?.len();
+                let pre = self
+                    .vocab
+                    .tokenize(d1::PRE.trim_end_matches('\n'), false, true)?;
+                let post = self.vocab.tokenize(d1::POST, false, true)?;
+                let mut rows = Vec::new();
+                for (qid, q) in prompts {
+                    let body = "\n".to_owned() + &state + q.suffix.strip_suffix(d1::POST).unwrap();
+                    let mut ids = pre.clone();
+                    ids.extend(self.vocab.tokenize(&body, false, false)?);
+                    ids.extend(&post);
+                    let mut candidates = Vec::new();
+                    let mut groups = Vec::new();
+                    for g in q.groups {
+                        let start = candidates.len();
+                        candidates.extend(g.into_iter().map(|i| i as Token));
+                        groups.push((start..candidates.len()).collect());
+                    }
+                    rows.push((
+                        qid,
+                        Row {
+                            ids,
+                            p: 0,
+                            wire_order: (0..groups.len()).collect(),
+                            candidates,
+                            groups: Some(groups),
                         },
                     ));
                 }
@@ -1074,6 +1234,7 @@ impl LlamaModel {
                             p: 0,
                             candidates: q.label_ids.iter().map(|&t| t as Token).collect(),
                             wire_order: q.wire_order,
+                            groups: None,
                         },
                     ));
                 }
@@ -1111,6 +1272,7 @@ impl LlamaModel {
                             p: 0,
                             candidates: q.label_ids.iter().map(|&t| t as Token).collect(),
                             wire_order: q.wire_order,
+                            groups: None,
                         },
                     ));
                 }
@@ -1160,7 +1322,10 @@ impl LlamaModel {
                     return Err(e);
                 }
             };
-            out.push(row.wire_order.iter().map(|&j| z[j]).collect());
+            out.push(match &row.groups {
+                Some(groups) => d1::pool(&z, groups),
+                None => row.wire_order.iter().map(|&j| z[j]).collect(),
+            });
         }
         Ok(out)
     }
@@ -1402,7 +1567,11 @@ impl crate::engine::Engine for LlamaModel {
         if images.is_empty() {
             return self.run_json(state, questions);
         }
-        self.run_winnow_images(state, questions, images)
+        if matches!(self.layout, Layout::D1(_)) {
+            self.run_d1_images(state, questions, images)
+        } else {
+            self.run_winnow_images(state, questions, images)
+        }
     }
 
     fn run(&self, state: &Value, questions: &Questions) -> Result<Output, Error> {

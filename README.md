@@ -106,6 +106,7 @@ numbers: [ollaya.dev/search](https://ollaya.dev/search).
 | `clef` | Cloudflare's Clef-Flash: Qwen3.5-9B, fully post-trained, with a joint schema head that scores every question's options in one forward pass: 0.703 on typed-decisions with an ECE of 0.020 and no fitted temperature, 532 ms for five questions on an RTX 4090 |
 | `cygnet` | blockbrain-ai's Cygnet: frozen Gemma 4 12B IT (Q8_0 GGUF) with a letter-readout prompt and temperature 3.4: 0.683 on typed-decisions, 202 ms for five questions on an RTX 4090 |
 | `snap` | logitlab's snap1-2b: MiniCPM5-2B fine-tuned on the prompt of emnlmn's snap engine, run from the author's Q8_0 GGUF on llama.cpp with snap's own prompt: 0.648 on typed-decisions, up to 26 options, 68 ms for five questions on an RTX 4090 |
+| `d1`, `d1:3b-vision` | Liquid AI’s d1-3B: typed text/image decisions from the author’s Q8_0 GGUF and projector, with max-pooled answer forms and temperature 1.0 |
 | `decima`, `decima:agent`, `decima:small` | A. M. Madani's Decima: multilingual encoders with a late-interaction scorer that reads every option against the state. `decima:base` (mmBERT-base, 321M) scores 0.495 on typed-decisions in 15 ms for five questions on an RTX 4090; `decima:agent` is fine-tuned for coding-agent decisions; `decima:small` (122M) takes 146 ms on a CPU |
 | `arbiter` | Codekins' Arbiter v3.3 (Zyot Lab): a LoRA and a fixed 24-slot head on Gemma 3 4B IT, one forward pass per question. It answers noul, choices of up to 16 options and scores of exactly 6 levels |
 

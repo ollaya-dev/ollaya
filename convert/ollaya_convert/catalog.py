@@ -135,6 +135,22 @@ LICENSE_MIT_NLI = ("DeBERTa-v3-large zero-shot v2.0 by Moritz Laurer "
                    "Note from the model card: part of the training data carries non-commercial licenses.\n")
 
 CATALOG = {
+    "d1": {
+        "namespace": "library", "model": "d1", "family": "d1", "author": "Liquid AI",
+        "license": "LFM Open License v1.0",
+        "license_text": "d1-3B by Liquid AI (https://huggingface.co/LiquidAI/d1-3B).\n\n" +
+            open(os.path.join(os.path.dirname(__file__), "families", "d1", "LICENSE"), encoding="utf-8").read(),
+        "tags": {
+            "3b": _gguf("d1-3b-q8_0", "LiquidAI/d1-3B-GGUF",
+                "bb1e436ea78eb96a3f1acb6da865f70c2fbeb563", "d1-3B-Q8_0.gguf",
+                "LiquidAI d1-3B: typed decisions with max-pooled answer forms, Q8_0.", "3B", ["multilingual"]),
+            "3b-vision": dict(_gguf("d1-3b-q8_0", "LiquidAI/d1-3B-GGUF",
+                "bb1e436ea78eb96a3f1acb6da865f70c2fbeb563", "d1-3B-Q8_0.gguf",
+                "LiquidAI d1-3B with its matching Q8_0 image projector.", "3B", ["multilingual"]),
+                mmproj="mmproj-d1-3B-Q8_0.gguf"),
+        },
+        "aliases": {"latest": "3b"},
+    },
     "laya": {
         "namespace": "library",
         "model": "laya",

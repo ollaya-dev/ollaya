@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-10",
+  "backend": "llama.cpp b11146-7fe450e19",
+  "author_prompt_revision": "051bcc464b01b9f92942b364d9586b0ef5912432",
+  "gguf_revision": "bb1e436ea78eb96a3f1acb6da865f70c2fbeb563",
+  "context": 32768,
+  "batch": 2048,
+  "microbatch": 512,
+  "plan": "cold",
+  "temperature": [
+    1,
+    1,
+    1
+  ],
+  "log_probability_tolerance": 0.001,
+  "parity": [
+    {
+      "device": "RTX 4070 CUDA",
+      "kind": "text",
+      "requests": 15,
+      "decisions": 29,
+      "result": "loaded Q8_0 on cuda:0 in 0.6s\n15 cases (0 rejected), 29 questions on cuda:0 in 0.4s: decisions 29/29 (100.00%), option logits max 7.473e-6 p99 7.473e-6, probabilities max 1.921e-6 p99 1.921e-6\nPASS"
+    },
+    {
+      "device": "RTX 4070 CUDA",
+      "kind": "images-and-text-after-images",
+      "requests": 8,
+      "decisions": 24,
+      "result": "PASS: 8 requests, 24/24 decisions, max log-probability error 7.4799377e-06"
+    },
+    {
+      "device": "CPU",
+      "kind": "text",
+      "requests": 15,
+      "decisions": 29,
+      "result": "loaded Q8_0 on cpu in 0.4s\n15 cases (0 rejected), 29 questions on cpu in 8.7s: decisions 29/29 (100.00%), option logits max 5.629e-6 p99 5.629e-6, probabilities max 1.901e-6 p99 1.901e-6\nPASS"
+    },
+    {
+      "device": "CPU",
+      "kind": "images-and-text-after-images",
+      "requests": 8,
+      "decisions": 24,
+      "result": "PASS: 8 requests, 24/24 decisions, max log-probability error 7.5397334e-06"
+    }
+  ],
+  "checks": {
+    "workspace": "242 passed; 0 failed; 0 ignored",
+    "python_packaging": "5 passed",
+    "clippy": "workspace all targets, warnings denied, passed",
+    "site": "192 pages with temporary d1 manifests, all links pass; generated registry excluded",
+    "negative_image_requests": "HTTP 400 for invalid PNG, 17 images and reserved control marker"
+  }
+}

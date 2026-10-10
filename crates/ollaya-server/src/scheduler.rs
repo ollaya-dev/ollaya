@@ -103,6 +103,7 @@ pub const LLAMA_LAYOUTS: &[&str] = &[
     jebadiah::LAYOUT,
     cygnet::LAYOUT,
     snap::LAYOUT,
+    ollaya_decision::d1::LAYOUT,
 ];
 
 #[derive(Debug, Deserialize)]

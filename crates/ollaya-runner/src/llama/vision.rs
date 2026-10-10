@@ -203,7 +203,9 @@ impl Vision {
     }
     pub(super) fn prefix(&self, text: &str, images: &[Vec<u8>]) -> Result<Chunks<'_>, Error> {
         if images.len() > 16 {
-            return Err(ollaya_decision::Error::invalid("Winnow accepts at most 16 images").into());
+            return Err(
+                ollaya_decision::Error::invalid("GGUF vision accepts at most 16 images").into(),
+            );
         }
         let mut bitmaps = Vec::new();
         for bytes in images {

@@ -76,7 +76,7 @@ pub struct RunnerConfig {
     pub tokenizer: Option<PathBuf>,
     /// A GGUF model, which runs on llama.cpp instead of ONNX Runtime.
     pub gguf: Option<PathBuf>,
-    /// Matching multimodal projector, for Winnow GGUF image input.
+    /// Matching multimodal projector, for GGUF image input.
     pub mmproj: Option<PathBuf>,
     /// Where llama.cpp's libraries are (`lib/ollaya/llama`), for a GGUF model.
     pub llama_dir: Option<PathBuf>,

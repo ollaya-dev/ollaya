@@ -11,6 +11,17 @@ from ollaya_convert import catalog, package
 
 
 class ProjectorPackaging(unittest.TestCase):
+    def test_d1_keeps_vision_opt_in_and_uses_original_author_files(self):
+        spec = catalog.CATALOG['d1']
+        self.assertEqual(spec['aliases']['latest'], '3b')
+        text, vision = spec['tags']['3b'], spec['tags']['3b-vision']
+        self.assertNotIn('mmproj', text)
+        self.assertEqual(vision['repo'], 'LiquidAI/d1-3B-GGUF')
+        self.assertEqual(vision['commit'], 'bb1e436ea78eb96a3f1acb6da865f70c2fbeb563')
+        self.assertEqual(vision['mmproj'], 'mmproj-d1-3B-Q8_0.gguf')
+        for key in ['repo', 'commit', 'gguf', 'export_dir']:
+            self.assertEqual(text[key], vision[key])
+
     def test_credence_variants_share_the_verified_frozen_projector(self):
         spec = catalog.CATALOG['credence']
         release = json.loads((Path(__file__).resolve().parents[1] /

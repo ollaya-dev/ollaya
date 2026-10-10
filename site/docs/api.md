@@ -153,7 +153,7 @@ Answers typed questions about a state in one forward pass. The body is the `/v1/
 | `state` | string, object or array | yes to decide | Without it, the request loads or unloads the model (below) |
 | `questions` | object | yes, unless the model has built-in questions | Replaces the model's own questions entirely |
 | `preset` | string | no | A [preset](#presets)'s name, built-in or custom, in place of `questions` |
-| `images` | array of strings | no | For a vision model: PNG images, base64 or base64 `data:` URLs. Decider takes one; `winnow:e4b-vision` and `winnow:12b-vision` take up to 16. See [Images](#images) |
+| `images` | array of strings | no | For a vision model: PNG images, base64 or base64 `data:` URLs. Decider takes one; `winnow:e4b-vision`, `winnow:12b-vision` and `d1:3b-vision` take up to 16. See [Images](#images) |
 | `keep_alive` | string or number | no | See [keep_alive](#keep-alive) |
 | `extras` | array of strings | no | `["laya"]` adds laya's own confidence and act probability to every answer |
 | `stream` | boolean | no | Reserved; `true` is rejected |
@@ -239,7 +239,7 @@ With `"extras": ["laya"]`, every answer also has a `laya` object: `confidence` (
 
 ### Images
 
-A vision model (`decider:2b-vision`, `winnow:e4b-vision` or `winnow:12b-vision`) answers questions about an image as well as the state. Send the image in `images`, base64-encoded, the way Ollama's `images` works:
+A vision model (`decider:2b-vision`, `winnow:e4b-vision`, `winnow:12b-vision` or `d1:3b-vision`) answers questions about an image as well as the state. Send the image in `images`, base64-encoded, the way Ollama's `images` works:
 
 ```shell
 curl http://localhost:11435/api/decide -d '{
