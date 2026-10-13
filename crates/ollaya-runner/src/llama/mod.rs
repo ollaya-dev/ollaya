@@ -796,7 +796,7 @@ impl LlamaModel {
                 let body = state.clone() + q.suffix.strip_suffix(d1::POST).unwrap();
                 // mtmd parses control tokens for image delimiters. Reject control spellings
                 // in user text rather than accidentally promoting them to template tokens.
-                if body.contains("<|") || body.contains("<__media__>") || body.contains("<image>") {
+                if d1::has_reserved_marker(&body) {
                     return Err(ollaya_decision::Error::invalid(
                         "d1 image text contains a reserved control marker",
                     )

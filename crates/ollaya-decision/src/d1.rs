@@ -10,6 +10,17 @@ use serde_json::Value;
 pub const LAYOUT: &str = "d1-v1";
 pub const PRE: &str = "<|startoftext|><|im_start|>user\n";
 pub const POST: &str = "<|im_end|>\n<|im_start|>assistant\n";
+/// Spellings the image path rejects in user text. libmtmd tokenizes the whole image prompt with
+/// special-token parsing, so these would become control tokens: every control token of the d1-3B
+/// vocabulary starts with `<|` except `<image>`, `<think>` and `</think>`; `<__media__>` is mtmd's marker.
+pub const RESERVED: &[&str] = &["<|", "<__media__>", "<image>", "<think>", "</think>"];
+pub fn has_reserved_marker(text: &str) -> bool {
+    RESERVED.iter().any(|m| text.contains(m))
+}
+/// Python's `str.strip()`: Unicode whitespace plus the separators U+001C..U+001F.
+fn py_strip(s: &str) -> &str {
+    s.trim_matches(|c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
+}
 #[derive(Debug, Clone, Deserialize)]
 pub struct D1Config {
     pub layout: String,
@@ -87,7 +98,7 @@ pub fn questions<F: FnMut(&str) -> Result<Vec<u32>, Error>>(
                         head_max_len: 255,
                     });
                 }
-                let labels: Vec<_> = m.keys().map(|s| s.trim()).collect();
+                let labels: Vec<_> = m.keys().map(|s| py_strip(s)).collect();
                 let native = labels
                     .iter()
                     .all(|s| s.chars().count() == 1 && s.chars().all(char::is_alphabetic));
@@ -242,6 +253,14 @@ mod tests {
         ] {
             assert!(questions(&serde_json::json!({"q":q}), |_| Ok(vec![1])).is_err());
         }
+    }
+    #[test]
+    fn labels_strip_and_reserved_markers() {
+        let q = json!({"q":{"type":"choice","instructions":"x","criteria":{"\u{1c}a ":null," b\u{1f}":null}}});
+        let out = questions(&q, |s| Ok(vec![s.bytes().map(u32::from).sum()])).unwrap();
+        assert!(out[0].1.suffix.contains("\na \u{1c}a \nb  b\u{1f}\n"));
+        assert!(has_reserved_marker("x <think> y") && has_reserved_marker("a<|b"));
+        assert!(!has_reserved_marker("a < b | c"));
     }
     #[test]
     fn state_and_pool() {
