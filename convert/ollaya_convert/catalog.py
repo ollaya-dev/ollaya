@@ -150,6 +150,12 @@ CATALOG = {
                 mmproj="mmproj-d1-3B-Q8_0.gguf"),
         },
         "aliases": {"latest": "3b"},
+        "hf_license": ("lfm1.0", "https://huggingface.co/LiquidAI/d1-3B/blob/051bcc464b01b9f92942b364d9586b0ef5912432/LICENSE"),
+        "parity": "Ollaya's runner matches stock llama-server of the pinned build (b11146) on the same GGUF and "
+                  "projector, on the CPU and on CUDA (RTX 5090; RTX 4070 by the contributor), with prompts and "
+                  "answer-token groups from Liquid AI's pinned prompt.py: 29 text and 24 image questions on each "
+                  "device, and 621 text and 31 image questions more on the RTX 5090, every decision the same, "
+                  "option log-probabilities within 7.7e-6.",
     },
     "laya": {
         "namespace": "library",
