@@ -106,7 +106,7 @@ numbers: [ollaya.dev/search](https://ollaya.dev/search).
 | `clef` | Cloudflare's Clef-Flash: Qwen3.5-9B, fully post-trained, with a joint schema head that scores every question's options in one forward pass: 0.703 on typed-decisions with an ECE of 0.020 and no fitted temperature, 532 ms for five questions on an RTX 4090 |
 | `cygnet` | blockbrain-ai's Cygnet: frozen Gemma 4 12B IT (Q8_0 GGUF) with a letter-readout prompt and temperature 3.4: 0.683 on typed-decisions, 202 ms for five questions on an RTX 4090 |
 | `snap` | logitlab's snap1-2b: MiniCPM5-2B fine-tuned on the prompt of emnlmn's snap engine, run from the author's Q8_0 GGUF on llama.cpp with snap's own prompt: 0.648 on typed-decisions, up to 26 options, 68 ms for five questions on an RTX 4090 |
-| `d1`, `d1:3b-vision` | Liquid AI’s d1-3B: typed text/image decisions from the author’s Q8_0 GGUF and projector, with max-pooled answer forms and temperature 1.0 |
+| `d1`, `d1:3b-vision` | Liquid AI's d1-3B, on LFM2.5-VL-3B: typed text and image decisions from the author's Q8_0 GGUF and projector, with max-pooled answer forms and temperature 1.0: 0.650 on typed-decisions |
 | `decima`, `decima:agent`, `decima:small` | A. M. Madani's Decima: multilingual encoders with a late-interaction scorer that reads every option against the state. `decima:base` (mmBERT-base, 321M) scores 0.495 on typed-decisions in 15 ms for five questions on an RTX 4090; `decima:agent` is fine-tuned for coding-agent decisions; `decima:small` (122M) takes 146 ms on a CPU |
 | `arbiter` | Codekins' Arbiter v3.3 (Zyot Lab): a LoRA and a fixed 24-slot head on Gemma 3 4B IT, one forward pass per question. It answers noul, choices of up to 16 options and scores of exactly 6 levels |
 
@@ -195,7 +195,7 @@ Apache-2.0. Each model keeps its own license: `laya` (Convai Innovations), `deci
 contributors, on Qwen3.5), `qwen3guard` (Qwen team), `gliclass` (Knowledgator), `von` (Victor Hugo
 Panisa), `winnow` (EldanRing, on Gemma 4 by Google DeepMind), `jevk5` (alibiserikbay, on Qwen3.5), `nimble`
 (Bespoke Labs, on Qwen3.5), `jeeves` (PostHog, on Qwen3.5), `clef` (Cloudflare, on Qwen3.5), `jeb` (Jason Brashear, on Qwen3.5 and Qwen3.8), `cygnet` (Gemma 4 by Google
-DeepMind; the Cygnet recipe is MIT), `snap` (logitlab, on MiniCPM5 by OpenBMB; snap's prompt is MIT), `decima` (A. M. Madani, on mmBERT-base by JHU CLSP and multilingual-e5-small by intfloat, both MIT) and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` (Moritz Laurer) is MIT. `arbiter`'s LoRA adapter and head (Codekins Pvt Ltd, Zyot Lab) are Apache-2.0; its base model, Gemma 3 4B IT by Google DeepMind, is under the Gemma Terms of Use. llama.cpp, which Ollaya ships for
+DeepMind; the Cygnet recipe is MIT), `snap` (logitlab, on MiniCPM5 by OpenBMB; snap's prompt is MIT), `decima` (A. M. Madani, on mmBERT-base by JHU CLSP and multilingual-e5-small by intfloat, both MIT) and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` (Moritz Laurer) is MIT. `arbiter`'s LoRA adapter and head (Codekins Pvt Ltd, Zyot Lab) are Apache-2.0; its base model, Gemma 3 4B IT by Google DeepMind, is under the Gemma Terms of Use. `d1` (Liquid AI) is under the LFM Open License v1.0: commercial use by an organization with US$10 million or more in annual revenue is not covered by it. llama.cpp, which Ollaya ships for
 GGUF models, is MIT.
 
 Ollaya is an independent project. It is not affiliated with or endorsed by Ollama or TypeSafe.
