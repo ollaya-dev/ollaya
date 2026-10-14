@@ -362,6 +362,36 @@ def winnow_error_class(state, questions, labels, template):
     return "invalid"
 
 
+class JevStyle:
+    """jev-style-v1: chaoliangUNSW/Jev-Style-2B-Decision-v3's render v2 and verdict readout
+    (logit(" yes") - logit(" no") at each option's " ->" slot) under non-causal block attention. The
+    decode and readout live in the Rust runner (run_jev_style); the package here is the GGUF pin, the
+    three readout token ids and the one global temperature. One cold pass per question."""
+
+    def __init__(self, srv, a):
+        from ..jev_style import ref
+        self.ref = ref
+        self.srv = srv
+        self.n_ctx = a.n_ctx
+        ids = {}
+        for text in (" yes", " no", " ->"):
+            tok = srv.tokenize(text, add_special=False, parse_special=False)
+            if len(tok) != 1 or srv.pieces(tok)[0] != text:
+                raise SystemExit("readout token %r is not one token in this GGUF: %s" % (text, tok))
+            ids[text] = tok[0]
+        self.decision = {
+            "family": "jev-style", "layout": ref.LAYOUT,
+            "yes": ids[" yes"], "no": ids[" no"], "arrow": ids[" ->"],
+            "upstream": ref.UPSTREAM,
+        }
+        self.plan = "cold"
+        # A non-causal context, logits read at the verdict slots (see run_jev_style).
+        self.llama_extra = {"attention_type": 1, "n_ubatch": 2048, "n_seq_max": 2, "n_outputs_max": 512}
+
+    def encode(self, state, questions):
+        raise NotImplementedError("jev-style logit-parity goldens need the author's jev-score-v2")
+
+
 def error_class(layout, lay, state, questions, e):
     if layout == "winnow":
         return winnow_error_class(state, winnow_questions(questions), lay.labels, lay.template)
@@ -396,7 +426,7 @@ def main():
     from . import cases
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("layout", choices=["llm-logits", "winnow", "jevk5", "jebadiah", "cygnet"])
+    ap.add_argument("layout", choices=["llm-logits", "winnow", "jevk5", "jebadiah", "cygnet", "jev-style"])
     ap.add_argument("--server", required=True, help="the pinned llama-server build the runtime ships")
     ap.add_argument("--gguf", required=True)
     ap.add_argument("--slug", required=True)
@@ -428,7 +458,8 @@ def main():
                             log=os.path.join(out, "llama-server-%s.log" % device_class(a.device)), timeout=1800)
     try:
         props = srv.props()
-        lay = {"llm-logits": LlmLogits, "winnow": Winnow, "jevk5": JevK5, "jebadiah": Jebadiah, "cygnet": Cygnet}[a.layout](srv, a)
+        lay = {"llm-logits": LlmLogits, "winnow": Winnow, "jevk5": JevK5, "jebadiah": Jebadiah, "cygnet": Cygnet,
+               "jev-style": JevStyle}[a.layout](srv, a)
         sha = sha256_file(a.gguf)
         decision = {"engine": "llama", **lay.decision}
         decision["gguf"] = {
@@ -439,6 +470,7 @@ def main():
         }
         decision["llama"] = {"n_ctx": a.n_ctx, "swa_full": swa, "plan": getattr(lay, "plan", "prefix"),
                              "build": LLAMA_BUILD}
+        decision["llama"].update(getattr(lay, "llama_extra", {}))
         with open(os.path.join(out, "decision.json"), "w", encoding="utf-8") as f:
             json.dump(decision, f, indent=1, ensure_ascii=False)
         if a.calibration:
@@ -457,6 +489,11 @@ def main():
                    "source": a.temperature_source or "uncalibrated (temperature 1.0)"}
         with open(os.path.join(out, "calibration.json"), "w", encoding="utf-8") as f:
             json.dump(cal, f, indent=2)
+        if a.layout == "jev-style":
+            print("%s: decision.json + calibration.json written. jev-style uses a non-causal "
+                  "verdict readout; logit-parity goldens need the author's jev-score-v2, not the "
+                  "causal llama-server plan." % out)
+            return
 
         plan = FixedPlan(post_to(srv.url))
         n_rows = 0

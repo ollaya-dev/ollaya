@@ -30,6 +30,7 @@ use ollaya_decision::cygnet::{self, CygnetConfig};
 use ollaya_decision::d1::{self, D1Config};
 use ollaya_decision::jebadiah::{self, JebadiahConfig};
 use ollaya_decision::jevk5::{self, JevK5Config};
+use ollaya_decision::jev_style::{self, JevStyleConfig};
 use ollaya_decision::llm_logits::{self, LlmLogitsConfig};
 use ollaya_decision::snap::{self, SnapConfig};
 use ollaya_decision::winnow::{self, WinnowConfig};
@@ -44,6 +45,7 @@ pub const LAYOUTS: &[&str] = &[
     llm_logits::LAYOUT,
     winnow::LAYOUT,
     jevk5::LAYOUT,
+    jev_style::LAYOUT,
     jebadiah::LAYOUT,
     cygnet::LAYOUT,
     snap::LAYOUT,
@@ -66,6 +68,27 @@ pub struct LlamaSettings {
     /// `prefix` (the shared-prefix plan) or `cold` (one cold pass per question).
     #[serde(default = "prefix_plan")]
     pub plan: String,
+    /// llama_context attention_type: -1 causal (default), 1 non-causal (jev-style blocks).
+    #[serde(default = "attn_causal")]
+    pub attention_type: i32,
+    #[serde(default = "ubatch_default")]
+    pub n_ubatch: u32,
+    #[serde(default = "nseq_default")]
+    pub n_seq_max: u32,
+    #[serde(default)]
+    pub n_outputs_max: u32,
+}
+
+fn attn_causal() -> i32 {
+    -1
+}
+
+fn ubatch_default() -> u32 {
+    512
+}
+
+fn nseq_default() -> u32 {
+    1
 }
 
 fn prefix_plan() -> String {
@@ -121,6 +144,7 @@ enum Layout {
     },
     Winnow(WinnowConfig),
     JevK5(JevK5Config),
+    JevStyle(JevStyleConfig),
     Jebadiah(JebadiahConfig),
     Cygnet {
         cfg: Box<CygnetConfig>,
@@ -551,6 +575,21 @@ fn prepare(vocab: &Vocab, decision: &Value) -> Result<Layout, Error> {
             cfg.validate().map_err(bad)?;
             Layout::JevK5(cfg)
         }
+        Some(jev_style::LAYOUT) => {
+            let cfg: JevStyleConfig =
+                serde_json::from_value(decision.clone()).map_err(parse_error)?;
+            cfg.validate().map_err(bad)?;
+            // The verdict readout tokens must be this GGUF's.
+            for (text, id) in [(" yes", cfg.yes), (" no", cfg.no), (" ->", cfg.arrow)] {
+                let got = vocab.tokenize(text, false, false)?;
+                if got != [id as Token] {
+                    return Err(model_error(format!(
+                        "jev-style: {text:?} is {got:?} in this GGUF, decision.json says [{id}]"
+                    )));
+                }
+            }
+            Layout::JevStyle(cfg)
+        }
         Some(jebadiah::LAYOUT) => {
             let cfg: JebadiahConfig =
                 serde_json::from_value(decision.clone()).map_err(parse_error)?;
@@ -615,6 +654,7 @@ fn prepare(vocab: &Vocab, decision: &Value) -> Result<Layout, Error> {
         }
         Layout::Winnow(cfg) => vec![&cfg.labels],
         Layout::JevK5(cfg) => vec![&cfg.labels],
+        Layout::JevStyle(_) => vec![],
         Layout::Jebadiah(cfg) => vec![&cfg.labels],
         Layout::Cygnet { cfg, .. } => vec![&cfg.labels],
         Layout::Snap { cfg, .. } => vec![&cfg.labels],
@@ -633,6 +673,146 @@ fn prepare(vocab: &Vocab, decision: &Value) -> Result<Layout, Error> {
 }
 
 impl LlamaModel {
+
+    /// `jev-style-v1` (chaoliangUNSW/Jev-Style-2B-Decision-v3): non-causal block attention + verdict
+    /// readout, mirroring the model's own jev-score-v2. The state decodes into sequence 0 once; each
+    /// question copies sequence 0 -> 1, decodes its question-side blocks into sequence 1 (logits only
+    /// at the ` ->` slots), reads `logit(" yes") - logit(" no")` at each slot, then clears sequence 1.
+    /// The one global temperature is applied by the calibration layer, as for every family.
+    fn run_jev_style(
+        &self,
+        state: &Value,
+        questions: &Value,
+        cfg: &JevStyleConfig,
+    ) -> Result<Output, Error> {
+        let api = self.handles.api;
+        let qmap = questions
+            .as_object()
+            .filter(|m| !m.is_empty())
+            .ok_or_else(|| model_error("questions must contain at least one named question"))?;
+        let vocab = &self.vocab;
+        let mut tok = |t: &str| {
+            vocab
+                .tokenize(t, false, false)
+                .map(|v| v.into_iter().map(|x| x as u32).collect::<Vec<u32>>())
+        };
+        let prefix = cfg.state_prefix(state, &mut tok)?;
+        let rendered: Vec<(&String, jev_style::Rendered)> = qmap
+            .iter()
+            .map(|(qid, def)| Ok((qid, cfg.render::<Error>(qid, def, &prefix, &mut tok)?)))
+            .collect::<Result<_, Error>>()?;
+
+        let mut guard = self
+            .handles
+            .context
+            .lock()
+            .map_err(|_| model_error("context mutex poisoned"))?;
+        let ctx = &mut *guard;
+        self.clear(ctx);
+        let mut p = 0usize;
+        while p < prefix.len() {
+            let e = (p + jev_style::BLOCK).min(prefix.len());
+            self.decode_block(ctx, &prefix, p, e, p, 0, &[])?;
+            p = e;
+        }
+        // SAFETY: the context is live and locked for the whole request.
+        unsafe { (api.llama_synchronize)(ctx.ptr.as_ptr()) };
+        ctx.prefix = None;
+
+        let (yes, no) = (cfg.yes as usize, cfg.no as usize);
+        let mut out = Vec::with_capacity(rendered.len());
+        let mut input_tokens = prefix.len();
+        for (_, r) in &rendered {
+            input_tokens += r.ids.len() - r.prefix_len;
+            // SAFETY: the memory belongs to this context.
+            unsafe {
+                (api.llama_memory_seq_rm)(ctx.memory, 1, -1, -1);
+                if !prefix.is_empty() {
+                    (api.llama_memory_seq_cp)(ctx.memory, 0, 1, -1, -1);
+                }
+            }
+            let mut scores = vec![f32::NAN; r.slots.len()];
+            for &(a, b) in r.blocks.iter().filter(|&&(a, _)| a >= r.prefix_len) {
+                let got = self.decode_block(ctx, &r.ids, a, b, a, 1, &r.slots)?;
+                for (w, rel) in got {
+                    // SAFETY: logits for `rel` are live until the next decode overwrites them.
+                    let ptr = unsafe { (api.llama_get_logits_ith)(ctx.ptr.as_ptr(), rel) };
+                    if ptr.is_null() {
+                        return Err(model_error("jev-style: no logits at a verdict slot"));
+                    }
+                    // SAFETY: the row has n_tokens entries; no decode runs during the read.
+                    let lg = unsafe { std::slice::from_raw_parts(ptr, self.vocab.n_tokens) };
+                    let y = *lg
+                        .get(yes)
+                        .ok_or_else(|| model_error("jev-style: 'yes' id outside the vocabulary"))?;
+                    let n = *lg
+                        .get(no)
+                        .ok_or_else(|| model_error("jev-style: 'no' id outside the vocabulary"))?;
+                    scores[w] = y - n;
+                }
+            }
+            // SAFETY: the memory belongs to this context.
+            unsafe { (api.llama_memory_seq_rm)(ctx.memory, 1, -1, -1) };
+            out.push(QuestionOutput {
+                logits: scores,
+                act_logits: None,
+            });
+        }
+        Ok(Output {
+            questions: out,
+            input_tokens,
+            state_tokens: prefix.len(),
+            state_truncated: false,
+        })
+    }
+
+    /// Decode one renderer block: `ids[lo..hi]` at positions `pos0..` into sequence `seq`, with the
+    /// logits requested only at the absolute positions in `want` that fall inside the block. Returns
+    /// `(want index, batch index)` pairs for reading those logits.
+    fn decode_block(
+        &self,
+        ctx: &mut Context,
+        ids: &[u32],
+        lo: usize,
+        hi: usize,
+        pos0: usize,
+        seq: ffi::SeqId,
+        want: &[usize],
+    ) -> Result<Vec<(usize, i32)>, Error> {
+        let n = hi - lo;
+        if n == 0 || n > jev_style::BLOCK {
+            return Err(model_error("jev-style: block length out of range"));
+        }
+        let mut token: Vec<Token> = ids[lo..hi].iter().map(|&x| x as Token).collect();
+        let mut pos: Vec<ffi::Pos> = (0..n).map(|k| (pos0 + k) as ffi::Pos).collect();
+        let mut n_seq_id = vec![1i32; n];
+        let mut seq_arr = [seq];
+        let mut seq_id: Vec<*mut ffi::SeqId> = vec![seq_arr.as_mut_ptr(); n];
+        let mut logits = vec![0i8; n];
+        let mut got = Vec::new();
+        for (w, &slot) in want.iter().enumerate() {
+            if slot >= pos0 && slot < pos0 + n {
+                let rel = slot - pos0;
+                logits[rel] = 1;
+                got.push((w, rel as i32));
+            }
+        }
+        let batch = Batch {
+            n_tokens: n as i32,
+            token: token.as_mut_ptr(),
+            embd: std::ptr::null_mut(),
+            pos: pos.as_mut_ptr(),
+            n_seq_id: n_seq_id.as_mut_ptr(),
+            seq_id: seq_id.as_mut_ptr(),
+            logits: logits.as_mut_ptr(),
+        };
+        // SAFETY: every array holds `n` entries (`seq_arr` one) and outlives the decode.
+        let rc = unsafe { (self.handles.api.llama_decode)(ctx.ptr.as_ptr(), batch) };
+        if rc != 0 {
+            return Err(model_error(format!("jev-style: llama_decode failed ({rc})")));
+        }
+        Ok(got)
+    }
     /// Load `gguf` with the layout of its `decision.json`, on `target`.
     pub fn load(
         gguf: &Path,
@@ -989,6 +1169,9 @@ impl LlamaModel {
     pub fn encode(&self, state: &Value, questions: &Value) -> Result<Encoded, Error> {
         let vocab = &self.vocab;
         match &self.layout {
+            Layout::JevStyle(_) => Err(model_error(
+                "internal: jev-style decisions are produced by run_jev_style",
+            )),
             Layout::LlmLogits {
                 cfg,
                 pre,
@@ -1430,6 +1613,9 @@ impl LlamaModel {
 
     /// Encode and evaluate a request: the runner contract's output.
     pub fn run_json(&self, state: &Value, questions: &Value) -> Result<Output, Error> {
+        if let Layout::JevStyle(cfg) = &self.layout {
+            return self.run_jev_style(state, questions, cfg);
+        }
         let enc = self.encode(state, questions)?;
         let logits = self.evaluate(&enc)?;
         Ok(Output {
@@ -1481,8 +1667,11 @@ fn load_on(
         let mut cp = (api.llama_context_default_params)();
         cp.n_ctx = settings.n_ctx as u32;
         cp.n_batch = N_BATCH as u32;
-        cp.n_ubatch = N_UBATCH;
-        cp.n_seq_max = 1;
+        cp.n_ubatch = settings.n_ubatch;
+        cp.n_seq_max = settings.n_seq_max;
+        cp.attention_type = settings.attention_type;
+        cp.n_outputs_max = settings.n_outputs_max;
+        cp.n_outputs_max_per_seq = settings.n_outputs_max.max(1);
         cp.n_threads = threads;
         cp.n_threads_batch = threads;
         cp.swa_full = settings.swa_full;

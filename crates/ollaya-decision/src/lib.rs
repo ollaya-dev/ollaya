@@ -19,6 +19,7 @@ pub mod gliclass;
 pub mod jebadiah;
 pub mod jeeves;
 pub mod jevk5;
+pub mod jev_style;
 pub mod kev;
 pub mod layout;
 pub mod llm_logits;
