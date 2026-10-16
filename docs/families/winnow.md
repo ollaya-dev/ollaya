@@ -124,6 +124,7 @@ The runner must match every decision, with option logits within 1e-3. Measured o
 | e4b Q8_0 | CPU, x86-64 Linux | 505 | 505/505 | 1.14e-5 | 2.9e-6 |
 | e4b Q8_0 | CPU, Windows x86-64 (against `llama-server.exe` win-cpu) | 15 | 15/15 | 7.6e-6 | 1.1e-6 |
 | e4b Q8_0 | CUDA, RTX 4090, Windows 11 (`ggml-cuda.dll` in the 0.7.4 CUDA pack; 2026-09-28) | 505 | 505/505 | 1.29e-5 | 3.0e-6 |
+| e4b Q8_0 | ROCm, Radeon RX 9070, Linux (ROCm pack; 2026-09-28) | 505 | 505/505 | 1.25e-5 | 3.0e-6 |
 
 - **Windows.** The golden replay on Windows stopped on a text-encoding error in the Python tool
   (cp1252), so the native Windows check covered only the first 3 requests.
@@ -135,6 +136,12 @@ The runner must match every decision, with option logits within 1e-3. Measured o
   device: e4b 505 of 505 decisions, option logits within 1.1e-5, probabilities within 3.0e-6
   (2026-10-01). Against the CUDA goldens instead it differs by up to 0.32 in log-probability (501 of
   505 decisions), about as far as the CPU backend (0.28, 501 of 505): ADR 0003, point 7.
+- **ROCm (#33).** llama.cpp's ROCm/HIP backend on an AMD Radeon RX 9070
+  (Linux x86-64, ROCm 7.1), gated like every device against stock llama-server on that device:
+  e4b 505 of 505 decisions, option logits within 1.25e-5, probabilities within 3.0e-6
+  ([measurements](../measurements/amd-rx9070-rocm-parity.md)). Against the CUDA goldens instead it
+  differs by up to 0.33 in log-probability (500 of 505 decisions), about as far as the CPU backend
+  (0.35, 505 of 505): ADR 0003, point 7.
 - **Not run.** Metal and the Apple CPU, linux-arm64, and the full 12b text suite on the CPU.
 - **Typed-decisions (measured here).** All 400 states, 2,000 decisions, argmax against the majority
   label: 12b 0.702 (ECE 0.155 at T 1, the shipped value), e4b 0.722 (ECE 0.022 with the shipped T

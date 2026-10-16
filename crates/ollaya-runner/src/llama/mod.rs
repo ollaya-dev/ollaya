@@ -95,6 +95,8 @@ pub struct Libraries {
     pub dir: PathBuf,
     /// The CUDA backend (`libggml-cuda.so` in the CUDA pack), when installed.
     pub cuda: Option<PathBuf>,
+    /// The ROCm backend (`libggml-hip.so` in the ROCm pack), when installed.
+    pub rocm: Option<PathBuf>,
 }
 
 /// Which device to load the model on.
@@ -263,6 +265,14 @@ fn api(libs: &Libraries, want_gpu: bool) -> Result<&'static Api, Error> {
                     tracing::warn!("could not load {} (see the llama.cpp log)", cuda.display());
                 }
             }
+            if want_gpu && let Some(rocm) = &libs.rocm {
+                #[cfg(windows)]
+                ffi::preload_beside(rocm);
+                let path = cpath(rocm)?;
+                if (api.ggml_backend_load)(path.as_ptr()).is_null() {
+                    tracing::warn!("could not load {} (see the llama.cpp log)", rocm.display());
+                }
+            }
         }
         Ok(api)
     })
@@ -288,6 +298,13 @@ pub const CUDA_BACKEND: &str = if cfg!(windows) {
     "ggml-cuda.dll"
 } else {
     "libggml-cuda.so"
+};
+
+/// The ROCm/HIP backend's file name (in the ROCm pack, next to the ROCm libraries it links).
+pub const ROCM_BACKEND: &str = if cfg!(windows) {
+    "ggml-hip.dll"
+} else {
+    "libggml-hip.so"
 };
 
 /// Load llama.cpp as a runner would and list what it finds: its version and every device,
@@ -348,6 +365,7 @@ pub fn probe(libs: &Libraries) -> Result<Value, Error> {
         "llama_cpp": version,
         "libraries": libs.dir,
         "cuda_backend": libs.cuda,
+        "rocm_backend": libs.rocm,
         "devices": devices,
     }))
 }
@@ -378,17 +396,23 @@ fn gpus(api: &Api) -> Vec<Gpu> {
     }
 }
 
-/// A CUDA device wins over Vulkan, then the discrete GPU with the most free memory. The backend
+/// CUDA wins over ROCm, ROCm over Vulkan, then the discrete GPU with the most free memory. The backend
 /// registry may list Vulkan first because it is bundled with the Windows CPU libraries, while
-/// CUDA is loaded separately from the optional GPU pack. An integrated GPU of another backend
-/// (Vulkan on an Intel or AMD APU) shares system memory and is not shown to beat the CPU, so it
-/// takes an explicit `OLLAYA_DEVICE=vulkan:<n>`. CUDA's integrated devices (the GB10 of a DGX
-/// Spark, which llama.cpp reports as integrated) and Metal stay eligible.
+/// CUDA and ROCm are loaded separately from the optional GPU pack. An integrated GPU of another backend
+/// (Vulkan on an Intel or AMD APU, or a ROCm APU) shares system memory and is not shown to beat the CPU,
+/// so it takes an explicit `OLLAYA_DEVICE=vulkan:<n>` or `rocm:<n>`. CUDA's integrated devices (the GB10
+/// of a DGX Spark, which llama.cpp reports as integrated) and Metal stay eligible.
 fn auto_gpu(found: &[Gpu]) -> Option<&Gpu> {
     found
         .iter()
         .filter(|g| g.name.starts_with("CUDA") || g.kind == ffi::DEVICE_TYPE_GPU)
-        .max_by_key(|g| (g.name.starts_with("CUDA"), g.free_mib))
+        .max_by_key(|g| {
+            (
+                g.name.starts_with("CUDA"),
+                g.name.starts_with("ROCm"),
+                g.free_mib,
+            )
+        })
 }
 
 /// Why llama.cpp's CUDA backend cannot run on the device named `dev` (`CUDA0`), or `None` when it
@@ -400,16 +424,19 @@ fn cuda_unsupported(libs: &Libraries, dev: &str) -> Option<String> {
     kernels.check(info.compute_capability, info.driver).err()
 }
 
-/// Ollaya's name for a llama.cpp device: `CUDA0` → `cuda:0`, `Vulkan0` → `vulkan:0`.
+/// Ollaya's name for a llama.cpp device: `CUDA0` → `cuda:0`, `ROCm0` → `rocm:0`, `Vulkan0` → `vulkan:0`.
 pub fn device_name(dev: &str) -> String {
-    if let Some(n) = dev.strip_prefix("CUDA") {
+    let lower = dev.to_ascii_lowercase();
+    if let Some(n) = lower.strip_prefix("cuda") {
         format!("cuda:{n}")
-    } else if let Some(n) = dev.strip_prefix("Vulkan") {
+    } else if let Some(n) = lower.strip_prefix("rocm") {
+        format!("rocm:{n}")
+    } else if let Some(n) = lower.strip_prefix("vulkan") {
         format!("vulkan:{n}")
-    } else if dev.starts_with("MTL") {
+    } else if lower.starts_with("mtl") {
         "metal".into()
     } else {
-        dev.to_ascii_lowercase()
+        lower
     }
 }
 
@@ -671,19 +698,27 @@ impl LlamaModel {
         let pick = match target {
             Target::Cpu => None,
             Target::Auto => auto_gpu(&found),
-            Target::Device(name) => {
-                Some(found.iter().find(|g| &g.name == name).ok_or_else(|| {
-                    let names: Vec<&str> = found.iter().map(|g| g.name.as_str()).collect();
-                    model_error(format!(
-                        "llama.cpp finds no device {name} (devices: {names:?}){}",
-                        if libs.cuda.is_none() && name.starts_with("CUDA") {
-                            "; the CUDA libraries are not installed"
-                        } else {
-                            ""
-                        }
-                    ))
-                })?)
-            }
+            Target::Device(name) => Some(
+                found
+                    .iter()
+                    .find(|g| &g.name == name || device_name(&g.name) == device_name(name))
+                    .ok_or_else(|| {
+                        let names: Vec<&str> = found.iter().map(|g| g.name.as_str()).collect();
+                        model_error(format!(
+                            "llama.cpp finds no device {name} (devices: {names:?}){}",
+                            if libs.cuda.is_none() && name.starts_with("CUDA") {
+                                "; the CUDA libraries are not installed"
+                            } else if libs.rocm.is_none()
+                                && (name.to_ascii_lowercase().starts_with("rocm")
+                                    || name.to_ascii_lowercase().starts_with("hip"))
+                            {
+                                "; the ROCm libraries are not installed"
+                            } else {
+                                ""
+                            }
+                        ))
+                    })?,
+            ),
         };
         let threads = threads.map_or_else(default_threads, |t| t as i32);
         // A CUDA GPU the pack's kernels cannot run on would load, then abort at the first
@@ -1611,6 +1646,7 @@ mod tests {
     #[test]
     fn device_names() {
         assert_eq!(device_name("CUDA1"), "cuda:1");
+        assert_eq!(device_name("ROCm0"), "rocm:0");
         assert_eq!(device_name("MTL0"), "metal");
         assert_eq!(device_name("Vulkan0"), "vulkan:0");
     }
@@ -1638,6 +1674,21 @@ mod tests {
         assert_eq!(auto_gpu(&spark).unwrap().name, "CUDA0");
         let mac = [gpu("MTL0", ffi::DEVICE_TYPE_GPU, 20_000)];
         assert_eq!(auto_gpu(&mac).unwrap().name, "MTL0");
+        // A ROCm device wins over Vulkan
+        let rocm = [
+            gpu("Vulkan1", ffi::DEVICE_TYPE_GPU, 8_000),
+            gpu("ROCm0", ffi::DEVICE_TYPE_GPU, 6_000),
+        ];
+        assert_eq!(auto_gpu(&rocm).unwrap().name, "ROCm0");
+        // CUDA wins over ROCm even with less free memory
+        let cuda_rocm = [
+            gpu("ROCm0", ffi::DEVICE_TYPE_GPU, 16_000),
+            gpu("CUDA0", ffi::DEVICE_TYPE_GPU, 6_000),
+        ];
+        assert_eq!(auto_gpu(&cuda_rocm).unwrap().name, "CUDA0");
+        // An integrated ROCm GPU alone: stays on the CPU
+        let rocm_igpu = [gpu("ROCm0", ffi::DEVICE_TYPE_IGPU, 16_000)];
+        assert!(auto_gpu(&rocm_igpu).is_none());
     }
 
     #[test]

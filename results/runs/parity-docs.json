@@ -62,7 +62,7 @@
    "date": null,
    "pass": true,
    "cite": "docs/families/winnow.md:125",
-   "note": "partial: the golden replay stopped on a cp1252 text-encoding error, so only the first 3 requests were checked (winnow.md:128-129)"
+   "note": "partial: the golden replay stopped on a cp1252 text-encoding error, so only the first 3 requests were checked (winnow.md:129-130)"
   },
   {
    "family": "winnow",
@@ -92,8 +92,24 @@
    "max_prob_diff": 3e-06,
    "date": "2026-10-01",
    "pass": true,
-   "cite": "docs/families/winnow.md:133-137",
+   "cite": "docs/families/winnow.md:134-138",
    "note": "against the CUDA goldens instead: 501 of 505 decisions, log-probabilities up to 0.32 apart, about as far as the x86-64 CPU (0.28); measured and documented, not gated (ADR 0003, point 7)"
+  },
+  {
+   "family": "winnow",
+   "model": "winnow:e4b",
+   "device": "rocm",
+   "device_detail": "Radeon RX 9070, Linux x86-64, llama.cpp ubuntu-rocm of the same build (#33)",
+   "reference": "stock llama-server of the pinned build (b11146), loaded with the author's GGUF on the device under test",
+   "kind": "runtime",
+   "questions": 505,
+   "decisions": "505/505",
+   "max_logit_diff": 1.25e-05,
+   "max_prob_diff": 3e-06,
+   "date": "2026-09-28",
+   "pass": true,
+   "cite": "docs/families/winnow.md:139-144",
+   "note": "against the CUDA goldens instead: 500 of 505 decisions, log-probabilities up to 0.33 apart, about as far as the x86-64 CPU (0.35); measured and documented, not gated (ADR 0003, point 7)"
   },
   {
    "family": "winnow",
@@ -1161,7 +1177,7 @@
   {
    "family": "winnow",
    "what": "Metal and the Apple CPU, linux-arm64, and 12b on the CPU",
-   "cite": "docs/families/winnow.md:136"
+   "cite": "docs/families/winnow.md:145"
   },
   {
    "family": "jevk5",
@@ -1215,7 +1231,7 @@
    "decisions": "all 503 agree",
    "max_prob_diff": 0.0028,
    "p99_prob_diff": 3e-06,
-   "cite": "docs/families/winnow.md:130-132"
+   "cite": "docs/families/winnow.md:131-133"
   },
   {
    "family": "winnow",
@@ -1227,7 +1243,7 @@
    "decisions": "501 of 503 agree",
    "max_prob_diff": 0.052,
    "p99_prob_diff": 0.03,
-   "cite": "docs/families/winnow.md:130-132"
+   "cite": "docs/families/winnow.md:131-133"
   },
   {
    "family": "llm-logits",
