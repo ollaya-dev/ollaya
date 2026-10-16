@@ -125,16 +125,18 @@ impl ServerConfig {
         let device = var("OLLAYA_DEVICE").unwrap_or_else(|| "auto".into());
         let known = matches!(
             device.as_str(),
-            "auto" | "cpu" | "cuda" | "vulkan" | "metal"
+            "auto" | "cpu" | "cuda" | "rocm" | "hip" | "vulkan" | "metal"
         ) || device
             .strip_prefix("cuda:")
+            .or_else(|| device.strip_prefix("rocm:"))
+            .or_else(|| device.strip_prefix("hip:"))
             .or_else(|| device.strip_prefix("vulkan:"))
             .is_some_and(|n| n.parse::<u32>().is_ok());
         if !known {
             return Err(invalid(
                 "OLLAYA_DEVICE",
                 &device,
-                "use auto, cpu, cuda, cuda:<n>, vulkan, vulkan:<n> or metal".into(),
+                "use auto, cpu, cuda, cuda:<n>, rocm, rocm:<n>, vulkan, vulkan:<n> or metal".into(),
             ));
         }
         Ok(ServerConfig {
@@ -241,5 +243,11 @@ mod tests {
             with(&[("OLLAYA_DEVICE", "vulkan:0")]).unwrap().device,
             "vulkan:0"
         );
+        assert_eq!(with(&[("OLLAYA_DEVICE", "rocm")]).unwrap().device, "rocm");
+        assert_eq!(
+            with(&[("OLLAYA_DEVICE", "rocm:1")]).unwrap().device,
+            "rocm:1"
+        );
+        assert_eq!(with(&[("OLLAYA_DEVICE", "hip")]).unwrap().device, "hip");
     }
 }

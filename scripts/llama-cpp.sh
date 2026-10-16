@@ -63,6 +63,8 @@ case $KIND in
         ASSET=$b-ubuntu-cuda-13.4-x64.tar.gz SUM=1603d9c00a4b6eac8298c5c7868cdb080a3ac31948ab1e457441d71ce274dd7e ;;
     linux-amd64-cuda12)
         ASSET=$b-ubuntu-cuda-12.8-x64.tar.gz SUM=c2ab9e19838513ff69d1af8d999ad717dd3c7ee4714ac04c7ed5ab9077c50e4e ;;
+    linux-amd64-rocm)
+        ASSET=$b-ubuntu-rocm-10.0-x64.tar.gz SUM=50e79dc559a11af3ea59391d416e9a704a715ac6be94352dbba710782c5dd7d1 ;;
     linux-arm64) ASSET=$b-ubuntu-arm64.tar.gz SUM=4aeda6fe68831547e49b7fa87607383ca5352b3d72ca5f70d52ed265f58c131f ;;
     linux-arm64-cuda)
         ASSET=$b-ubuntu-cuda-13.4-arm64.tar.gz SUM=4e00496ab6cdee9c00afb11de3cb9d10f9da7e17147d8ed14ca3af05209b400f ;;
@@ -106,7 +108,9 @@ wanted() {
     case $KIND:$1 in
         linux-*-cuda*:libggml-cuda.so | windows-amd64-cuda:ggml-cuda.dll) return 0 ;;
         linux-*-cuda*:* | windows-amd64-cuda:*) return 1 ;;
-        *:libggml-cuda.so) return 1 ;;
+        linux-*-rocm:libggml-hip.so) return 0 ;;
+        linux-*-rocm:*) return 1 ;;
+        *:libggml-cuda.so | *:libggml-hip.so) return 1 ;;
         # libllama-common, libllama-server-impl and the other tools' libraries.
         *:libllama-*) return 1 ;;
         # The RPC backend is a loadable plugin on Linux, not needed; macOS links it into libggml.
@@ -145,6 +149,7 @@ done
 case $KIND in
     linux-*-cuda*) need=libggml-cuda.so ;;
     windows-amd64-cuda) need=ggml-cuda.dll ;;
+    linux-*-rocm) need=libggml-hip.so ;;
     linux-*) need=libllama.so.0 ;;
     darwin-*) need=libllama.0.dylib ;;
     *) need=llama.dll ;;

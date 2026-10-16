@@ -18,7 +18,7 @@ import json
 import os
 import subprocess
 
-from .llama_server import LlamaServer
+from .llama_server import LlamaServer, device_class
 from .plan import FixedPlan, server_args
 
 
@@ -33,19 +33,13 @@ def post_to(url):
     return post
 
 
-def device_class(device):
-    if device.startswith("Vulkan"):
-        return "vulkan"
-    return "cuda" if device.startswith("CUDA") else "metal" if device.startswith("MTL") else "cpu"
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("model_dir", help="out/<layout>-<slug>: decision.json and the goldens")
     ap.add_argument("--server", required=True)
     ap.add_argument("--gguf", required=True)
     ap.add_argument("--from", dest="source", default="goldens-cuda.jsonl")
-    ap.add_argument("--device", required=True, help="llama.cpp device (CUDA0, MTL0, Vulkan0), or cpu")
+    ap.add_argument("--device", required=True, help="llama.cpp device (CUDA0, ROCm0, MTL0, Vulkan0), or cpu")
     ap.add_argument("--port", type=int, default=8096)
     a = ap.parse_args()
 

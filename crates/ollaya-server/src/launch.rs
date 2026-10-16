@@ -56,6 +56,9 @@ pub const CUDA_RUNNER: &str = "ollaya-cuda-runner";
 /// R580). An install has at most one of them.
 pub const CUDA_PACKS: [&str; 2] = ["cuda_v13", "cuda_v12"];
 
+/// The llama.cpp ROCm/HIP backend library (in the ROCm pack).
+pub const ROCM_BACKEND: &str = "libggml-hip.so";
+
 /// How runner processes are started.
 #[derive(Debug, Clone)]
 pub struct RunnerLaunch {
@@ -170,17 +173,56 @@ pub fn llama_dir(exe: &Path) -> Option<PathBuf> {
         .map(|d| resolve(&d))
 }
 
+/// The ROCm pack directory, for AMD Radeon and Instinct GPUs.
+pub const ROCM_PACK: &str = "rocm";
+
+/// Directory holding the ROCm runtime pack, if this install has one.
+pub fn rocm_dir(exe: &Path) -> Option<PathBuf> {
+    let has_backend = |d: &Path| d.join(ROCM_BACKEND).is_file();
+    let exe_dir = exe.parent()?;
+    let library_path = std::env::var_os("OLLAYA_LIBRARY_PATH").map(PathBuf::from);
+    let roots = [library_path, Some(exe_dir.join("../lib/ollaya"))];
+    roots
+        .iter()
+        .flatten()
+        .map(|root| root.join(ROCM_PACK))
+        .chain(std::iter::once(exe_dir.to_path_buf()))
+        .find(|d| has_backend(d))
+        .map(|d| resolve(&d))
+}
+
 /// How to start runners for the executable `exe`.
 pub fn runner_launch(exe: &Path) -> RunnerLaunch {
-    match cuda_dir(exe) {
-        Some(dir) => gpu_launch(exe, &dir).unwrap_or_else(|e| {
+    if let Some(dir) = cuda_dir(exe) {
+        return gpu_launch(exe, &dir).unwrap_or_else(|e| {
             tracing::warn!(
                 "cannot use the GPU runtime in {}, runners will use the CPU: {e}",
                 dir.display()
             );
             RunnerLaunch::plain(exe)
-        }),
-        None => RunnerLaunch::plain(exe),
+        });
+    }
+    if let Some(dir) = rocm_dir(exe) {
+        return rocm_launch(exe, &dir);
+    }
+    RunnerLaunch::plain(exe)
+}
+
+fn rocm_launch(exe: &Path, dir: &Path) -> RunnerLaunch {
+    let mut ld = dir.display().to_string();
+    if let Some(old) = std::env::var("LD_LIBRARY_PATH")
+        .ok()
+        .filter(|v| !v.is_empty())
+    {
+        ld.push(':');
+        ld.push_str(&old);
+    }
+    RunnerLaunch {
+        exe: exe.to_path_buf(),
+        arg0: Some(dir.join("ollaya")),
+        env: vec![("LD_LIBRARY_PATH".into(), ld)],
+        llama_dir: None,
+        cpu_exe: None,
     }
 }
 
@@ -395,6 +437,16 @@ mod tests {
         let lib = root.path().join("lib/ollaya/cuda_v12");
         pack(&lib);
         assert_eq!(cuda_dir(&exe), Some(resolve(&lib)));
+    }
+
+    #[test]
+    fn finds_a_rocm_pack() {
+        let root = tempfile::tempdir().unwrap();
+        let exe = install(root.path());
+        let lib = root.path().join("lib/ollaya/rocm");
+        std::fs::create_dir_all(&lib).unwrap();
+        std::fs::write(lib.join(ROCM_BACKEND), b"hip").unwrap();
+        assert_eq!(rocm_dir(&exe), Some(resolve(&lib)));
     }
 
     #[cfg(not(windows))]
