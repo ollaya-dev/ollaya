@@ -42,9 +42,12 @@ fn main() -> Result<()> {
             .map(|pack| lib.join(pack).join(ollaya_runner::llama::CUDA_BACKEND))
             .into_iter()
             .find(|p| p.is_file());
+        let rocm =
+            Some(lib.join("rocm").join(ollaya_runner::llama::ROCM_BACKEND)).filter(|p| p.is_file());
         let libs = Libraries {
             dir: lib.join("llama"),
             cuda,
+            rocm,
         };
         let target = match device {
             Device::Cuda(n) => Target::Device(format!("CUDA{n}")),

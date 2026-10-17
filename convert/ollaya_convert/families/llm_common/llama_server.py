@@ -28,6 +28,19 @@ import urllib.request
 BIAS = 100.0
 
 
+def device_class(device: str) -> str:
+    """Map a llama.cpp device argument (e.g. CUDA0, ROCm0, Vulkan0, MTL0, cpu) to its family name."""
+    if device.startswith(("ROCm", "HIP", "rocm", "hip")):
+        return "rocm"
+    if device.startswith(("Vulkan", "vulkan")):
+        return "vulkan"
+    if device.startswith(("CUDA", "cuda")):
+        return "cuda"
+    if device.startswith(("MTL", "metal", "Metal")):
+        return "metal"
+    return "cpu"
+
+
 class LlamaServer:
     def __init__(self, url: str, proc=None):
         self.url = url.rstrip("/")

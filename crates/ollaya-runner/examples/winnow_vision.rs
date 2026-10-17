@@ -16,6 +16,7 @@ fn main() -> anyhow::Result<()> {
     let libs = Libraries {
         dir: PathBuf::from(&args[2]),
         cuda: args.get(4).map(PathBuf::from),
+        rocm: None,
     };
     let mut model = LlamaModel::load(
         &PathBuf::from(&args[0]),

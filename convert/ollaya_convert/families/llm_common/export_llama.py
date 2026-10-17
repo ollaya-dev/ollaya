@@ -42,7 +42,7 @@ import os
 import struct
 import urllib.request
 
-from .llama_server import LlamaServer
+from .llama_server import LlamaServer, device_class
 from .plan import FixedPlan, server_args, split_point
 
 LLAMA_BUILD = "b11146"
@@ -377,12 +377,6 @@ def error_class(layout, lay, state, questions, e):
     return "too_many_options" if "exceed this model's" in str(e) else "invalid"
 
 
-def device_class(device):
-    if device.startswith("Vulkan"):
-        return "vulkan"
-    return "cuda" if device.startswith("CUDA") else "metal" if device.startswith("MTL") else "cpu"
-
-
 def server_version(binary):
     import subprocess
 
@@ -415,7 +409,7 @@ def main():
     ap.add_argument("--assistant-prefix", default="")
     ap.add_argument("--td", type=int, default=40, help="typed-decisions rows in the goldens")
     ap.add_argument("--port", type=int, default=8095)
-    ap.add_argument("--device", default="CUDA0", help="llama.cpp device (CUDA0, MTL0, Vulkan0), or cpu")
+    ap.add_argument("--device", default="CUDA0", help="llama.cpp device (CUDA0, ROCm0, MTL0, Vulkan0), or cpu")
     a = ap.parse_args()
 
     out = os.path.abspath(os.path.join(OUT, "%s-%s" % (a.layout, a.slug)))

@@ -26,6 +26,7 @@
 #   ollaya-<platform>-cuda.sha256    sha256 of every library in the CUDA archive (FILES.sha256),
 #                                    which the installers use to skip an unchanged CUDA download
 #   ollaya-<platform>-cuda12.sha256  the same for the CUDA 12 archive
+#   ollaya-<platform>-rocm.sha256    the same for the ROCm archive
 #   ollaya-darwin-arm64-mlx.sha256   the same for the MLX archive
 #   sha256sum.txt                    over every archive in --out, and the files above
 #
@@ -137,7 +138,7 @@ write_checksums() {
         : >sha256sum.txt.tmp
         for f in *; do
             case $f in
-                *.tar.zst | *.tgz | *.zip | *-cuda.sha256 | *-cuda12.sha256 | *-mlx.sha256) [ -f "$f" ] || continue ;;
+                *.tar.zst | *.tgz | *.zip | *-cuda.sha256 | *-cuda12.sha256 | *-rocm.sha256 | *-mlx.sha256) [ -f "$f" ] || continue ;;
                 *) continue ;;
             esac
             printf '%s  %s\n' "$(sha256_of "$f")" "$f" >>sha256sum.txt.tmp
@@ -162,13 +163,14 @@ fetch() {
 
 # --- arguments ---------------------------------------------------------------------------------
 
-PLATFORM='' CUDA=0 CUDA12=0 MLX=0 BASE=1 STAGE='' OUT=dist
+PLATFORM='' CUDA=0 CUDA12=0 ROCM=0 MLX=0 BASE=1 STAGE='' OUT=dist
 while [ $# -gt 0 ]; do
     case $1 in
         --platform) [ $# -ge 2 ] || usage; PLATFORM=$2; shift 2 ;;
         --platform=*) PLATFORM=${1#*=}; shift ;;
         --cuda) CUDA=1; shift ;;
         --cuda12) CUDA12=1; shift ;;
+        --rocm) ROCM=1; shift ;;
         --mlx) MLX=1; shift ;;
         --no-base) BASE=0; shift ;;
         --stage) [ $# -ge 2 ] || usage; STAGE=$2; shift 2 ;;
@@ -212,9 +214,10 @@ case $PLATFORM in
     linux-arm64) [ "$CUDA12" = 0 ] || die "--cuda12 is not supported for linux-arm64 (there is no aarch64 CUDA 12 build of ONNX Runtime); use --cuda" ;;
     *) [ "$CUDA$CUDA12" = 00 ] || die "--cuda is only supported for linux-amd64, linux-arm64 and windows-amd64, --cuda12 for linux-amd64 and windows-amd64" ;;
 esac
+[ "$ROCM" = 0 ] || [ "$PLATFORM" = linux-amd64 ] || die "--rocm is only supported for linux-amd64"
 [ "$MLX" = 0 ] || [ "$PLATFORM" = darwin-arm64 ] || die "--mlx is only supported for darwin-arm64"
-[ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || [ "$CUDA12" = 1 ] || [ "$MLX" = 1 ] ||
-    die "--no-base without --cuda, --cuda12 or --mlx leaves nothing to do"
+[ "$BASE" = 1 ] || [ "$CUDA" = 1 ] || [ "$CUDA12" = 1 ] || [ "$ROCM" = 1 ] || [ "$MLX" = 1 ] ||
+    die "--no-base without --cuda, --cuda12, --rocm or --mlx leaves nothing to do"
 # The `mlx` feature links MLX into bin/ollaya, so its notices go into the base archive too.
 case ",$FEATURES," in *mlx,*) LINKS_MLX=1 ;; *) LINKS_MLX=0 ;; esac
 
@@ -698,6 +701,42 @@ stage_mlx() {
     say "Staged $name ($(human_size "$lib/mlx.metallib") metallib)"
 }
 
+stage_rocm() {
+    name=ollaya-$PLATFORM-rocm
+    root=$TREES/$name
+    lib=$root/lib/ollaya/rocm
+    doc=$root/share/doc/ollaya/rocm
+    rm -rf "$root"
+    mkdir -p "$lib" "$doc"
+
+    # llama.cpp's ROCm/HIP backend (GGUF models)
+    [ "$PLATFORM" = linux-amd64 ] || die "ROCm pack is only available on linux-amd64"
+    LLAMA_ROCM=libggml-hip.so
+    OLLAYA_CACHE=$CACHE "$ROOT/scripts/llama-cpp.sh" "$PLATFORM-rocm" "$WORK/llama-rocm" \
+        "$doc/llama.cpp-THIRD_PARTY_NOTICES"
+    cp -a "$WORK/llama-rocm"/* "$lib/"
+
+    # FILES.sha256 for keep-if-unchanged installs
+    (
+        cd "$lib"
+        LC_ALL=C
+        export LC_ALL
+        for f in *; do
+            [ "$f" = FILES.sha256 ] || printf '%s  %s\n' "$(sha256_of "$f")" "$f"
+        done
+    ) >"$WORK/FILES.sha256"
+    mv "$WORK/FILES.sha256" "$lib/FILES.sha256"
+
+    {
+        printf 'Ollaya ROCm / HIP accelerator package (%s): third-party notices\n\n' "$PLATFORM"
+        printf 'Everything in lib/ollaya/rocm is third-party software. None of it is covered by\n'
+        printf "Ollaya's Apache-2.0 license.\n\n"
+        printf '1. llama.cpp %s ROCm/HIP backend (MIT), %s: see llama.cpp-THIRD_PARTY_NOTICES.\n' \
+            "$LLAMA_CPP_BUILD" "$LLAMA_ROCM"
+    } >"$doc/THIRD_PARTY_NOTICES"
+    say "Staged $name ($(du -sk "$lib" | awk '{ printf "%.0f MiB", $1 / 1024 }') of libraries)"
+}
+
 # --- archives ----------------------------------------------------------------------------------
 
 # tar_create DIR ENTRIES...: deterministic tar stream of DIR/ENTRIES on stdout. Only the named
@@ -750,6 +789,7 @@ archive() {
 [ "$BASE" = 0 ] || stage_base
 [ "$CUDA" = 0 ] || stage_cuda 13
 [ "$CUDA12" = 0 ] || stage_cuda 12
+[ "$ROCM" = 0 ] || stage_rocm
 [ "$MLX" = 0 ] || stage_mlx
 
 if [ -n "$STAGE" ]; then
@@ -765,6 +805,10 @@ fi
 if [ "$CUDA12" = 1 ]; then
     archive "ollaya-$PLATFORM-cuda12" lib share
     cp "$TREES/ollaya-$PLATFORM-cuda12/lib/ollaya/cuda_v12/FILES.sha256" "$OUT/ollaya-$PLATFORM-cuda12.sha256"
+fi
+if [ "$ROCM" = 1 ]; then
+    archive "ollaya-$PLATFORM-rocm" lib share
+    cp "$TREES/ollaya-$PLATFORM-rocm/lib/ollaya/rocm/FILES.sha256" "$OUT/ollaya-$PLATFORM-rocm.sha256"
 fi
 if [ "$MLX" = 1 ]; then
     archive "ollaya-$PLATFORM-mlx" lib share

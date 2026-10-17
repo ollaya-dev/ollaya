@@ -26,6 +26,8 @@ Each release on GitHub (`ollaya-dev/ollaya`, set with `OLLAYA_REPO`) carries:
 | `ollaya-linux-amd64-cuda.sha256` | The sha256 of every library in `lib/ollaya/cuda_v13/`, also installed there as `FILES.sha256` | 2 KiB |
 | `ollaya-linux-amd64-cuda12.tar.zst` | `lib/ollaya/cuda_v12/` (21 libraries, llama.cpp's CUDA 12.8 `libggml-cuda.so` included), `share/doc/ollaya/cuda_v12/`, for drivers without CUDA 13 support | 1568 MiB (3370 MiB unpacked) |
 | `ollaya-linux-amd64-cuda12.sha256` | The same for `lib/ollaya/cuda_v12/` | 2 KiB |
+| `ollaya-linux-amd64-rocm.tar.zst` | `lib/ollaya/rocm/libggml-hip.so` (llama.cpp ROCm/HIP backend), `share/doc/ollaya/rocm/` | about 46 MiB (140 MiB unpacked) |
+| `ollaya-linux-amd64-rocm.sha256` | The sha256 of `libggml-hip.so`, also installed there as `FILES.sha256` | 1 KiB |
 | `ollaya-linux-arm64.tar.zst` | `bin/ollaya` (CPU only), `lib/ollaya/llama/`, `lib/ollaya/ollaya-cuda-runner` (the GPU runner), `share/doc/ollaya/` | |
 | `ollaya-linux-arm64-cuda.tar.zst`, `ollaya-linux-arm64-cuda.sha256` | `lib/ollaya/cuda_v13/` for aarch64 (DGX Spark; see "The linux-arm64 pack" below), `share/doc/ollaya/cuda_v13/`, and its checksums | |
 | `ollaya-darwin-arm64.tar.zst` | `bin/ollaya`, `lib/ollaya/llama/` (llama.cpp with Metal), `share/doc/ollaya/` (CPU and CoreML) | |
@@ -208,6 +210,7 @@ sha256 (llama.cpp v0.5.0, build b11146):
 | `lib/ollaya/cuda_v13/libggml-cuda.so` (linux-arm64) | the CUDA 13.4 backend | `llama-b11146-bin-ubuntu-cuda-13.4-arm64.tar.gz`, the same build (commit and ggml backend interface) |
 | `lib/ollaya/llama/` (darwin-arm64) | `libllama.0.dylib`, `libggml*.0.dylib` (Metal built in, shaders embedded, macOS 13.3 or newer) | `llama-b11146-bin-macos-arm64.tar.gz` |
 | `lib/ollaya/llama/` (windows-amd64) | `llama.dll`, `ggml.dll`, `ggml-base.dll`, `ggml-vulkan.dll`, the `ggml-cpu-*.dll` variants and `libomp.dll` | `llama-b11146-bin-win-vulkan-x64.zip` |
+| `lib/ollaya/rocm/libggml-hip.so` (linux-amd64) | the ROCm/HIP backend | `llama-b11146-bin-ubuntu-rocm-10.0-x64.tar.gz`, the same build |
 
 - **Nothing else.** No `llama-server`, no tools, no symbolic links: each library is stored once,
   under the name the loader asks for.
@@ -215,6 +218,16 @@ sha256 (llama.cpp v0.5.0, build b11146):
   `<exe dir>/../lib/ollaya/llama`). ggml loads the best CPU variant for the machine. The CUDA backend
   is found next to a GPU runner's `argv[0]`, the CUDA pack, where it links the pack's `libcudart`,
   `libcublas` and `libcublasLt` through its `$ORIGIN` RUNPATH.
+- **AMD ROCm / HIP.** `libggml-hip.so` lives in the optional ROCm pack (`lib/ollaya/rocm/`) and is loaded
+  dynamically by the runner. The archive ships only `libggml-hip.so`; it requires ROCm 7 runtime libraries
+  installed on the host (`libamdhip64.so.7`, `libhipblas.so.3` and `librocblas.so.5`). With
+  `OLLAYA_DEVICE=auto`, GGUF models prioritize CUDA, then discrete ROCm GPUs over generic Vulkan or CPU. An
+  explicit `OLLAYA_DEVICE=rocm` or `rocm:<n>` targets a specific AMD card. If a GPU runner fails while it
+  loads, the model starts again on the CPU.
+- **ROCm parity**, per device as for every backend (docs/decisions/0003-llama-cpp-runtime.md, point 7):
+  Ollaya's runner against stock `llama-server` b11146 on the same ROCm device. On an AMD Radeon RX 9070
+  (`gfx1201`): `winnow:e4b` 505/505 decisions (100%), option logits within 1.25e-5
+  ([measurements](measurements/amd-rx9070-rocm-parity.md)).
 - **Windows Vulkan.** `ggml-vulkan.dll` lives beside the CPU libraries and is loaded by llama.cpp's
   backend discovery. With `OLLAYA_DEVICE=auto`, GGUF models use CUDA when its optional pack is
   installed, else a discrete Vulkan GPU. An integrated GPU shares system memory and is not shown to
