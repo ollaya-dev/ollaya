@@ -210,7 +210,10 @@ impl ModelName {
     pub fn stored(&self) -> String {
         format!(
             "{}/{}/{}:{}",
-            self.host, self.namespace, self.model, self.tag
+            self.host_dir(),
+            self.namespace,
+            self.model,
+            self.tag
         )
     }
 }
