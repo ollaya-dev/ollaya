@@ -27,6 +27,12 @@ export NO_PROXY=localhost,127.0.0.1    # keep local requests off any system prox
 - **System proxies.** On a Mac with a system HTTP proxy, the TypeSafe SDK (like `httpx`) sends requests for `localhost` through the proxy too, ignoring the system's exception list. Your states then pass through the proxy, and while Ollaya is down the SDK reports `502 status code (no body)` instead of a refused connection. Set `NO_PROXY=localhost,127.0.0.1` next to `TYPESAFE_BASE_URL`.
 - **Warm-up and timings.** To load a model before the first request, send `{"model": "winnow:e4b", "keep_alive": -1}` to [`/api/decide`](/docs/api#decide) (no `state`). `/v1/*` responses carry no timings, as TypeSafe's don't; `/api/decide` reports `total_duration`, `load_duration` and `eval_duration`.
 
+## Libraries
+
+Libraries that reach Ollaya through this API. To add one, open a pull request with a line here: its link, what it does and how it reaches Ollaya.
+
+- **[gut](https://gutpy.dev)** (Python). Judgment calls as one line of code: `gut.likely(text, "is spam")`, `gut.classify` and `gut.rate` answer YES, NO or UNSURE. `gut.JevBackend.ollaya("winnow:e4b")` asks Ollaya through the TypeSafe SDK and reads `OLLAYA_HOST` and `OLLAYA_API_KEY`. Install with `pip install "gutfeel[jev]"`; see its [Ollaya notes](https://gutpy.dev/docs/backends.html#on-your-own-machine-through-ollaya).
+
 ## Endpoints
 
 | Endpoint | Description |
