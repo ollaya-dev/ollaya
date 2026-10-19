@@ -101,6 +101,7 @@ pub const LAYOUTS: &[&str] = &[
     "decima-late-interaction-v1",
     "decima-late-interaction-v2",
     "arbiter-fixed-v1",
+    "strands-pointer-v1",
 ];
 
 /// The layout a `decision` layer declares.
@@ -163,6 +164,9 @@ pub fn load(
             crate::decima::DecimaModel::load_files(files, device, threads)?,
         )),
         "arbiter-fixed-v1" => Ok(Box::new(crate::arbiter::ArbiterModel::load_files(
+            files, device, threads,
+        )?)),
+        "strands-pointer-v1" => Ok(Box::new(crate::strands::StrandsModel::load_files(
             files, device, threads,
         )?)),
         other => Err(Error::Model(format!(

@@ -384,6 +384,36 @@ CATALOG = {
                   "4090): identical token rows, the same 121 rejected requests, the same decision on every question, "
                   "slot scores within 8.5e-5 and probabilities within 1.0e-5.",
     },
+    "strands-decider": {
+        "namespace": "library",
+        "model": "strands-decider",
+        "family": "strands",
+        "author": "Strands Agents (adapter and pointer head) and the Qwen team (base model)",
+        "license": "Apache-2.0",
+        "license_text": ("Strands Decider by Strands Agents "
+                         "(https://huggingface.co/StrandsAgents/strands-decider-2B-qwen3.5-v1-2610)\n"
+                         "LoRA adapter and pointer head: Apache-2.0 (LICENSE.md in the model repository).\n"
+                         "Base model: Qwen3.5-2B-Base by the Qwen team (https://huggingface.co/Qwen/Qwen3.5-2B-Base), "
+                         "Apache-2.0.\nLicensed under the Apache License, Version 2.0.\n\n") + LICENSE_APACHE,
+        "tags": {
+            "2b": _wl("strands-decider-2b", "StrandsAgents/strands-decider-2B-qwen3.5-v1-2610",
+                      "216d1ccb46a9e9b036eb9187b248db98480f77d4",
+                      "Strands Decider v1 (2610): a LoRA and a pointer head on Qwen3.5-2B base. Each question is one "
+                      "row, every option scored at the end of its own line, calibrated per question type. Up to 255 "
+                      "options and 10 score levels, 4,096 tokens per row. Needs about 8 GB of memory (weights widened to fp32 at load).",
+                      "2B", 4096, ["en"], wl_dir=os.path.join(OUT, "strands-decider-2b"),
+                      weights={"model.safetensors-00001-of-00001.safetensors":
+                               ("Qwen/Qwen3.5-2B-Base", "b1485b2fa6dfa1287294f269f5fb618e03d52d7c",
+                                "model.safetensors-00001-of-00001.safetensors"),
+                               "adapter_model.safetensors": "lora/adapter_model.safetensors",
+                               "head.safetensors": "head.safetensors"}),
+        },
+        "aliases": {"latest": "2b"},
+        "parity": "Ollaya's Rust runtime matches upstream strands_decider (PyTorch fp32, the LoRA unmerged) on 650 "
+                  "questions from 152 requests: identical token rows and option positions, the same 18 rejected "
+                  "requests, the same decision on every question, option logits within 1.1e-5 and probabilities "
+                  "within 2.8e-6 (CUDA), and TypeSafe answers equal to upstream's 4-decimal rounding.",
+    },
     "decision": {
         "namespace": "library",
         "model": "decision",

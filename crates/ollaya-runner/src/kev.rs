@@ -160,58 +160,14 @@ impl KevModel {
         Ok(self.output(&encoding, scores))
     }
 
-    /// Each row's option scores (its first `k_row` graph outputs). Rows run shortest first, in
-    /// batches padded to a multiple of `seq_multiple`.
+    /// Each row's option scores (its first `k_row` graph outputs).
     pub fn scores(&self, encoding: &KevEncoding) -> Result<Vec<Vec<f32>>, Error> {
-        let rows = &encoding.rows;
-        let mut order: Vec<usize> = (0..rows.len()).collect();
-        order.sort_by_key(|&i| rows[i].ids.len());
-        let padded: Vec<usize> = order
-            .iter()
-            .map(|&i| rows[i].ids.len().div_ceil(self.seq_multiple) * self.seq_multiple)
-            .collect();
-        let pad = i64::from(self.layout.special_tokens.pad);
-
-        let mut scores = vec![Vec::new(); rows.len()];
-        let mut session = self.session.lock().expect("session mutex poisoned");
-        for range in crate::engine::batches(&padded, TOKEN_BUDGET, MAX_ROWS) {
-            let batch = &order[range.clone()];
-            let seq = padded[range].iter().copied().max().unwrap_or(0);
-            let k = batch.iter().map(|&i| rows[i].opts.len()).max().unwrap_or(0);
-            let mut input_ids = Array2::<i64>::from_elem((batch.len(), seq), pad);
-            let mut decide_pos = Array1::<i64>::zeros(batch.len());
-            let mut opt_pos = Array2::<i64>::zeros((batch.len(), k));
-            for (r, &i) in batch.iter().enumerate() {
-                let row = &rows[i];
-                for (c, &id) in row.ids.iter().enumerate() {
-                    input_ids[[r, c]] = i64::from(id);
-                }
-                decide_pos[r] = row.decide as i64;
-                for (c, &p) in row.opts.iter().enumerate() {
-                    opt_pos[[r, c]] = p as i64;
-                }
-            }
-            let outputs = session.run(ort::inputs![
-                "input_ids" => ort::value::Tensor::from_array(input_ids)?,
-                "decide_pos" => ort::value::Tensor::from_array(decide_pos)?,
-                "opt_pos" => ort::value::Tensor::from_array(opt_pos)?,
-            ])?;
-            let out = outputs[OUTPUT]
-                .try_extract_array::<f32>()?
-                .into_dimensionality::<Ix2>()
-                .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?;
-            if out.nrows() != batch.len() || out.ncols() != k {
-                return Err(Error::Model(format!(
-                    "{OUTPUT} has shape {:?} for {} rows of up to {k} options",
-                    out.shape(),
-                    batch.len()
-                )));
-            }
-            for (&i, row) in batch.iter().zip(out.rows()) {
-                scores[i] = row.iter().take(rows[i].opts.len()).copied().collect();
-            }
-        }
-        Ok(scores)
+        pointer_scores(
+            &self.session,
+            &encoding.rows,
+            self.seq_multiple,
+            self.layout.special_tokens.pad,
+        )
     }
 
     /// The request's output from each row's option scores.
@@ -229,6 +185,65 @@ impl KevModel {
             state_truncated: encoding.state.truncated,
         }
     }
+}
+
+/// Each row's option scores from a pointer graph (`input_ids`, `decide_pos`, `opt_pos` -> `scores`):
+/// its first `k_row` outputs. Rows run shortest first, in batches padded to a multiple of
+/// `seq_multiple`. Shared by the pointer layouts (`kev`, `strands`).
+pub(crate) fn pointer_scores(
+    session: &Mutex<Session>,
+    rows: &[KevRow],
+    seq_multiple: usize,
+    pad: u32,
+) -> Result<Vec<Vec<f32>>, Error> {
+    let mut order: Vec<usize> = (0..rows.len()).collect();
+    order.sort_by_key(|&i| rows[i].ids.len());
+    let padded: Vec<usize> = order
+        .iter()
+        .map(|&i| rows[i].ids.len().div_ceil(seq_multiple) * seq_multiple)
+        .collect();
+    let pad = i64::from(pad);
+
+    let mut scores = vec![Vec::new(); rows.len()];
+    let mut session = session.lock().expect("session mutex poisoned");
+    for range in crate::engine::batches(&padded, TOKEN_BUDGET, MAX_ROWS) {
+        let batch = &order[range.clone()];
+        let seq = padded[range].iter().copied().max().unwrap_or(0);
+        let k = batch.iter().map(|&i| rows[i].opts.len()).max().unwrap_or(0);
+        let mut input_ids = Array2::<i64>::from_elem((batch.len(), seq), pad);
+        let mut decide_pos = Array1::<i64>::zeros(batch.len());
+        let mut opt_pos = Array2::<i64>::zeros((batch.len(), k));
+        for (r, &i) in batch.iter().enumerate() {
+            let row = &rows[i];
+            for (c, &id) in row.ids.iter().enumerate() {
+                input_ids[[r, c]] = i64::from(id);
+            }
+            decide_pos[r] = row.decide as i64;
+            for (c, &p) in row.opts.iter().enumerate() {
+                opt_pos[[r, c]] = p as i64;
+            }
+        }
+        let outputs = session.run(ort::inputs![
+            "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+            "decide_pos" => ort::value::Tensor::from_array(decide_pos)?,
+            "opt_pos" => ort::value::Tensor::from_array(opt_pos)?,
+        ])?;
+        let out = outputs[OUTPUT]
+            .try_extract_array::<f32>()?
+            .into_dimensionality::<Ix2>()
+            .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?;
+        if out.nrows() != batch.len() || out.ncols() != k {
+            return Err(Error::Model(format!(
+                "{OUTPUT} has shape {:?} for {} rows of up to {k} options",
+                out.shape(),
+                batch.len()
+            )));
+        }
+        for (&i, row) in batch.iter().zip(out.rows()) {
+            scores[i] = row.iter().take(rows[i].opts.len()).copied().collect();
+        }
+    }
+    Ok(scores)
 }
 
 /// Session options for the kev graphs on `device`: the decoder options (see

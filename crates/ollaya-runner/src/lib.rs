@@ -23,6 +23,7 @@ pub mod nli;
 pub mod onnx;
 pub mod qwen3guard;
 pub mod server;
+pub mod strands;
 pub mod vision;
 pub mod von;
 

@@ -101,6 +101,7 @@ numbers: [ollaya.dev/search](https://ollaya.dev/search).
 | `clm` | Contrastive-LM's CLM-v0.1-8B: the Qwen3-8B encoder and two projection heads score options by similarity, with questions and options cached. 0.357 on typed-decisions; built for agent, game and tool-calling states |
 | `jevk5` | alibiserikbay's JevK5 v0.3, a Qwen3.5-4B fine-tune run from the author's Q8_0 GGUF on llama.cpp, up to 16 options |
 | `nimble` | Bespoke Labs' Nimble v2: a LoRA on Qwen3.5-9B that reads the whole request as a JSON schema and scores option codes, with the author's temperature: 0.665 on typed-decisions, up to 255 options, ~2.3 s for five questions on an RTX 4090 |
+| `strands-decider` | Strands Agents' Strands Decider: a LoRA and a pointer head on Qwen3.5-2B base, every option scored at the end of its own line, calibrated per question type; up to 255 options, ~0.34 s for five questions on an RTX 4090 |
 | `jeb`, `jeb:4b`, `jeb:27b` | Jason Brashear's Jebadiah (AINode): LoRAs merged into Qwen3.5 (9B by default, 4B) and Qwen3.8-27B, run from the authors' GGUF on llama.cpp with their per-type temperatures; `jeb:9b` answers five questions in 124 ms on an RTX 4090 |
 | `jeeves` | PostHog's Jeeves-9B without its reasoning chain: Qwen3.5-9B (LoRA merged) and a pointer head: 0.680 on typed-decisions with an ECE of 0.031, 838 ms for five questions on an RTX 4090 |
 | `clef` | Cloudflare's Clef-Flash: Qwen3.5-9B, fully post-trained, with a joint schema head that scores every question's options in one forward pass: 0.703 on typed-decisions with an ECE of 0.020 and no fitted temperature, 532 ms for five questions on an RTX 4090 |
@@ -194,7 +195,7 @@ Apache-2.0. Each model keeps its own license: `laya` (Convai Innovations), `deci
 `kev` (Jared Palmer, on Qwen3.5 by the Qwen team), `decision` (the vLLM Semantic Router
 contributors, on Qwen3.5), `qwen3guard` (Qwen team), `gliclass` (Knowledgator), `von` (Victor Hugo
 Panisa), `winnow` (EldanRing, on Gemma 4 by Google DeepMind), `jevk5` (alibiserikbay, on Qwen3.5), `nimble`
-(Bespoke Labs, on Qwen3.5), `jeeves` (PostHog, on Qwen3.5), `clef` (Cloudflare, on Qwen3.5), `jeb` (Jason Brashear, on Qwen3.5 and Qwen3.8), `cygnet` (Gemma 4 by Google
+(Bespoke Labs, on Qwen3.5), `strands-decider` (Strands Agents, on Qwen3.5), `jeeves` (PostHog, on Qwen3.5), `clef` (Cloudflare, on Qwen3.5), `jeb` (Jason Brashear, on Qwen3.5 and Qwen3.8), `cygnet` (Gemma 4 by Google
 DeepMind; the Cygnet recipe is MIT), `snap` (logitlab, on MiniCPM5 by OpenBMB; snap's prompt is MIT), `decima` (A. M. Madani, on mmBERT-base by JHU CLSP and multilingual-e5-small by intfloat, both MIT) and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` (Moritz Laurer) is MIT. `arbiter`'s LoRA adapter and head (Codekins Pvt Ltd, Zyot Lab) are Apache-2.0; its base model, Gemma 3 4B IT by Google DeepMind, is under the Gemma Terms of Use. `d1` (Liquid AI) is under the LFM Open License v1.0: commercial use by an organization with US$10 million or more in annual revenue is not covered by it. llama.cpp, which Ollaya ships for
 GGUF models, is MIT.
 

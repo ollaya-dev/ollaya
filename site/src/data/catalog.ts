@@ -340,6 +340,19 @@ const overlays: Record<string, ModelOverlay> = {
       '4b': { summary: 'Arbiter v3.3 on Gemma 3 4B IT (weights kept BF16, about 8 GB): noul, up to 16 options, 6-level scores.' },
     },
   },
+  'strands-decider': {
+    title: 'Strands Decider',
+    description:
+      "Strands Agents' decision model: a LoRA and a pointer head on Qwen3.5-2B base. Each question is one row with a line per option, every option scored at the end of its own line, and the probabilities are calibrated with the authors' temperature for each question type. Up to 255 options.",
+    publisher: { name: 'Strands Agents', url: 'https://huggingface.co/StrandsAgents' },
+    capabilities: ['decision', 'fine-tuned'],
+    keywords: ['strands', 'strands decider', 'strands agents', 'amazon', 'qwen', 'qwen3.5', 'lora', 'pointer', 'llm', 'decision', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 21,
+    tags: {
+      latest: { summary: 'Same as strands-decider:2b.' },
+      '2b': { summary: 'strands-decider-2B-qwen3.5-v1-2610 (LoRA and pointer head on Qwen3.5-2B base), about 8 GB in memory.' },
+    },
+  },
   decima: {
     stats: { tag: 'decima:base', accuracy: 0.495, latencyMs: 15.1 },
     title: 'Decima',

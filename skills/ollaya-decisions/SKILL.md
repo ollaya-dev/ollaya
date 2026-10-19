@@ -71,6 +71,7 @@ If none is available, tell the user how to install Ollaya:
 | `decima` | Decima-base (mmBERT-base, 321M): options read against the state one by one, order never matters; calibrated; states up to 512 tokens. `decima:agent` for coding-agent gates, tool choice and knowledge-graph judgments (2,048-token states), `decima:small` for a CPU | ~15 ms GPU, ~0.45 s CPU (`decima:small` ~0.15 s) |
 | `arbiter` | Gemma 3 4B IT with a LoRA and a fixed 24-slot head; noul, choices of up to 16 options, scores of exactly 6 levels (other questions are rejected); about 8 GB | ~0.15 s GPU for three or more questions |
 | `nimble` | Bespoke Labs' Nimble (LoRA on Qwen3.5-9B): reads the whole request as a schema; calibrated; up to 255 options; needs a 24 GB GPU | ~2.3 s GPU |
+| `strands-decider` | Strands Agents' Strands Decider (LoRA and pointer head on Qwen3.5-2B base): one row per question, options scored at their own lines; calibrated per type; up to 255 options; about 8 GB | ~0.35 s GPU |
 | `jeeves` | PostHog's Jeeves-9B (no thinking): Qwen3.5-9B with a pointer head; calibrated; needs a 24 GB GPU | ~0.84 s GPU |
 | `clef` | Cloudflare's Clef-Flash: Qwen3.5-9B with a joint schema head, all questions in one pass; well calibrated without a temperature; needs a 24 GB GPU | ~0.53 s GPU |
 | `jeb` | Jebadiah (Qwen3.5 4b/9b, Qwen3.8 27b) on llama.cpp; per-type calibration | `jeb:9b` ~0.12 s GPU |
