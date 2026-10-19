@@ -20,21 +20,21 @@ Ollaya borrows Ollama's experience (one binary, `pull`, `run`, `serve`, Modelfil
 
 ## Ollama runs decision models now. How is Ollaya different?
 
-Ollama 0.35 (September 2026) added `/v1/systemone` for two decoder models, Bespoke Labs' Nimble and Together AI's Tev1. Both projects follow TypeSafe's wire format, and for decoder models both read the answer labels' next-token scores. Ollaya runs Nimble too, since 0.8.0. This comparison is with Ollama 0.35:
+Ollama 0.35 (September 2026) added `/v1/systemone` for two decoder models, Bespoke Labs' Nimble and Together AI's Tev1; by 0.40 (October 2026) it lists nine: Nimble and Nimble v3, Tev1, Clef and Clef-Flash, Kev, Laya, Perplexity's pplx-decider and Strands Decider (the last on its macOS MLX engine only). Both projects follow TypeSafe's wire format. This comparison is with Ollama 0.40.6:
 
-| | Ollaya | Ollama 0.35 |
+| | Ollaya | Ollama 0.40 |
 |---|---|---|
-| Models | 21 families: encoders (`laya`, `nli`, `gliclass`, `von`, `decima`) and decoders (`winnow`, `clef`, `kev`, `decider`, `nimble`, `jeb`, `jeeves`, `cygnet`, `snap`, `arbiter` and more) | Nimble (9B) and Tev1 (4B, 0.8B) |
-| Encoders | Read every question in one forward pass. `laya:en` answers five questions in 8 to 10 ms on an RTX 4090 | Not supported |
-| Probabilities | Calibrated with each model's fitted temperatures, which you can refit on your own data in a [Modelfile](/docs/modelfile#calibration) | Softmax of the raw label scores. Ollama documents `confidence` as uncalibrated |
-| Limits | TypeSafe's: 1 to 256 questions, 2 to 255 options, 2 to 10 score levels | 1 to 64 questions, 2 to 26 options and score levels, a 64 KiB request body |
+| Models | 23 families: encoders (`laya`, `nli`, `gliclass`, `von`, `decima`) and decoders (`winnow`, `clef`, `kev`, `decider`, `nimble`, `pplx-decider`, `strands-decider`, `jeb`, `jeeves`, `cygnet`, `snap`, `arbiter` and more) | Nine decision models, all decoders except Laya |
+| Encoders | Read every question in one forward pass. `laya:en` answers five questions in 8 to 10 ms on an RTX 4090 | Laya only |
+| Probabilities | Calibrated with each model's fitted temperatures, which you can refit on your own data in a [Modelfile](/docs/modelfile#calibration) | Mostly the softmax of the raw label scores: Nimble's and Strands Decider's fitted temperatures are not applied. `confidence` is one minus the normalized entropy |
+| Limits | TypeSafe's: 1 to 256 questions, 2 to 255 options, 2 to 10 score levels | 1 to 64 questions; 2 to 26 options for Nimble, Tev1 and Clef (255 for Kev and Strands Decider); 2 to 10 score levels; 64 KiB of text |
 | API | TypeSafe's `/v1/systemone`, `/v1/decisions` and `/v1/models`; `/api/decide` with routing and timings; an MCP server | `/v1/systemone` |
 | Routers | `laya` picks the English or the multilingual model for each request | None |
 | Weights | Pulled unmodified from the author's Hugging Face repository, pinned to a commit and checked by sha256 | Converted to GGUF and served from Ollama's registry |
 
-**Measured side by side.** On one RTX 5090, over Bespoke Labs' public benchmark (3,880 human-labeled questions from 13 datasets, scored with Bespoke's own code): `winnow:12b` on Ollaya scores 0.773 at 60 ms per question, against 0.749 at 210 ms for Nimble on Ollama, Ollama's best. On the same Nimble weights the accuracy is the same (0.748 and 0.749), the calibration error is 5.5 times lower on Ollaya (0.022 against 0.122, because Ollaya applies the author's temperature), and Ollama is faster (210 against 310 ms: it runs a Q8_0 GGUF where Ollaya computes in fp32). The [home page](/#vs-ollama) has the chart.
+**Measured side by side.** On one RTX 5090, over Bespoke Labs' public benchmark (3,880 human-labeled questions from 13 datasets, scored with Bespoke's own code), every decision model of Ollama 0.40.6 against Ollaya 0.13: the best is Perplexity's 4B flash model on Ollaya, `pplx-decider:flash` (0.824 at 232 ms per question), then Ollama's best, pplx-decider's 27B at Q4_K_M (0.816 at 96 ms), and `jeb:27b` on Ollaya (0.788 at 98 ms). On the same weights the accuracy is the same (Nimble 0.752 on Ollama and 0.748 on Ollaya, Kev 4B 0.744 and 0.745), Ollama is 4 to 8 times faster (Nimble 42 against 328 ms: it runs Q8_0 GGUFs where Ollaya computes in fp32), and Ollaya's calibration error is 5 times lower where the author fitted a temperature (Nimble 0.022 against 0.115). The [home page](/#vs-ollama) has the chart; every number is in the repository's `docs/measurements/2026-10-ollama-0.40.md`.
 
-Ollama's advantages are real too. Tev1 is there and not here yet (Together AI has not published a license for its weights), and if you already use Ollama for language models, one daemon covers both. The two run side by side: Ollama on port 11434, Ollaya on 11435.
+Ollama's advantages are real too. It is faster on the same weights, it serves pplx-decider's 27B (Ollaya has the 4B flash model; the 27B needs about 54 GB in Ollaya's fp32 runtime) and Tev1 (Together AI has not published a license for its weights), it quantizes models when it creates them, and if you already use Ollama for language models, one daemon covers both. The two run side by side: Ollama on port 11434, Ollaya on 11435.
 
 ## How is it related to TypeSafe?
 

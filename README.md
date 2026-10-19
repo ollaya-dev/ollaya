@@ -116,7 +116,8 @@ Browse them at [ollaya.dev/search](https://ollaya.dev/search). Laya tags ending 
 `-fp32` or `-fp16` pin the precision. The derived files of every model are also published at
 [huggingface.co/ollaya-dev](https://huggingface.co/ollaya-dev).
 
-Ollama 0.35 also serves decision models: Nimble and Tev1, through the same TypeSafe wire format.
+Ollama 0.40 also serves decision models, nine of them, through the same TypeSafe wire format
+([measured side by side](docs/measurements/2026-10-ollama-0.40.md)).
 [The FAQ](https://ollaya.dev/docs/faq#ollama-runs-decision-models-now-how-is-ollaya-different)
 compares the two projects.
 

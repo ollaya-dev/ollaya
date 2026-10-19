@@ -39,3 +39,78 @@ Items queued for GitHub issues. Each item becomes one issue once `github.com/oll
 
 **Acceptance**
 - An agent with only the skill installed and `ollaya` running completes a ticket-triage task end-to-end using typed decisions.
+
+---
+
+## Decoders as fast as Ollama's: a reduced-precision path for the Qwen3.5 families
+
+**Why.** Ollama 0.40.6 serves the same Kev and Nimble weights 4 to 8 times faster than Ollaya on the same RTX 5090,
+at the same accuracy (Bespoke Labs' public suite, one request at a time; `docs/measurements/2026-10-ollama-0.40.md`):
+Nimble 42 ms against 328 ms, Kev 4B 34 against 187 ms, Kev 9B 40 against 227 ms. Ollama runs Q8_0 GGUFs on
+llama.cpp, whose b11669 knows these models natively (kev, nimble, clef, laya and pplx-decider decision types, a
+`/v1/systemone` endpoint, decision metadata in the GGUF). Ollaya computes in fp32 on the BF16 weights. Its
+calibration is better (Nimble's pooled ECE 0.022 against 0.115, because Ollaya applies the author's temperature),
+which a faster path must keep.
+
+**Scope**
+- Measure first: ONNX Runtime CUDA with BF16 or FP16 compute for `qwen35.py` graphs (TensorRT RTX EP included),
+  against the fp32 goldens. Report the decision agreement and the probability error per family.
+- If that is not enough, run the Qwen3.5 families on Ollaya's libllama runner (ADR 0003). Ollaya never re-hosts
+  weights, so the GGUF has to be built on the user's machine from the author's pinned safetensors (Ollama
+  quantizes at `ollama create` time, `create/create.go`), and the pointer heads (kev, strands) need custom code.
+- A reduced-precision tag is a new tag with its own measured gate (decision agreement, max probability error),
+  never a loosened tolerance on the fp32 tags.
+
+**Acceptance**
+- `kev:4b` and `nimble:9b` within 1.5x of Ollama's median latency on the same GPU, same decisions on at least
+  99.5% of the parity questions, the authors' temperatures applied.
+
+---
+
+## CLI: ask questions without writing JSON
+
+**Why.** `ollama run kev --ask "Is a refund being requested?" --ask "Which team?" --choice billing --choice
+sales < ticket.txt` asks typed questions straight from the shell; each `--choice` (a label, optionally
+`label="description"`) or `--level` attaches to the `--ask` before it, and an `--ask` alone is yes/no (Ollama
+`cmd/decide.go`). strands-decider's CLI has the same idea (`--noul`, `--choice "Q=a,b"`, `--score "Q=low,high"`).
+Ollaya needs `--preset` or a `--questions` file.
+
+**Scope**
+- `ollaya run MODEL --ask TEXT [--choice LABEL[=DESC]... | --level LEVEL...]...`, building `q1`, `q2`, ...
+  in order; reject `--choice` and `--level` on one question, and either before any `--ask`.
+- Mutually exclusive with `--questions` and `--preset`. Text output as today.
+
+**Acceptance**
+- The README's triage example runs as one command line with `--ask`; unit tests for the ordering rules.
+
+---
+
+## A decision integration corpus run against every release
+
+**Why.** Ollama ships `integration/systemone_test.go`: fixed requests per model that must keep their decisions
+across releases. Ollaya's parity examples cover one model at a time against goldens; nothing checks the
+installed daemon end to end after a release.
+
+**Scope**
+- A small corpus (about 20 requests: every question type, a long state, a rejected request) with the expected
+  decision per model, run against a release build over HTTP for every library model that fits the runner.
+
+**Acceptance**
+- Runs in the release checklist; a changed decision fails it, with the model and question named.
+
+---
+
+## Give memory back after an oversized request
+
+**Why.** A session's CUDA arena keeps the size of its largest `session.run`. One 10,000-token Nimble v3 row on a
+24 GB RTX 4090 pushes the working set past the GPU, the WSL driver spills into system memory, and every later
+request in that process stays slow: five-question requests went from 2.4 s to 20.9 s at the median
+(`docs/families/nimble.md`, v3). Kev, Clef and pplx-decider have the same exposure near their windows.
+
+**Scope**
+- After a run whose padded tokens exceed the usual budget, shrink the arena (ONNX Runtime's run option
+  `memory.enable_memory_arena_shrinkage`), or run such batches in a separate allocation.
+- Measure that the shrink costs nothing on ordinary requests.
+
+**Acceptance**
+- The Nimble v3 parity run, long row included, keeps the five-question p50 within 10% of a run without it.

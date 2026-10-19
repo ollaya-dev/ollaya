@@ -426,34 +426,40 @@ function Fast() {
 // Bespoke Labs' public decision benchmark (github.com/bespokelabsai/nimble, docs/PUBLIC_BENCHMARKS.md):
 // 13 subsets of 11 human-labeled datasets, 3,880 questions, rebuilt byte for byte from Bespoke's manifests
 // and scored with Bespoke's own runner (convert/ollaya_convert/bench_public.py). Both servers ran on the same
-// RTX 4090, one request at a time through /v1/systemone. Accuracy: macro average over the 13 subsets. ECE:
-// ten-bin expected calibration error of the top probability, averaged over the subsets (lower is better).
-// Latency: median request, HTTP included. Numbers: results/runs/2026-09-30-public-benchmark-rtx5090-cuda.json.
+// RTX 5090, one request at a time through /v1/systemone. Accuracy: macro average over the 13 subsets. ECE:
+// ten-bin expected calibration error of the top probability, pooled over the questions (lower is better).
+// Latency: median request, HTTP included. Numbers: results/runs/2026-10-14-public-benchmark-rtx5090-cuda.json
+// (Ollaya 0.13.0) and docs/measurements/2026-10-ollama-0.40.md (Ollama 0.40.6, and pplx-decider:flash, measured
+// on Ollaya before its release).
 type VsRun = { tag: string; server: 'ollaya' | 'ollama'; acc: number; ece: number; ms: number }
 const vsRuns: VsRun[] = [
-  { tag: 'winnow:12b', server: 'ollaya', acc: 0.773, ece: 0.141, ms: 60 },
-  { tag: 'decider:4b', server: 'ollaya', acc: 0.756, ece: 0.043, ms: 188 },
-  { tag: 'kev:9b', server: 'ollaya', acc: 0.753, ece: 0.058, ms: 229 },
-  { tag: 'nimble', server: 'ollama', acc: 0.749, ece: 0.122, ms: 210 },
-  { tag: 'nimble:9b', server: 'ollaya', acc: 0.748, ece: 0.022, ms: 310 },
-  { tag: 'tev1:4b', server: 'ollama', acc: 0.747, ece: 0.075, ms: 406 },
-  { tag: 'winnow:e4b', server: 'ollaya', acc: 0.734, ece: 0.071, ms: 43 },
-  { tag: 'decider:2b', server: 'ollaya', acc: 0.703, ece: 0.087, ms: 98 },
-  { tag: 'tev1:0.8b', server: 'ollama', acc: 0.639, ece: 0.129, ms: 61 },
-  { tag: 'laya:multilingual', server: 'ollaya', acc: 0.579, ece: 0.155, ms: 14 },
+  { tag: 'pplx-decider:flash', server: 'ollaya', acc: 0.824, ece: 0.016, ms: 232 },
+  { tag: 'pplx-decider', server: 'ollama', acc: 0.816, ece: 0.017, ms: 96 },
+  { tag: 'jeb:27b', server: 'ollaya', acc: 0.788, ece: 0.024, ms: 98 },
+  { tag: 'winnow:12b', server: 'ollaya', acc: 0.773, ece: 0.141, ms: 57 },
+  { tag: 'clef-flash', server: 'ollama', acc: 0.772, ece: 0.024, ms: 43 },
+  { tag: 'clef:flash', server: 'ollaya', acc: 0.772, ece: 0.025, ms: 284 },
+  { tag: 'jeb:9b', server: 'ollaya', acc: 0.766, ece: 0.039, ms: 34 },
+  { tag: 'nimble', server: 'ollama', acc: 0.752, ece: 0.115, ms: 42 },
+  { tag: 'tev1', server: 'ollama', acc: 0.75, ece: 0.087, ms: 30 },
+  { tag: 'nimble:9b', server: 'ollaya', acc: 0.748, ece: 0.022, ms: 328 },
+  { tag: 'kev:4b', server: 'ollaya', acc: 0.745, ece: 0.062, ms: 187 },
+  { tag: 'kev:4b-q8_0', server: 'ollama', acc: 0.744, ece: 0.062, ms: 34 },
+  { tag: 'tev1:0.8b', server: 'ollama', acc: 0.664, ece: 0.118, ms: 21 },
+  { tag: 'laya:multilingual', server: 'ollaya', acc: 0.579, ece: 0.155, ms: 15 },
 ]
 // The accuracy axis of the comparison: a dot on a focused range, not a bar from zero, so the
 // differences between 0.58 and 0.77 are visible; the ticks print the range.
 const VS_MIN = 0.55
-const VS_MAX = 0.8
-const VS_TICKS = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8]
+const VS_MAX = 0.85
+const VS_TICKS = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
 const vsPos = (a: number) => `${(((Math.min(Math.max(a, VS_MIN), VS_MAX) - VS_MIN) / (VS_MAX - VS_MIN)) * 100).toFixed(2)}%`
 
 const vsFeatures: { label: string; ollaya: string; ollama: string }[] = [
-  { label: 'Decision models', ollaya: '21 families: encoders (laya, nli, gliclass, von, decima) and decoders (winnow, clef, kev, decider, nimble, jeb, jeeves, cygnet, snap, arbiter and more)', ollama: 'Nimble and Tev1, decoders only' },
-  { label: 'Small encoders (milliseconds, CPU-friendly)', ollaya: 'laya, nli, gliclass, von, decima', ollama: 'None' },
-  { label: 'Probabilities', ollaya: "Calibrated with each author's fitted temperature, refittable in a Modelfile", ollama: 'Raw softmax; documented as uncalibrated' },
-  { label: 'Options per question', ollaya: 'Up to 255, as TypeSafe', ollama: 'Up to 26' },
+  { label: 'Decision models', ollaya: '23 families: encoders (laya, nli, gliclass, von, decima) and decoders (winnow, clef, kev, decider, nimble, pplx-decider, strands-decider, jeb, jeeves, cygnet, snap, arbiter and more)', ollama: 'Nine, all decoders except Laya' },
+  { label: 'Small encoders (milliseconds, CPU-friendly)', ollaya: 'laya, nli, gliclass, von, decima', ollama: 'Laya' },
+  { label: 'Probabilities', ollaya: "Calibrated with each author's fitted temperature, refittable in a Modelfile", ollama: "Mostly raw softmax; Nimble's and Strands Decider's temperatures not applied" },
+  { label: 'Options per question', ollaya: 'Up to 255, as TypeSafe', ollama: 'Up to 26 (255 for Kev and Strands Decider)' },
   { label: 'Questions per request', ollaya: 'Up to 256, as TypeSafe', ollama: 'Up to 64' },
   { label: 'TypeSafe endpoints', ollaya: '/v1/systemone, /v1/decisions, /v1/models', ollama: '/v1/systemone' },
   { label: 'Language routing', ollaya: 'laya picks English or multilingual per request', ollama: 'None' },
@@ -498,15 +504,15 @@ function VersusOllama() {
       id="vs-ollama"
       title="Ollaya and Ollama"
       lead="Inspired by Ollama, measured side by side."
-      body="Ollaya borrows Ollama's design: one binary, pull and run, a local API. Ollama 0.35 now serves two decision models too, Nimble and Tev1, so we ran both on the same RTX 5090 over Bespoke Labs' public benchmark: 3,880 human-labeled questions from 13 datasets, scored with Bespoke's own code. Ollaya leads on accuracy, calibration and the models it runs; on the same Nimble weights, Ollama is faster."
+      body="Ollaya borrows Ollama's design: one binary, pull and run, a local API. Ollama 0.40 serves nine decision models, so we ran all of them on the same RTX 5090 over Bespoke Labs' public benchmark: 3,880 human-labeled questions from 13 datasets, scored with Bespoke's own code. Perplexity's models score highest: the 4B flash model on Ollaya (0.824), then the 27B on Ollama (0.816). On the same weights Ollama is 4 to 8 times faster. Ollaya runs more models, applies each author's temperature, and checks every model against its author's code."
     >
       <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-3">
-        <Stat value="0.773" unit="" label="Most accurate: winnow:12b on Ollaya" detail="Ollama's best: 0.749 (Nimble)" />
+        <Stat value="0.824" unit="" label="Most accurate on Ollaya: pplx-decider:flash" detail="Ollama's best: 0.816 (pplx-decider, 27B)" />
         <div class="border-t border-line sm:border-t-0 sm:border-l">
-          <Stat value="60" unit="ms" label="winnow:12b per question" detail="Nimble on Ollama: 210 ms" />
+          <Stat value="23" unit="" label="Decision model families on Ollaya" detail="Ollama 0.40: nine models" />
         </div>
         <div class="border-t border-line sm:border-t-0 sm:border-l">
-          <Stat value="5.5×" unit="" label="Lower calibration error, same Nimble" detail="ECE 0.022 on Ollaya, 0.122 on Ollama" />
+          <Stat value="5.2×" unit="" label="Lower calibration error, same Nimble" detail="ECE 0.022 on Ollaya, 0.115 on Ollama" />
         </div>
       </div>
 
@@ -518,8 +524,8 @@ function VersusOllama() {
         <div class="mt-4">
           <Legend
             items={[
-              { label: 'Ollaya 0.8.0', tone: 'us' },
-              { label: 'Ollama 0.35.0', tone: 'them', mark: 'ring' },
+              { label: 'Ollaya', tone: 'us' },
+              { label: 'Ollama 0.40.6', tone: 'them', mark: 'ring' },
             ]}
           />
         </div>
@@ -560,7 +566,7 @@ function VersusOllama() {
             <tr>
               <th scope="col" class="w-[30%] px-6 py-3 text-left text-[13px] font-medium text-muted"></th>
               <th scope="col" class="px-6 py-3 text-left text-[13px] font-medium text-fg">Ollaya</th>
-              <th scope="col" class="px-6 py-3 text-left text-[13px] font-medium text-muted">Ollama 0.35</th>
+              <th scope="col" class="px-6 py-3 text-left text-[13px] font-medium text-muted">Ollama 0.40</th>
             </tr>
           </thead>
           <tbody class="block divide-y divide-line md:table-row-group">
@@ -574,7 +580,7 @@ function VersusOllama() {
                   <span class="text-[15px] leading-6 text-body">{f.ollaya}</span>
                 </td>
                 <td class="flex gap-3 pt-1.5 md:table-cell md:px-6 md:py-4 md:align-top">
-                  <span class="w-24 shrink-0 text-[13px] leading-6 text-muted md:hidden">Ollama 0.35</span>
+                  <span class="w-24 shrink-0 text-[13px] leading-6 text-muted md:hidden">Ollama 0.40</span>
                   <span class="text-[15px] leading-6 text-muted">{f.ollama}</span>
                 </td>
               </tr>

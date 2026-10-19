@@ -6,7 +6,7 @@ Strands Decider is a decision model by [Strands Agents](https://huggingface.co/S
 |---|---|---|---|---|
 | `strands-decider:latest`, `strands-decider:2b` | Qwen3.5-2B base | v1, 2026-10 (`strands-decider-2B-qwen3.5-v1-2610`) | 2B | 180 / 231 tasks, ECE 0.072 |
 
-The JevBench number is from the model card, served at a 4,096-token window.
+The JevBench number is from the model card, served at a 4,096-token window. Measured by Ollaya on an RTX 5090: 0.745 macro accuracy on Bespoke Labs' public benchmark (3,880 questions, pooled ECE 0.039, 133 ms per question) and 0.616 on the 400 typed-decisions states.
 
 ## Usage
 
