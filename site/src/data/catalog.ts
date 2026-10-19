@@ -223,6 +223,7 @@ const overlays: Record<string, ModelOverlay> = {
     tags: {
       latest: { summary: 'Same as nimble:9b.' },
       '9b': { summary: "Bespoke-Nimble-9B v2 (LoRA on Qwen3.5-9B) with the author's temperature 2.18. Needs a 24 GB GPU." },
+      '9b-v3': { summary: "Bespoke-Nimble-9B v3: v2's prompts with a new LoRA, served as the author's Decision Index engine. CC BY-NC 4.0 (non-commercial). Needs a 24 GB GPU." },
     },
   },
   jeeves: {

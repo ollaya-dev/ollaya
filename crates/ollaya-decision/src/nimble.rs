@@ -14,6 +14,11 @@
 //! score  values "0".."n-1", texts = the levels
 //! ```
 //!
+//! Nimble v3 ships no TypeSafe server; its mapping is the author's Decision Index engine
+//! (`mapping: "decision-index"`, `nimble.evaluation.decision_index_engine`): a missing or null
+//! description leaves the choice without one (no label, no `Yes`/`No`), noul criteria may also be
+//! keyed `yes`/`no`, and a blank string state is read as its JSON form.
+//!
 //! `serialize` is the string itself or `json.dumps(ensure_ascii=False)`; `safe_json` also writes `<`
 //! and `>` as `\u003c` and `\u003e`, so user text can never form a chat control token and the row is
 //! tokenized whole with special tokens parsed. Codes are `A`..`Z`, then two-letter codes; a request
@@ -56,12 +61,27 @@ pub struct NoulDefaults {
     pub r#true: String,
 }
 
+/// How TypeSafe questions become schema fields: the author's server for each checkpoint.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Mapping {
+    /// v2: `nimble/serving/compiler.py` with openjev's defaults.
+    #[default]
+    Openjev,
+    /// v3: `nimble.evaluation.decision_index_engine` (`native_question`, `native_schema`).
+    DecisionIndex,
+}
+
 /// The layout as `decision.json` declares it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct NimbleLayout {
     pub templates: Templates,
     pub codes: Codes,
-    pub noul_defaults: NoulDefaults,
+    #[serde(default)]
+    pub mapping: Mapping,
+    /// Noul descriptions when the request gives none (openjev only).
+    #[serde(default)]
+    pub noul_defaults: Option<NoulDefaults>,
     /// A longer row is rejected (upstream never truncates).
     pub max_prompt_tokens: usize,
 }
@@ -97,11 +117,12 @@ fn safe_json(v: &Value) -> String {
         .replace('>', "\\u003e")
 }
 
-/// A question as the schema lists it: its description and option values and texts.
+/// A question as the schema lists it: its description and option values and texts (a choice
+/// without a text has no `description` key).
 struct Field {
     description: String,
     values: Vec<Value>,
-    texts: Vec<String>,
+    texts: Vec<Option<String>>,
 }
 
 impl NimbleLayout {
@@ -113,9 +134,11 @@ impl NimbleLayout {
             || c.letter_codes == 0
             || c.letter_codes > c.strings.len()
             || self.max_prompt_tokens == 0
+            || (self.mapping == Mapping::Openjev && self.noul_defaults.is_none())
         {
             return Err(Error::invalid(format!(
-                "codes ({} strings, {} ids, {} letter codes) and max_prompt_tokens={} are inconsistent",
+                "codes ({} strings, {} ids, {} letter codes), max_prompt_tokens={} and the noul \
+                 defaults are inconsistent",
                 c.strings.len(),
                 c.ids.len(),
                 c.letter_codes,
@@ -152,7 +175,8 @@ impl NimbleLayout {
             return Err(bad("instructions must not be blank for this model"));
         }
         let crit = def.get("criteria").unwrap_or(&Value::Null);
-        let (values, texts): (Vec<Value>, Vec<String>) = match def
+        let di = self.mapping == Mapping::DecisionIndex;
+        let (values, texts): (Vec<Value>, Vec<Option<String>>) = match def
             .get("type")
             .and_then(Value::as_str)
         {
@@ -163,29 +187,44 @@ impl NimbleLayout {
                     Value::Object(m) => m,
                     _ => return Err(bad("noul criteria must be an object")),
                 };
-                if c.keys().any(|k| k != "true" && k != "false") {
-                    return Err(bad(
-                        "this model takes noul criteria with only \"true\" and \"false\" keys",
-                    ));
+                let true_false = c.keys().all(|k| k == "true" || k == "false");
+                // native_question: exactly {yes, no} reads as {true, false}
+                let yes_no = di && c.len() == 2 && c.contains_key("yes") && c.contains_key("no");
+                if !true_false && !yes_no {
+                    return Err(bad(if di {
+                        "this model takes noul criteria keyed \"true\"/\"false\" or \"yes\"/\"no\""
+                    } else {
+                        "this model takes noul criteria with only \"true\" and \"false\" keys"
+                    }));
                 }
-                let text = |key: &str, default: &str| match c.get(key) {
-                    None | Some(Value::Null) => default.to_owned(),
-                    Some(v) => serialize(v),
+                let (f, t) = if yes_no {
+                    ("no", "yes")
+                } else {
+                    ("false", "true")
                 };
+                let text = |key: &str, default: Option<&String>| match c.get(key) {
+                    None | Some(Value::Null) => default.cloned(),
+                    Some(v) => Some(serialize(v)),
+                };
+                let d = self.noul_defaults.as_ref();
                 (
                     vec![Value::Bool(false), Value::Bool(true)],
                     vec![
-                        text("false", &self.noul_defaults.r#false),
-                        text("true", &self.noul_defaults.r#true),
+                        text(f, d.map(|d| &d.r#false)),
+                        text(t, d.map(|d| &d.r#true)),
                     ],
                 )
             }
             Some("choice") => {
-                let pairs: Vec<(String, String)> = match crit {
+                let pairs: Vec<(String, Option<String>)> = match crit {
                     Value::Object(m) => m
                         .iter()
                         .map(|(k, d)| {
-                            let text = if d.is_null() { k.clone() } else { serialize(d) };
+                            let text = match d {
+                                Value::Null if di => None,
+                                Value::Null => Some(k.clone()),
+                                d => Some(serialize(d)),
+                            };
                             (k.clone(), text)
                         })
                         .collect(),
@@ -200,7 +239,13 @@ impl NimbleLayout {
                                 labels.push(label.to_owned());
                             }
                         }
-                        labels.into_iter().map(|l| (l.clone(), l)).collect()
+                        labels
+                            .into_iter()
+                            .map(|l| {
+                                let text = (!di).then(|| l.clone());
+                                (l, text)
+                            })
+                            .collect()
                     }
                     _ => return Err(bad("choice criteria must be an object or a list of labels")),
                 };
@@ -219,7 +264,7 @@ impl NimbleLayout {
                 levels
                     .iter()
                     .enumerate()
-                    .map(|(i, level)| (Value::String(i.to_string()), serialize(level)))
+                    .map(|(i, level)| (Value::String(i.to_string()), Some(serialize(level))))
                     .unzip()
             }
             _ => return Err(bad("unknown type; use one of choice, noul, score")),
@@ -253,7 +298,13 @@ impl NimbleLayout {
             .iter()
             .map(|(qid, def)| self.field(qid, def))
             .collect::<Result<Vec<_>, _>>()?;
-        let context = serialize(state);
+        let context = match state {
+            // the Decision Index engine passes a blank string state as `json.dumps(state)` (ASCII)
+            Value::String(s) if self.mapping == Mapping::DecisionIndex && blank(s) => {
+                pyjson::dumps(state, true)
+            }
+            _ => serialize(state),
+        };
         if blank(&context) {
             return Err(Error::invalid("state must not be blank for this model"));
         }
@@ -270,7 +321,9 @@ impl NimbleLayout {
                         let mut c = Map::new();
                         c.insert("code".into(), Value::String(code.clone()));
                         c.insert("value".into(), value.clone());
-                        c.insert("description".into(), Value::String(text.clone()));
+                        if let Some(text) = text {
+                            c.insert("description".into(), Value::String(text.clone()));
+                        }
                         Value::Object(c)
                     })
                     .collect();
@@ -356,10 +409,11 @@ mod tests {
                 ids,
                 letter_codes: 26,
             },
-            noul_defaults: NoulDefaults {
+            mapping: Mapping::Openjev,
+            noul_defaults: Some(NoulDefaults {
                 r#false: "No".into(),
                 r#true: "Yes".into(),
-            },
+            }),
             max_prompt_tokens: 8192,
         }
     }
@@ -439,5 +493,36 @@ mod tests {
             json!({"n": 0}),
             json!({"type": "noul", "instructions": 5, "criteria": {"true": null}})
         ));
+    }
+
+    #[test]
+    fn the_decision_index_mapping_leaves_missing_texts_out() {
+        let l = NimbleLayout {
+            mapping: Mapping::DecisionIndex,
+            noul_defaults: None,
+            ..layout()
+        };
+        let n =
+            json!({"type": "noul", "instructions": "Ok?", "criteria": {"yes": "fine", "no": null}});
+        let c = json!({"type": "choice", "instructions": "Team?", "criteria": {"billing": null, "tech": "bugs"}});
+        let l2 = json!({"type": "choice", "instructions": "Which?", "criteria": ["a", "b", "a"]});
+        let p = l
+            .prompts(&json!(" "), &[("n", &n), ("c", &c), ("l", &l2)])
+            .unwrap();
+        let body = concat!(
+            r#"<L>{"context": "\" \"", "schema": ["#,
+            r#"{"name": "n", "description": "Ok?", "choices": ["#,
+            r#"{"code": "A", "value": false}, {"code": "B", "value": true, "description": "fine"}]}, "#,
+            r#"{"name": "c", "description": "Team?", "choices": ["#,
+            r#"{"code": "A", "value": "billing"}, {"code": "B", "value": "tech", "description": "bugs"}]}, "#,
+            r#"{"name": "l", "description": "Which?", "choices": ["#,
+            r#"{"code": "A", "value": "a"}, {"code": "B", "value": "b"}]}"#,
+            "]}\n\nRequested field: "
+        );
+        assert_eq!(p[0], (format!("{body}\"n\"</L>"), 2));
+        let mixed =
+            json!({"type": "noul", "instructions": "q", "criteria": {"yes": "y", "false": "n"}});
+        assert!(l.prompts(&json!("x"), &[("q", &mixed)]).is_err());
+        assert!(layout().prompts(&json!(" "), &[("n", &c)]).is_err());
     }
 }

@@ -130,6 +130,13 @@ def _kev_license(repo, base):
             "Licensed under the Apache License, Version 2.0.\n\n" % (repo, base, base)) + LICENSE_APACHE
 
 
+NIMBLE_V3_LICENSE = (
+    "Bespoke-Nimble-9B-v3 by Bespoke Labs (https://huggingface.co/bespokelabs/Bespoke-Nimble-9B-v3)\n"
+    "LoRA adapter: Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0), per the model card: "
+    "it may not be used for commercial purposes. https://creativecommons.org/licenses/by-nc/4.0/legalcode\n"
+    "Base model: Qwen3.5-9B by the Qwen team (https://huggingface.co/Qwen/Qwen3.5-9B), Apache-2.0.\n\n") + LICENSE_APACHE
+
+
 LICENSE_MIT_NLI = ("DeBERTa-v3-large zero-shot v2.0 by Moritz Laurer "
                    "(https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0), MIT License.\n"
                    "Note from the model card: part of the training data carries non-commercial licenses.\n")
@@ -313,12 +320,29 @@ CATALOG = {
                                   ("Qwen/Qwen3.5-9B", "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
                                    "model.safetensors-%05d-of-00004.safetensors" % i) for i in range(1, 5)},
                                "adapter_model.safetensors": "adapter_model.safetensors"}),
+            # v3 is CC BY-NC 4.0 (v2 Apache-2.0), so `latest` stays on v2. Its tokenizer is v2's file: what
+            # transformers 5 rebuilds from the base, which the author's engine loads (families/nimble/ref_v3.py).
+            "9b-v3": dict(_wl("nimble-9b-v3", "bespokelabs/Bespoke-Nimble-9B-v3", "8e927b9b4afdbb14479fac10a7364d1a695be208",
+                              "Bespoke Labs' Nimble v3: v2's prompts and readout with a new rank-64 LoRA, served as the "
+                              "author's Decision Index engine (softmax at temperature 1, prompts up to 32,768 tokens). "
+                              "Non-commercial license (CC BY-NC 4.0). Needs about 18 GB of memory; best on a 24 GB GPU.",
+                              "9B", 32768, ["en"], wl_dir=os.path.join(OUT, "nimble-9b-v3"),
+                              license="CC-BY-NC-4.0 (adapter) and Apache-2.0 (base model)",
+                              license_text=NIMBLE_V3_LICENSE,
+                              weights={**{"model.safetensors-%05d-of-00004.safetensors" % i:
+                                          ("Qwen/Qwen3.5-9B", "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+                                           "model.safetensors-%05d-of-00004.safetensors" % i) for i in range(1, 5)},
+                                       "adapter_model.safetensors": "adapter_model.safetensors"}),
+                          tokenizer=("bespokelabs/Bespoke-Nimble-9B-v2", "4b8c04d1ac2cea3e41e5e3c4d2130bcead2c0abe",
+                                     "tokenizer.json")),
         },
         "aliases": {"latest": "9b"},
         "parity": "Ollaya's Rust runtime matches the author's reference code (serving_schema.prepare_prompts and "
                   "inference.candidate_logits, PyTorch fp32 with the LoRA unmerged) on 492 questions from 104 "
                   "requests: identical token rows, the same 4 rejected requests, the same decision on every "
-                  "question, option logits within 1.1e-4 and probabilities within 6.5e-6 (CUDA).",
+                  "question, option logits within 1.1e-4 and probabilities within 6.5e-6 (CUDA). nimble:9b-v3 matches "
+                  "the author's Decision Index engine the same way on 498 questions from 105 requests (3 rejected): "
+                  "option logits within 1.4e-4, probabilities within 1.1e-5 (CUDA).",
     },
     "kev": {
         "namespace": "library",

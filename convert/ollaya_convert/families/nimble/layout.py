@@ -17,6 +17,10 @@ requested field name at the end differs:
     serialize(x) = x if a string, else json.dumps(x, ensure_ascii=False)
     safe_json(x) = json.dumps(x, ensure_ascii=False) with "<" and ">" written as \\u003c and \\u003e
 
+Bespoke-Nimble-9B-v3 (`mapping: "decision-index"`, the author's `decision_index_engine`): a choice or noul
+side without a description gets no "description" key (no label, no Yes/No), noul criteria keyed exactly
+{yes, no} read as {true, false}, and a blank string state is sent as `json.dumps(state)`.
+
 `safe_json` keeps user text from forming a chat control token, so the whole row is tokenized with
 special tokens parsed, as upstream does. Codes are A..Z, then 229 two-letter codes (`serving_config.json`);
 a request whose widest question has more than 26 options uses the "short" system prompt ("short code"
@@ -43,8 +47,11 @@ def safe_json(v) -> str:
     return json.dumps(v, ensure_ascii=False, allow_nan=False).replace("<", "\\u003c").replace(">", "\\u003e")
 
 
-def fields_of(questions: Dict[str, Any], max_options: int):
-    """-> (fields without codes, meta). Mirrors ref._schema + upstream validate_schema."""
+def fields_of(questions: Dict[str, Any], max_options: int, mapping: str = "openjev", noul_defaults=None):
+    """-> (fields without codes, meta). Mirrors ref._schema (or ref_v3.prepare) + upstream validate_schema.
+    A text of None leaves the choice without a description."""
+    di = mapping == "decision-index"
+    noul_defaults = NOUL_DEFAULTS if noul_defaults is None else noul_defaults
     if not isinstance(questions, dict) or not questions:
         raise LayoutError("questions must contain at least one question")
     fields, meta = [], []
@@ -61,17 +68,19 @@ def fields_of(questions: Dict[str, Any], max_options: int):
             if crit is not None and not isinstance(crit, dict):
                 raise LayoutError("question %r: noul criteria must be an object" % qid)
             c = crit or {}
-            if set(c) - set(NOUL_DEFAULTS):
+            yes_no = di and set(c) == {"yes", "no"}
+            if set(c) - {"false", "true"} and not yes_no:
                 raise LayoutError("question %r: noul criteria take only \"true\" and \"false\"" % qid)
+            sides = (("no", "false"), ("yes", "true")) if yes_no else (("false", "false"), ("true", "true"))
             values = [False, True]
-            texts = [serialize(c[k]) if c.get(k) is not None else NOUL_DEFAULTS[k] for k in ("false", "true")]
+            texts = [serialize(c[k]) if c.get(k) is not None else (None if di else noul_defaults[d]) for k, d in sides]
         elif t == "choice":
             labels = list(crit) if isinstance(crit, dict) else list(dict.fromkeys(crit))
             descs = crit if isinstance(crit, dict) else {}
             if any(not label.strip() for label in labels):
                 raise LayoutError("question %r: choice labels must not be blank" % qid)
             values = labels
-            texts = [serialize(descs[k]) if descs.get(k) is not None else k for k in labels]
+            texts = [serialize(descs[k]) if descs.get(k) is not None else (None if di else k) for k in labels]
         elif t == "score":
             if not isinstance(crit, list):
                 raise LayoutError("question %r: score criteria must be a list of levels" % qid)
@@ -94,15 +103,19 @@ class NimbleLayout:
         self.code_ids = decision["codes"]["ids"]
         self.legacy = decision["codes"]["letter_codes"]
         self.max_tokens = decision["max_prompt_tokens"]
+        self.mapping = decision.get("mapping", "openjev")
+        self.noul_defaults = decision.get("noul_defaults")
 
     def prompts(self, state, questions):
         """-> (prompt strings, meta)."""
-        fields, meta = fields_of(questions, len(self.codes))
+        fields, meta = fields_of(questions, len(self.codes), self.mapping, self.noul_defaults)
+        if self.mapping == "decision-index" and isinstance(state, str) and not state.strip():
+            state = json.dumps(state)
         context = serialize(state)
         if not context.strip():
             raise LayoutError("state must not be blank for this model")
         schema = [{"name": qid, "description": desc,
-                   "choices": [{"code": code, "value": value, "description": text}
+                   "choices": [{"code": code, "value": value, **({} if text is None else {"description": text})}
                                for code, value, text in zip(self.codes, values, texts)]}
                   for qid, desc, values, texts in fields]
         t = self.templates["letter" if max(m["k"] for m in meta) <= self.legacy else "short"]
