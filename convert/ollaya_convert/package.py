@@ -171,7 +171,8 @@ def graph_from_wl(wl_dir, oids, name="model.onnx"):
 
 
 def package_wl(spec, tag, v, blobs):
-    """One tag of a model converted under `families/` (fp32 graph; runs fp32 on every device)."""
+    """One tag of a model converted under `families/`: an fp32 graph that runs fp32 on every device, or, for a
+    `precision: fp16` tag (`qwen35.half_trunk`), an fp16 graph."""
     repo, commit = v["repo"], v["commit"]
     oids, weights, locals_ = {}, [], []
     for location, source in v["weights"].items():
@@ -189,8 +190,9 @@ def package_wl(spec, tag, v, blobs):
         raise SystemExit("%s: the MLX engine reads one weights file" % spec["model"])
     arch = arch_layers(v, blobs, locals_[0]) if v.get("arch") else []
     data, stats = graph_from_wl(v["wl_dir"], oids)
-    print("  %s:%s fp32 graph %.1f MB %s" % (spec["model"], tag, len(data) / 2**20, stats))
-    graph = blobs.put(MEDIA["graph"], data, {"org.ollaya.precision": "fp32"})
+    precision = v.get("precision", "fp32")
+    print("  %s:%s %s graph %.1f MB %s" % (spec["model"], tag, precision, len(data) / 2**20, stats))
+    graph = blobs.put(MEDIA["graph"], data, {"org.ollaya.precision": precision})
     # A vision model's image graph: a second graph layer, marked so the daemon passes it separately.
     vision = []
     if os.path.exists(os.path.join(v["wl_dir"], "vision.onnx")):

@@ -39,10 +39,11 @@ refund_requested  yes                                   ████████
 churn_risk        yes                                   ████████████████ 0.99
 ```
 
-`winnow:e4b` is the recommended model: 0.722 accuracy on typed decisions (TypeSafe's Jev: 0.738)
-and 89 ms for these five questions on an RTX 4090. It is a 4B-class language model, so without an
-NVIDIA GPU start with `laya`, which answers in a fraction of a second on a CPU. All models and their
-numbers: [ollaya.dev/search](https://ollaya.dev/search).
+Or ask your own questions: `ollaya run kev --ask "Is a refund requested?" --ask "Which team?" --choice billing --choice sales < ticket.txt`.
+
+<!-- results:recommended -->
+`winnow:e4b` is the recommended model: 0.724 accuracy on typed decisions (TypeSafe reports 0.738 for its Jev) and 113 ms for five questions on an RTX 5090. It is a 4B-class language model, so without an NVIDIA GPU start with `laya`: `laya:multilingual` answers five questions in 516 ms on a CPU. All models and their numbers: [ollaya.dev/search](https://ollaya.dev/search).
+<!-- /results:recommended -->
 
 ## Features
 
@@ -83,37 +84,39 @@ numbers: [ollaya.dev/search](https://ollaya.dev/search).
 
 | Model | What it is |
 |---|---|
-| `winnow:e4b` | **Recommended.** EldanRing's Winnow-E4B, a Gemma 4 fine-tune run from the author's Q8_0 GGUF on llama.cpp: 0.722 on typed-decisions (Jev: 0.738), 89 ms for five questions on an RTX 4090 |
+| `winnow:e4b` | **Recommended.** EldanRing's Winnow-E4B, a Gemma 4 fine-tune run from the author's Q8_0 GGUF on llama.cpp |
 | `credence:e4b`, `credence:e4b-calibrated` | Txoka's MiCA refinements of Winnow-E4B, Q8_0: accuracy-focused and public-calibration variants; see the measured tradeoffs in the family documentation |
 | `laya` | Router: picks `laya:en` or `laya:multilingual` by language |
-| `laya:en` | English decision model (ModernBERT-large, 421M). The fastest: 8–10 ms for five questions on an RTX 4090 |
+| `laya:en` | English decision model (ModernBERT-large, 421M) |
 | `laya:multilingual` | 100+ languages (mmBERT-base, 322M) |
 | `laya:typed-decisions` | Fine-tuned on the typed-decisions workflows |
-| `decider`, `decider:4b`, `decider:0.8b` | Mapika's Qwen3.5 decoders, 2B (the default), 4B and 0.8B: 0.680 on typed-decisions for 4B, 0.591 for 2B |
+| `decider`, `decider:4b`, `decider:0.8b` | Mapika's Qwen3.5 decoders, 2B (the default), 4B and 0.8B |
 | `decider:2b-vision` | Mapika's Qwen3.5-2B vision-language decider: questions about an image (`--image`, `images` on `/api/decide`) as well as the state |
-| `kev`, `kev:0.8b`, `kev:9b` | Jared Palmer's Kev: a LoRA and a pointer head on Qwen3.5 (4B by default, 0.8B, 9B), calibrated. `kev:4b` scores 0.669 on typed-decisions and `kev:9b` 0.722, as much as `winnow:e4b` |
+| `kev`, `kev:0.8b`, `kev:9b` | Jared Palmer's Kev: a LoRA and a pointer head on Qwen3.5 (4B by default, 0.8B, 9B), calibrated |
 | `decision` | Decision 1.0 Eos by the vLLM Semantic Router contributors: a fine-tuned Qwen3.5-0.8B with an endpoint head, 16k-token rows |
 | `qwen3guard` | Qwen3Guard-Gen-0.6B safety guard with built-in questions: safe, controversial or unsafe, and the category |
 | `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
 | `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
 | `von` | Victor Hugo Panisa's Von 1.1 (ModernBERT-large): every option scored at its own marker, 8k-token context |
-| `winnow` | EldanRing's Winnow-12B, the larger sibling of `winnow:e4b`: 0.702 on typed-decisions |
-| `clm` | Contrastive-LM's CLM-v0.1-8B: the Qwen3-8B encoder and two projection heads score options by similarity, with questions and options cached. 0.357 on typed-decisions; built for agent, game and tool-calling states |
+| `winnow` | EldanRing's Winnow-12B, the larger sibling of `winnow:e4b` |
+| `clm` | Contrastive-LM's CLM-v0.1-8B: the Qwen3-8B encoder and two projection heads score options by similarity, with questions and options cached. Built for agent, game and tool-calling states |
 | `jevk5` | alibiserikbay's JevK5 v0.3, a Qwen3.5-4B fine-tune run from the author's Q8_0 GGUF on llama.cpp, up to 16 options |
-| `nimble`, `nimble:9b-v3` | Bespoke Labs' Nimble v2: a LoRA on Qwen3.5-9B that reads the whole request as a JSON schema and scores option codes, with the author's temperature: 0.665 on typed-decisions, up to 255 options, ~2.3 s for five questions on an RTX 4090. `nimble:9b-v3` is v3 (non-commercial license) as the author's Decision Index engine serves it |
-| `strands-decider` | Strands Agents' Strands Decider: a LoRA and a pointer head on Qwen3.5-2B base, every option scored at the end of its own line, calibrated per question type; up to 255 options, ~0.34 s for five questions on an RTX 4090 |
-| `pplx-decider` | Perplexity's pplx-decider-flash v1.2: Qwen3.5-4B distilled from its 27B decision models, every question in one sequence and read at its own marker, calibrated; up to 255 options, ~0.29 s for five questions on an RTX 4090 |
-| `jeb`, `jeb:4b`, `jeb:27b` | Jason Brashear's Jebadiah (AINode): LoRAs merged into Qwen3.5 (9B by default, 4B) and Qwen3.8-27B, run from the authors' GGUF on llama.cpp with their per-type temperatures; `jeb:9b` answers five questions in 124 ms on an RTX 4090 |
-| `jeeves` | PostHog's Jeeves-9B without its reasoning chain: Qwen3.5-9B (LoRA merged) and a pointer head: 0.680 on typed-decisions with an ECE of 0.031, 838 ms for five questions on an RTX 4090 |
-| `clef` | Cloudflare's Clef-Flash: Qwen3.5-9B, fully post-trained, with a joint schema head that scores every question's options in one forward pass: 0.703 on typed-decisions with an ECE of 0.020 and no fitted temperature, 532 ms for five questions on an RTX 4090 |
-| `cygnet` | blockbrain-ai's Cygnet: frozen Gemma 4 12B IT (Q8_0 GGUF) with a letter-readout prompt and temperature 3.4: 0.683 on typed-decisions, 202 ms for five questions on an RTX 4090 |
-| `snap` | logitlab's snap1-2b: MiniCPM5-2B fine-tuned on the prompt of emnlmn's snap engine, run from the author's Q8_0 GGUF on llama.cpp with snap's own prompt: 0.648 on typed-decisions, up to 26 options, 68 ms for five questions on an RTX 4090 |
-| `d1`, `d1:3b-vision` | Liquid AI's d1-3B, on LFM2.5-VL-3B: typed text and image decisions from the author's Q8_0 GGUF and projector, with max-pooled answer forms and temperature 1.0: 0.650 on typed-decisions, 48 ms for five questions on an RTX 4090 |
-| `decima`, `decima:agent`, `decima:small` | A. M. Madani's Decima: multilingual encoders with a late-interaction scorer that reads every option against the state. `decima:base` (mmBERT-base, 321M) scores 0.495 on typed-decisions in 15 ms for five questions on an RTX 4090; `decima:agent` (2.2) is fine-tuned for coding-agent decisions and knowledge-graph judgments; `decima:small` (122M) takes 146 ms on a CPU |
+| `nimble`, `nimble:9b-v3` | Bespoke Labs' Nimble v2: a LoRA on Qwen3.5-9B that reads the whole request as a JSON schema and scores option codes, with the author's temperature, up to 255 options. `nimble:9b-v3` is v3 (non-commercial license) as the author's Decision Index engine serves it |
+| `strands-decider` | Strands Agents' Strands Decider: a LoRA and a pointer head on Qwen3.5-2B base, every option scored at the end of its own line, calibrated per question type; up to 255 options |
+| `pplx-decider` | Perplexity's pplx-decider-flash v1.2: Qwen3.5-4B distilled from its 27B decision models, every question in one sequence and read at its own marker, calibrated; up to 255 options |
+| `jeb`, `jeb:4b`, `jeb:27b` | Jason Brashear's Jebadiah (AINode): LoRAs merged into Qwen3.5 (9B by default, 4B) and Qwen3.8-27B, run from the authors' GGUF on llama.cpp with their per-type temperatures |
+| `jeeves` | PostHog's Jeeves-9B without its reasoning chain: Qwen3.5-9B (LoRA merged) and a pointer head |
+| `clef` | Cloudflare's Clef-Flash: Qwen3.5-9B, fully post-trained, with a joint schema head that scores every question's options in one forward pass, with no fitted temperature |
+| `cygnet` | blockbrain-ai's Cygnet: frozen Gemma 4 12B IT (Q8_0 GGUF) with a letter-readout prompt and temperature 3.4 |
+| `snap` | logitlab's snap1-2b: MiniCPM5-2B fine-tuned on the prompt of emnlmn's snap engine, run from the author's Q8_0 GGUF on llama.cpp with snap's own prompt, up to 26 options |
+| `d1`, `d1:3b-vision` | Liquid AI's d1-3B, on LFM2.5-VL-3B: typed text and image decisions from the author's Q8_0 GGUF and projector, with max-pooled answer forms and temperature 1.0 |
+| `decima`, `decima:agent`, `decima:small` | A. M. Madani's Decima: multilingual encoders with a late-interaction scorer that reads every option against the state. `decima:base` is mmBERT-base (321M); `decima:agent` (2.2) is fine-tuned for coding-agent decisions and knowledge-graph judgments; `decima:small` (122M) is the smallest |
 | `arbiter` | Codekins' Arbiter v3.3 (Zyot Lab): a LoRA and a fixed 24-slot head on Gemma 3 4B IT, one forward pass per question. It answers noul, choices of up to 16 options and scores of exactly 6 levels |
 
-Browse them at [ollaya.dev/search](https://ollaya.dev/search). Laya tags ending in
-`-fp32` or `-fp16` pin the precision. The derived files of every model are also published at
+Browse them at [ollaya.dev/search](https://ollaya.dev/search); every tag's accuracy, speed and memory is on
+[Ollaya Bench](https://bench.ollaya.dev). Decoder tags ending in `-fp16` (`kev:4b-fp16`) compute in fp16 on NVIDIA
+GPUs: faster, with at least 99.5 % of their decisions the same as the base tag's. Laya's `-fp32` and `-fp16` tags
+pin the precision. The derived files of every model are also published at
 [huggingface.co/ollaya-dev](https://huggingface.co/ollaya-dev).
 
 Ollama 0.40 also serves decision models, nine of them, through the same TypeSafe wire format
@@ -126,22 +129,18 @@ compares the two projects.
 Every model in the library is measured on our own machines and published, with the raw data, on
 [Ollaya Bench](https://bench.ollaya.dev): one released runtime, each author's own weights, the same
 5,880 questions for every model (Bespoke Labs' 13 public subsets and typed-decisions), and speed and
-memory on a GPU and a CPU. Edition 2026.10 ran Ollaya 0.13.0 on an RTX 5090 desktop:
+memory on a GPU and a CPU.
 
-- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: `jeb:27b` 67.8 (scored
-  without typed-decisions, which it was trained on), `winnow:12b` 65.7, `clef:flash` 65.1,
-  `cygnet:12b` 64.6 and `d1:3b` 63.1, which answers five questions in 51 ms on the RTX 5090.
-- **Calibration.** The lowest calibration errors on the public benchmark are 0.022 (`nimble:9b`,
-  `laya:typed-decisions`), 0.024 (`jeb:27b`) and 0.025 (`clef:flash`).
-- **Speed and memory.** Five-question requests through the HTTP API: the encoders take 13 to 30 ms
-  on the RTX 5090 and 0.5 to 2.6 s on its Threadripper 3960X; the decoders 51 ms to 1.7 s on the GPU
-  and 1.7 to 62 s on the CPU. Every model's VRAM and RAM are on its page.
-- **Parity.** Before a model ships, its runtime is checked question by question against the
-  authors' code (or llama.cpp's own server, for GGUF models) on each device it runs on.
+<!-- results:bench -->
+Edition 2026.10 ran Ollaya 0.13.0 on an RTX 5090 desktop, and 0.14.0 added what it changed:
 
-Earlier runs, the comparison with Ollama on the same GPU (on the same Nimble weights the
-calibration error is 0.022 on Ollaya and 0.122 on Ollama) and the Windows, CUDA and Vulkan
-measurements are at [ollaya.dev/results](https://ollaya.dev/results).
+- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: `pplx-decider:flash` 73.7, `jeb:27b` 67.8 (scored without typed-decisions, which it was trained on), `winnow:12b` 65.7, `clef:flash` 65.1 and `jeb:9b` 64.9 (scored without typed-decisions, which it was trained on). The fastest of these, `jeb:9b`, answers five questions in 107 ms on the RTX 5090.
+- **Calibration.** The lowest calibration errors on the public benchmark are 0.016 (`pplx-decider:flash`), 0.022 (`laya:typed-decisions`, `nimble:9b`) and 0.024 (`jeb:27b`).
+- **Speed and memory.** Five-question requests through the HTTP API take 13 ms to 1.0 s on the RTX 5090 and 516 ms to 62.0 s on its Threadripper 3960X. Every model's VRAM and RAM are on its page.
+- **Parity.** Before a model ships, its runtime is checked question by question against the authors' code (or llama.cpp's own server, for GGUF models) on each device it runs on.
+
+Earlier runs, the comparison with Ollama on the same GPU (on the same Nimble weights the calibration error is 0.022 on Ollaya and 0.115 on Ollama) and the Windows, CUDA and Vulkan measurements are at [ollaya.dev/results](https://ollaya.dev/results).
+<!-- /results:bench -->
 
 <p align="center">
   <a href="https://ollaya.dev/results#speed"><img src="https://ollaya.dev/data/results/speed.svg" alt="Median latency of five-question requests for every model on each GPU and CPU we measured" width="760"></a>

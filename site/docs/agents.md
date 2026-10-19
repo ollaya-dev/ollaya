@@ -7,7 +7,7 @@ order: 6
 
 # Agents: MCP and skill
 
-A decision takes about 10 ms and costs nothing, so an agent can make one before every routing,
+A decision takes {{result laya:en gpu.p50_ms 0}} ms with `laya:en` on a GPU and costs nothing, so an agent can make one before every routing,
 triage, moderation or escalation step. Ollaya gives agents two things:
 
 - **An MCP server**, `ollaya mcp`, which exposes the local models as tools.

@@ -1,0 +1,88 @@
+{
+ "schema": 1,
+ "suite": "latency-triage",
+ "date": "2026-10-19T11:14:03Z",
+ "ollaya": "0.14.0",
+ "machine": "rtx-5090",
+ "machine_detail": {
+  "id": "rtx-5090",
+  "cpu": "AMD Ryzen Threadripper 3960X 24-Core Processor",
+  "threads": 48,
+  "gpus": [
+   {
+    "name": "NVIDIA GeForce RTX 5090",
+    "driver": "596.21",
+    "memory": "32607 MiB"
+   }
+  ],
+  "os": "Linux 6.6.87.2-microsoft-standard-WSL2"
+ },
+ "device": "cpu",
+ "protocol": {
+  "preset": "triage",
+  "questions": 5,
+  "states": 30,
+  "warm": 2,
+  "n": 10,
+  "client": "one request at a time over HTTP to /api/decide, timed by the client; each request a different short message, in turn",
+  "memory": "vram_mb: peak rise of the GPU's used memory over its idle level before the load (nvidia-smi, 100 ms); ram_peak_mb and ram_mb: the runner's VmHWM and VmRSS"
+ },
+ "note": "Ollaya 0.14.0. Release candidate (feat/fp16-decoders), measured before the release; one model loaded at a time.",
+ "results": [
+  {
+   "model": "nimble:9b-v3",
+   "questions": "triage",
+   "load_ms": 19115.2,
+   "first_request_ms": 71569.8,
+   "answered_by": "nimble:9b-v3",
+   "p50_ms": 50928.2,
+   "p90_ms": 51052.6,
+   "min_ms": 50614.2,
+   "eval_p50_ms": 50927.1,
+   "input_tokens": 2798,
+   "device": "cpu",
+   "precision": "F32",
+   "digest": "01cb73cdc839e8eb25a6209976a2cd1e83048b6b893c809d7144e71b34ff2b31",
+   "size_mb": 19105,
+   "ram_peak_mb": 19256,
+   "ram_mb": 19256
+  },
+  {
+   "model": "pplx-decider:flash",
+   "questions": "triage",
+   "load_ms": 7038.2,
+   "first_request_ms": 12926.6,
+   "answered_by": "pplx-decider:flash",
+   "p50_ms": 5533.6,
+   "p90_ms": 5592.1,
+   "min_ms": 5397.1,
+   "eval_p50_ms": 5532.6,
+   "input_tokens": 320,
+   "device": "cpu",
+   "precision": "F32",
+   "digest": "e403f9b1f0ac01129919433e754f66b8718ff76a61055eb841ec4f969173fd40",
+   "size_mb": 8689,
+   "ram_peak_mb": 8356,
+   "ram_mb": 8356
+  },
+  {
+   "model": "strands-decider:2b",
+   "questions": "triage",
+   "load_ms": 31173.1,
+   "first_request_ms": 35954.2,
+   "answered_by": "strands-decider:2b",
+   "p50_ms": 4461.5,
+   "p90_ms": 4507.5,
+   "min_ms": 4387.5,
+   "eval_p50_ms": 4460.5,
+   "input_tokens": 562,
+   "device": "cpu",
+   "precision": "F32",
+   "digest": "9aae566845cbf83cafbe804ba9f486fd856239f3d405d265704cb42385bea63a",
+   "size_mb": 4571,
+   "ram_peak_mb": 11367,
+   "ram_mb": 7015
+  }
+ ],
+ "edition": "2026.10"
+}

@@ -6,9 +6,9 @@ CLM is a contrastive decision model by [Contrastive-LM](https://huggingface.co/C
 
 | Tag | Encoder | Params | Typed-decisions accuracy |
 |---|---|---|---|
-| `clm:latest`, `clm:8b` | Qwen3-8B (last-token embedding) | 8.2B | 0.357 |
+| `clm:latest`, `clm:8b` | Qwen3-8B (last-token embedding) | 8.2B | {{result clm:8b typed.accuracy 3}} |
 
-Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states. On these structured workflow states CLM is close to chance and leans towards "yes"; its authors report its strength on computer-use, gaming and tool-calling states, and as a fine-tuned verifier. For general triage, `winnow:e4b` (0.722) is the better pick.
+Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states. On these structured workflow states CLM is close to chance and leans towards "yes"; its authors report its strength on computer-use, gaming and tool-calling states, and as a fine-tuned verifier. For general triage, `winnow:e4b` ({{result winnow:e4b typed.accuracy 3}}) is the better pick.
 
 ## Usage
 
@@ -20,7 +20,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `clm`
 
 ## Speed
 
-- **RTX 4090, through the HTTP API:** the triage preset (five questions) on a new short message takes 149 ms at the median once the questions are cached, and under a millisecond for a repeated request. With nothing cached, five questions take about 0.5 s.
+- **RTX 5090, through the HTTP API (Ollaya Bench):** the triage preset (five questions) on a new short message takes {{result clm:8b gpu.p50_ms 0}} ms at the median once the questions are cached, and under a millisecond for a repeated request. With nothing cached, five questions take about 0.5 s.
 - **Memory:** the encoder's weights stay BF16, about 16 GB; use a GPU with 20 GB or more. On a 24-core CPU a request takes about 13 s.
 
 ## How it works

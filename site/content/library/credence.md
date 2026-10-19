@@ -14,8 +14,8 @@ Local measurements through Ollaya: 13 public subsets/3,880 rows and 400 typed
 states/2,000 questions. Public ECE is pooled ten-bin ECE. These are single-run
 results, not significance claims. Neither variant improves every metric over
 original Winnow. Full probability metrics and per-subset results are retained in
-the repository's `docs/measurements/credence/` directory. On an RTX 4090 the runner
-answers five questions in about 97 ms, the same as `winnow:e4b`.
+the repository's `docs/measurements/credence/` directory. Over HTTP on an RTX 5090 it
+answers five questions in {{result credence:e4b gpu.p50_ms 0}} ms (`winnow:e4b`: {{result winnow:e4b gpu.p50_ms 0}} ms).
 
 ```shell
 ollaya run credence:e4b --preset triage "My order never arrived. Please refund it."

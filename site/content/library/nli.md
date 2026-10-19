@@ -4,10 +4,10 @@ Zero-shot NLI classifiers by [Moritz Laurer](https://huggingface.co/MoritzLaurer
 
 | Tag | Backbone | Params | License | Typed-decisions accuracy |
 |---|---|---|---|---|
-| `nli:latest`, `nli:deberta-v3-large` | DeBERTa-v3-large | 435M | MIT | **0.548** |
-| `nli:modernbert-large` | ModernBERT-large | 396M | Apache-2.0 | 0.515 |
+| `nli:latest`, `nli:deberta-v3-large` | DeBERTa-v3-large | 435M | MIT | **{{result nli:deberta-v3-large typed.accuracy 3}}** |
+| `nli:modernbert-large` | ModernBERT-large | 396M | Apache-2.0 | {{result nli:modernbert-large typed.accuracy 3}} |
 
-Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `laya:en` scores 0.361 and `gliclass` 0.477. The labels have low annotator agreement, so compare the numbers to each other rather than reading them as absolutes.
+Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `laya:en` scores {{result laya:en typed.accuracy 3}} and `gliclass` {{result gliclass:large typed.accuracy 3}}. The labels have low annotator agreement, so compare the numbers to each other rather than reading them as absolutes.
 
 ## Usage
 

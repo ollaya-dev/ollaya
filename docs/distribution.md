@@ -734,6 +734,10 @@ volumes:
    - `curl -fsSL https://ollaya.dev/install.sh | OLLAYA_VERSION=0.1.0 sh`
    - `docker run --rm ghcr.io/ollaya-dev/ollaya:0.1.0 --version`
    - The `/download` page.
+   - The decision integration corpus against the installed release, on a GPU machine:
+     `python -m ollaya_convert.integration check` (every model in `results/integration/`). A changed
+     decision fails it, with the model, the request and the question named. Record a new model's file with
+     `record` from the release that adds it.
 6. **Roll back.** Mark the previous release as latest, or delete the bad one; `install.sh` follows
    GitHub's latest flag. Point the image tags back with
    `docker buildx imagetools create -t …:latest …:<previous>`, and the same for `:cuda` and `:cuda12`.

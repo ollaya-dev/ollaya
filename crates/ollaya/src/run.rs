@@ -30,6 +30,19 @@ pub struct RunArgs {
     /// inline JSON, which starts with `{`. Overrides the model's own.
     #[arg(long, value_name = "FILE|JSON")]
     pub questions: Option<String>,
+    /// Ask a question without writing JSON: yes/no, or a choice or a score with the `--choice` or
+    /// `--level` flags that follow it. Repeat for more questions (q1, q2, ...).
+    #[arg(long, value_name = "TEXT", conflicts_with_all = ["questions", "preset"])]
+    pub ask: Vec<String>,
+    /// An option of the `--ask` before it: `label` or `label=description`.
+    #[arg(long, value_name = "LABEL[=DESC]", requires = "ask")]
+    pub choice: Vec<String>,
+    /// A level of the `--ask` before it, lowest first: the question becomes a score.
+    #[arg(long, value_name = "LEVEL", requires = "ask")]
+    pub level: Vec<String>,
+    /// The questions `--ask` built, in command-line order (`asked_questions`).
+    #[arg(skip)]
+    pub asked: Option<Questions>,
     /// An image file (PNG) to decide about, for vision models such as decider:2b-vision.
     #[arg(long, value_name = "FILE")]
     pub image: Option<std::path::PathBuf>,
@@ -104,6 +117,57 @@ pub fn resolve_questions(raw: &str) -> Result<Questions> {
     load_questions(Path::new(raw))
 }
 
+/// `--ask`, `--choice` and `--level` in command-line order: each `--choice` or `--level` belongs to
+/// the `--ask` before it. `None` without `--ask`.
+pub fn asked_questions(m: &clap::ArgMatches) -> Result<Option<Questions>> {
+    let mut flags: Vec<(usize, &str, &String)> = Vec::new();
+    for id in ["ask", "choice", "level"] {
+        if let (Some(at), Some(values)) = (m.indices_of(id), m.get_many::<String>(id)) {
+            flags.extend(at.zip(values).map(|(i, v)| (i, id, v)));
+        }
+    }
+    if flags.is_empty() {
+        return Ok(None);
+    }
+    flags.sort_by_key(|f| f.0);
+    let mut asked: Vec<(&String, Vec<&String>, Vec<&String>)> = Vec::new();
+    for (_, id, v) in flags {
+        match (id, asked.last_mut()) {
+            ("ask", _) => asked.push((v, vec![], vec![])),
+            (_, None) => bail!("--{id} {v:?} comes before any --ask"),
+            ("choice", Some(q)) => q.1.push(v),
+            (_, Some(q)) => q.2.push(v),
+        }
+    }
+    let mut out = serde_json::Map::new();
+    for (i, (text, choices, levels)) in asked.into_iter().enumerate() {
+        let q = match (choices.is_empty(), levels.is_empty()) {
+            (true, true) => serde_json::json!({"type": "noul", "instructions": text}),
+            (false, true) => {
+                let mut criteria = serde_json::Map::new();
+                for c in choices {
+                    let (label, desc) = match c.split_once('=') {
+                        Some((l, d)) => (l, Value::from(d)),
+                        None => (c.as_str(), Value::Null),
+                    };
+                    if criteria.insert(label.to_owned(), desc).is_some() {
+                        bail!("--ask {text:?}: --choice {label:?} is given twice");
+                    }
+                }
+                serde_json::json!({"type": "choice", "instructions": text, "criteria": criteria})
+            }
+            (true, false) => {
+                serde_json::json!({"type": "score", "instructions": text, "criteria": levels})
+            }
+            (false, false) => {
+                bail!("--ask {text:?} has both --choice and --level; a question has one type")
+            }
+        };
+        out.insert(format!("q{}", i + 1), q);
+    }
+    Ok(Some(serde_json::from_value(Value::Object(out))?))
+}
+
 fn preset(name: &str) -> Result<Questions> {
     let Some(q) = presets::get(name) else {
         bail!(
@@ -137,6 +201,9 @@ const DEFAULT_PRESET: &str = "triage";
 /// Where the questions come from: explicit flags first, then the model's built-in set, then
 /// [`DEFAULT_PRESET`]. `None` means "use the model's own".
 fn choose_questions(args: &RunArgs, has_builtin: bool) -> Result<Option<Questions>> {
+    if let Some(q) = &args.asked {
+        return Ok(Some(q.clone()));
+    }
     if let Some(raw) = &args.questions {
         return resolve_questions(raw).map(Some);
     }
@@ -151,7 +218,7 @@ fn choose_questions(args: &RunArgs, has_builtin: bool) -> Result<Option<Question
 
 /// Whether [`choose_questions`] fell back to [`DEFAULT_PRESET`].
 fn uses_default_preset(args: &RunArgs, has_builtin: bool) -> bool {
-    args.questions.is_none() && args.preset.is_none() && !has_builtin
+    args.questions.is_none() && args.preset.is_none() && args.asked.is_none() && !has_builtin
 }
 
 struct Session {
@@ -498,6 +565,10 @@ mod tests {
             questions: questions.map(str::to_owned),
             image: None,
             preset: preset.map(str::to_owned),
+            ask: vec![],
+            choice: vec![],
+            level: vec![],
+            asked: None,
             format: Format::Text,
             keepalive: None,
             verbose: false,

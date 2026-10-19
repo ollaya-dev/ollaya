@@ -4,13 +4,13 @@ Decima by [A. M. Madani](https://huggingface.co/amyrmahdy) is a family of multil
 
 ## Models
 
-| Tag | Model | Typed-decisions accuracy | Five questions, RTX 4090 / CPU |
+| Tag | Model | Typed-decisions accuracy | Five questions, RTX 5090 / CPU |
 |---|---|---|---|
-| `decima:latest`, `decima:base` | Decima-base 2.0 (mmBERT-base, 321M), fp32, 1.3 GB | 0.495 | 15 ms / 438 ms |
-| `decima:agent` | Decima-agent 2.2 (decima-base for coding agents), fp32, 1.3 GB | 0.461 | 15 ms / 439 ms |
-| `decima:small` | Decima-small 1.1 (multilingual-e5-small, 122M), fp32, 490 MB | 0.432 | 7.3 ms / 146 ms |
+| `decima:latest`, `decima:base` | Decima-base 2.0 (mmBERT-base, 321M), fp32, 1.3 GB | {{result decima:base typed.accuracy 3}} | {{result decima:base gpu.p50_ms 0}} ms / {{result decima:base cpu.p50_ms 0}} ms |
+| `decima:agent` | Decima-agent 2.2 (decima-base for coding agents), fp32, 1.3 GB | {{result decima:agent typed.accuracy 3}} | {{result decima:agent gpu.p50_ms 0}} ms / {{result decima:agent cpu.p50_ms 0}} ms |
+| `decima:small` | Decima-small 1.1 (multilingual-e5-small, 122M), fp32, 490 MB | {{result decima:small typed.accuracy 3}} | {{result decima:small gpu.p50_ms 0}} ms / {{result decima:small cpu.p50_ms 0}} ms |
 
-Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states, measured by Ollaya. Calibration error (ECE) at the author's temperatures: 0.073 for base, 0.193 for agent, 0.110 for small. The author reports 0.427 for small, and notes that small models struggle with this benchmark's long, multi-fact business cases. Latency is the median request through the HTTP API on an RTX 4090 and on the CPU of the same machine (i9-13900K).
+Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states, measured by Ollaya. Calibration error (ECE) at the author's temperatures: {{result decima:base typed.ece 3}} for base, {{result decima:agent typed.ece 3}} for agent, {{result decima:small typed.ece 3}} for small. The author reports 0.427 for small, and notes that small models struggle with this benchmark's long, multi-fact business cases. Latency is the median request through the HTTP API on an RTX 5090 and on the CPU of the same machine (Threadripper 3960X), Ollaya Bench.
 
 `decima:small` is the fastest model Ollaya runs on a CPU. `decima:agent` is trained for the small, frequent decisions inside a coding agent's loop: is there a real secret in this edit, should this command run, ask or be denied, which tool or command fits, which model tier a task needs. Version 2.2 adds knowledge-graph judgments (fact status, entity matching, relation selection) and gate fixes from field logs; the author measures 0.85 on 40 agent cases written after training (2.1: 0.83, base: 0.60).
 

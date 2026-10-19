@@ -1,7 +1,7 @@
 # decision (`decision-endpoint-v1`)
 
 **Decision 1.0** by the vLLM Semantic Router contributors (Hugging Face org
-[llm-semantic-router](https://huggingface.co/llm-semantic-router), Apache-2.0) is a family of decision
+[vllm-sr](https://huggingface.co/vllm-sr), Apache-2.0) is a family of decision
 models built from two parts:
 
 - a **fully fine-tuned Qwen3.5 text backbone** (the hybrid Gated-DeltaNet + gated-attention model,
@@ -33,9 +33,9 @@ three times on 2026-09-22), so every file is pinned to a commit.
 
 | Model | Repo @ commit | Weights (sha256 = HF LFS oid) |
 |---|---|---|
-| Eos | `llm-semantic-router/Decision-1.0-Eos-0.8B` @ `3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd` | `backbone/model.safetensors` 1,504,820,888 B `613f491d…8abd`; `decision_head.safetensors` 4,213,584 B `75f4ee8b…72f6` |
-| Nox | `llm-semantic-router/Decision-1.0-Nox-4B` @ `0bb833504965c0eabdb9630b7bbd385cb2fe5cd4` | `backbone/model-0000{1,2,3}-of-00003.safetensors` (`5ebccc39…`, `990e2e79…`, `c47859a3…`); head `9cb6f639…89de` |
-| Lux | `llm-semantic-router/Decision-1.0-Lux-9B` @ `bd45a30aee8c84032791c245c70f86dee5389cc8` | `backbone/model-0000{1,2,3,4}-of-00004.safetensors` (`38b8c6b3…`, `2b568637…`, `ff152c4b…`, `99d7d3bf…`); head `f810788b…137f` |
+| Eos | `vllm-sr/Decision-1.0-Eos-0.8B` @ `3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd` | `backbone/model.safetensors` 1,504,820,888 B `613f491d…8abd`; `decision_head.safetensors` 4,213,584 B `75f4ee8b…72f6` |
+| Nox | `vllm-sr/Decision-1.0-Nox-4B` @ `0bb833504965c0eabdb9630b7bbd385cb2fe5cd4` | `backbone/model-0000{1,2,3}-of-00003.safetensors` (`5ebccc39…`, `990e2e79…`, `c47859a3…`); head `9cb6f639…89de` |
+| Lux | `vllm-sr/Decision-1.0-Lux-9B` @ `bd45a30aee8c84032791c245c70f86dee5389cc8` | `backbone/model-0000{1,2,3,4}-of-00004.safetensors` (`38b8c6b3…`, `2b568637…`, `ff152c4b…`, `99d7d3bf…`); head `f810788b…137f` |
 
 All three share `tokenizer.json` sha256 `06b95093…e523`, the same file as `decider` and `kev`.
 
@@ -282,6 +282,6 @@ with room to spare.
 
 ## Attribution
 
-Decision 1.0 is by the vLLM Semantic Router contributors (https://huggingface.co/llm-semantic-router),
+Decision 1.0 is by the vLLM Semantic Router contributors (https://huggingface.co/vllm-sr),
 released under Apache-2.0 and built on Qwen3.5 by the Qwen team (Apache-2.0). The reference loads the
 inference code shipped in each model repo at the pinned commit.

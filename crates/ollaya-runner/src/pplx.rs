@@ -170,11 +170,15 @@ impl PplxModel {
                     markers[[r, c]] = m as i64;
                 }
             }
-            let outputs = session.run(ort::inputs![
-                "input_ids" => ort::value::Tensor::from_array(input_ids)?,
-                "lengths" => ort::value::Tensor::from_array(lengths)?,
-                "markers" => ort::value::Tensor::from_array(markers)?,
-            ])?;
+            let options = crate::engine::run_options(self.device, batch.len() * seq, TOKEN_BUDGET)?;
+            let outputs = session.run_with_options(
+                ort::inputs![
+                    "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+                    "lengths" => ort::value::Tensor::from_array(lengths)?,
+                    "markers" => ort::value::Tensor::from_array(markers)?,
+                ],
+                &options,
+            )?;
             let out = outputs[OUTPUT]
                 .try_extract_array::<f32>()?
                 .into_dimensionality::<Ix3>()

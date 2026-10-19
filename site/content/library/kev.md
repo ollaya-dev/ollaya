@@ -4,11 +4,11 @@ Kev is a family of decision models by [Jared Palmer](https://huggingface.co/jare
 
 | Tag | Base | Checkpoint | Params | Typed-decisions accuracy | Out-of-domain (upstream) |
 |---|---|---|---|---|---|
-| `kev:0.8b` | Qwen3.5-0.8B | round 15 | 0.76B | 0.460 | 0.697 |
-| `kev:latest`, `kev:4b` | Qwen3.5-4B | round 10 | 4.2B | 0.669 | 0.838 |
-| `kev:9b` | Qwen3.5-9B | 2026-09-21 | 7.9B | **0.722** | 0.852 |
+| `kev:0.8b` | Qwen3.5-0.8B | round 15 | 0.76B | {{result kev:0.8b typed.accuracy 3}} | 0.697 |
+| `kev:latest`, `kev:4b` | Qwen3.5-4B | round 10 | 4.2B | {{result kev:4b typed.accuracy 3}} | 0.838 |
+| `kev:9b` | Qwen3.5-9B | 2026-09-21 | 7.9B | **{{result kev:9b typed.accuracy 3}}** | 0.852 |
 
-Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `decider:2b` scores 0.591, `nli` 0.548 and `laya:en` 0.361. The labels have low annotator agreement, so compare the numbers against each other rather than reading them as absolutes. The last column is upstream's locked out-of-domain test (transfer-v4); Jev scores 0.857 on its development items.
+Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `decider:2b` scores {{result decider:2b typed.accuracy 3}}, `nli` {{result nli:deberta-v3-large typed.accuracy 3}} and `laya:en` {{result laya:en typed.accuracy 3}}. The labels have low annotator agreement, so compare the numbers against each other rather than reading them as absolutes. The last column is upstream's locked out-of-domain test (transfer-v4); Jev scores 0.857 on its development items.
 
 ## Usage
 
@@ -21,17 +21,18 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `kev`
 
 ## Speed
 
-- **RTX 4090, through the HTTP API:** the triage preset (five questions) on a short message takes 128 ms on `0.8b`, 354 ms on `4b` and 498 ms on `9b` at the median of 15 warm requests.
+- **RTX 5090, through the HTTP API (Ollaya Bench):** the triage preset (five questions) on a short message takes {{result kev:0.8b gpu.p50_ms 0}} ms on `0.8b`, {{result kev:4b gpu.p50_ms 0}} ms on `4b` and {{result kev:9b gpu.p50_ms 0}} ms on `9b` at the median.
 - **State length:** every question reads the whole state again, so the cost grows with the number of questions times the state length.
-- **CPU:** `0.8b` takes about 2 s for five questions with a short state on a 24-core x86 CPU. `4b` and `9b` belong on a GPU.
+- **CPU:** `0.8b` takes {{result kev:0.8b cpu.p50_ms 0}} ms for five questions with a short state on the Threadripper 3960X (24 cores). `4b` and `9b` belong on a GPU.
 
 ## How it works
 
 - **One row per question.** The state comes first, then the question, then one span per option, then a decide token. The pointer head compares each option's closing token with the decide token.
 - **Calibrated.** The scores are divided by the temperature each checkpoint ships, fitted upstream on development data: 2.35 (`0.8b`), 2.41 (`4b`), 2.30 (`9b`).
 - **Weights.** The files download from Hugging Face, pinned to a commit and verified by sha256: the Qwen3.5 base weights from Qwen's repository, and the adapter and `head.pt` from Jared Palmer's. The adapter is applied at run time, not merged, so every file stays byte for byte the author's. Ollaya hosts only the ONNX graph (10 to 14 MB).
-- **Precision.** Every model computes in fp32 on the BF16 base weights. `0.8b` widens them when it loads; `4b` and `9b` keep them BF16, half the memory, and widen each layer just before it runs.
+- **Precision.** The fp32 tags compute in fp32 on the BF16 base weights. `0.8b` widens them when it loads; `4b` and `9b` keep them BF16, half the memory, and widen each layer just before it runs.
 - **Parity.** Ollaya's Rust runtime matches upstream Kev exactly: identical token rows and option positions, and the same decision on every test question, on CPU and CUDA.
+- **fp16 tags.** `kev:4b-fp16` and `kev:9b-fp16` compute the trunk in fp16 on NVIDIA GPUs, with the norms, the recurrent state, the attention softmax and the heads in fp32 ([how](https://github.com/ollaya-dev/ollaya/blob/main/docs/decisions/0008-fp16-decoder-tags.md)). On the RTX 5090 five questions take {{result kev:4b-fp16 gpu.p50_ms 0}} and {{result kev:9b-fp16 gpu.p50_ms 0}} ms (fp32: {{result kev:4b gpu.p50_ms 0}} and {{result kev:9b gpu.p50_ms 0}} ms); on the parity set {{result kev:4b-fp16 parity.cuda.decisions_same 0}} and {{result kev:9b-fp16 parity.cuda.decisions_same 0}} of {{result kev:4b-fp16 parity.cuda.questions 0}} decisions are the same as the fp32 tag's, and on typed decisions they score {{result kev:4b-fp16 typed.accuracy 3}} and {{result kev:9b-fp16 typed.accuracy 3}}. `kev:0.8b` has no fp16 tag: its fp32 graph is as fast. On a CPU use the fp32 tags.
 
 ## Limits
 

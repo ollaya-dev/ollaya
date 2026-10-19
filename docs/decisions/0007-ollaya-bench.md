@@ -46,6 +46,7 @@ Ollaya Bench measures every model in the library the way a user runs it, and pub
 - typed-decisions numbers now come from the runtime over HTTP. They differ slightly from the catalog's
   reference numbers where Ollaya rejects a long input (`STATE_TRUNCATED`) that the reference truncated.
 - An edition takes about 7.5 hours on the RTX 5090 desktop (pulls, GPU speed, accuracy, CPU speed);
-  `~/ollaya-bench/e2610/run.sh` on that machine is the template.
+  `convert/ollaya_convert/bench_run.py` runs it. Between editions, releases update the current one with what
+  they changed ([ADR-0009](0009-measurement-per-release.md)).
 - Not yet covered: other devices (more machines, community runs), hosted models such as Jev, a
   held-out slice per edition, and the per-question outputs as a public dataset.

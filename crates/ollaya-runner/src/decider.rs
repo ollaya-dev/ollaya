@@ -233,10 +233,14 @@ impl DeciderModel {
                 }
                 slot_pos[r] = rows[i].len() as i64 - 1;
             }
-            let outputs = session.run(ort::inputs![
-                "input_ids" => ort::value::Tensor::from_array(input_ids)?,
-                "slot_pos" => ort::value::Tensor::from_array(slot_pos)?,
-            ])?;
+            let options = crate::engine::run_options(self.device, batch.len() * seq, TOKEN_BUDGET)?;
+            let outputs = session.run_with_options(
+                ort::inputs![
+                    "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+                    "slot_pos" => ort::value::Tensor::from_array(slot_pos)?,
+                ],
+                &options,
+            )?;
             let out = outputs[OUTPUT]
                 .try_extract_array::<f32>()?
                 .into_dimensionality::<Ix2>()

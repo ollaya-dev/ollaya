@@ -4,12 +4,12 @@ decider is a family of open decision models by [Mapika](https://huggingface.co/M
 
 | Tag | Base | Params | Typed-decisions accuracy |
 |---|---|---|---|
-| `decider:latest`, `decider:2b` | Qwen3.5-2B | 1.9B | 0.591 |
-| `decider:4b` | Qwen3.5-4B (v2.1) | 4.2B | **0.680** |
-| `decider:0.8b` | Qwen3.5-0.8B | 0.75B | 0.506 |
+| `decider:latest`, `decider:2b` | Qwen3.5-2B | 1.9B | {{result decider:2b typed.accuracy 3}} |
+| `decider:4b` | Qwen3.5-4B (v2.1) | 4.2B | **{{result decider:4b typed.accuracy 3}}** |
+| `decider:0.8b` | Qwen3.5-0.8B | 0.75B | {{result decider:0.8b typed.accuracy 3}} |
 | `decider:2b-vision` | Qwen3.5-2B vision-language (v5 text weights) | 2.2B | reads images; see below |
 
-Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `nli` scores 0.548, `gliclass` 0.477 and `laya:en` 0.361. The labels have low annotator agreement, so compare the numbers against each other rather than reading them as absolutes. On Mapika's own benchmarks `4b` is ahead of `2b` (in-task 0.831 vs 0.805, held-out 0.784 vs 0.755, JevBench hard 0.649 vs 0.459), and the Decision Index scores it 36.6 against 26.1.
+Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `nli` scores {{result nli:deberta-v3-large typed.accuracy 3}}, `gliclass` {{result gliclass:large typed.accuracy 3}} and `laya:en` {{result laya:en typed.accuracy 3}}. The labels have low annotator agreement, so compare the numbers against each other rather than reading them as absolutes. On Mapika's own benchmarks `4b` is ahead of `2b` (in-task 0.831 vs 0.805, held-out 0.784 vs 0.755, JevBench hard 0.649 vs 0.459), and the Decision Index scores it 36.6 against 26.1.
 
 > `decider:4b` needs Ollaya 0.7.0 or newer, which keeps its weights BF16 in memory. Older versions widen them to fp32 (about 17 GB).
 
@@ -38,7 +38,7 @@ ollaya run decider:2b-vision --image shelf.png --questions '{"blocked":{"type":"
 
 ## Speed
 
-- **RTX 4090, end to end:** a five-question request with a short state takes about 155 ms on `0.8b`, 190 ms on `2b` and 520 ms on `4b` at the median. That is slower than the encoder models (Laya: 8–10 ms). `0.8b` and `2b` are still faster than hosted Jev (236–276 ms).
+- **RTX 5090, through the HTTP API (Ollaya Bench):** a five-question request with a short state takes {{result decider:0.8b gpu.p50_ms 0}} ms on `0.8b`, {{result decider:2b gpu.p50_ms 0}} ms on `2b` and {{result decider:4b gpu.p50_ms 0}} ms on `4b` at the median. That is slower than the encoder models (`laya:en`: {{result laya:en gpu.p50_ms 0}} ms). `0.8b` and `2b` are still faster than hosted Jev (236–276 ms).
 - **State length:** cost grows with the number of options times the context length.
 - **Memory:** on a 24 GB GPU, `2b` handles states up to about 8k tokens. Longer states spill out of GPU memory and become very slow.
 

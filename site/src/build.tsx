@@ -15,6 +15,7 @@
  * The /v2/ prefix is reserved for the static model registry; nothing here may write under it.
  */
 import type { Child } from 'hono/jsx'
+import { withResults } from './data/numbers'
 import { Layout, type PageMeta } from './components/Layout'
 import { catalog, fullName, searchIndex } from './data/catalog'
 import { docPages } from './generated/content'
@@ -31,6 +32,8 @@ import { accuracyScatter, ResultsPage, speedDots } from './pages/results'
 import { DotPlot, Scatter } from './components/charts'
 import { runs } from './data/results'
 import { SearchPage } from './pages/search'
+
+export { withReadmeBlocks } from './data/readme'
 
 export interface BuildOptions {
   /** Public origin without trailing slash, e.g. from the SITE_ORIGIN env var. */
@@ -103,7 +106,7 @@ function pages(origin: string): Page[] {
     ...docPages.map((page) => ({
       url: `/docs/${page.slug}`,
       meta: { title: page.title, description: page.description, nav: 'docs' as const },
-      render: () => <DocView page={page} html={withOrigin(page.html, origin)} />,
+      render: () => <DocView page={page} html={withResults(withOrigin(page.html, origin))} />,
     })),
   ]
 

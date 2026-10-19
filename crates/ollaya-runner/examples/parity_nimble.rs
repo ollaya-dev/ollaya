@@ -2,7 +2,7 @@
 //! `ollaya_convert.families.nimble.goldens` (the author's `serving_schema.prepare_prompts` and
 //! `inference.candidate_logits`, Qwen3.5-9B + LoRA in fp32 on its BF16 weights).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_nimble -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]
+//!     cargo run --release -p ollaya-runner --example parity_nimble -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--fp16]
 //!
 //! Every case is checked for rows first:
 //! * a request upstream rejects must be rejected, and each of its questions exactly when upstream
@@ -95,13 +95,16 @@ fn wire_diff(ours: &Value, upstream: &Value) -> Option<f64> {
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        bail!("usage: parity_nimble <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]");
+        bail!("usage: parity_nimble <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--fp16]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
         _ => Device::Cpu,
     };
     let latency = args.iter().any(|a| a == "--latency");
+    // An fp16 graph's gate (docs/decisions/0008-fp16-decoder-tags.md): the encoding stays exact, at least 99.5%
+    // of decisions match the fp32 reference, and the numbers are reported rather than bounded.
+    let fp16 = args.iter().any(|a| a == "--fp16");
     let t = Instant::now();
     let model = NimbleModel::load(&PathBuf::from(&args[1]), device, None)?;
     println!("load {:.1}s on {device:?}", t.elapsed().as_secs_f64());
@@ -269,13 +272,24 @@ fn main() -> Result<()> {
         percentile(&prob_diffs, 99),
         1000.0 * forward / cases.len().max(1) as f64,
     );
-    if logit_max > LOGIT_TOL {
+    // One JSON line for `ollaya_convert.parity_run`, which records it in results/runs/.
+    println!(
+        "record: {}",
+        serde_json::json!({
+            "questions": nq,
+            "decisions_same": nq - disagree,
+            "max_logit_diff": logit_max,
+            "max_prob_diff": prob_diffs.last().copied().unwrap_or(0.0),
+            "p99_prob_diff": percentile(&prob_diffs, 99),
+        })
+    );
+    if !fp16 && logit_max > LOGIT_TOL {
         bail!("logits differ by more than {LOGIT_TOL:e}");
     }
-    if disagree > 0 {
+    if disagree > if fp16 { nq / 200 } else { 0 } {
         bail!("decisions differ from the reference");
     }
-    if wire_bad > 0 || wire_max > WIRE_TOL {
+    if !fp16 && (wire_bad > 0 || wire_max > WIRE_TOL) {
         bail!("answers differ from upstream's");
     }
 

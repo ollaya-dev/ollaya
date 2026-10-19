@@ -140,6 +140,7 @@ impl StrandsModel {
             &encoding.rows,
             self.seq_multiple,
             self.layout.special_tokens.pad,
+            self.device,
         )
     }
 

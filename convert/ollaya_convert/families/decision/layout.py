@@ -1,4 +1,4 @@
-"""`decision-endpoint-v1`: the request -> token rows layout of llm-semantic-router's Decision 1.0 models,
+"""`decision-endpoint-v1`: the request -> token rows layout of vllm-sr's Decision 1.0 models,
 written the way the Rust port is (HF `tokenizers` only, no author code). `parity.py` and `goldens.py`
 check it id for id against the author's `question_row` + `encode` (prompt version
 `structured-segmented-candidate-endpoints-global-query-v2`).

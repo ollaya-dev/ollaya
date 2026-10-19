@@ -27,6 +27,8 @@ export interface Machine {
 export interface PublicResult {
   server: 'ollaya' | 'ollama'
   model: string
+  /** Ollama rows: the quantization and size `ollama pull` serves. */
+  weights?: string | null
   records: number
   errors: number
   macro_accuracy: number
@@ -70,6 +72,10 @@ export interface ParityResult {
   date?: string | null
   cite?: string
   reference_note?: string
+  /** Rows written by convert/ollaya_convert/parity_run.py: the gate the tag passed and the export it checked. */
+  gate?: 'fp32' | 'fp16'
+  p99_prob_diff?: number
+  export_sha256?: string
 }
 
 export interface CrossDevice {
@@ -87,6 +93,8 @@ interface RunBase {
   machine?: string
   device?: string
   note?: string
+  /** The Ollaya Bench edition a run belongs to (bench_edition.py). */
+  edition?: string
 }
 export interface PublicRun extends RunBase {
   suite: 'public-benchmark'
@@ -113,10 +121,23 @@ export const latencyRuns = runs.filter((r): r is LatencyRun => r.suite === 'late
 export const parityRuns = runs.filter((r): r is ParityRun => r.suite === 'parity')
 
 /**
- * The newest public-benchmark run with Ollama on the same GPU: the comparison this page and the
- * README's chart draw. Ollaya Bench editions (the bench site) measure Ollaya alone.
+ * The comparison with Ollama that this page and the home page draw: the newest public-benchmark run of Ollama,
+ * beside the newest Ollaya row of each model that the Ollaya Bench runs (an edition and the releases that updated
+ * it, ADR 0009) measured on the same machine. A run that measured both servers stands as it is.
  */
-export const publicBench: PublicRun | undefined = publicRuns.filter((r) => 'ollama' in r.servers).at(-1)
+export const publicBench: PublicRun | undefined = (() => {
+  const ollama = publicRuns.filter((r) => 'ollama' in r.servers).at(-1)
+  if (!ollama || 'ollaya' in ollama.servers) return ollama
+  const ollaya = new Map<string, PublicResult>()
+  let version = ''
+  for (const r of publicRuns)
+    if (r.machine === ollama.machine && r.edition && 'ollaya' in r.servers)
+      for (const x of r.results) {
+        ollaya.set(shortName(x.model), x)
+        version = r.servers.ollaya!
+      }
+  return { ...ollama, servers: { ...ollama.servers, ollaya: version }, results: [...ollama.results, ...ollaya.values()] }
+})()
 
 /**
  * The name a run's model goes by on the page: without a registry host (`127.0.0.1:18742/library/

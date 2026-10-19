@@ -3,7 +3,12 @@
     python -m ollaya_convert.bench_edition --raw OUT_DIR --public-data PUBLIC_DIR --typed-data typed.jsonl \
         --edition 2026.10 --date 2026-10-14 --machine rtx-5090 --models winnow:e4b kev:4b ... --results ../results
 
-OUT_DIR is what the edition's run script writes on the bench machine:
+With --update RELEASE, the runs go into the existing edition instead (ADR 0009, a rolling edition): only the models
+a release changed are measured (`bench_plan`), their run files are added to the edition's runs, where a later run's
+row replaces an earlier one of the same model, their scores replace the old ones, and `updates` records the release.
+`-fp16` tags are not added to the edition's models: the site shows them under their base tag, unranked.
+
+OUT_DIR is what `bench_run` writes on the bench machine:
 
     latency-<machine>-cuda.json, latency-<machine>-cpu.json    bench_latency.py, with --memory
     typed/<model>/rows.jsonl                                   bench_typed.py
@@ -152,6 +157,9 @@ def main():
     ap.add_argument("--machine", required=True)
     ap.add_argument("--models", nargs="+", required=True)
     ap.add_argument("--results", required=True)
+    ap.add_argument("--update", metavar="RELEASE", help="add these runs to the existing edition (ADR 0009)")
+    ap.add_argument("--note", default="", help="added to the public and typed run files' note (for example, rows "
+                    "carried from an earlier build of the same graphs)")
     a = ap.parse_args()
     raw, public_data, results = Path(a.raw), Path(a.public_data), Path(a.results)
     typed_data = [json.loads(line) for line in open(a.typed_data, encoding="utf-8") if line.strip()]
@@ -228,13 +236,13 @@ def main():
         name = "%s-cuda.json" % (stem % "public-benchmark")
         prev = json.load(open(results / "runs" / "2026-09-30-public-benchmark-rtx5090-cuda.json", encoding="utf-8"))
         json.dump({**common, "suite": "public-benchmark", "servers": {"ollaya": version},
-                   "protocol": prev["protocol"], "note": "Ollaya Bench edition %s." % a.edition,
+                   "protocol": prev["protocol"], "note": ("Ollaya Bench edition %s. %s" % (a.edition, a.note)).strip(),
                    "results": sorted(public_results, key=lambda r: -r["macro_accuracy"])},
                   open(results / "runs" / name, "w", encoding="utf-8"), indent=1)
         files.append(name)
     if typed_results:
         name = "%s-cuda.json" % (stem % "typed-decisions")
-        json.dump({**common, "suite": "typed-decisions", "ollaya": version, "protocol": {
+        json.dump({**common, "suite": "typed-decisions", "ollaya": version, **({"note": a.note} if a.note else {}), "protocol": {
             "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each "
                          "(2,000 questions: 600 choice, 600 noul, 800 score)",
             "source": "https://huggingface.co/datasets/LocalLLaMA/typed-decisions",
@@ -247,6 +255,9 @@ def main():
             open(results / "runs" / name, "w", encoding="utf-8"), indent=1)
         files.append(name)
 
+    if a.update:
+        update(results / "editions" / ("%s.json" % a.edition), a.update, a.date, files, a.models, scores)
+        return
     edition = {
         "schema": 1, "id": a.edition, "title": "Ollaya Bench %s" % a.edition, "date": a.date, "ollaya": version,
         "machine": a.machine, "runs": files, "models": a.models,
@@ -262,6 +273,23 @@ def main():
     }
     json.dump(edition, open(results / "editions" / ("%s.json" % a.edition), "w", encoding="utf-8"), indent=1)
     print("wrote", ", ".join(files), "and editions/%s.json" % a.edition)
+
+
+def merge_update(edition, release, date, files, models, scores):
+    """`edition` with one release's runs, models and scores added (a rolling update)."""
+    edition["runs"] += [f for f in files if f not in edition["runs"]]
+    edition["models"] += [m for m in models if m not in edition["models"] and not m.endswith("-fp16")]
+    new = {s["model"] for s in scores}
+    edition["score"]["results"] = sorted([r for r in edition["score"]["results"] if r["model"] not in new] + scores,
+                                         key=lambda r: -r["score"])
+    edition.setdefault("updates", []).append({"release": release, "date": date, "runs": files, "models": models})
+    return edition
+
+
+def update(path, release, date, files, models, scores):
+    edition = merge_update(json.load(open(path, encoding="utf-8")), release, date, files, models, scores)
+    json.dump(edition, open(path, "w", encoding="utf-8"), indent=1)
+    print("wrote", ", ".join(files), "and updated", path.name)
 
 
 if __name__ == "__main__":

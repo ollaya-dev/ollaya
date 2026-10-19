@@ -24,7 +24,7 @@ import tokenizers
 import torch
 
 from ..llm_common import onnx_export as ox
-from ..llm_common.qwen35 import CHUNK, Qwen35Trunk
+from ..llm_common.qwen35 import CHUNK, Qwen35Trunk, half_trunk
 from ...weightless_sharded import safetensors_source
 from . import ref
 from .layout import PplxLayout
@@ -73,7 +73,7 @@ def templates(processor, system_prompt):
     return pre, post
 
 
-def export(slug, out_dir, run_dir):
+def export(slug, out_dir, run_dir, fp16=False):
     meta = ref.MODELS[slug]
     decider = ref.load(run_dir, device="cpu")
     _, protocol = ref.package(run_dir)
@@ -97,10 +97,14 @@ def export(slug, out_dir, run_dir):
         markers[i, :len(r["markers"])] = torch.tensor(r["markers"])
     args = (ids, torch.tensor([len(r["ids"]) for r in rows]), markers)
     with torch.no_grad():
+        wants = [decider.reference_logits([c])[0] for c in chunks]
+    if fp16:
+        half_trunk(graph.trunk)   # after the fp32 reference: the trunk shares upstream's modules; the readout stays fp32
+    with torch.no_grad():
         got = graph(*args)
         diff = 0.0
-        for i, (c, r) in enumerate(zip(chunks, rows)):
-            for j, (want, n) in enumerate(zip(decider.reference_logits([c])[0], r["counts"])):
+        for i, (w, r) in enumerate(zip(wants, rows)):
+            for j, (want, n) in enumerate(zip(w, r["counts"])):
                 diff = max(diff, float((got[i, j, :n] - torch.tensor(want)).abs().max()))
     print("eager graph (padded rows) vs upstream reference_logits: %.2e" % diff)
 
@@ -163,7 +167,7 @@ def export(slug, out_dir, run_dir):
         "option_logits": {"choice": "logits[row, q, :k]", "noul": "logits[row, q, :2] (0 = false, 1 = true)",
                           "score": "logits[row, q, :levels]"},
         "opset": ox.OPSET,
-        "precision": "fp32 compute; weights BF16, widened by Cast (at load, or per forward pass with "
+        "precision": ox.FP16_PRECISION if fp16 else "fp32 compute; weights BF16, widened by Cast (at load, or per forward pass with "
                      "weights_in_memory bf16)",
         "weights_in_memory": ox.weights_in_memory(report),
     }
@@ -202,8 +206,9 @@ def main():
     ap.add_argument("model", choices=sorted(ref.MODELS))
     ap.add_argument("--out", required=True)
     ap.add_argument("--run", default=None, help="local snapshot of the model repo")
+    ap.add_argument("--fp16", action="store_true", help="fp16 compute in the trunk (the -fp16 GPU tags)")
     a = ap.parse_args()
-    export(a.model, a.out, a.run or ref.snapshot(a.model))
+    export(a.model, a.out, a.run or ref.snapshot(a.model), fp16=a.fp16)
 
 
 if __name__ == "__main__":

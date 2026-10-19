@@ -473,12 +473,12 @@ CATALOG = {
         "author": "the vLLM Semantic Router contributors",
         "license": "Apache-2.0",
         "license_text": "Decision 1.0 by the vLLM Semantic Router contributors "
-                        "(https://huggingface.co/llm-semantic-router)\n"
+                        "(https://huggingface.co/vllm-sr)\n"
                         "A fine-tune of Qwen3.5 by the Qwen team (https://huggingface.co/Qwen), Apache-2.0.\n"
                         "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
         "tags": {
             # The backbone and the head are read in place from the author's safetensors.
-            "eos": _wl("decision-eos-0.8b", "llm-semantic-router/Decision-1.0-Eos-0.8B",
+            "eos": _wl("decision-eos-0.8b", "vllm-sr/Decision-1.0-Eos-0.8B",
                        "3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd",
                        "Decision 1.0 Eos (fully fine-tuned Qwen3.5-0.8B) with an endpoint head: every option is "
                        "scored at its own last token against the question, in one forward pass per question.",
@@ -823,3 +823,15 @@ CATALOG = {
                   "on every question, scores within 2.2e-5 and probabilities within 5.4e-6.",
     },
 }
+
+# The -fp16 GPU tags (docs/decisions/0008-fp16-decoder-tags.md): the same weights and tokenizer as the base tag, a
+# graph that computes the trunk in fp16. Each passed its own parity gate before it was added here. kev:0.8b has none:
+# after the Split rewrite its fp32 graph is as fast on an RTX 5090 (67 ms fp16, 62 ms fp32), so fp16 bought nothing.
+for _model, _tag in [("kev", "4b"), ("kev", "9b"), ("nimble", "9b"), ("clef", "flash"),
+                     ("pplx-decider", "flash"), ("strands-decider", "2b")]:
+    _t = CATALOG[_model]["tags"][_tag]
+    CATALOG[_model]["tags"][_tag + "-fp16"] = dict(
+        _t, wl_dir=_t["wl_dir"] + "-fp16", precision="fp16", arch=None,
+        description=_t["description"] + " This tag computes in fp16 on NVIDIA GPUs: faster than %s:%s, with at least "
+                    "99.5 %% of its decisions the same. On a CPU it runs, slowly; use %s:%s there."
+                    % (_model, _tag, _model, _tag))

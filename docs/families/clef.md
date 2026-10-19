@@ -102,6 +102,21 @@ cargo run --release -p ollaya-runner --features ollaya-runner/cuda --example par
 
 Not run: the CPU and Metal.
 
+## fp16 tag
+
+`clef:flash-fp16` runs the same weights with the trunk in fp16 on NVIDIA GPUs ([ADR 0008](../decisions/0008-fp16-decoder-tags.md)).
+The RMSNorms, the gated delta rule, the attention softmax, the rotary frequencies, the masks and the heads stay fp32,
+as the authors' code computes them. The gate (`parity_clef --fp16`, run by `parity_run`) keeps the encodings exact and
+requires at least 99.5 % of the decisions to match the fp32 reference. On the RTX 4090
+(`results/runs/2026-10-19-parity-rtx4090-cuda.json`):
+
+| Tag | Decisions the same | Max option logit diff | Max probability diff (p99) |
+|---|---|---:|---:|
+| `clef:flash-fp16` | 570 / 571 (99.82 %) | 2.9e-02 | 4.5e-03 (2.2e-03) |
+
+The fp32 tag is unchanged and still matches the authors' code. Speed and typed-decisions accuracy of
+the fp16 tag are on the model page and on bench.ollaya.dev. On a CPU an fp16 tag runs, slowly; use the fp32 tag there.
+
 ## Quality and speed
 
 - **Typed-decisions** (all 400 test states, 2,000 questions, argmax against the majority label, through the

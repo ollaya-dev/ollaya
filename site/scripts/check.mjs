@@ -89,6 +89,7 @@ for (const file of files.filter((f) => f.endsWith('.html'))) {
   const html = await readFile(join(dist, file), 'utf8')
   if (!html.startsWith('<!DOCTYPE html>')) errors.push(`dist/${file}: missing doctype`)
   if (/\{\{SITE_(ORIGIN|HOST)\}\}/.test(html)) errors.push(`dist/${file}: unreplaced {{SITE_ORIGIN}}/{{SITE_HOST}}`)
+  if (html.includes('{{result ')) errors.push(`dist/${file}: unreplaced {{result …}} reference`)
   if (/coming soon|pre-release|illustrative output|being built/i.test(html.replace(/<[^>]+>/g, ' '))) {
     errors.push(`dist/${file}: still says "coming soon", "pre-release", "illustrative output" or "being built"`)
   }

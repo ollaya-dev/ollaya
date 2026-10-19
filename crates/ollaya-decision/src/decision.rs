@@ -1,4 +1,4 @@
-//! `decision-endpoint-v1`: llm-semantic-router's Decision 1.0 models (a fine-tuned Qwen3.5 text
+//! `decision-endpoint-v1`: vllm-sr's Decision 1.0 models (a fine-tuned Qwen3.5 text
 //! backbone plus an endpoint head), whose rows follow the author's `question_row` and `encode`
 //! (prompt version `structured-segmented-candidate-endpoints-global-query-v2`,
 //! `ollaya_convert.families.decision.layout`).

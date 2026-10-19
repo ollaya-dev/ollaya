@@ -18,12 +18,11 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `pplx
 
 ## Speed
 
-- **RTX 4090, in the runtime:** five-question requests of about 470 tokens take 288 ms at the median (446 ms at p95). All questions share one forward pass.
-- **RTX 5090, over HTTP:** 232 ms per question at the median on Bespoke Labs' public benchmark, 380 ms per five-question typed-decisions request.
+- **RTX 5090, over HTTP (Ollaya Bench):** five-question triage requests take {{result pplx-decider:flash gpu.p50_ms 0}} ms at the median, all questions in one forward pass; {{result pplx-decider:flash public.median_ms 0}} ms per question at the median on Bespoke Labs' public benchmark, {{result pplx-decider:flash typed.median_ms 0}} ms per five-question typed-decisions request.
 
 ## Accuracy
 
-Measured by Ollaya on an RTX 5090: 0.824 macro accuracy on Bespoke Labs' public benchmark (3,880 human-labeled questions, pooled ECE 0.016) and 0.726 on the 400 typed-decisions states. Its public score is the highest of any model Ollaya or Ollama 0.40 serves, Ollama's 27B pplx-decider included (0.816 public, 0.702 typed). See the [comparison with Ollama](/#vs-ollama).
+Measured by Ollaya on an RTX 5090: {{result pplx-decider:flash public.macro_accuracy 3}} macro accuracy on Bespoke Labs' public benchmark (3,880 human-labeled questions, pooled ECE {{result pplx-decider:flash public.pooled_ece 3}}) and {{result pplx-decider:flash typed.accuracy 3}} on the 400 typed-decisions states. Its public score is the highest of any model Ollaya or Ollama 0.40 serves, Ollama's 27B pplx-decider included ({{result ollama/pplx-decider public.macro_accuracy 3}} public, {{result ollama/pplx-decider typed.accuracy 3}} typed). See the [comparison with Ollama](/#vs-ollama).
 
 ## How it works
 
@@ -31,6 +30,7 @@ Measured by Ollaya on an RTX 5090: 0.824 macro accuracy on Bespoke Labs' public 
 - **Calibrated.** The readout logits are divided by the temperature Perplexity fitted on held-out requests (1.55).
 - **Weights.** The files download from Hugging Face, pinned to a commit and verified by sha256, byte for byte Perplexity's. Ollaya hosts only the ONNX graph (11 MB).
 - **Parity.** Ollaya's Rust runtime matches upstream `pplx_decider` in fp32: identical token sequences, the same rejections and the same decision on all 696 test questions, probabilities within 6.8e-6.
+- **fp16 tag.** `pplx-decider:flash-fp16` computes the trunk in fp16 on NVIDIA GPUs, with the norms, the recurrent state, the attention softmax and the heads in fp32 ([how](https://github.com/ollaya-dev/ollaya/blob/main/docs/decisions/0008-fp16-decoder-tags.md)): {{result pplx-decider:flash-fp16 gpu.p50_ms 0}} ms for five questions on the RTX 5090 instead of {{result pplx-decider:flash gpu.p50_ms 0}} ms, {{result pplx-decider:flash-fp16 parity.cuda.decisions_same 0}} of {{result pplx-decider:flash-fp16 parity.cuda.questions 0}} decisions the same as `pplx-decider:flash` on the parity set, and {{result pplx-decider:flash-fp16 typed.accuracy 3}} on typed decisions. On a CPU use `pplx-decider:flash`.
 
 ## Limits
 

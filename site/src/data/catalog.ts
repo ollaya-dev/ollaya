@@ -9,6 +9,7 @@
  * Rules: never add pull counts or other numbers we do not have.
  */
 import { registryModels, type RegistryModel, type RegistryTag } from '../generated/registry'
+import { benchGpu, measured, result, trainedOnTyped, value } from './numbers'
 
 // ---------------------------------------------------------------------------------------------
 // Hand-written extras (optional per model)
@@ -41,6 +42,13 @@ interface ModelOverlay {
   tags?: Record<string, TagOverlay>
 }
 
+/** A tag's numbers from the current Ollaya Bench edition: typed-decisions accuracy (left out for a model trained on
+ * its train split, or one it does not apply to) and the median five-question request on the bench GPU. */
+function stats(tag: string, latencyNote?: string): ModelStats {
+  const accuracy = trainedOnTyped(tag) ? undefined : measured(tag, 'typed.accuracy')
+  return { tag, accuracy, latencyMs: value(tag, 'gpu.p50_ms'), latencyNote }
+}
+
 export interface ModelStats {
   /** The tag the numbers are for, e.g. "laya:en". */
   tag: string
@@ -53,7 +61,7 @@ export interface ModelStats {
 
 const overlays: Record<string, ModelOverlay> = {
   laya: {
-    stats: { tag: 'laya:en', accuracy: 0.361, latencyMs: 9.6 },
+    stats: stats('laya:en'),
     title: 'Laya',
     description:
       'Open decision models from Convai Innovations. Typed, calibrated answers to choice, score and yes/no questions in a single forward pass, in English and 100+ languages.',
@@ -69,13 +77,13 @@ const overlays: Record<string, ModelOverlay> = {
         capabilities: ['multilingual'],
       },
       'typed-decisions': {
-        summary: 'Fine-tuned on typed-decisions workflows: 0.766 accuracy vs 0.727 published for Jev 1.13.',
+        summary: `Fine-tuned on typed-decisions workflows: ${result('laya:typed-decisions', 'typed.accuracy', 3)} accuracy vs 0.727 published for Jev 1.13.`,
         capabilities: ['fine-tuned'],
       },
     },
   },
   nli: {
-    stats: { tag: 'nli:deberta-v3-large', accuracy: 0.548, latencyMs: 20.4 },
+    stats: stats('nli:deberta-v3-large'),
     title: 'NLI zero-shot',
     description:
       'Zero-shot classifiers by Moritz Laurer: every option becomes a hypothesis scored for entailment. The most accurate encoder model on typed decisions in our tests.',
@@ -85,24 +93,24 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 5,
     tags: {
       latest: { summary: 'Same as nli:deberta-v3-large.' },
-      'deberta-v3-large': { summary: 'DeBERTa-v3-large, MIT. Most accurate encoder in our tests (0.548 on typed decisions).' },
-      'modernbert-large': { summary: 'ModernBERT-large, Apache-2.0. Faster, slightly less accurate (0.515).' },
+      'deberta-v3-large': { summary: `DeBERTa-v3-large, MIT. Most accurate encoder in our tests (${result('nli:deberta-v3-large', 'typed.accuracy', 3)} on typed decisions).` },
+      'modernbert-large': { summary: `ModernBERT-large, Apache-2.0. Faster, slightly less accurate (${result('nli:modernbert-large', 'typed.accuracy', 3)}).` },
     },
   },
   decider: {
-    stats: { tag: 'decider:4b', accuracy: 0.68, latencyMs: 520 },
+    stats: stats('decider:4b'),
     title: 'decider',
     description:
-      'Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass. decider:4b scores 0.680 on typed decisions, decider:2b 0.591.',
+      `Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass. decider:4b scores ${result('decider:4b', 'typed.accuracy', 3)} on typed decisions, decider:2b ${result('decider:2b', 'typed.accuracy', 3)}.`,
     publisher: { name: 'Mapika', url: 'https://huggingface.co/Mapika' },
     capabilities: ['decision', 'long-context'],
     keywords: ['decider', 'decision', 'qwen', 'llm', 'classification', 'typesafe', 'jev', 'system one'],
     rank: 3,
     tags: {
       latest: { summary: 'Same as decider:2b.' },
-      '4b': { summary: 'Qwen3.5-4B base (v2.1), 0.680 on typed decisions, one fitted temperature per answer type. Best on a GPU.' },
-      '2b': { summary: 'Qwen3.5-2B base, 0.591 on typed decisions.' },
-      '0.8b': { summary: 'Qwen3.5-0.8B base, 0.506 on typed decisions: smaller and faster.' },
+      '4b': { summary: `Qwen3.5-4B base (v2.1), ${result('decider:4b', 'typed.accuracy', 3)} on typed decisions, one fitted temperature per answer type. Best on a GPU.` },
+      '2b': { summary: `Qwen3.5-2B base, ${result('decider:2b', 'typed.accuracy', 3)} on typed decisions.` },
+      '0.8b': { summary: `Qwen3.5-0.8B base, ${result('decider:0.8b', 'typed.accuracy', 3)} on typed decisions: smaller and faster.` },
       '2b-vision': {
         summary: 'Reads an image as well as the state: Qwen3.5-2B vision-language with v5 text weights. One PNG per request, up to 10 options.',
         capabilities: ['vision'],
@@ -110,7 +118,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   clm: {
-    stats: { tag: 'clm:8b', accuracy: 0.357, latencyMs: 149, latencyNote: 'a new message, questions cached' },
+    stats: stats('clm:8b', 'a new message, questions cached'),
     title: 'CLM',
     description:
       'Contrastive decision model by Contrastive-LM: the Qwen3-8B encoder embeds the state and every option, and two trained heads pick the option closest to the state. Repeated questions and options are cached.',
@@ -120,11 +128,11 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 11,
     tags: {
       latest: { summary: 'Same as clm:8b.' },
-      '8b': { summary: 'CLM-v0.1-8B on Qwen3-8B, 0.357 on typed decisions; built for agent, game and tool-calling states. Needs a 20 GB GPU.' },
+      '8b': { summary: `CLM-v0.1-8B on Qwen3-8B, ${result('clm:8b', 'typed.accuracy', 3)} on typed decisions; built for agent, game and tool-calling states. Needs a 20 GB GPU.` },
     },
   },
   kev: {
-    stats: { tag: 'kev:4b', accuracy: 0.669, latencyMs: 354 },
+    stats: stats('kev:4b'),
     title: 'Kev',
     description:
       "Decision models by Jared Palmer: a LoRA on a Qwen3.5 base plus a pointer head that scores every option at its own span, in one forward pass per question. Calibrated with Kev's own temperature.",
@@ -134,17 +142,17 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 4,
     tags: {
       latest: { summary: 'Same as kev:4b.' },
-      '9b': { summary: 'Qwen3.5-9B base, 0.722 on typed decisions: the most accurate Kev. Needs a 24 GB GPU.' },
-      '4b': { summary: 'Qwen3.5-4B base, round 10, 0.669 on typed decisions. Best on a GPU.' },
-      '0.8b': { summary: 'Qwen3.5-0.8B base, round 15, 0.460 on typed decisions: small and fast.' },
+      '9b': { summary: `Qwen3.5-9B base, ${result('kev:9b', 'typed.accuracy', 3)} on typed decisions: the most accurate Kev. Needs a 24 GB GPU.` },
+      '4b': { summary: `Qwen3.5-4B base, round 10, ${result('kev:4b', 'typed.accuracy', 3)} on typed decisions. Best on a GPU.` },
+      '0.8b': { summary: `Qwen3.5-0.8B base, round 15, ${result('kev:0.8b', 'typed.accuracy', 3)} on typed decisions: small and fast.` },
     },
   },
   decision: {
-    stats: { tag: 'decision:eos', latencyMs: 217 },
+    stats: stats('decision:eos'),
     title: 'Decision 1.0',
     description:
       'Decision models by the vLLM Semantic Router contributors: a fully fine-tuned Qwen3.5 backbone plus an endpoint head that scores every option at its own last token against the question, in one forward pass per question. 16k-token rows.',
-    publisher: { name: 'vLLM Semantic Router', url: 'https://huggingface.co/llm-semantic-router' },
+    publisher: { name: 'vLLM Semantic Router', url: 'https://huggingface.co/vllm-sr' },
     capabilities: ['decision', 'long-context'],
     keywords: ['decision', 'eos', 'nox', 'lux', 'semantic router', 'vllm', 'qwen', 'llm', 'endpoint', 'classification', 'typesafe', 'jev', 'system one'],
     rank: 8,
@@ -154,7 +162,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   qwen3guard: {
-    stats: { tag: 'qwen3guard:0.6b', latencyMs: 37, latencyNote: 'its four built-in questions' },
+    stats: stats('qwen3guard:0.6b', 'its four built-in questions'),
     title: 'Qwen3Guard',
     description:
       'Safety guard by the Qwen team: is a text safe, controversial or unsafe, and which unsafe category? It answers its own built-in questions, in 119 languages, in one forward pass.',
@@ -169,7 +177,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   von: {
-    stats: { tag: 'von:1.1', accuracy: 0.447, latencyMs: 23 },
+    stats: stats('von:1.1'),
     title: 'Von',
     description:
       'Decision model by Victor Hugo Panisa on ModernBERT-large: every option is scored at its own marker, all options of a question in one pass, with an input-conditioned calibration. 8k-token context.',
@@ -179,7 +187,7 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 9,
     tags: {
       latest: { summary: 'Same as von:1.1.' },
-      '1.1': { summary: 'Von 1.1, ModernBERT-large, 0.447 on typed decisions; 8,192-token context.' },
+      '1.1': { summary: `Von 1.1, ModernBERT-large, ${result('von:1.1', 'typed.accuracy', 3)} on typed decisions; 8,192-token context.` },
     },
   },
   credence: {
@@ -197,7 +205,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   winnow: {
-    stats: { tag: 'winnow:e4b', accuracy: 0.722, latencyMs: 89 },
+    stats: stats('winnow:e4b'),
     title: 'Winnow',
     description:
       "Decision models by EldanRing, fine-tuned from Google's Gemma 4 and published as GGUF. Winnow reads the answer labels' logits after its own prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Vulkan GPUs on Windows, Apple silicon or the CPU.",
@@ -207,12 +215,12 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 1,
     tags: {
       latest: { summary: 'Same as winnow:12b.' },
-      '12b': { summary: 'Winnow-12B, Q8_0 GGUF: 0.702 on typed decisions, 85.7 % on the author\'s JevBench set; a 16 GB GPU holds it.' },
-      e4b: { summary: "Winnow-E4B, Q8_0 GGUF, with the author's fitted temperature: 0.722 on typed decisions in 89 ms on an RTX 4090. Ollaya's recommended model." },
+      '12b': { summary: `Winnow-12B, Q8_0 GGUF: ${result('winnow:12b', 'typed.accuracy', 3)} on typed decisions, 85.7 % on the author's JevBench set; a 16 GB GPU holds it.` },
+      e4b: { summary: `Winnow-E4B, Q8_0 GGUF, with the author's fitted temperature: ${result('winnow:e4b', 'typed.accuracy', 3)} on typed decisions in ${result('winnow:e4b', 'gpu.p50_ms', 0)} ms on an ${benchGpu}. Ollaya's recommended model.` },
     },
   },
   nimble: {
-    stats: { tag: 'nimble:9b', accuracy: 0.665, latencyMs: 2297 },
+    stats: stats('nimble:9b'),
     title: 'Nimble',
     description:
       "Decision model by Bespoke Labs: a LoRA on Qwen3.5-9B trained on contrastive pairs. Nimble reads the whole request as a JSON schema and scores each option by the next-token logit of its code; Ollaya applies the author's temperature, so its probabilities are calibrated. Up to 255 options.",
@@ -227,7 +235,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   jeeves: {
-    stats: { tag: 'jeeves:9b', accuracy: 0.68, latencyMs: 838 },
+    stats: stats('jeeves:9b'),
     title: 'Jeeves',
     description:
       "Decision model by PostHog: Qwen3.5-9B with a LoRA merged in and a pointer head that scores every option at its own marker. Ollaya runs it without its reasoning chain, in one forward pass per question, calibrated with the authors' temperature.",
@@ -241,7 +249,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   clef: {
-    stats: { tag: 'clef:flash', accuracy: 0.703, latencyMs: 532 },
+    stats: stats('clef:flash'),
     title: 'Clef',
     description:
       "Decision models by Cloudflare. Clef-Flash is Qwen3.5-9B, fully post-trained, with a joint schema head that scores every option of every question together, in one forward pass per request. Its probabilities come straight from the head. Ollaya runs its text path.",
@@ -255,7 +263,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   jeb: {
-    stats: { tag: 'jeb:9b', latencyMs: 124 },
+    stats: stats('jeb:9b'),
     title: 'Jebadiah',
     description:
       "Decision models by Jason Brashear and AINode: LoRAs merged into Qwen3.5 and Qwen3.8, published as GGUF. Jeb reads the option labels' logits after AINode's own decision prompt, with a fitted temperature per question type; Ollaya runs the authors' files on llama.cpp.",
@@ -271,7 +279,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   cygnet: {
-    stats: { tag: 'cygnet:12b', accuracy: 0.683, latencyMs: 202 },
+    stats: stats('cygnet:12b'),
     title: 'Cygnet',
     description:
       "Frozen Gemma 4 12B IT with blockbrain-ai's Cygnet prompt: the options as letters, one answer slot, and one calibration temperature. No fine-tuning; Ollaya runs ggml-org's Q8_0 GGUF on llama.cpp.",
@@ -281,11 +289,11 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 14,
     tags: {
       latest: { summary: 'Same as cygnet:12b.' },
-      '12b': { summary: 'Gemma 4 12B IT (Q8_0) with Cygnet\'s prompt and temperature 3.4: 0.683 on typed decisions, up to 20 options.' },
+      '12b': { summary: `Gemma 4 12B IT (Q8_0) with Cygnet's prompt and temperature 3.4: ${result('cygnet:12b', 'typed.accuracy', 3)} on typed decisions, up to 20 options.` },
     },
   },
   jevk5: {
-    stats: { tag: 'jevk5:4b', accuracy: 0.625, latencyMs: 105 },
+    stats: stats('jevk5:4b'),
     title: 'JevK5',
     description:
       "Decision model by alibiserikbay, fine-tuned from Qwen3.5-4B and published as GGUF. JevK5 reads the answer letters' logits after its own JSON prompt; Ollaya runs the author's file on llama.cpp, on NVIDIA GPUs, Vulkan GPUs on Windows, Apple silicon or the CPU.",
@@ -295,11 +303,11 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 10,
     tags: {
       latest: { summary: 'Same as jevk5:4b.' },
-      '4b': { summary: "JevK5 v0.3 (4B), Q8_0 GGUF, with the author's temperature 1.22: 0.625 on typed decisions; up to 16 options per question." },
+      '4b': { summary: `JevK5 v0.3 (4B), Q8_0 GGUF, with the author's temperature 1.22: ${result('jevk5:4b', 'typed.accuracy', 3)} on typed decisions; up to 16 options per question.` },
     },
   },
   snap: {
-    stats: { tag: 'snap:2b', accuracy: 0.648, latencyMs: 68 },
+    stats: stats('snap:2b'),
     title: 'snap',
     description:
       "logitlab's snap1-2b: MiniCPM5-2B fine-tuned to read one option letter after the prompt of emnlmn's snap engine. Ollaya runs the author's Q8_0 GGUF on llama.cpp with snap's own prompt, on NVIDIA GPUs, Apple silicon or the CPU.",
@@ -309,12 +317,12 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 17,
     tags: {
       latest: { summary: 'Same as snap:2b.' },
-      '2b': { summary: "snap1-2b (MiniCPM5-2B), Q8_0 GGUF, raw probabilities: 0.648 on typed decisions; up to 26 options per question." },
-      '2b-q4_k_m': { summary: "snap1-2b, Q4_K_M GGUF (snap's own default file, 1.6 GB): 0.660 on typed decisions; 63 ms for five questions on an RTX 4090." },
+      '2b': { summary: `snap1-2b (MiniCPM5-2B), Q8_0 GGUF, raw probabilities: ${result('snap:2b', 'typed.accuracy', 3)} on typed decisions; up to 26 options per question.` },
+      '2b-q4_k_m': { summary: `snap1-2b, Q4_K_M GGUF (snap's own default file, 1.6 GB): ${result('snap:2b-q4_k_m', 'typed.accuracy', 3)} on typed decisions; ${result('snap:2b-q4_k_m', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
     },
   },
   gliclass: {
-    stats: { tag: 'gliclass:large', accuracy: 0.477, latencyMs: 14.7 },
+    stats: stats('gliclass:large'),
     title: 'GLiClass',
     description:
       'Instruction-following zero-shot classifier by Knowledgator: all options of a question are scored in one pass, so cost barely grows with the number of options.',
@@ -368,7 +376,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   decima: {
-    stats: { tag: 'decima:base', accuracy: 0.495, latencyMs: 15.1 },
+    stats: stats('decima:base'),
     title: 'Decima',
     description:
       "A. M. Madani's Decima: multilingual encoders (mmBERT-base, multilingual-e5-small) with a late-interaction scorer that reads every option against the state, so option order never changes the answer, and an ordinal head for scores. A general model, one for coding-agent decisions, and a small one that is the fastest on a CPU.",
@@ -378,9 +386,9 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 18,
     tags: {
       latest: { summary: 'Same as decima:base.' },
-      base: { summary: 'Decima-base 2.0 (mmBERT-base, 321M), fp32: 0.495 on typed decisions; 15 ms for five questions on an RTX 4090.' },
+      base: { summary: `Decima-base 2.0 (mmBERT-base, 321M), fp32: ${result('decima:base', 'typed.accuracy', 3)} on typed decisions; ${result('decima:base', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
       agent: { summary: "Decima-agent 2.2: decima-base fine-tuned for coding-agent decisions (secret and command gates, tool and model choice) and knowledge-graph judgments; states up to 2,048 tokens, options kept whole beside long questions." },
-      small: { summary: 'Decima-small 1.1 (multilingual-e5-small, 122M), fp32: 0.432 on typed decisions; 146 ms for five questions on a CPU, the fastest there.' },
+      small: { summary: `Decima-small 1.1 (multilingual-e5-small, 122M), fp32: ${result('decima:small', 'typed.accuracy', 3)} on typed decisions; ${result('decima:small', 'cpu.p50_ms', 0)} ms for five questions on a CPU.` },
     },
   },
 }
@@ -728,6 +736,12 @@ export interface SearchIndex {
 }
 
 /** The static search index served at /search.json (navbar typeahead). */
+/** Whether `model:tag` is a tag of the library (in the registry), so a page may offer it. */
+export function published(tag: string): boolean {
+  const i = tag.indexOf(':')
+  return !!catalog.find((m) => m.name === tag.slice(0, i))?.tags.some((t) => t.name === tag.slice(i + 1))
+}
+
 export function searchIndex(): SearchIndex {
   return {
     models: catalog.map((m) => ({

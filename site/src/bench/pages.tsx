@@ -20,6 +20,7 @@ import {
   modelUrl,
   rows,
   type Row,
+  type SpeedResult,
   scoredRows,
 } from './data'
 import { Flag, ModelLink, Mono, num3, pct1, rowFlags, ScoreBar, Section, Stat } from './ui'
@@ -266,6 +267,27 @@ function Kv({ k, v }: { k: string; v: Child }) {
   )
 }
 
+function SpeedCells({ s, d }: { s: SpeedResult | undefined; d: Device }) {
+  if (s?.error)
+    return (
+      <td colspan={6} class="px-3 py-2 text-muted" title={s.error}>
+        failed: {s.error.slice(0, 90)}
+      </td>
+    )
+  return (
+    <>
+      <td class="px-3 py-2 text-right font-medium text-fg" title={s?.ollaya ? `Ollaya ${s.ollaya}` : undefined}>
+        {fmtMs(s?.p50_ms)}
+      </td>
+      <td class="px-3 py-2 text-right">{fmtMs(s?.p90_ms)}</td>
+      <td class="px-3 py-2 text-right">{fmtMs(s?.load_ms)}</td>
+      <td class="px-3 py-2 text-right">{d.device === 'cpu' ? '–' : fmtMb(s?.vram_mb)}</td>
+      <td class="px-3 py-2 text-right">{fmtMb(s?.ram_peak_mb)}</td>
+      <td class="px-3 py-2 font-mono text-xs">{s?.precision ?? '–'}</td>
+    </>
+  )
+}
+
 export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: string }) {
   const total = scoredRows.length
   const badge = `[![Ollaya Bench](${origin}${badgeUrl(r.name)})](${origin}${modelUrl(r.name)})`
@@ -435,26 +457,37 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
                           </a>{' '}
                           <span class="text-xs text-muted">{d.device === 'cpu' ? 'CPU' : d.device.toUpperCase()}</span>
                         </td>
-                        {s?.error ? (
-                          <td colspan={6} class="px-3 py-2 text-muted" title={s.error}>
-                            failed: {s.error.slice(0, 90)}
-                          </td>
-                        ) : (
-                          <>
-                            <td class="px-3 py-2 text-right font-medium text-fg">{fmtMs(s?.p50_ms)}</td>
-                            <td class="px-3 py-2 text-right">{fmtMs(s?.p90_ms)}</td>
-                            <td class="px-3 py-2 text-right">{fmtMs(s?.load_ms)}</td>
-                            <td class="px-3 py-2 text-right">{d.device === 'cpu' ? '–' : fmtMb(s?.vram_mb)}</td>
-                            <td class="px-3 py-2 text-right">{fmtMb(s?.ram_peak_mb)}</td>
-                            <td class="px-3 py-2 font-mono text-xs">{s?.precision ?? '–'}</td>
-                          </>
-                        )}
+                        <SpeedCells s={s} d={d} />
                       </tr>
                     )
                   })}
+                  {r.variants.flatMap((v) =>
+                    devices
+                      .filter((d) => v.speed.has(d.slug))
+                      .map((d) => (
+                        <tr class="border-t border-line">
+                          <td class="px-3 py-2">
+                            <Mono>{v.name}</Mono> <span class="text-xs text-muted">{d.name}</span>
+                          </td>
+                          <SpeedCells s={v.speed.get(d.slug)} d={d} />
+                        </tr>
+                      )),
+                  )}
                 </tbody>
               </table>
             </div>
+            {r.variants.map((v) => (
+              <p class="mt-3 max-w-2xl text-sm text-muted">
+                <Mono>{v.name}</Mono> is the same model computing in fp16 on the GPU, not ranked separately. Its decisions agree with{' '}
+                <Mono>{r.name}</Mono>'s on at least 99.5 % of the parity questions
+                {v.typed && r.typed ? (
+                  <>
+                    ; typed-decisions {pct1(v.typed.accuracy)} against {pct1(r.typed.accuracy)}
+                  </>
+                ) : null}
+                {v.typed?.ollaya ? <>, measured with Ollaya {v.typed.ollaya}</> : null}.
+              </p>
+            ))}
             <p class="mt-2 text-xs text-muted">
               Five-question requests over HTTP, one at a time, each a different short message. VRAM: the rise of the GPU’s used
               memory while the model is loaded. RAM peak: the runner process’s peak resident memory.
@@ -487,7 +520,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
                         <td class="px-3 py-2 text-right">{p.max_logit_diff == null ? '–' : p.max_logit_diff.toExponential(1)}</td>
                         <td class="px-3 py-2">
                           {p.pass === true ? (
-                            <span class="font-medium text-pass">pass</span>
+                            <span class="font-medium text-pass">pass{p.gate === 'fp16' ? ' (fp16 gate)' : ''}</span>
                           ) : p.pass === false ? (
                             <span class="font-medium text-fail">fail</span>
                           ) : (
@@ -761,6 +794,51 @@ export function MethodologyPage() {
         </Prose>
       </Section>
 
+      <Section id="releases" title="New models and releases">
+        <Prose>
+          <p>
+            An edition is not frozen until the next one. Each Ollaya release adds what it changed, measured on the same
+            machine with the same protocol, and the row says which release measured it:
+          </p>
+          <ul class="list-disc space-y-2 pl-5">
+            <li>A new model, or new weights: every suite, after it passes parity on the GPU and the CPU.</li>
+            <li>
+              A new graph or engine for a model: parity again. When every decision is the same as before, its accuracy
+              stays and only its speed is measured again.
+            </li>
+            <li>
+              A faster, lower-precision tag such as <Mono>kev:4b-fp16</Mono>: typed-decisions and speed. It is shown on its
+              base model's page, not ranked: its decisions agree with the base model's on at least 99.5 % of the parity
+              questions.
+            </li>
+          </ul>
+          <p>
+            A new edition, with every suite for every model, follows a change that moves decisions across the library, or
+            a quarter. The repository's <Mono>docs/model-lifecycle.md</Mono> is the full procedure, and{' '}
+            <Mono>docs/decisions/0009-measurement-per-release.md</Mono> the rule for what each change measures.
+          </p>
+        </Prose>
+      </Section>
+
+      <Section id="run-it-yourself" title="Run it yourself">
+        <Prose>
+          <p>
+            The tools are in the repository and need only Python's standard library and an Ollaya install. On your own
+            machine:
+          </p>
+          <pre class="overflow-x-auto rounded-xl border border-line bg-subtle p-4 font-mono text-[12px] leading-relaxed text-fg">
+            {`python -m ollaya_convert.bench_run --machine community-<gpu> --out runs/ \
+    --models kev:4b d1:3b --suites latency-cuda typed \
+    --typed-data typed-decisions-test.jsonl`}
+          </pre>
+          <p>
+            It starts a server, pulls the models and resumes where it stopped. To publish your numbers, open a pull request
+            that adds your machine to <Mono>results/machines.json</Mono> and the run files: they appear on Ollaya's results page
+            under your machine's name. An edition ranks only its own machine's rows.
+          </p>
+        </Prose>
+      </Section>
+
       <Section id="limits" title="Limits">
         <Prose>
           <ul class="list-disc space-y-2 pl-5">
@@ -778,6 +856,11 @@ export function MethodologyPage() {
             <span class="font-medium text-fg">2026.10</span> · {dateLabel(edition?.date)}. First edition: {rows.length} models,
             Ollaya {edition?.ollaya}, the RTX 5090 desktop (GPU and CPU).
           </p>
+          {(edition?.updates ?? []).map((u) => (
+            <p>
+              <span class="font-medium text-fg">Ollaya {u.release}</span> · {dateLabel(u.date)}. Measured {u.models.join(', ')}.
+            </p>
+          ))}
         </Prose>
       </Section>
     </div>

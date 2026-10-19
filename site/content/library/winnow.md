@@ -11,7 +11,7 @@ Winnow is a pair of open decision models by EldanRing, fine-tuned from Google De
 | `winnow:e4b-vision` | Gemma 4 E4B IT, with the vision projector | Q8_0 GGUF, 8.0 GB, and a 990 MB projector | – | – |
 | `winnow:12b-vision` | Gemma 4 12B IT, with the vision projector | Q8_0 GGUF, 12.7 GB, and a 175 MB projector | – | – |
 
-The accuracies are the author's, measured with the author's server on the same Q8_0 files (model cards of [Winnow-12B](https://huggingface.co/EldanRing/Winnow-12B) and [Winnow-E4B](https://huggingface.co/EldanRing/Winnow-E4B)). For comparison, the author reports 85.7 % and 87.0 % for Jev 1.13 on the same two sets. On typed-decisions (all 400 states, argmax against the majority label), measured by Ollaya, `winnow:12b` scores 0.702 and `winnow:e4b` 0.722. With its speed, that makes `winnow:e4b` Ollaya's recommended model.
+The accuracies are the author's, measured with the author's server on the same Q8_0 files (model cards of [Winnow-12B](https://huggingface.co/EldanRing/Winnow-12B) and [Winnow-E4B](https://huggingface.co/EldanRing/Winnow-E4B)). For comparison, the author reports 85.7 % and 87.0 % for Jev 1.13 on the same two sets. On typed-decisions (all 400 states, argmax against the majority label), measured by Ollaya, `winnow:12b` scores {{result winnow:12b typed.accuracy 3}} and `winnow:e4b` {{result winnow:e4b typed.accuracy 3}}. With its speed, that makes `winnow:e4b` Ollaya's recommended model.
 
 ## Usage
 
@@ -24,7 +24,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `winn
 
 ## Speed
 
-- **RTX 4090, through the HTTP API:** the triage preset (five questions) on a short customer message takes 89 ms on `e4b` and 131 ms on `12b` at the median of 15 warm requests. On the parity fixtures, measured in the runner, the medians are 96 ms and 154 ms.
+- **RTX 5090, through the HTTP API (Ollaya Bench):** the triage preset (five questions) on a short customer message takes {{result winnow:e4b gpu.p50_ms 0}} ms on `e4b` and {{result winnow:12b gpu.p50_ms 0}} ms on `12b` at the median. On the parity fixtures, measured in the runner, the medians are 96 ms and 154 ms.
 - **CPU:** `e4b` takes about 5.1 s for the same request on a 24-core x86 CPU. Use a GPU.
 
 ## How it works

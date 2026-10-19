@@ -33,7 +33,7 @@ curl http://localhost:11435/api/decide -d '{"model": "qwen3guard", "state": "How
 
 ## Speed
 
-- **RTX 4090, end to end:** about 37 ms at the median for a short message, with all four questions.
+- **RTX 5090, through the HTTP API (Ollaya Bench):** {{result qwen3guard:0.6b gpu.p50_ms 0}} ms at the median for a short message, with all four questions.
 - **Text length:** attention covers the whole text, so the cost grows faster than its length: about 70 ms for a 500-token text, 0.36 s for 2,000 tokens and 1 s for 4,000 tokens.
 - **CPU:** about 1.7 s at the median for texts of a few hundred tokens, on a 24-core x86 CPU.
 

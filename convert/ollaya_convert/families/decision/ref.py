@@ -1,4 +1,4 @@
-"""The PyTorch reference for llm-semantic-router's Decision 1.0 models: the author's own code, run in fp32.
+"""The PyTorch reference for vllm-sr's Decision 1.0 models: the author's own code, run in fp32.
 
 Each model repo ships its inference code: the model and prompt (`decision_model.py`, identical in every
 repo, sha256 d3e28489...) and the typed request/answer adapter (Eos: `decision/types.py`; Nox and Lux:
@@ -31,17 +31,17 @@ import os
 import torch
 
 MODELS = {
-    "decision-eos": {"repo": "llm-semantic-router/Decision-1.0-Eos-0.8B",
+    "decision-eos": {"repo": "vllm-sr/Decision-1.0-Eos-0.8B",
                      "revision": "3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd",
                      "base": "Qwen/Qwen3.5-0.8B", "model_code": "decision/model.py", "api": "decision/types.py",
                      "temperature": ("runtime.json", None), "segment_cache": False,
                      "backbone": ["backbone/model.safetensors"]},
-    "decision-nox": {"repo": "llm-semantic-router/Decision-1.0-Nox-4B",
+    "decision-nox": {"repo": "vllm-sr/Decision-1.0-Nox-4B",
                      "revision": "0bb833504965c0eabdb9630b7bbd385cb2fe5cd4",
                      "base": "Qwen/Qwen3.5-4B", "model_code": "code/decision_model.py", "api": "code/decision_api.py",
                      "temperature": ("temperature.json", "temperatures"), "segment_cache": True,
                      "backbone": ["backbone/model-0000%d-of-00003.safetensors" % i for i in (1, 2, 3)]},
-    "decision-lux": {"repo": "llm-semantic-router/Decision-1.0-Lux-9B",
+    "decision-lux": {"repo": "vllm-sr/Decision-1.0-Lux-9B",
                      "revision": "bd45a30aee8c84032791c245c70f86dee5389cc8",
                      "base": "Qwen/Qwen3.5-9B", "model_code": "code/decision_model.py", "api": "code/decision_api.py",
                      "temperature": ("temperature.json", "temperatures"), "segment_cache": True,

@@ -118,6 +118,21 @@ cargo run --release -p ollaya-runner --example parity_strands -- \
 The CPU run takes 11.4 s per request on the i9-13900K (the goldens include 4,096-token rows); a CPU is not a
 practical target for this model.
 
+## fp16 tag
+
+`strands-decider:2b-fp16` runs the same weights with the trunk in fp16 on NVIDIA GPUs ([ADR 0008](../decisions/0008-fp16-decoder-tags.md)).
+The RMSNorms, the gated delta rule, the attention softmax, the rotary frequencies, the masks and the heads stay fp32,
+as the authors' code computes them. The gate (`parity_strands --fp16`, run by `parity_run`) keeps the encodings exact and
+requires at least 99.5 % of the decisions to match the fp32 reference. On the RTX 4090
+(`results/runs/2026-10-19-parity-rtx4090-cuda.json`):
+
+| Tag | Decisions the same | Max option logit diff | Max probability diff (p99) |
+|---|---|---:|---:|
+| `strands-decider:2b-fp16` | 649 / 650 (99.85 %) | 2.3e-02 | 5.6e-03 (4.4e-03) |
+
+The fp32 tag is unchanged and still matches the authors' code. Speed and typed-decisions accuracy of
+the fp16 tag are on the model page and on bench.ollaya.dev. On a CPU an fp16 tag runs, slowly; use the fp32 tag there.
+
 ## Limits
 
 - **Not ported.** Images (`serve --vision`), the prefix cache (an exact-result speedup upstream), and the

@@ -4,15 +4,15 @@ Jebadiah (Jeb) is a family of decision models by Jason Brashear, built with [AIN
 
 ## Models
 
-| Tag | Base | Weights | Five questions, RTX 4090 |
+| Tag | Base | Weights | Five questions, RTX 5090 |
 |---|---|---|---|
-| `jeb:4b` | Qwen3.5-4B, v2 | Q8_0 GGUF, 4.5 GB | 96 ms |
-| `jeb:latest`, `jeb:9b` | Qwen3.5-9B, v2 | Q8_0 GGUF, 9.8 GB | 124 ms |
-| `jeb:27b` | Qwen3.8-27B | Q4_K_M GGUF, 17 GB | 309 ms |
+| `jeb:4b` | Qwen3.5-4B, v2 | Q8_0 GGUF, 4.5 GB | {{result jeb:4b gpu.p50_ms 0}} ms |
+| `jeb:latest`, `jeb:9b` | Qwen3.5-9B, v2 | Q8_0 GGUF, 9.8 GB | {{result jeb:9b gpu.p50_ms 0}} ms |
+| `jeb:27b` | Qwen3.8-27B | Q4_K_M GGUF, 17 GB | {{result jeb:27b gpu.p50_ms 0}} ms |
 
 The 4B and 9B files are Q8_0, the ones the authors checked against the bf16 weights (256 and 257 of 260 held-out answers the same). The 27B is Q4_K_M so that it fits a 24 GB GPU. Latency is the triage preset (five questions) on a short message through the HTTP API, at the median of 15 warm requests.
 
-On typed-decisions Jeb scores about 0.79 to 0.80, but its training data includes the typed-decisions train split, so that number is not comparable with the zero-shot models and the model list leaves it out. The authors publish held-out results in [getainode/jebadiah](https://github.com/getainode/jebadiah).
+On typed-decisions Jeb scores {{result jeb:9b typed.accuracy 3}} to {{result jeb:27b typed.accuracy 3}}, but its training data includes the typed-decisions train split, so that number is not comparable with the zero-shot models and the model list leaves it out. The authors publish held-out results in [getainode/jebadiah](https://github.com/getainode/jebadiah).
 
 ## Usage
 

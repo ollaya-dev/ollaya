@@ -3,7 +3,7 @@
  * catalog (publisher, licence, runtime) and the parity record. Everything on the bench site comes
  * from here; nothing is typed in by hand.
  */
-import { catalog, type Model } from '../data/catalog'
+import { catalog, published, type Model } from '../data/catalog'
 import { editionsRaw } from '../generated/results'
 import { machines, parityRuns, runs, shortName, type Machine, type ParityResult, type PublicResult } from '../data/results'
 
@@ -26,6 +26,8 @@ export interface Edition {
   models: string[]
   score: { definition: string; interval: string; results: ScoreResult[] }
   trained_on: Record<string, string[]>
+  /** Releases that added their runs to this edition (ADR 0009). */
+  updates?: { release: string; date: string; runs: string[]; models: string[] }[]
 }
 
 export interface TypedResult {
@@ -45,6 +47,7 @@ export interface TypedResult {
   median_ms: number | null
   p95_ms: number | null
   trained_on_split: boolean
+  ollaya?: string
 }
 
 export interface SpeedResult {
@@ -66,6 +69,8 @@ export interface SpeedResult {
   ram_mb?: number
   vram_mb?: number
   error?: string
+  /** The Ollaya release that measured this row (an edition's own, or a later release's update). */
+  ollaya?: string
 }
 
 export interface BenchPublic extends PublicResult {
@@ -104,6 +109,8 @@ export interface Row {
   typed?: TypedResult
   speed: Map<string, SpeedResult>
   parity: ParityResult[]
+  /** Faster tags of the same model (`-fp16`): shown under it, not ranked (ADR 0009). */
+  variants: Row[]
   /** Answers only its own built-in questions, so no accuracy. */
   builtin: boolean
   router: boolean
@@ -130,14 +137,24 @@ function deviceName(m: Machine, device: string): { name: string; kind: string } 
   return { name: gpu, kind: `NVIDIA GPU, ${device.toUpperCase()}${mem ? `, ${mem}` : ''}` }
 }
 
-/** The devices this edition timed the models on, GPUs first. */
-export const devices: Device[] = editionRuns
-  .filter((r) => r.suite === 'latency-triage')
-  .map((r) => {
+const versionOf = (r: AnyRun) => r.ollaya ?? (r as { servers?: { ollaya?: string } }).servers?.ollaya ?? ''
+
+/**
+ * The devices this edition timed the models on, GPUs first. Releases add runs to an edition (ADR 0009): a later
+ * run's row replaces an earlier one of the same model, and keeps the release that measured it.
+ */
+const latencyGroups = new Map<string, AnyRun[]>()
+for (const r of editionRuns.filter((r) => r.suite === 'latency-triage')) {
+  const key = `${r.machine}/${r.device}`
+  latencyGroups.set(key, [...(latencyGroups.get(key) ?? []), r])
+}
+export const devices: Device[] = [...latencyGroups.values()]
+  .map((group) => {
+    const r = group[0]!
     const info = machines[r.machine ?? '']!
     const { name, kind } = deviceName(info, r.device ?? '')
     const results = new Map<string, SpeedResult>()
-    for (const x of r.results as SpeedResult[]) results.set(shortName(x.model), x)
+    for (const g of group) for (const x of g.results as SpeedResult[]) results.set(shortName(x.model), { ...x, ollaya: versionOf(g) })
     return {
       slug: slugify(name),
       machine: r.machine ?? '',
@@ -152,8 +169,16 @@ export const devices: Device[] = editionRuns
   .sort((a, b) => Number(a.device === 'cpu') - Number(b.device === 'cpu'))
 
 type RunOf<T> = Omit<AnyRun, 'results'> & { results: T[] }
-export const publicRun = editionRuns.find((r) => r.suite === 'public-benchmark') as unknown as RunOf<BenchPublic> | undefined
-export const typedRun = editionRuns.find((r) => r.suite === 'typed-decisions') as unknown as RunOf<TypedResult> | undefined
+/** Every run of `suite` in the edition as one: the first run's protocol, each model's newest row. */
+function merged<T extends { model: string }>(suite: string): RunOf<T & { ollaya: string }> | undefined {
+  const rs = editionRuns.filter((r) => r.suite === suite)
+  if (!rs.length) return undefined
+  const byModel = new Map<string, T & { ollaya: string }>()
+  for (const r of rs) for (const x of r.results as T[]) byModel.set(x.model, { ...x, ollaya: versionOf(r) })
+  return { ...rs[0]!, results: [...byModel.values()] }
+}
+export const publicRun = merged<BenchPublic>('public-benchmark')
+export const typedRun = merged<TypedResult>('typed-decisions')
 
 /** Rank by the score's interval: one plus the number of models whose whole interval is above this one's. */
 function ranked(results: ScoreResult[]): (ScoreResult & { rank: number })[] {
@@ -169,12 +194,17 @@ function runtimeOf(model: Model | undefined, tag: string): Row['runtime'] {
 
 /** The parity gates a model passed on its way into the library: the runtime against its authors' reference, as cited in the docs. */
 function parityFor(name: string): ParityResult[] {
-  const out: ParityResult[] = []
-  for (const run of parityRuns) for (const r of run.results) if (shortName(r.model) === name && r.kind === 'runtime' && r.cite) out.push(r)
-  return out
+  // The compiled docs first, then the recorded runs by date: the newest row per device wins.
+  const ordered = [...parityRuns].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
+  const out = new Map<string, ParityResult>()
+  for (const run of ordered)
+    for (const r of run.results)
+      if (shortName(r.model) === name && r.kind === 'runtime' && (r.cite || r.gate))
+        out.set(r.device, r.cite ? r : { ...r, cite: `results/runs/${run.file}`, device_detail: `${machines[run.machine ?? '']?.headline ?? run.machine} ${r.device === 'cpu' ? 'CPU' : r.device.toUpperCase()}` })
+  return [...out.values()]
 }
 
-export const rows: Row[] = (edition?.models ?? []).map((name) => {
+function rowFor(name: string, variants: Row[] = []): Row {
   const [family, tag = 'latest'] = name.split(':') as [string, string | undefined]
   const model = catalog.find((m) => m.name === family)
   const t = model?.tags.find((x) => x.name === tag)
@@ -201,10 +231,18 @@ export const rows: Row[] = (edition?.models ?? []).map((name) => {
     typed,
     speed,
     parity: parityFor(name),
+    variants,
     builtin: !!t?.builtinQuestions,
     router: t?.kind === 'router',
   }
-})
+}
+
+/** Whether the edition measured a tag at all (a variant is measured without being in `models`). */
+const measured = (name: string) => devices.some((d) => d.results.has(name)) || !!typedRun?.results.some((r) => r.model === name)
+
+export const rows: Row[] = (edition?.models ?? []).map((name) =>
+  rowFor(name, measured(`${name}-fp16`) && published(`${name}-fp16`) ? [rowFor(`${name}-fp16`)] : []),
+)
 
 /** Share of the 5,880 questions the model rejected (an option count, a score scale or an input length it can't take). */
 export function rejectedShare(r: Row): number {

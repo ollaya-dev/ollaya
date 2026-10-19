@@ -25,7 +25,7 @@ import tokenizers
 import torch
 
 from ..llm_common import onnx_export as ox
-from ..llm_common.qwen35 import CHUNK, Qwen35Trunk
+from ..llm_common.qwen35 import CHUNK, Qwen35Trunk, half_trunk
 from ...weightless_sharded import safetensors_source
 from . import ref
 from .layout import KINDS, StrandsLayout
@@ -64,7 +64,7 @@ def rename(name):
     return [name]
 
 
-def export(slug, out_dir, run_dir, base_dir):
+def export(slug, out_dir, run_dir, base_dir, fp16=False):
     meta = ref.MODELS[slug]
     model, engine = ref.load(run_dir, device="cpu")
     cfg = model.config
@@ -86,6 +86,9 @@ def export(slug, out_dir, run_dir, base_dir):
     args = (ids, torch.tensor([r["decide"] for r in rows]), torch.tensor([r["opts"] for r in rows]))
     with torch.no_grad():
         want = [torch.tensor(z) for z in ref.forward(model, rows)]
+    if fp16:
+        half_trunk(graph.trunk)   # after the fp32 reference: the trunk shares upstream's modules; the head stays fp32
+    with torch.no_grad():
         got = graph(*args)
     print("eager graph vs upstream: %.2e" % max(float((g - w).abs().max()) for g, w in zip(got, want)))
 
@@ -166,7 +169,7 @@ def export(slug, out_dir, run_dir, base_dir):
         "option_logits": {"choice": "scores[row, :k]", "noul": "scores[row, :2] (0 = false, 1 = true)",
                           "score": "scores[row, :levels]"},
         "opset": ox.OPSET,
-        "precision": "fp32 compute; base weights BF16, widened by Cast (at load, or per forward pass with "
+        "precision": ox.FP16_PRECISION if fp16 else "fp32 compute; base weights BF16, widened by Cast (at load, or per forward pass with "
                      "weights_in_memory bf16); adapter and head F32",
         "weights_in_memory": ox.weights_in_memory(report),
     }
@@ -208,9 +211,10 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--run", default=None, help="local snapshot of the model repo")
     ap.add_argument("--base", default=None, help="local snapshot of the base repo at the pinned revision")
+    ap.add_argument("--fp16", action="store_true", help="fp16 compute in the trunk (the -fp16 GPU tags)")
     a = ap.parse_args()
     run, base = (a.run, a.base) if a.run and a.base else ref.snapshot(a.model)
-    export(a.model, a.out, run, base)
+    export(a.model, a.out, run, base, fp16=a.fp16)
 
 
 if __name__ == "__main__":

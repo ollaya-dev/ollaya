@@ -30,6 +30,8 @@ const INPUTS: [&str; 6] = [
     "option_question",
 ];
 const OUTPUT: &str = "logits";
+/// A request longer than this gives the CUDA arena back after its run (`engine::run_options`).
+const TOKEN_BUDGET: usize = 8192;
 
 #[derive(Debug, Clone, Deserialize)]
 struct Contract {
@@ -190,14 +192,18 @@ impl ClefModel {
             }
         }
         let mut session = self.session.lock().expect("session mutex poisoned");
-        let outputs = session.run(ort::inputs![
-            "input_ids" => ort::value::Tensor::from_array(input_ids)?,
-            "token_positions" => ort::value::Tensor::from_array(positions)?,
-            "question_spans" => ort::value::Tensor::from_array(question_spans)?,
-            "question_types" => ort::value::Tensor::from_array(question_types)?,
-            "option_spans" => ort::value::Tensor::from_array(option_spans)?,
-            "option_question" => ort::value::Tensor::from_array(option_question)?,
-        ])?;
+        let options = crate::engine::run_options(self.device, seq, TOKEN_BUDGET)?;
+        let outputs = session.run_with_options(
+            ort::inputs![
+                "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+                "token_positions" => ort::value::Tensor::from_array(positions)?,
+                "question_spans" => ort::value::Tensor::from_array(question_spans)?,
+                "question_types" => ort::value::Tensor::from_array(question_types)?,
+                "option_spans" => ort::value::Tensor::from_array(option_spans)?,
+                "option_question" => ort::value::Tensor::from_array(option_question)?,
+            ],
+            &options,
+        )?;
         let out = outputs[OUTPUT]
             .try_extract_array::<f32>()?
             .into_dimensionality::<Ix1>()

@@ -1,4 +1,4 @@
-"""Export llm-semantic-router/Decision-1.0-* (Qwen3.5 text backbone + endpoint head) to a weightless ONNX graph.
+"""Export vllm-sr/Decision-1.0-* (Qwen3.5 text backbone + endpoint head) to a weightless ONNX graph.
 
     uv run python -m ollaya_convert.families.decision.export decision-eos --out out/decision-eos-0.8b [--root SNAPSHOT]
 

@@ -61,6 +61,24 @@ impl Engine for OnnxModel {
 /// peak memory: 64 rows of 512 tokens fit comfortably even for large encoders on the GPU.
 pub const TOKEN_BUDGET: usize = 32_768;
 
+/// Options for one `session.run` of `tokens` padded tokens. A batch over `budget` (one row longer
+/// than the engine's batch budget) gives the CUDA arena back when the run ends: the arena otherwise
+/// keeps the size of its largest run for the session's life, and a 24 GB GPU under WSL or Windows
+/// then spills every later request into system memory (docs/families/nimble.md, v3).
+pub fn run_options(
+    device: Device,
+    tokens: usize,
+    budget: usize,
+) -> Result<ort::session::RunOptions, Error> {
+    let mut options = ort::session::RunOptions::new()?;
+    if let Device::Cuda(id) = device
+        && tokens > budget
+    {
+        options.set("memory.enable_memory_arena_shrinkage", format!("gpu:{id}"))?;
+    }
+    Ok(options)
+}
+
 /// Split `lens` (row lengths, in order) into consecutive batches whose padded size
 /// (rows × longest row) stays within `budget`, and at most `max_rows` rows each.
 pub fn batches(lens: &[usize], budget: usize, max_rows: usize) -> Vec<std::ops::Range<usize>> {

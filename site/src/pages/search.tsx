@@ -1,4 +1,5 @@
 import { Icon } from '../components/Icon'
+import { benchGpu } from '../data/numbers'
 import { CapBadge, SizeBadge } from '../components/ui'
 import { Updated } from '../components/Updated'
 import { capabilityFilters, catalog, comingNext, haystack, type Model, type ModelStats } from '../data/catalog'
@@ -81,11 +82,11 @@ export function SearchPage() {
           ))}
         </ul>
         <p class="mt-4 text-[13px] text-muted">
-          Numbers are for each model's default tag. Typed-decisions accuracy is the argmax against
-          the majority label on all 400 typed-decisions states; the labels have low annotator
+          Numbers are for each model's default tag, from the current Ollaya Bench edition. Typed-decisions accuracy is
+          the argmax against the majority label on all 400 typed-decisions states; the labels have low annotator
           agreement, so compare models with each other rather than reading the numbers as absolutes.
           Latency is the median five-question request with a short state, end to end through the
-          HTTP API on an RTX 4090 (qwen3guard: its four built-in questions). Larger models are more
+          HTTP API on an {benchGpu} (qwen3guard: its four built-in questions). Larger models are more
           accurate and slower; see each model's page for how speed grows with the length of the
           state.
         </p>
@@ -127,8 +128,8 @@ function Stats({ stats }: { stats: ModelStats }) {
         </span>
       ) : null}
       {ms !== null ? (
-        <span title={`Median request to ${stats.tag} on an RTX 4090${stats.latencyNote ? `, ${stats.latencyNote}` : ''}`}>
-          <span class="tabular-nums text-fg">{ms} ms</span> on RTX 4090
+        <span title={`Median five-question request to ${stats.tag} on an ${benchGpu}, Ollaya Bench${stats.latencyNote ? `, ${stats.latencyNote}` : ''}`}>
+          <span class="tabular-nums text-fg">{ms} ms</span> on {benchGpu}
         </span>
       ) : null}
     </>

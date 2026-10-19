@@ -67,39 +67,6 @@ which a faster path must keep.
 
 ---
 
-## CLI: ask questions without writing JSON
-
-**Why.** `ollama run kev --ask "Is a refund being requested?" --ask "Which team?" --choice billing --choice
-sales < ticket.txt` asks typed questions straight from the shell; each `--choice` (a label, optionally
-`label="description"`) or `--level` attaches to the `--ask` before it, and an `--ask` alone is yes/no (Ollama
-`cmd/decide.go`). strands-decider's CLI has the same idea (`--noul`, `--choice "Q=a,b"`, `--score "Q=low,high"`).
-Ollaya needs `--preset` or a `--questions` file.
-
-**Scope**
-- `ollaya run MODEL --ask TEXT [--choice LABEL[=DESC]... | --level LEVEL...]...`, building `q1`, `q2`, ...
-  in order; reject `--choice` and `--level` on one question, and either before any `--ask`.
-- Mutually exclusive with `--questions` and `--preset`. Text output as today.
-
-**Acceptance**
-- The README's triage example runs as one command line with `--ask`; unit tests for the ordering rules.
-
----
-
-## A decision integration corpus run against every release
-
-**Why.** Ollama ships `integration/systemone_test.go`: fixed requests per model that must keep their decisions
-across releases. Ollaya's parity examples cover one model at a time against goldens; nothing checks the
-installed daemon end to end after a release.
-
-**Scope**
-- A small corpus (about 20 requests: every question type, a long state, a rejected request) with the expected
-  decision per model, run against a release build over HTTP for every library model that fits the runner.
-
-**Acceptance**
-- Runs in the release checklist; a changed decision fails it, with the model and question named.
-
----
-
 ## Give memory back after an oversized request
 
 **Why.** A session's CUDA arena keeps the size of its largest `session.run`. One 10,000-token Nimble v3 row on a

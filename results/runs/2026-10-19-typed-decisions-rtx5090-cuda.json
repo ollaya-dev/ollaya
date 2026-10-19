@@ -1,0 +1,340 @@
+{
+ "schema": 1,
+ "date": "2026-10-19",
+ "edition": "2026.10",
+ "machine": "rtx-5090",
+ "device": "cuda",
+ "suite": "typed-decisions",
+ "ollaya": "0.14.0",
+ "note": "The rows of nimble:9b-v3, pplx-decider:flash and strands-decider:2b were measured on 2026-10-18 with a build of this branch whose graphs gave the same parity numbers as 0.14.0's (results/runs/2026-10-19-parity-rtx4090-cuda.json).",
+ "protocol": {
+  "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each (2,000 questions: 600 choice, 600 noul, 800 score)",
+  "source": "https://huggingface.co/datasets/LocalLLaMA/typed-decisions",
+  "runner": "convert/ollaya_convert/bench_typed.py",
+  "client": "one request (one state, its five questions) at a time over HTTP to /v1/systemone, timed by the client",
+  "accuracy": "argmax of the returned probabilities against the gold label, over all 2,000 questions; a rejected request counts as wrong on its five questions; 95 % bootstrap interval over states",
+  "ece": "ten-bin expected calibration error of the top probability, pooled over the answered questions"
+ },
+ "results": [
+  {
+   "model": "pplx-decider:flash",
+   "digest": "e403f9b1f0ac01129919433e754f66b8718ff76a61055eb841ec4f969173fd40",
+   "answered_by": [
+    "pplx-decider:flash"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.726,
+   "accuracy_ci": [
+    0.7055,
+    0.7465
+   ],
+   "by_type": {
+    "choice": 0.6983,
+    "noul": 0.825,
+    "score": 0.6725
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.626,
+    "customer_service": 0.778,
+    "invoice_processing": 0.764,
+    "security_incidents": 0.736
+   },
+   "ece": 0.0312,
+   "brier": 0.3708,
+   "soft_ce": 1.0355,
+   "median_ms": 380.1,
+   "p95_ms": 476.4,
+   "trained_on_split": false
+  },
+  {
+   "model": "pplx-decider:flash-fp16",
+   "digest": "2d518c01dae07bf0915c1e7bc8dcc0327f90ecec3047ec0db31365e75ad91e97",
+   "answered_by": [
+    "pplx-decider:flash-fp16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.726,
+   "accuracy_ci": [
+    0.707,
+    0.746
+   ],
+   "by_type": {
+    "choice": 0.6967,
+    "noul": 0.8283,
+    "score": 0.6713
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.626,
+    "customer_service": 0.778,
+    "invoice_processing": 0.764,
+    "security_incidents": 0.736
+   },
+   "ece": 0.0331,
+   "brier": 0.3709,
+   "soft_ce": 1.0356,
+   "median_ms": 111.8,
+   "p95_ms": 149.2,
+   "trained_on_split": false
+  },
+  {
+   "model": "kev:9b-fp16",
+   "digest": "35a2c187f75c665bcee4d55da13ae88216f0ebb7f6db7fefc264f29c91f44ab0",
+   "answered_by": [
+    "kev:9b-fp16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.7225,
+   "accuracy_ci": [
+    0.6965,
+    0.7465
+   ],
+   "by_type": {
+    "choice": 0.695,
+    "noul": 0.8133,
+    "score": 0.675
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.616,
+    "customer_service": 0.752,
+    "invoice_processing": 0.802,
+    "security_incidents": 0.72
+   },
+   "ece": 0.0955,
+   "brier": 0.4104,
+   "soft_ce": 0.9768,
+   "median_ms": 210.7,
+   "p95_ms": 283.7,
+   "trained_on_split": false
+  },
+  {
+   "model": "clef:flash-fp16",
+   "digest": "d79bf9209e5294838f25a55fa1b5875273e435ea5f33f4095b8a48abb7337000",
+   "answered_by": [
+    "clef:flash-fp16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.7025,
+   "accuracy_ci": [
+    0.681,
+    0.724
+   ],
+   "by_type": {
+    "choice": 0.7033,
+    "noul": 0.8133,
+    "score": 0.6188
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.606,
+    "customer_service": 0.754,
+    "invoice_processing": 0.756,
+    "security_incidents": 0.694
+   },
+   "ece": 0.0154,
+   "brier": 0.3916,
+   "soft_ce": 0.9769,
+   "median_ms": 160.0,
+   "p95_ms": 181.1,
+   "trained_on_split": false
+  },
+  {
+   "model": "kev:4b-fp16",
+   "digest": "904795c918ecae7ad2093323d722cae1ea2bc4bc50fa22bd022fe50f836b0fc3",
+   "answered_by": [
+    "kev:4b-fp16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.6695,
+   "accuracy_ci": [
+    0.647,
+    0.69
+   ],
+   "by_type": {
+    "choice": 0.645,
+    "noul": 0.765,
+    "score": 0.6162
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.568,
+    "customer_service": 0.716,
+    "invoice_processing": 0.696,
+    "security_incidents": 0.698
+   },
+   "ece": 0.0937,
+   "brier": 0.4645,
+   "soft_ce": 0.9905,
+   "median_ms": 151.9,
+   "p95_ms": 198.6,
+   "trained_on_split": false
+  },
+  {
+   "model": "nimble:9b-fp16",
+   "digest": "c6aa45c1955a8726fecafd74eaac920e9e5ab9631c733bd28f883466964be695",
+   "answered_by": [
+    "nimble:9b-fp16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.665,
+   "accuracy_ci": [
+    0.6425,
+    0.6885
+   ],
+   "by_type": {
+    "choice": 0.57,
+    "noul": 0.81,
+    "score": 0.6275
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.538,
+    "customer_service": 0.712,
+    "invoice_processing": 0.736,
+    "security_incidents": 0.674
+   },
+   "ece": 0.0829,
+   "brier": 0.4565,
+   "soft_ce": 1.0082,
+   "median_ms": 675.0,
+   "p95_ms": 985.1,
+   "trained_on_split": false
+  },
+  {
+   "model": "nimble:9b-v3",
+   "digest": "01cb73cdc839e8eb25a6209976a2cd1e83048b6b893c809d7144e71b34ff2b31",
+   "answered_by": [
+    "nimble:9b-v3"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.6475,
+   "accuracy_ci": [
+    0.625,
+    0.6695
+   ],
+   "by_type": {
+    "choice": 0.645,
+    "noul": 0.7467,
+    "score": 0.575
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.594,
+    "customer_service": 0.688,
+    "invoice_processing": 0.7,
+    "security_incidents": 0.608
+   },
+   "ece": 0.1947,
+   "brier": 0.5155,
+   "soft_ce": 1.5882,
+   "median_ms": 3059.5,
+   "p95_ms": 4231.5,
+   "trained_on_split": false
+  },
+  {
+   "model": "strands-decider:2b",
+   "digest": "9aae566845cbf83cafbe804ba9f486fd856239f3d405d265704cb42385bea63a",
+   "answered_by": [
+    "strands-decider:2b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.6155,
+   "accuracy_ci": [
+    0.593,
+    0.639
+   ],
+   "by_type": {
+    "choice": 0.61,
+    "noul": 0.75,
+    "score": 0.5188
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.566,
+    "customer_service": 0.64,
+    "invoice_processing": 0.63,
+    "security_incidents": 0.626
+   },
+   "ece": 0.0897,
+   "brier": 0.5208,
+   "soft_ce": 1.0505,
+   "median_ms": 500.1,
+   "p95_ms": 662.7,
+   "trained_on_split": false
+  },
+  {
+   "model": "strands-decider:2b-fp16",
+   "digest": "d23105625e3c264e6e47fc8677db367e07ae2fbad225cc2117f309bf95023753",
+   "answered_by": [
+    "strands-decider:2b-fp16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.615,
+   "accuracy_ci": [
+    0.592,
+    0.6375
+   ],
+   "by_type": {
+    "choice": 0.61,
+    "noul": 0.7517,
+    "score": 0.5162
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.566,
+    "customer_service": 0.64,
+    "invoice_processing": 0.628,
+    "security_incidents": 0.626
+   },
+   "ece": 0.0919,
+   "brier": 0.5209,
+   "soft_ce": 1.0507,
+   "median_ms": 97.0,
+   "p95_ms": 117.7,
+   "trained_on_split": false
+  },
+  {
+   "model": "kev:0.8b-fp16",
+   "digest": "0fdd775fc30cc278669ce578a798134020aaac0293ea8cac97439fca84de8131",
+   "answered_by": [
+    "kev:0.8b-fp16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.461,
+   "accuracy_ci": [
+    0.434,
+    0.488
+   ],
+   "by_type": {
+    "choice": 0.505,
+    "noul": 0.5267,
+    "score": 0.3787
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.35,
+    "customer_service": 0.552,
+    "invoice_processing": 0.436,
+    "security_incidents": 0.506
+   },
+   "ece": 0.0418,
+   "brier": 0.6057,
+   "soft_ce": 1.1168,
+   "median_ms": 80.6,
+   "p95_ms": 89.5,
+   "trained_on_split": false
+  }
+ ]
+}

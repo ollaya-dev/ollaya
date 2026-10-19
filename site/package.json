@@ -12,6 +12,7 @@
     "gen": "node scripts/gen-content.mjs && node scripts/gen-registry.mjs && node scripts/gen-results.mjs",
     "typecheck": "npm run gen && tsc --noEmit",
     "build": "npm run typecheck && node scripts/build.mjs && node scripts/check.mjs && node scripts/build-bench.mjs",
+    "readme": "npm run gen && README=write node scripts/build.mjs",
     "build:bench": "npm run gen && node scripts/build-bench.mjs",
     "dev": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",

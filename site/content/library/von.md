@@ -4,9 +4,9 @@ Von is an open decision model by Victor Hugo Panisa, built on ModernBERT-large a
 
 | Tag | Backbone | Params | Context | Typed-decisions accuracy |
 |---|---|---|---|---|
-| `von:latest`, `von:1.1` | ModernBERT-large | 395M | 8,192 tokens | 0.447 |
+| `von:latest`, `von:1.1` | ModernBERT-large | 395M | 8,192 tokens | {{result von:1.1 typed.accuracy 3}} |
 
-Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `decider` scores 0.591, `nli` 0.548, `gliclass` 0.477 and `laya:en` 0.361. The labels have low annotator agreement, so compare the numbers to each other rather than reading them as absolutes. On the author's JevBench harness Von 1.1 scores 0.938 (easy), 0.653 (standard) and 0.351 (hard).
+Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `decider` scores {{result decider:2b typed.accuracy 3}}, `nli` {{result nli:deberta-v3-large typed.accuracy 3}}, `gliclass` {{result gliclass:large typed.accuracy 3}} and `laya:en` {{result laya:en typed.accuracy 3}}. The labels have low annotator agreement, so compare the numbers to each other rather than reading them as absolutes. On the author's JevBench harness Von 1.1 scores 0.938 (easy), 0.653 (standard) and 0.351 (hard).
 
 ## Usage
 
@@ -18,7 +18,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `von`
 
 ## Speed
 
-- **RTX 4090, end to end:** a five-question request with a short state takes about 23 ms at the median.
+- **RTX 5090, through the HTTP API (Ollaya Bench):** a five-question request with a short state takes {{result von:1.1 gpu.p50_ms 0}} ms at the median.
 - **CPU:** the same request takes about 0.76 s on a 24-core x86 CPU.
 - **State length:** every question reads the whole state, and attention cost grows faster than the sequence. Five questions about a 600-token state take about 0.17 s on the GPU and 5.6 s on the CPU; about a 2,200-token state, 0.78 s and 25 s. A state near 7,500 tokens takes about 7 s on the GPU. On the CPU a full 8,192-token sequence needs about 25 GB of memory.
 

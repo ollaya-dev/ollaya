@@ -4,11 +4,11 @@ Cygnet by [blockbrain-ai](https://github.com/blockbrain-ai/cygnet-recipe) is not
 
 ## Models
 
-| Tag | Weights | Typed-decisions accuracy | Five questions, RTX 4090 |
+| Tag | Weights | Typed-decisions accuracy | Five questions, RTX 5090 |
 |---|---|---|---|
-| `cygnet:latest`, `cygnet:12b` | Gemma 4 12B IT, Q8_0 GGUF, 12.7 GB | 0.683 | 202 ms |
+| `cygnet:latest`, `cygnet:12b` | Gemma 4 12B IT, Q8_0 GGUF, 12.7 GB | {{result cygnet:12b typed.accuracy 3}} | {{result cygnet:12b gpu.p50_ms 0}} ms |
 
-Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states, measured by Ollaya, with a calibration error (ECE) of 0.148 at Cygnet's temperature (0.289 without it). The authors report 203 of 231 on JevBench's public items with BF16 weights on vLLM; Ollaya runs ggml-org's Q8_0 conversion of the same Gemma revision on llama.cpp, which is close but not bit for bit the same model.
+Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states, measured by Ollaya, with a calibration error (ECE) of {{result cygnet:12b typed.ece 3}} at Cygnet's temperature (0.289 without it). The authors report 203 of 231 on JevBench's public items with BF16 weights on vLLM; Ollaya runs ggml-org's Q8_0 conversion of the same Gemma revision on llama.cpp, which is close but not bit for bit the same model.
 
 ## Usage
 

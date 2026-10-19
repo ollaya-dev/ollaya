@@ -25,6 +25,8 @@ import {
   type ParityResult,
   type PublicResult,
 } from '../data/results'
+import { measured } from '../data/numbers'
+import { published } from '../data/catalog'
 
 const SUBSET_LABELS: Record<string, string> = {
   'vitaminc-dev': 'VitaminC',
@@ -155,7 +157,8 @@ export function speedDots() {
     mark: machineOrder.indexOf(s.machine) === 0 ? 'dot' : 'ring',
   }))
   const models = new Set<string>()
-  for (const s of series) for (const m of s.p50.keys()) models.add(m)
+  // An -fp16 tag that was measured but not shipped (kev:0.8b-fp16, ADR 0008) stays in the raw data only.
+  for (const s of series) for (const m of s.p50.keys()) if (!m.endsWith('-fp16') || published(m)) models.add(m)
   const fastest = (m: string) => Math.min(...series.map((s) => s.p50.get(m) ?? Infinity))
   const rows = [...models]
     .sort((a, b) => fastest(a) - fastest(b))
@@ -181,7 +184,7 @@ function AccuracySpeed() {
       id="accuracy"
       title="Accuracy and speed"
       lead="Side by side with Ollama, on the same GPU."
-      body={`Ollaya is inspired by Ollama, which now serves two decision models of its own. Both ran Bespoke Labs' public decision benchmark: ${nf.format(3880)} human-labeled questions from 13 datasets, scored with Bespoke's own code, one request at a time on one RTX 5090.`}
+      body={`Ollaya is inspired by Ollama, which serves decision models of its own: nine in Ollama ${publicBench.servers.ollama ?? ''}, and every one of their tags ran here. Both servers ran Bespoke Labs' public decision benchmark: ${nf.format(3880)} human-labeled questions from 13 datasets, scored with Bespoke's own code, one request at a time on one RTX 5090.`}
     >
       <Figure
         title="Accuracy against latency"
@@ -199,7 +202,60 @@ function AccuracySpeed() {
       >
         <Responsive wide={<Scatter {...chart} />} compact={<Scatter {...chart} compact />} />
       </Figure>
+      <Versus rows={publicBench.results} />
     </Section>
+  )
+}
+
+/** Every model of both servers in one table: the public benchmark and typed-decisions, most accurate first. */
+function Versus({ rows }: { rows: PublicResult[] }) {
+  const typed = (r: PublicResult) => measured(r.server === 'ollama' ? `ollama/${r.model}` : shortName(r.model), 'typed.accuracy')
+  const num = 'px-4 py-2 text-right whitespace-nowrap'
+  return (
+    <div class="mt-10 overflow-x-auto rounded-2xl border border-line">
+      <table class="w-full min-w-[40rem] text-left text-[13px] tabular-nums">
+        <caption class="sr-only">Every model of Ollaya and Ollama on the public benchmark and typed-decisions, most accurate first</caption>
+        <thead class="border-b border-line bg-subtle text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-2.5 font-medium">Model</th>
+            <th scope="col" class="px-4 py-2.5 font-medium">Server</th>
+            <th scope="col" class="px-4 py-2.5 font-medium">Weights</th>
+            <th scope="col" class="px-4 py-2.5 text-right font-medium">Accuracy</th>
+            <th scope="col" class="px-4 py-2.5 text-right font-medium">ECE</th>
+            <th scope="col" class="px-4 py-2.5 text-right font-medium">Median</th>
+            <th scope="col" class="px-4 py-2.5 text-right font-medium">Typed-decisions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          {[...rows]
+            .sort((a, b) => b.macro_accuracy - a.macro_accuracy)
+            .map((r) => {
+              const t = typed(r)
+              return (
+                <tr>
+                  <th scope="row" class="px-4 py-2 font-mono font-normal text-fg">
+                    {r.model}
+                  </th>
+                  <td class="px-4 py-2" style={`color:${toneVar(tone(r))}`}>
+                    {r.server === 'ollama' ? 'Ollama' : 'Ollaya'}
+                  </td>
+                  <td class="px-4 py-2 text-muted">{r.weights ?? "the authors'"}</td>
+                  <td class={num}>
+                    {r.macro_accuracy.toFixed(3)}
+                    {rejectedNote(r) ? <span class="text-muted"> ({rejectedNote(r)})</span> : null}
+                  </td>
+                  <td class={num}>{r.pooled_ece.toFixed(3)}</td>
+                  <td class={num}>{Math.round(r.median_ms)} ms</td>
+                  <td class={num}>{t === undefined ? <span class="text-faint">·</span> : t.toFixed(3)}</td>
+                </tr>
+              )
+            })}
+        </tbody>
+      </table>
+      <p class="border-t border-line px-4 py-3 text-[13px] leading-relaxed text-muted">
+        Accuracy and ECE over the 13 public datasets; the median is one question over HTTP. Typed-decisions: 400 states, 2,000 questions, argmax against the majority label. Ollama runs its own GGUF files of each model (the weights column); Ollaya runs the authors' files.
+      </p>
+    </div>
   )
 }
 
@@ -349,7 +405,7 @@ function Parity() {
   // Runtime parity of library models (tags like `kev:4b`) on the devices Ollaya runs on; export
   // checks, research checkpoints and rejected providers stay in the raw data.
   const entries: ParityResult[] = parityRuns.flatMap((r) =>
-    r.results.filter((x) => x.kind !== 'export' && DEVICE_ORDER.includes(x.device) && x.pass !== null && x.pass !== undefined && /^[a-z0-9-]+:[\w.-]+$/.test(x.model)),
+    r.results.filter((x) => x.kind !== 'export' && DEVICE_ORDER.includes(x.device) && x.pass !== null && x.pass !== undefined && /^[a-z0-9-]+:[\w.-]+$/.test(x.model) && (!x.model.endsWith('-fp16') || published(x.model))),
   )
   if (!entries.length) return null
   const devices = DEVICE_ORDER.filter((d) => entries.some((e) => e.device === d))
@@ -368,7 +424,7 @@ function Parity() {
       id="parity"
       title="Parity"
       lead="The same answers as the authors' own code."
-      body="Before a model ships, Ollaya's runtime is compared question by question with a reference on each device: the authors' code in fp32 for ONNX models, and llama.cpp's own server of the same build for GGUF models. Every decision must be the same and every option score within 0.001."
+      body="Before a model ships, Ollaya's runtime is compared question by question with a reference on each device: the authors' code in fp32 for ONNX models, and llama.cpp's own server of the same build for GGUF models. Every decision must be the same and every option score within 0.001. A tag ending in -fp16 computes in fp16 on NVIDIA GPUs and has its own gate: the same inputs, and at least 99.5 % of its decisions the same as the fp32 reference."
     >
       <div class="overflow-x-auto rounded-2xl border border-line">
         <table class="w-full min-w-[32rem] text-left text-[13px] tabular-nums">

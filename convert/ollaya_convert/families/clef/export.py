@@ -32,7 +32,7 @@ import torch
 import torch.nn.functional as F
 
 from ..llm_common import onnx_export as ox
-from ..llm_common.qwen35 import CHUNK, Qwen35Trunk
+from ..llm_common.qwen35 import CHUNK, Qwen35Trunk, half_trunk
 from ...weightless_sharded import safetensors_source
 from . import ref
 from .check import decision_for
@@ -199,7 +199,7 @@ SAMPLE = {
 }
 
 
-def export(out_dir, model_dir):
+def export(out_dir, model_dir, fp16=False):
     import tokenizers
     from transformers import AutoTokenizer
 
@@ -213,6 +213,8 @@ def export(out_dir, model_dir):
 
     tm, lm_head = text_model(model_dir)
     graph = ClefGraph(tm, lm_head, load_head(jsm, model_dir)).eval()
+    if fp16:
+        half_trunk(graph.trunk)   # the head and the LM-head rows stay fp32
     with torch.no_grad():
         hidden = graph.trunk(torch.from_numpy(inputs["input_ids"]))[0].float()
     check_head(jsm, graph, hidden, row, inputs, AutoTokenizer.from_pretrained(model_dir))
@@ -268,7 +270,7 @@ def export(out_dir, model_dir):
         "type_index": TYPE_INDEX,
         "option_logits": {"noul": "[true, false]", "choice": "labels sorted by code point", "score": "levels in order"},
         "opset": ox.OPSET,
-        "precision": "fp32 compute; weights BF16 (widened by Cast)",
+        "precision": ox.FP16_PRECISION if fp16 else "fp32 compute; weights BF16 (widened by Cast)",
         "weights_in_memory": ox.weights_in_memory(report),
     }
     calibration = {"temperature": [1.0, 1.0, 1.0], "temperature_by_options": {},
@@ -294,9 +296,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
     ap.add_argument("--model", default=None)
+    ap.add_argument("--fp16", action="store_true", help="fp16 compute in the trunk (the -fp16 GPU tags)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    export(a.out, a.model or ref.snapshot())
+    export(a.out, a.model or ref.snapshot(), fp16=a.fp16)
 
 
 if __name__ == "__main__":

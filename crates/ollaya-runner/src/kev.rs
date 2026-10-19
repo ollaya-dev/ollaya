@@ -167,6 +167,7 @@ impl KevModel {
             &encoding.rows,
             self.seq_multiple,
             self.layout.special_tokens.pad,
+            self.device,
         )
     }
 
@@ -195,6 +196,7 @@ pub(crate) fn pointer_scores(
     rows: &[KevRow],
     seq_multiple: usize,
     pad: u32,
+    device: Device,
 ) -> Result<Vec<Vec<f32>>, Error> {
     let mut order: Vec<usize> = (0..rows.len()).collect();
     order.sort_by_key(|&i| rows[i].ids.len());
@@ -223,11 +225,15 @@ pub(crate) fn pointer_scores(
                 opt_pos[[r, c]] = p as i64;
             }
         }
-        let outputs = session.run(ort::inputs![
-            "input_ids" => ort::value::Tensor::from_array(input_ids)?,
-            "decide_pos" => ort::value::Tensor::from_array(decide_pos)?,
-            "opt_pos" => ort::value::Tensor::from_array(opt_pos)?,
-        ])?;
+        let options = crate::engine::run_options(device, batch.len() * seq, TOKEN_BUDGET)?;
+        let outputs = session.run_with_options(
+            ort::inputs![
+                "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+                "decide_pos" => ort::value::Tensor::from_array(decide_pos)?,
+                "opt_pos" => ort::value::Tensor::from_array(opt_pos)?,
+            ],
+            &options,
+        )?;
         let out = outputs[OUTPUT]
             .try_extract_array::<f32>()?
             .into_dimensionality::<Ix2>()

@@ -115,7 +115,18 @@ await build({
   jsxImportSource: 'hono/jsx',
   logLevel: 'warning',
 })
-const { renderSite } = await import(`${pathToFileURL(bundle).href}?t=${Date.now()}`)
+const { renderSite, withReadmeBlocks } = await import(`${pathToFileURL(bundle).href}?t=${Date.now()}`)
+// The README's measured numbers come from results/ (src/data/readme.ts): README=write rewrites them, otherwise a stale
+// block fails the build.
+const readmePath = join(root, '..', 'README.md')
+const readme = await readFile(readmePath, 'utf8')
+// GitHub shows the README, so its links go to the production site whatever SITE_ORIGIN this build uses.
+const readmeNow = withReadmeBlocks(readme, DEFAULT_ORIGIN)
+if (readmeNow !== readme) {
+  if (process.env.README !== 'write') throw new Error('README.md: its results blocks are stale; run `npm run readme` in site/')
+  await writeFile(readmePath, readmeNow)
+  console.log('README.md: results blocks rewritten')
+}
 const bench = resolveOrigin(process.env.BENCH_ORIGIN?.trim() || DEFAULT_BENCH_ORIGIN)
 const files = await renderSite({ origin, bench, assetVersions, stars: await githubStars() })
 

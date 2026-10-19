@@ -1,0 +1,486 @@
+{
+ "schema": 1,
+ "date": "2026-10-18",
+ "machine": "rtx-5090",
+ "device": "cuda",
+ "servers": {
+  "ollama": "0.40.6"
+ },
+ "note": "Ollama 0.40.6 (ollama-linux-amd64), every decision model of its library as `ollama pull` serves it, one model loaded and one request at a time (OLLAMA_NUM_PARALLEL=1), on the machine of Ollaya Bench 2026.10. Built from the raw outputs of bench_public.py and bench_typed.py with their summarize functions. Compared in docs/measurements/2026-10-ollama-0.40.md.",
+ "suite": "typed-decisions",
+ "ollama": "0.40.6",
+ "protocol": {
+  "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each (2,000 questions: 600 choice, 600 noul, 800 score)",
+  "source": "https://huggingface.co/datasets/LocalLLaMA/typed-decisions",
+  "runner": "convert/ollaya_convert/bench_typed.py",
+  "client": "one request (one state, its five questions) at a time over HTTP to /v1/systemone, timed by the client",
+  "accuracy": "argmax of the returned probabilities against the gold label, over all 2,000 questions; a rejected request counts as wrong on its five questions; 95 % bootstrap interval over states",
+  "ece": "ten-bin expected calibration error of the top probability, pooled over the answered questions"
+ },
+ "results": [
+  {
+   "server": "ollama",
+   "model": "laya:421m-typed-decisions-bf16",
+   "weights": "BF16, 0.8 GB",
+   "answered_by": [
+    "laya:421m-typed-decisions-bf16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.7655,
+   "by_type": {
+    "choice": 0.73,
+    "noul": 0.8567,
+    "score": 0.7238
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.728,
+    "customer_service": 0.764,
+    "invoice_processing": 0.802,
+    "security_incidents": 0.768
+   },
+   "ece": 0.2128,
+   "brier": 0.3997,
+   "soft_ce": 0.8845,
+   "median_ms": 39.3,
+   "p95_ms": 56.4,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "clef:27b-q8_0",
+   "weights": "Q8_0, 29.7 GB",
+   "answered_by": [
+    "clef:27b-q8_0"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.723,
+   "by_type": {
+    "choice": 0.6417,
+    "noul": 0.8467,
+    "score": 0.6913
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.624,
+    "customer_service": 0.742,
+    "invoice_processing": 0.778,
+    "security_incidents": 0.748
+   },
+   "ece": 0.0205,
+   "brier": 0.3698,
+   "soft_ce": 0.9581,
+   "median_ms": 3162.3,
+   "p95_ms": 3638.2,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "clef",
+   "weights": "Q4_K_M, 20.2 GB",
+   "answered_by": [
+    "clef"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.718,
+   "by_type": {
+    "choice": 0.645,
+    "noul": 0.8417,
+    "score": 0.68
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.638,
+    "customer_service": 0.732,
+    "invoice_processing": 0.766,
+    "security_incidents": 0.736
+   },
+   "ece": 0.0191,
+   "brier": 0.3732,
+   "soft_ce": 0.9598,
+   "median_ms": 207.2,
+   "p95_ms": 251.0,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "clef-flash",
+   "weights": "Q8_0, 10.6 GB",
+   "answered_by": [
+    "clef-flash"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.705,
+   "by_type": {
+    "choice": 0.7083,
+    "noul": 0.8167,
+    "score": 0.6188
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.614,
+    "customer_service": 0.762,
+    "invoice_processing": 0.752,
+    "security_incidents": 0.692
+   },
+   "ece": 0.0088,
+   "brier": 0.3911,
+   "soft_ce": 0.9763,
+   "median_ms": 72.0,
+   "p95_ms": 91.1,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "pplx-decider",
+   "weights": "Q4_K_M, 17.5 GB",
+   "answered_by": [
+    "pplx-decider"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.7015,
+   "by_type": {
+    "choice": 0.6567,
+    "noul": 0.8,
+    "score": 0.6613
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.62,
+    "customer_service": 0.774,
+    "invoice_processing": 0.69,
+    "security_incidents": 0.722
+   },
+   "ece": 0.06,
+   "brier": 0.394,
+   "soft_ce": 1.1043,
+   "median_ms": 298.2,
+   "p95_ms": 336.7,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "kev:9b-q8_0",
+   "weights": "Q8_0, 9.5 GB",
+   "answered_by": [
+    "kev:9b-q8_0"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.689,
+   "by_type": {
+    "choice": 0.6483,
+    "noul": 0.7567,
+    "score": 0.6687
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.504,
+    "customer_service": 0.75,
+    "invoice_processing": 0.798,
+    "security_incidents": 0.704
+   },
+   "ece": 0.0734,
+   "brier": 0.4312,
+   "soft_ce": 0.9813,
+   "median_ms": 137.9,
+   "p95_ms": 162.1,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "nimble",
+   "weights": "Q8_0, 9.5 GB",
+   "answered_by": [
+    "nimble"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.676,
+   "by_type": {
+    "choice": 0.6133,
+    "noul": 0.835,
+    "score": 0.6038
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.558,
+    "customer_service": 0.784,
+    "invoice_processing": 0.696,
+    "security_incidents": 0.666
+   },
+   "ece": 0.0747,
+   "brier": 0.4491,
+   "soft_ce": 1.255,
+   "median_ms": 140.8,
+   "p95_ms": 174.8,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "kev",
+   "weights": "Q4_K_M, 5.6 GB",
+   "answered_by": [
+    "kev"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.6695,
+   "by_type": {
+    "choice": 0.645,
+    "noul": 0.7283,
+    "score": 0.6438
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.504,
+    "customer_service": 0.738,
+    "invoice_processing": 0.728,
+    "security_incidents": 0.708
+   },
+   "ece": 0.0595,
+   "brier": 0.4443,
+   "soft_ce": 0.9944,
+   "median_ms": 138.3,
+   "p95_ms": 158.6,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "kev:4b-q8_0",
+   "weights": "Q8_0, 4.5 GB",
+   "answered_by": [
+    "kev:4b-q8_0"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.665,
+   "by_type": {
+    "choice": 0.6467,
+    "noul": 0.755,
+    "score": 0.6112
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.57,
+    "customer_service": 0.714,
+    "invoice_processing": 0.68,
+    "security_incidents": 0.696
+   },
+   "ece": 0.0904,
+   "brier": 0.4652,
+   "soft_ce": 0.9904,
+   "median_ms": 128.8,
+   "p95_ms": 141.8,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "tev1",
+   "weights": "Q8_0, 4.6 GB",
+   "answered_by": [
+    "tev1"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.6515,
+   "by_type": {
+    "choice": 0.6617,
+    "noul": 0.7067,
+    "score": 0.6025
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.53,
+    "customer_service": 0.732,
+    "invoice_processing": 0.648,
+    "security_incidents": 0.696
+   },
+   "ece": 0.0602,
+   "brier": 0.4603,
+   "soft_ce": 1.1521,
+   "median_ms": 120.1,
+   "p95_ms": 138.7,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "nimble-v3",
+   "weights": "Q8_0, 9.5 GB",
+   "answered_by": [
+    "nimble-v3"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.648,
+   "by_type": {
+    "choice": 0.6433,
+    "noul": 0.7483,
+    "score": 0.5763
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.596,
+    "customer_service": 0.688,
+    "invoice_processing": 0.696,
+    "security_incidents": 0.612
+   },
+   "ece": 0.1895,
+   "brier": 0.5146,
+   "soft_ce": 1.5031,
+   "median_ms": 147.9,
+   "p95_ms": 175.5,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "nimble-v3:9b-q8_0",
+   "weights": "Q8_0, 9.5 GB",
+   "answered_by": [
+    "nimble-v3:9b-q8_0"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.648,
+   "by_type": {
+    "choice": 0.6433,
+    "noul": 0.7483,
+    "score": 0.5763
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.596,
+    "customer_service": 0.688,
+    "invoice_processing": 0.696,
+    "security_incidents": 0.612
+   },
+   "ece": 0.1895,
+   "brier": 0.5146,
+   "soft_ce": 1.5031,
+   "median_ms": 155.7,
+   "p95_ms": 190.4,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "tev1:0.8b",
+   "weights": "Q8_0, 0.8 GB",
+   "answered_by": [
+    "tev1:0.8b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.52,
+   "by_type": {
+    "choice": 0.5167,
+    "noul": 0.625,
+    "score": 0.4437
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.384,
+    "customer_service": 0.614,
+    "invoice_processing": 0.556,
+    "security_incidents": 0.526
+   },
+   "ece": 0.0986,
+   "brier": 0.6297,
+   "soft_ce": 1.2871,
+   "median_ms": 91.6,
+   "p95_ms": 107.4,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "kev:0.8b-q8_0",
+   "weights": "Q8_0, 0.8 GB",
+   "answered_by": [
+    "kev:0.8b-q8_0"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.4605,
+   "by_type": {
+    "choice": 0.505,
+    "noul": 0.5283,
+    "score": 0.3762
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.35,
+    "customer_service": 0.55,
+    "invoice_processing": 0.438,
+    "security_incidents": 0.504
+   },
+   "ece": 0.0341,
+   "brier": 0.6063,
+   "soft_ce": 1.1181,
+   "median_ms": 98.7,
+   "p95_ms": 110.4,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "laya",
+   "weights": "BF16, 0.8 GB",
+   "answered_by": [
+    "laya"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 7,
+   "accuracy": 0.355,
+   "by_type": {
+    "choice": 0.28,
+    "noul": 0.475,
+    "score": 0.3212
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.386,
+    "customer_service": 0.36,
+    "invoice_processing": 0.36,
+    "security_incidents": 0.314
+   },
+   "ece": 0.1774,
+   "brier": 0.7502,
+   "soft_ce": 1.3354,
+   "median_ms": 67.2,
+   "p95_ms": 74.4,
+   "trained_on_split": false
+  },
+  {
+   "server": "ollama",
+   "model": "laya:322m-multilingual-bf16",
+   "weights": "BF16, 0.7 GB",
+   "answered_by": [
+    "laya:322m-multilingual-bf16"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.3535,
+   "by_type": {
+    "choice": 0.2967,
+    "noul": 0.4983,
+    "score": 0.2875
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.286,
+    "customer_service": 0.42,
+    "invoice_processing": 0.308,
+    "security_incidents": 0.4
+   },
+   "ece": 0.311,
+   "brier": 0.8904,
+   "soft_ce": 1.8561,
+   "median_ms": 28.1,
+   "p95_ms": 38.9,
+   "trained_on_split": false
+  }
+ ]
+}

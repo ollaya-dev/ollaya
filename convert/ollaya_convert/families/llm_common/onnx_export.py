@@ -6,15 +6,22 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import tempfile
 import time
+from collections import defaultdict
 
+import numpy as np
 import onnx
 import torch
+from onnx import TensorProto, helper, numpy_helper
 
 from ...weightless_sharded import make_weightless
 
 OPSET = 20
+# decision.json "precision" of the -fp16 graphs (qwen35.half_trunk).
+FP16_PRECISION = ("fp16 compute, with the RMSNorms, the gated delta rule and the attention softmax in fp32; weights "
+                  "cast from the checkpoint's (at load, or per forward pass with weights_in_memory bf16)")
 SEQ_MULTIPLE = 64
 
 
@@ -43,8 +50,70 @@ def export_graph(module, args, input_names, output_names, dynamic_shapes, path, 
         optimize_ir(program.model, input_size_limit=fold_limit, output_size_limit=fold_limit)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     program.save(path, external_data=True)
+    model = onnx.load(path, load_external_data=False)
+    if sequence_splits_to_split(model):
+        onnx.save(model, path)
     onnx.checker.check_model(path, full_check=False)
     return time.time() - t0
+
+
+def sequence_splits_to_split(model):
+    """Rewrite each `SplitToSequence` read only by `SequenceAt` at constant positions (how torch.split and
+    torch.chunk export) into one `Split`. ONNX Runtime has no CUDA kernel for SplitToSequence, so every one
+    ran on the CPU with copies to the host and back: a quarter of a kev-4b request on an RTX 4090. The values
+    are identical. Returns the number of nodes rewritten."""
+    g = model.graph
+    consts = {t.name: numpy_helper.to_array(t) for t in g.initializer if t.data_location != TensorProto.EXTERNAL}
+    for n in g.node:
+        if n.op_type == "Constant" and len(n.attribute) == 1 and n.attribute[0].name == "value":
+            consts[n.output[0]] = numpy_helper.to_array(n.attribute[0].t)
+    readers = defaultdict(list)
+    for n in g.node:
+        for i in n.input:
+            readers[i].append(n)
+    graph_outputs = {o.name for o in g.output}
+    dims = None
+    replaced, nodes, done = {}, [], 0
+    for n in g.node:
+        if id(n) in replaced:
+            nodes.append(replaced.pop(id(n)))
+            continue
+        users = readers[n.output[0]] if n.op_type == "SplitToSequence" else []
+        if (len(n.input) < 2 or n.input[1] not in consts or not users or n.output[0] in graph_outputs
+                or any(u.op_type != "SequenceAt" or u.input[1] not in consts for u in users)):
+            nodes.append(n)
+            continue
+        axis = next((a.i for a in n.attribute if a.name == "axis"), 0)
+        sizes = consts[n.input[1]].astype(np.int64)
+        split_input = n.input[1]
+        if sizes.ndim == 0:   # torch.chunk: equal parts of a dimension the graph must know
+            if dims is None:
+                inferred = onnx.shape_inference.infer_shapes(model).graph
+                dims = {v.name: [d.dim_value if d.HasField("dim_value") else None for d in v.type.tensor_type.shape.dim]
+                        for v in list(inferred.value_info) + list(inferred.input)}
+            shape = dims.get(n.input[0])
+            dim = shape[axis] if shape and -len(shape) <= axis < len(shape) else None
+            if not dim:
+                nodes.append(n)
+                continue
+            s = int(sizes)
+            sizes = np.array([s] * (dim // s) + ([dim % s] if dim % s else []), dtype=np.int64)
+            split_input = n.output[0] + "_sizes"
+            g.initializer.append(numpy_helper.from_array(sizes, split_input))
+        parts = ["%s_part%d" % (n.output[0], i) for i in range(len(sizes))]
+        nodes.append(helper.make_node("Split", [n.input[0], split_input], parts, axis=axis, name=n.name))
+        for u in users:
+            i = int(consts[u.input[1]])
+            replaced[id(u)] = helper.make_node("Identity", [parts[i + len(sizes) if i < 0 else i]], [u.output[0]],
+                                               name=u.name)
+        done += 1
+    if done:
+        del g.node[:]
+        g.node.extend(nodes)
+        kept = [v for v in g.value_info if not v.type.HasField("sequence_type")]
+        del g.value_info[:]
+        g.value_info.extend(kept)
+    return done
 
 
 def sha256_file(path, chunk=1 << 24):
@@ -115,3 +184,30 @@ def write_json(path, obj):
 
 def cleanup(path):
     shutil.rmtree(path, ignore_errors=True)
+
+
+def main():
+    """Apply `sequence_splits_to_split` to exported model directories in place (graphs exported before it):
+
+        python -m ollaya_convert.families.llm_common.onnx_export out/kev-4b out/nimble-9b-v2 ...
+    """
+    for d in sys.argv[1:]:
+        path = os.path.join(d, "model.onnx")
+        model = onnx.load(path, load_external_data=False)
+        n = sequence_splits_to_split(model)
+        if n:
+            # No onnx.checker here: it refuses weights that are hard or symbolic links. Parity checks the graph.
+            onnx.save(model, path + ".tmp")
+            os.replace(path + ".tmp", path)   # a new file: never write through a hard link to a registry blob
+            files = os.path.join(d, "files.json")
+            if os.path.exists(files):
+                f = json.load(open(files, encoding="utf-8"))
+                for layer in f.get("layers", []):
+                    if layer.get("path") == "model.onnx":
+                        layer.update(bytes=os.path.getsize(path), sha256=sha256_file(path))
+                write_json(files, f)
+        print("%s: %d SplitToSequence rewritten" % (d, n))
+
+
+if __name__ == "__main__":
+    main()

@@ -90,7 +90,7 @@ curl http://localhost:11435/api/decide -d '{
 
 ## Performance
 
-On an RTX 4090 at fp16, a request with five questions takes 9.6 ms on `laya:en` and 8.1 ms on `laya:multilingual` at the median, end to end through the HTTP API.
+On an RTX 5090 at fp16, a request with five questions takes {{result laya:en gpu.p50_ms 0}} ms on `laya:en` and {{result laya:multilingual gpu.p50_ms 0}} ms on `laya:multilingual` at the median, end to end through the HTTP API (Ollaya Bench).
 
 Figures published on the Laya model card, measured on an NVIDIA Tesla T4:
 
@@ -100,7 +100,7 @@ Figures published on the Laya model card, measured on an NVIDIA Tesla T4:
 | Laya multilingual | 32.8 ms | 72.3 ms | – |
 | TypeSafe Jev | 236–276 ms p50 (third-party) | – | 0.246 |
 
-On batched calls `laya:multilingual` is up to ~2.2× faster than `laya:en`; for a single question the two are close. `laya:typed-decisions` reaches 0.766 accuracy on typed-decisions, against 0.727 published for Jev 1.13 on the Laya card (Winnow's benchmark report has 0.738 for Jev on the same questions). Jev latencies come from [AbdelStark/jev-benchmarks](https://github.com/AbdelStark/jev-benchmarks) and [nibzard/decision-model-benchmark](https://github.com/nibzard/decision-model-benchmark); setups differ.
+On batched calls `laya:multilingual` is up to ~2.2× faster than `laya:en`; for a single question the two are close. `laya:typed-decisions` reaches {{result laya:typed-decisions typed.accuracy 3}} accuracy on typed-decisions, against 0.727 published for Jev 1.13 on the Laya card (Winnow's benchmark report has 0.738 for Jev on the same questions). Jev latencies come from [AbdelStark/jev-benchmarks](https://github.com/AbdelStark/jev-benchmarks) and [nibzard/decision-model-benchmark](https://github.com/nibzard/decision-model-benchmark); setups differ.
 
 ## ONNX export
 
@@ -108,7 +108,7 @@ Ollaya runs Laya as ONNX. Across 2,383 questions per checkpoint (`en`, `multilin
 
 ## Limitations
 
-- **Zero-shot typed decisions.** The base checkpoints (`en`, `multilingual`) are near chance zero-shot on typed-decisions (0.362). Use `laya:typed-decisions` for those workflows.
+- **Zero-shot typed decisions.** The base checkpoints (`en`, `multilingual`) are near chance zero-shot on typed-decisions ({{result laya:en typed.accuracy 3}} for `laya:en`). Use `laya:typed-decisions` for those workflows.
 - **Many options.** Choice questions with more than ~20 options are weaker: 0.425 on Banking77, against 0.870 for Jev.
 - **Calibration.** The raw checkpoints are over-confident unless their temperatures are refit, and `laya:multilingual` ships without refit temperatures. For thresholds you rely on, refit calibration on your own labelled data and bake it in with `CALIBRATION` in a [Modelfile](/docs/modelfile).
 

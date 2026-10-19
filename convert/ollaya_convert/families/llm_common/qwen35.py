@@ -106,6 +106,17 @@ def _rotate_half(x):
     return torch.cat((-x[..., h:], x[..., :h]), dim=-1)
 
 
+def half_trunk(trunk):
+    """fp16 compute for an exported trunk: weights and activations in fp16, while the RMSNorms, the gated
+    delta rule and the attention softmax stay fp32, as HF's modules and this file upcast them. The rotary
+    frequencies and the doubling masks stay fp32 (fp16 positions are off by whole radians at 8,000 tokens)."""
+    keep = {k: getattr(trunk, k) for k in ("inv_freq", "masks")}
+    trunk.half()
+    for k, v in keep.items():
+        setattr(trunk, k, v)
+    return trunk
+
+
 class Qwen35Trunk(nn.Module):
     """input_ids [B, T] -> last hidden state [B, T, hidden] (after the final norm), positions 0..T-1.
 

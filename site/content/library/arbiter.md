@@ -4,9 +4,9 @@ Arbiter by [Codekins Pvt Ltd · Zyot Lab](https://huggingface.co/hiteshluke/arbi
 
 ## Models
 
-| Tag | Weights | Questions it answers | Three or more questions, RTX 4090 |
+| Tag | Weights | Questions it answers | Five questions, RTX 5090 |
 |---|---|---|---|
-| `arbiter:latest`, `arbiter:4b` | Arbiter v3.3: Gemma 3 4B IT (BF16) with the authors' LoRA and head, about 8 GB | noul, choices of 1 to 16 options, scores of exactly 6 levels | 154 ms (runner) |
+| `arbiter:latest`, `arbiter:4b` | Arbiter v3.3: Gemma 3 4B IT (BF16) with the authors' LoRA and head, about 8 GB | noul, choices of 1 to 16 options, scores of exactly 6 levels | {{result arbiter:4b gpu.p50_ms 0}} ms |
 
 On typed-decisions (all 400 states, argmax against the majority label) the fixed head answers 1,200 of the 2,000 questions: none of the 800 score questions has 6 levels. On those 1,200 it scores 0.620 (choice 0.563, yes/no 0.677), with no fitted temperature, so the number is not comparable with the other models' full scores.
 

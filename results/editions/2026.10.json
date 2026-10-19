@@ -9,7 +9,11 @@
   "2026-10-14-latency-rtx5090-cuda.json",
   "2026-10-14-latency-rtx5090-cpu.json",
   "2026-10-14-public-benchmark-rtx5090-cuda.json",
-  "2026-10-14-typed-decisions-rtx5090-cuda.json"
+  "2026-10-14-typed-decisions-rtx5090-cuda.json",
+  "2026-10-19-latency-rtx5090-cuda.json",
+  "2026-10-19-latency-rtx5090-cpu.json",
+  "2026-10-19-public-benchmark-rtx5090-cuda.json",
+  "2026-10-19-typed-decisions-rtx5090-cuda.json"
  ],
  "models": [
   "decima:small",
@@ -47,12 +51,40 @@
   "clef:flash",
   "jeeves:9b",
   "nimble:9b",
-  "jeb:27b"
+  "jeb:27b",
+  "nimble:9b-v3",
+  "pplx-decider:flash",
+  "strands-decider:2b"
  ],
  "score": {
   "definition": "Mean over 14 tasks (13 public subsets and typed-decisions, equal weight) of the chance-corrected accuracy 100 * (accuracy - chance) / (1 - chance); chance is the mean of 1/K over the task's questions. A model trained on a task's train split is scored on the other tasks",
   "interval": "95 % bootstrap, 1000 draws, seed 20261014; questions resampled within each subset, typed-decisions states whole",
   "results": [
+   {
+    "model": "pplx-decider:flash",
+    "score": 73.65,
+    "score_ci": [
+     71.96,
+     75.21
+    ],
+    "tasks": {
+     "vitaminc-dev": 86.23,
+     "massive-en-US": 90.92,
+     "massive-de-DE": 91.23,
+     "boolq": 76.0,
+     "squad2": 85.28,
+     "paws": 87.2,
+     "multinli": 87.96,
+     "civil_comments": 85.33,
+     "aegis2": 68.8,
+     "helpsteer2": 23.19,
+     "summeval-relevance": 42.71,
+     "summeval-consistency": 80.03,
+     "pubmedqa": 66.4,
+     "typed-decisions": 59.85
+    },
+    "trained_on": []
+   },
    {
     "model": "jeb:27b",
     "score": 67.85,
@@ -285,6 +317,31 @@
     "trained_on": []
    },
    {
+    "model": "nimble:9b-v3",
+    "score": 62.43,
+    "score_ci": [
+     60.47,
+     64.39
+    ],
+    "tasks": {
+     "vitaminc-dev": 69.2,
+     "massive-en-US": 85.48,
+     "massive-de-DE": 83.06,
+     "boolq": 72.0,
+     "squad2": 62.54,
+     "paws": 63.2,
+     "multinli": 83.44,
+     "civil_comments": 78.0,
+     "aegis2": 48.0,
+     "helpsteer2": 26.2,
+     "summeval-relevance": 21.88,
+     "summeval-consistency": 70.49,
+     "pubmedqa": 62.2,
+     "typed-decisions": 48.35
+    },
+    "trained_on": []
+   },
+   {
     "model": "nimble:9b",
     "score": 61.86,
     "score_ci": [
@@ -306,6 +363,31 @@
      "summeval-consistency": 80.9,
      "pubmedqa": 63.4,
      "typed-decisions": 50.92
+    },
+    "trained_on": []
+   },
+   {
+    "model": "strands-decider:2b",
+    "score": 61.27,
+    "score_ci": [
+     59.25,
+     63.12
+    ],
+    "tasks": {
+     "vitaminc-dev": 64.19,
+     "massive-en-US": 82.15,
+     "massive-de-DE": 77.61,
+     "boolq": 72.67,
+     "squad2": 65.89,
+     "paws": 70.4,
+     "multinli": 76.92,
+     "civil_comments": 81.33,
+     "aegis2": 43.2,
+     "helpsteer2": 23.19,
+     "summeval-relevance": 19.79,
+     "summeval-consistency": 73.96,
+     "pubmedqa": 62.8,
+     "typed-decisions": 43.66
     },
     "trained_on": []
    },
@@ -951,5 +1033,39 @@
   "jeb:27b": [
    "typed-decisions"
   ]
- }
+ },
+ "updates": [
+  {
+   "release": "0.14.0",
+   "date": "2026-10-19",
+   "runs": [
+    "2026-10-19-latency-rtx5090-cuda.json",
+    "2026-10-19-latency-rtx5090-cpu.json",
+    "2026-10-19-public-benchmark-rtx5090-cuda.json",
+    "2026-10-19-typed-decisions-rtx5090-cuda.json"
+   ],
+   "models": [
+    "clef:flash",
+    "clef:flash-fp16",
+    "decider:0.8b",
+    "decider:2b",
+    "decider:4b",
+    "decision:eos",
+    "jeeves:9b",
+    "kev:0.8b",
+    "kev:0.8b-fp16",
+    "kev:4b",
+    "kev:4b-fp16",
+    "kev:9b",
+    "kev:9b-fp16",
+    "nimble:9b",
+    "nimble:9b-fp16",
+    "nimble:9b-v3",
+    "pplx-decider:flash",
+    "pplx-decider:flash-fp16",
+    "strands-decider:2b",
+    "strands-decider:2b-fp16"
+   ]
+  }
+ ]
 }

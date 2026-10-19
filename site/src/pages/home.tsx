@@ -5,6 +5,8 @@ import { LogoMark } from '../components/Logo'
 import { Legend } from '../components/charts'
 import { btnPrimary, Code, CodeBlock, textLink } from '../components/ui'
 import { catalog, comingNext, featuredTags, fullName } from '../data/catalog'
+import { result } from '../data/numbers'
+import { publicBench, shortName } from '../data/results'
 import { hero, type HeroOption, type HeroQuestion } from '../data/hero'
 import { GITHUB_URL, LOCAL_API } from '../site'
 
@@ -357,13 +359,13 @@ function Fast() {
     <Section
       id="fast"
       title="Fast and accurate"
-      lead="Close to Jev's accuracy, in under 100 ms."
-      body="A decision model answers in a single forward pass, with no token-by-token generation. On an RTX 4090, winnow:e4b answers a five-question request in 89 ms end to end, and scores 0.722 on typed decisions against 0.738 for TypeSafe's hosted Jev. Smaller models such as laya answer in about 10 ms, and run well on a CPU."
+      lead={`Close to Jev's accuracy, in ${result('winnow:e4b', 'gpu.p50_ms', 0)} ms.`}
+      body={`A decision model answers in a single forward pass, with no token-by-token generation. On an RTX 5090, winnow:e4b answers a five-question request in ${result('winnow:e4b', 'gpu.p50_ms', 0)} ms end to end, and scores ${result('winnow:e4b', 'typed.accuracy', 3)} on typed decisions; TypeSafe reports ${JEV_TYPED} for its hosted Jev. Smaller models such as laya:en answer in ${result('laya:en', 'gpu.p50_ms', 0)} ms, and run well on a CPU.`}
     >
       <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-2">
-        <Stat value="89" unit="ms" label="winnow:e4b on Ollaya" detail="RTX 4090, five questions · 0.722 accuracy" />
+        <Stat value={result('winnow:e4b', 'gpu.p50_ms', 0)} unit="ms" label="winnow:e4b on Ollaya" detail={`RTX 5090, five questions · ${result('winnow:e4b', 'typed.accuracy', 3)} accuracy`} />
         <div class="border-t border-line sm:border-t-0 sm:border-l">
-          <Stat value="236–276" unit="ms" label="TypeSafe Jev" detail="Hosted API, median request · 0.738 accuracy" muted />
+          <Stat value={JEV_TYPED} unit="" label="TypeSafe Jev" detail="Hosted API · typed-decisions accuracy as TypeSafe reports it" muted />
         </div>
       </div>
 
@@ -428,26 +430,31 @@ function Fast() {
 // and scored with Bespoke's own runner (convert/ollaya_convert/bench_public.py). Both servers ran on the same
 // RTX 5090, one request at a time through /v1/systemone. Accuracy: macro average over the 13 subsets. ECE:
 // ten-bin expected calibration error of the top probability, pooled over the questions (lower is better).
-// Latency: median request, HTTP included. Numbers: results/runs/2026-10-14-public-benchmark-rtx5090-cuda.json
-// (Ollaya 0.13.0) and docs/measurements/2026-10-ollama-0.40.md (Ollama 0.40.6, and pplx-decider:flash, measured
-// on Ollaya before its release).
+// Latency: median request, HTTP included. The numbers are results/: the Ollaya Bench edition and its updates for
+// Ollaya, Ollama 0.40.6's runs for Ollama (publicBench); docs/measurements/2026-10-ollama-0.40.md discusses them.
 type VsRun = { tag: string; server: 'ollaya' | 'ollama'; acc: number; ece: number; ms: number }
-const vsRuns: VsRun[] = [
-  { tag: 'pplx-decider:flash', server: 'ollaya', acc: 0.824, ece: 0.016, ms: 232 },
-  { tag: 'pplx-decider', server: 'ollama', acc: 0.816, ece: 0.017, ms: 96 },
-  { tag: 'jeb:27b', server: 'ollaya', acc: 0.788, ece: 0.024, ms: 98 },
-  { tag: 'winnow:12b', server: 'ollaya', acc: 0.773, ece: 0.141, ms: 57 },
-  { tag: 'clef-flash', server: 'ollama', acc: 0.772, ece: 0.024, ms: 43 },
-  { tag: 'clef:flash', server: 'ollaya', acc: 0.772, ece: 0.025, ms: 284 },
-  { tag: 'jeb:9b', server: 'ollaya', acc: 0.766, ece: 0.039, ms: 34 },
-  { tag: 'nimble', server: 'ollama', acc: 0.752, ece: 0.115, ms: 42 },
-  { tag: 'tev1', server: 'ollama', acc: 0.75, ece: 0.087, ms: 30 },
-  { tag: 'nimble:9b', server: 'ollaya', acc: 0.748, ece: 0.022, ms: 328 },
-  { tag: 'kev:4b', server: 'ollaya', acc: 0.745, ece: 0.062, ms: 187 },
-  { tag: 'kev:4b-q8_0', server: 'ollama', acc: 0.744, ece: 0.062, ms: 34 },
-  { tag: 'tev1:0.8b', server: 'ollama', acc: 0.664, ece: 0.118, ms: 21 },
-  { tag: 'laya:multilingual', server: 'ollaya', acc: 0.579, ece: 0.155, ms: 15 },
+const VS_TAGS: [string, VsRun['server']][] = [
+  ['pplx-decider:flash', 'ollaya'], ['pplx-decider', 'ollama'], ['jeb:27b', 'ollaya'], ['winnow:12b', 'ollaya'],
+  ['clef-flash', 'ollama'], ['clef:flash', 'ollaya'], ['jeb:9b', 'ollaya'], ['nimble', 'ollama'], ['tev1', 'ollama'],
+  ['nimble:9b', 'ollaya'], ['kev:4b', 'ollaya'], ['kev:4b-q8_0', 'ollama'], ['tev1:0.8b', 'ollama'],
+  ['laya:multilingual', 'ollaya'],
 ]
+const vsRuns: VsRun[] = VS_TAGS.map(([tag, server]) => {
+  // Ollama's names stay Ollama's: its `pplx-decider` is the 27B, not Ollaya's `pplx-decider:latest`.
+  const r = publicBench?.results.find((x) => x.server === server && (server === 'ollama' ? x.model : shortName(x.model)) === tag)
+  if (!r) throw new Error(`home: no ${server} public-benchmark row for ${tag} in results/`)
+  return { tag, server, acc: r.macro_accuracy, ece: r.pooled_ece, ms: Math.round(r.median_ms) }
+}).sort((a, b) => b.acc - a.acc)
+const vs = (tag: string, server: VsRun['server']) => vsRuns.find((r) => r.tag === tag && r.server === server)!
+/** How many times faster Ollama is on the same weights, as a range over the pairs both serve. */
+function speedup() {
+  const r = [['nimble:9b', 'nimble'], ['clef:flash', 'clef-flash'], ['kev:4b', 'kev:4b-q8_0']].map(([a, b]) => vs(a!, 'ollaya').ms / vs(b!, 'ollama').ms)
+  const lo = Math.floor(Math.min(...r))
+  const hi = Math.round(Math.max(...r))
+  return lo === hi ? String(lo) : `${lo} to ${hi}`
+}
+// A number TypeSafe publishes for its hosted model (the typed-decisions dataset card); not one we measured.
+const JEV_TYPED = '0.738'
 // The accuracy axis of the comparison: a dot on a focused range, not a bar from zero, so the
 // differences between 0.58 and 0.77 are visible; the ticks print the range.
 const VS_MIN = 0.55
@@ -478,7 +485,7 @@ function VsBar({ run }: { run: VsRun }) {
     <li class={VS_GRID}>
       <span class="order-1 flex min-h-9 flex-col justify-center leading-tight sm:order-none">
         <span class="font-mono text-xs text-fg sm:text-[13px]">{run.tag}</span>
-        <span class="text-xs text-muted">{ollama ? 'on Ollama 0.35' : 'on Ollaya'}</span>
+        <span class="text-xs text-muted">{ollama ? 'on Ollama 0.40.6' : 'on Ollaya'}</span>
       </span>
       <span class="relative order-5 col-span-4 flex h-6 items-center sm:order-none sm:col-span-1 sm:h-9" aria-hidden="true">
         <span class="relative h-px w-full bg-line">
@@ -504,15 +511,15 @@ function VersusOllama() {
       id="vs-ollama"
       title="Ollaya and Ollama"
       lead="Inspired by Ollama, measured side by side."
-      body="Ollaya borrows Ollama's design: one binary, pull and run, a local API. Ollama 0.40 serves nine decision models, so we ran all of them on the same RTX 5090 over Bespoke Labs' public benchmark: 3,880 human-labeled questions from 13 datasets, scored with Bespoke's own code. Perplexity's models score highest: the 4B flash model on Ollaya (0.824), then the 27B on Ollama (0.816). On the same weights Ollama is 4 to 8 times faster. Ollaya runs more models, applies each author's temperature, and checks every model against its author's code."
+      body={`Ollaya borrows Ollama's design: one binary, pull and run, a local API. Ollama 0.40 serves nine decision models, so we ran all of them on the same RTX 5090 over Bespoke Labs' public benchmark: 3,880 human-labeled questions from 13 datasets, scored with Bespoke's own code. Perplexity's models score highest: the 4B flash model on Ollaya (${vs('pplx-decider:flash', 'ollaya').acc.toFixed(3)}), then the 27B on Ollama (${vs('pplx-decider', 'ollama').acc.toFixed(3)}). On the same weights Ollama is ${speedup()} times faster. Ollaya runs more models, applies each author's temperature, and checks every model against its author's code.`}
     >
       <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-3">
-        <Stat value="0.824" unit="" label="Most accurate on Ollaya: pplx-decider:flash" detail="Ollama's best: 0.816 (pplx-decider, 27B)" />
+        <Stat value={vs('pplx-decider:flash', 'ollaya').acc.toFixed(3)} unit="" label="Most accurate on Ollaya: pplx-decider:flash" detail={`Ollama's best: ${vs('pplx-decider', 'ollama').acc.toFixed(3)} (pplx-decider, 27B)`} />
         <div class="border-t border-line sm:border-t-0 sm:border-l">
           <Stat value="23" unit="" label="Decision model families on Ollaya" detail="Ollama 0.40: nine models" />
         </div>
         <div class="border-t border-line sm:border-t-0 sm:border-l">
-          <Stat value="5.2×" unit="" label="Lower calibration error, same Nimble" detail="ECE 0.022 on Ollaya, 0.115 on Ollama" />
+          <Stat value={`${(vs('nimble', 'ollama').ece / vs('nimble:9b', 'ollaya').ece).toFixed(1)}×`} unit="" label="Lower calibration error, same Nimble" detail={`ECE ${vs('nimble:9b', 'ollaya').ece.toFixed(3)} on Ollaya, ${vs('nimble', 'ollama').ece.toFixed(3)} on Ollama`} />
         </div>
       </div>
 

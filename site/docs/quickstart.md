@@ -40,7 +40,7 @@ refund_requested  yes                                   ████████
 churn_risk        yes                                   ████████████████ 0.99
 ```
 
-`ollaya run` starts the server if it isn't running, pulls the model on first use and loads it. `winnow:e4b` is the recommended model: 0.722 accuracy on typed decisions, close to TypeSafe's Jev (0.738), and 89 ms for these five questions on an RTX 4090. It is an 8 GB download.
+`ollaya run` starts the server if it isn't running, pulls the model on first use and loads it. `winnow:e4b` is the recommended model: {{result winnow:e4b typed.accuracy 3}} accuracy on typed decisions, close to the 0.738 TypeSafe reports for Jev, and {{result winnow:e4b gpu.p50_ms 0}} ms for five questions on an RTX 5090. It is an 8 GB download.
 
 No NVIDIA GPU? Start with `laya`, which answers in a fraction of a second on a CPU. It is a router: it sends English text to `laya:en` and other languages, Turkish for example, to `laya:multilingual`, and pulling `laya` pulls both. [Models](/search) compares the accuracy and speed of every model.
 

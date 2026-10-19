@@ -4,11 +4,11 @@ Jeeves is a decision model by [PostHog](https://huggingface.co/PostHog): Qwen3.5
 
 ## Models
 
-| Tag | Base | Params | Typed-decisions accuracy | Five questions, RTX 4090 |
+| Tag | Base | Params | Typed-decisions accuracy | Five questions, RTX 5090 |
 |---|---|---|---|---|
-| `jeeves:latest`, `jeeves:9b` | Qwen3.5-9B, LoRA merged | 9B | 0.680 | 838 ms |
+| `jeeves:latest`, `jeeves:9b` | Qwen3.5-9B, LoRA merged | 9B | {{result jeeves:9b typed.accuracy 3}} | {{result jeeves:9b gpu.p50_ms 0}} ms |
 
-Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states, measured by Ollaya, with a calibration error (ECE) of 0.031. The authors report 0.804 on their own test split without thinking (0.840 with it), with a calibration error of 0.021 at the fitted temperature.
+Typed-decisions accuracy is the argmax against the majority label on all 400 typed-decisions states, measured by Ollaya, with a calibration error (ECE) of {{result jeeves:9b typed.ece 3}}. The authors report 0.804 on their own test split without thinking (0.840 with it), with a calibration error of 0.021 at the fitted temperature.
 
 ## Usage
 

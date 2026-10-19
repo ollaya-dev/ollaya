@@ -13,6 +13,7 @@ import {
 } from '../data/catalog'
 import { usageTabs, visionUsageTabs } from '../data/examples'
 import { readmes } from '../generated/content'
+import { withResults } from '../data/numbers'
 
 // Pages: /library/<model>, /library/<model>/tags and /library/<model>:<tag>.
 // (/library itself redirects to /search; see public/_redirects and LibraryRedirect below.)
@@ -214,7 +215,7 @@ export function ModelPage({ model }: { model: Model }) {
           <h2 id="readme-title" class="text-base font-semibold text-fg">
             Readme
           </h2>
-          <div class="prose mt-6" dangerouslySetInnerHTML={{ __html: readme }}></div>
+          <div class="prose mt-6" dangerouslySetInnerHTML={{ __html: withResults(readme) }}></div>
         </section>
       ) : null}
     </div>

@@ -1,4 +1,4 @@
-Decision 1.0 is a family of decision models by the [vLLM Semantic Router](https://huggingface.co/llm-semantic-router) contributors, released under Apache-2.0. Each model is a fully fine-tuned Qwen3.5 text backbone plus a small endpoint head. For each question it lays out the context, the question and one segment per option, then scores every option at its last token against the end of the question, in one forward pass. It never generates text.
+Decision 1.0 is a family of decision models by the [vLLM Semantic Router](https://huggingface.co/vllm-sr) contributors, released under Apache-2.0. Each model is a fully fine-tuned Qwen3.5 text backbone plus a small endpoint head. For each question it lays out the context, the question and one segment per option, then scores every option at its last token against the end of the question, in one forward pass. It never generates text.
 
 > Needs Ollaya 0.7.0 or newer, which adds this model family. Update first (`ollaya --version`); an older version downloads the weights and then fails to load them.
 
@@ -20,7 +20,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `deci
 
 ## Speed
 
-- **RTX 4090, end to end:** a five-question request with a short message (700 tokens in all) takes about 217 ms at the median, close to `kev` and `decider:0.8b`.
+- **RTX 5090, through the HTTP API (Ollaya Bench):** a five-question request with a short message takes {{result decision:eos gpu.p50_ms 0}} ms at the median (`kev:0.8b` {{result kev:0.8b gpu.p50_ms 0}} ms, `decider:0.8b` {{result decider:0.8b gpu.p50_ms 0}} ms).
 - **CPU:** the same request takes about 0.85 s on a Mac mini (M4 Pro), through the daemon.
 - **State length:** every question reads the whole context again, so the cost grows with the number of questions times the context length. Five typed-decisions questions about a JSON state (about 1,050 tokens in all) take about 0.2 s on the RTX 4090, 0.84 s on the Mac mini and 2.1 s on a 24-core x86 CPU, measured in the runtime without HTTP.
 

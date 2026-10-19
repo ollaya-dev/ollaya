@@ -1,4 +1,4 @@
-//! ONNX Runtime engine for llm-semantic-router's Decision 1.0 models (layout
+//! ONNX Runtime engine for vllm-sr's Decision 1.0 models (layout
 //! `decision-endpoint-v1`).
 //!
 //! Every question is one row: the context, question and options, then the decision suffix. The

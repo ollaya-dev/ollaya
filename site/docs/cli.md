@@ -52,13 +52,16 @@ ollaya run laya --preset triage "Your app crashed during checkout and I was char
 |---|---|
 | `--preset NAME` | Use a preset: built-in (`triage`, `email`, `guard`, `moderation`, `router` or `agent`) or one you saved with [`ollaya preset create`](#ollaya-preset) |
 | `--questions FILE\|@FILE\|JSON` | Use these questions (question id → question), overriding the model's own: a file path, `@file` (`@-` for stdin), or inline JSON starting with `{` |
+| `--ask TEXT` | Ask a question; repeat for more. Alone it is a yes/no question; the `--choice` or `--level` flags after it make it a choice or a score. The questions are `q1`, `q2`, … in order |
+| `--choice LABEL[=DESC]` | An option of the `--ask` before it, with an optional description |
+| `--level LEVEL` | A level of the `--ask` before it, lowest first |
 | `--format text\|json` | `text` (default) prints the table; `json` prints the full [`/api/decide`](/docs/api#decide) response |
 | `--keepalive DURATION` | How long to keep the model loaded afterwards: `5m`, `1h`, `0` (unload now), `-1` (keep loaded) |
 | `--verbose` | Also print every option's probability, the routing decision and the timings |
 | `--state-json` | Parse the state as JSON. A state that looks like a JSON object or array is detected anyway |
 | `--image FILE` | A PNG image to decide about, for a vision model (`decider:2b-vision`). It goes with every state, in the REPL too |
 
-Where the questions come from, first match wins: `--questions`, then `--preset`, then questions built into the model (qwen3guard's, or ones added with a Modelfile), then the `triage` preset. When `run` falls back to `triage` it says so on stderr.
+Where the questions come from, first match wins: `--ask`, `--questions`, then `--preset`, then questions built into the model (qwen3guard's, or ones added with a Modelfile), then the `triage` preset. When `run` falls back to `triage` it says so on stderr.
 
 `--questions` takes the JSON straight on the command line too, the way `curl -d` does: a value that starts with `{` is inline JSON, and anything else is a file path. `@file` is always a file (handy if a file name starts with `{`), and `@-` reads the questions from stdin, in which case the state goes on the command line:
 
@@ -66,6 +69,15 @@ Where the questions come from, first match wins: `--questions`, then `--preset`,
 ollaya run winnow:e4b --questions '{"topic":{"type":"choice","criteria":["billing","access","other"]}}' "..."
 ollaya run winnow:e4b --questions @questions.json "..."
 cat questions.json | ollaya run winnow:e4b --questions @- "..."
+```
+
+`--ask` asks questions without writing JSON. It can't be combined with `--questions` or `--preset`, and one question takes either `--choice` or `--level`, not both:
+
+```shell
+ollaya run kev --ask "Is a refund requested?" \
+  --ask "Which team handles this?" --choice billing="Payments or invoices" --choice technical --choice sales \
+  --ask "How upset is the customer?" --level calm --level annoyed --level furious \
+  "I was charged twice for order A-104. Refund the duplicate today."
 ```
 
 **The state** is the rest of the command line. Without one, `run` reads piped stdin:

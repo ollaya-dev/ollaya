@@ -27,7 +27,7 @@ import shutil
 import torch
 
 from ..llm_common import onnx_export as ox
-from ..llm_common.qwen35 import CHUNK, Qwen35Trunk
+from ..llm_common.qwen35 import CHUNK, Qwen35Trunk, half_trunk
 from ...weightless_sharded import safetensors_source
 from . import ref, ref_v3
 from .layout import NOUL_DEFAULTS, NimbleLayout
@@ -120,7 +120,7 @@ def spec_v3(adapter_dir):
     }
 
 
-def export(out_dir, adapter_dir, base_dir, checkpoint="v2"):
+def export(out_dir, adapter_dir, base_dir, checkpoint="v2", fp16=False):
     spec = (spec_v3 if checkpoint == "v3" else spec_v2)(adapter_dir)
     src = spec["ref"]
     tok, model = src.load(adapter_dir, base_dir, device="cpu")
@@ -143,6 +143,9 @@ def export(out_dir, adapter_dir, base_dir, checkpoint="v2"):
     args = (ids, torch.tensor([n - 1 for n in lens]))
     with torch.no_grad():
         want = src.forward(model, prepared, adapter_dir)
+    if fp16:
+        half_trunk(graph.trunk)   # after the fp32 reference: the trunk shares upstream's modules; the LM head stays fp32
+    with torch.no_grad():
         got = graph(*args)
     print("eager graph vs upstream candidate_logits: %.2e"
           % max(float((got[i, :len(w)].double() - torch.tensor(w)).abs().max()) for i, w in enumerate(want)))
@@ -203,7 +206,7 @@ def export(out_dir, adapter_dir, base_dir, checkpoint="v2"):
         "option_logits": {"choice": "cand_logits[row, :k]", "noul": "cand_logits[row, :2] (0 = false, 1 = true)",
                           "score": "cand_logits[row, :levels]"},
         "opset": ox.OPSET,
-        "precision": "fp32 compute; base weights BF16, widened by Cast; adapter F32",
+        "precision": ox.FP16_PRECISION if fp16 else "fp32 compute; base weights BF16, widened by Cast; adapter F32",
         "weights_in_memory": ox.weights_in_memory(report),
     }
     calibration = {"temperature": [spec["temperature"]] * 3, "temperature_by_options": {},
@@ -248,10 +251,11 @@ def main():
     ap.add_argument("--checkpoint", choices=["v2", "v3"], default="v2")
     ap.add_argument("--adapter", default=None, help="local snapshot of the Nimble repo at the pinned revision")
     ap.add_argument("--base", default=None, help="local snapshot of Qwen/Qwen3.5-9B at the pinned revision")
+    ap.add_argument("--fp16", action="store_true", help="fp16 compute in the trunk (the -fp16 GPU tags)")
     a = ap.parse_args()
     R = ref_v3 if a.checkpoint == "v3" else ref
     adapter, base = (a.adapter, a.base) if a.adapter and a.base else R.snapshot()
-    export(a.out, adapter, base, a.checkpoint)
+    export(a.out, adapter, base, a.checkpoint, fp16=a.fp16)
 
 
 if __name__ == "__main__":

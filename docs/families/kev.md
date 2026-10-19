@@ -148,6 +148,23 @@ The port reproduces upstream token rows, decide positions and option positions o
 requests**: 77 Laya edge cases, 4 decoder cases and 400 typed-decisions rows. It also rejects the same
 requests; for example, list-valued choice criteria get a pydantic 422 in both.
 
+## fp16 tags
+
+`kev:4b-fp16` and `kev:9b-fp16` run the same weights with the trunk in fp16 on NVIDIA GPUs ([ADR 0008](../decisions/0008-fp16-decoder-tags.md)).
+The RMSNorms, the gated delta rule, the attention softmax, the rotary frequencies, the masks and the heads stay fp32,
+as the authors' code computes them. The gate (`parity_kev --fp16`, run by `parity_run`) keeps the encodings exact and
+requires at least 99.5 % of the decisions to match the fp32 reference. On the RTX 4090
+(`results/runs/2026-10-19-parity-rtx4090-cuda.json`):
+
+| Tag | Decisions the same | Max option logit diff | Max probability diff (p99) |
+|---|---|---:|---:|
+| `kev:4b-fp16` | 478 / 480 (99.58 %) | 6.5e-02 | 3.9e-03 (2.2e-03) |
+| `kev:9b-fp16` | 480 / 480 (100.00 %) | 2.7e-02 | 2.4e-03 (1.8e-03) |
+
+`kev:0.8b` has no fp16 tag: its fp16 graph passed the gate (478 / 480), but after the `Split` rewrite the fp32 graph
+is as fast on an RTX 5090 (62 ms against 67 ms for five questions), so it is not shipped. The fp32 tags are unchanged and still match the authors' code. Speed and typed-decisions accuracy of
+the fp16 tags are on the model page and on bench.ollaya.dev. On a CPU an fp16 tag runs, slowly; use the fp32 tag there.
+
 ## Limits
 
 - **Options.** Choice 1..255; score 1..255 levels. TypeSafe caps score at 10; kev does not.

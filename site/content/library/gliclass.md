@@ -4,9 +4,9 @@ GLiClass is an instruction-following zero-shot classifier by [Knowledgator](http
 
 | Tag | Backbone | Params | License | Typed-decisions accuracy |
 |---|---|---|---|---|
-| `gliclass:latest`, `gliclass:large` | DeBERTa-v3-large | 439M | Apache-2.0 | 0.477 |
+| `gliclass:latest`, `gliclass:large` | DeBERTa-v3-large | 439M | Apache-2.0 | {{result gliclass:large typed.accuracy 3}} |
 
-Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `nli` scores 0.548 and `laya:en` 0.361.
+Accuracy is the argmax against the majority label on all 400 typed-decisions states. For comparison, `nli` scores {{result nli:deberta-v3-large typed.accuracy 3}} and `laya:en` {{result laya:en typed.accuracy 3}}.
 
 ## Usage
 
