@@ -164,7 +164,9 @@ class Qwen35Trunk(nn.Module):
         o = o * torch.sigmoid(gate)
         return mod.o_proj(o)
 
-    def forward(self, input_ids):
+    def forward(self, input_ids, bias=None):
+        """`bias`: the full-attention layers' additive mask, broadcast to [B, heads, T, T]; causal when None.
+        The linear-attention layers are causal either way."""
         m = self.m
         x = m.embed_tokens(input_ids)
         T = input_ids.shape[1]
@@ -172,7 +174,8 @@ class Qwen35Trunk(nn.Module):
         freqs = pos[:, None] * self.inv_freq[None, :]
         emb = torch.cat((freqs, freqs), dim=-1)
         cos, sin = emb.cos().to(x.dtype), emb.sin().to(x.dtype)
-        bias = torch.full((T, T), float("-inf"), device=x.device, dtype=x.dtype).triu(1)
+        if bias is None:
+            bias = torch.full((T, T), float("-inf"), device=x.device, dtype=x.dtype).triu(1)
         for layer, kind in zip(m.layers, self.layer_types):
             h = layer.input_layernorm(x)
             if kind == "linear_attention":

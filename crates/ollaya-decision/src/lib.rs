@@ -24,6 +24,7 @@ pub mod layout;
 pub mod llm_logits;
 pub mod nimble;
 pub mod nli;
+pub mod pplx;
 mod printable;
 pub mod pyjson;
 pub mod pyrepr;

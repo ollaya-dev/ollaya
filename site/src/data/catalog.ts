@@ -354,6 +354,19 @@ const overlays: Record<string, ModelOverlay> = {
       '2b': { summary: 'strands-decider-2B-qwen3.5-v1-2610 (LoRA and pointer head on Qwen3.5-2B base), about 8 GB in memory.' },
     },
   },
+  'pplx-decider': {
+    title: 'pplx-decider',
+    description:
+      "Perplexity's decision model: Qwen3.5-4B distilled from its 27B decision models, with a readout over 255 answer codes. Every question of a request shares one sequence and reads the whole request, and the probabilities are calibrated with Perplexity's temperature. Up to 255 options.",
+    publisher: { name: 'Perplexity AI', url: 'https://huggingface.co/perplexity-ai' },
+    capabilities: ['decision', 'multilingual', 'fine-tuned'],
+    keywords: ['pplx', 'pplx-decider', 'perplexity', 'qwen', 'qwen3.5', 'distilled', 'joint', 'llm', 'decision', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 22,
+    tags: {
+      latest: { summary: 'Same as pplx-decider:flash.' },
+      flash: { summary: 'pplx-decider-flash-v1.2 (Qwen3.5-4B), about 9 GB in memory.' },
+    },
+  },
   decima: {
     stats: { tag: 'decima:base', accuracy: 0.495, latencyMs: 15.1 },
     title: 'Decima',

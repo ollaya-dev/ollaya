@@ -21,6 +21,7 @@ pub mod net;
 pub mod nimble;
 pub mod nli;
 pub mod onnx;
+pub mod pplx;
 pub mod qwen3guard;
 pub mod server;
 pub mod strands;

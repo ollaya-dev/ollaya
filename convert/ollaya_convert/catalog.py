@@ -438,6 +438,34 @@ CATALOG = {
                   "requests, the same decision on every question, option logits within 1.1e-5 and probabilities "
                   "within 2.8e-6 (CUDA), and TypeSafe answers equal to upstream's 4-decimal rounding.",
     },
+    "pplx-decider": {
+        "namespace": "library",
+        "model": "pplx-decider",
+        "family": "pplx",
+        "author": "Perplexity AI (post-trained model and readout) and the Qwen team (base model)",
+        "license": "Apache-2.0",
+        "license_text": ("pplx-decider-flash-v1.2 by Perplexity AI (https://huggingface.co/perplexity-ai/pplx-decider-flash-v1.2)\n"
+                         "Model, readout and code: Apache-2.0 (LICENSE and NOTICE in the model repository).\n"
+                         "Base model: Qwen3.5-4B by the Qwen team (https://huggingface.co/Qwen/Qwen3.5-4B), Apache-2.0.\n"
+                         "Licensed under the Apache License, Version 2.0.\n\n") + LICENSE_APACHE,
+        "tags": {
+            "flash": _wl("pplx-decider-flash", "perplexity-ai/pplx-decider-flash-v1.2",
+                         "6d771ad7b5ecff5e93b8fc7b90d4c5ccc341954d",
+                         "pplx-decider-flash v1.2: Qwen3.5-4B post-trained by Perplexity (distilled from its 27B decision "
+                         "models), with a 255-code readout. Every question of a request shares one sequence, read at a "
+                         "marker after each question; the full-attention layers see the whole request. Up to 255 options "
+                         "and levels, 8,192 tokens per sequence. Needs about 9 GB of memory.",
+                         "4B", 8192, ["multilingual"], wl_dir=os.path.join(OUT, "pplx-decider-flash"),
+                         weights={"model-00001-of-00002.safetensors": "model-00001-of-00002.safetensors",
+                                  "model-00002-of-00002.safetensors": "model-00002-of-00002.safetensors",
+                                  "readout.safetensors": "readout.safetensors"}),
+        },
+        "aliases": {"latest": "flash"},
+        "parity": "Ollaya's Rust runtime matches upstream pplx_decider (the reference path, PyTorch fp32) on 696 "
+                  "questions from 138 requests: identical token sequences and marker positions, the same 5 rejected "
+                  "requests, the same decision on every question, option logits within 8.2e-5 and probabilities "
+                  "within 6.8e-6 (CUDA).",
+    },
     "decision": {
         "namespace": "library",
         "model": "decision",
