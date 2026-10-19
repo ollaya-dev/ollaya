@@ -42,28 +42,26 @@ Items queued for GitHub issues. Each item becomes one issue once `github.com/oll
 
 ---
 
-## Decoders as fast as Ollama's: a reduced-precision path for the Qwen3.5 families
+## Decoders as fast as Ollama's: Nimble and Clef
 
-**Why.** Ollama 0.40.6 serves the same Kev and Nimble weights 4 to 8 times faster than Ollaya on the same RTX 5090,
-at the same accuracy (Bespoke Labs' public suite, one request at a time; `docs/measurements/2026-10-ollama-0.40.md`):
-Nimble 42 ms against 328 ms, Kev 4B 34 against 187 ms, Kev 9B 40 against 227 ms. Ollama runs Q8_0 GGUFs on
-llama.cpp, whose b11669 knows these models natively (kev, nimble, clef, laya and pplx-decider decision types, a
-`/v1/systemone` endpoint, decision metadata in the GGUF). Ollaya computes in fp32 on the BF16 weights. Its
-calibration is better (Nimble's pooled ECE 0.022 against 0.115, because Ollaya applies the author's temperature),
-which a faster path must keep.
+**Why.** 0.14.0 closed most of the gap with Ollama 0.40.6 on the same RTX 5090 (ADR 0008): `Split` instead of
+`SplitToSequence` and the `-fp16` tags. On the typed-decisions suite (median request,
+`results/runs/2026-10-19-typed-decisions-rtx5090-cuda.json` against `2026-10-18-…-ollama.json`), `kev:4b-fp16` is
+within 1.2x of Ollama's Q8_0 (152 against 129 ms) and `kev:9b-fp16` within 1.5x (211 against 138 ms), with the same
+decisions as fp32 on at least 99.5 % of the parity questions. Two remain slow: `nimble:9b-fp16` 675 against 141 ms
+(4.8x) and `clef:flash-fp16` 160 against 72 ms (2.2x). Their calibration stays better than Ollama's (Nimble's
+pooled ECE 0.022 against 0.115), which a faster path must keep.
 
 **Scope**
-- Measure first: ONNX Runtime CUDA with BF16 or FP16 compute for `qwen35.py` graphs (TensorRT RTX EP included),
-  against the fp32 goldens. Report the decision agreement and the probability error per family.
-- If that is not enough, run the Qwen3.5 families on Ollaya's libllama runner (ADR 0003). Ollaya never re-hosts
-  weights, so the GGUF has to be built on the user's machine from the author's pinned safetensors (Ollama
-  quantizes at `ollama create` time, `create/create.go`), and the pointer heads (kev, strands) need custom code.
-- A reduced-precision tag is a new tag with its own measured gate (decision agreement, max probability error),
-  never a loosened tolerance on the fp32 tags.
+- Profile `nimble:9b-fp16` per request: its prompt is longer than Kev's, so prefill dominates; check what ONNX
+  Runtime runs on the CPU and whether attention takes the fused path.
+- If ONNX Runtime cannot close it, run the Qwen3.5 families on Ollaya's libllama runner (ADR 0003), with the GGUF
+  built on the user's machine from the author's pinned safetensors (Ollaya never re-hosts weights).
+- A faster path is a new tag with its own gate, never a loosened tolerance on the existing tags.
 
 **Acceptance**
-- `kev:4b` and `nimble:9b` within 1.5x of Ollama's median latency on the same GPU, same decisions on at least
-  99.5% of the parity questions, the authors' temperatures applied.
+- `nimble:9b` and `clef:flash` within 1.5x of Ollama's median latency on the same GPU, same decisions on at least
+  99.5 % of the parity questions, the authors' temperatures applied.
 
 ---
 
