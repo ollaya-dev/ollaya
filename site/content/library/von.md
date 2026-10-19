@@ -19,8 +19,8 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `von`
 ## Speed
 
 - **RTX 5090, through the HTTP API (Ollaya Bench):** a five-question request with a short state takes {{result von:1.1 gpu.p50_ms 0}} ms at the median.
-- **CPU:** the same request takes about 0.76 s on a 24-core x86 CPU.
-- **State length:** every question reads the whole state, and attention cost grows faster than the sequence. Five questions about a 600-token state take about 0.17 s on the GPU and 5.6 s on the CPU; about a 2,200-token state, 0.78 s and 25 s. A state near 7,500 tokens takes about 7 s on the GPU. On the CPU a full 8,192-token sequence needs about 25 GB of memory.
+- **CPU:** the same request takes {{result von:1.1 cpu.p50_ms 0}} ms on the Threadripper 3960X (24 cores).
+- **State length:** every question reads the whole state, and attention cost grows faster than the sequence: five questions about a 2,200-token state take about 0.78 s on the GPU and 25 s on the CPU. On the CPU a full 8,192-token sequence needs about 25 GB of memory.
 
 ## How it works
 
@@ -28,7 +28,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `von`
 - **State as text.** A JSON state is written the way Von was trained on it: one `key: value` line per top-level key, with Python's rendering of nested values.
 - **Yes/no without criteria.** A `noul` question without `true`/`false` descriptions adds a second sequence without the state. It measures the question's own lean towards yes or no, which is taken off the answer, as Von does.
 - **Calibration.** The temperature is computed per question from the answer's entropy, the state's length and the number of options, with Von's own fitted coefficients.
-- **Weights.** Von's trained weights exist only in the author's `option_marker.pt`, a PyTorch archive whose tensors are stored uncompressed. Ollaya downloads it from Hugging Face, pinned to a commit and verified by sha256, and the ONNX graph reads the tensors in place by byte offset. Nothing in it is unpickled or executed, and Ollaya hosts only the graph (3 MB).
+- **Weights.** Von's weights exist only in the author's `option_marker.pt`, a PyTorch archive with uncompressed tensors, downloaded from Hugging Face, pinned to a commit and verified by sha256. The ONNX graph reads the tensors in place by byte offset, so nothing is unpickled or executed; Ollaya hosts only the graph (3 MB).
 - **Parity.** Ollaya's Rust runtime reproduces upstream Von computed in float64: the same token ids and option markers, the same decision on every test question, and logits within 4.4e-4 on x86-64 CPU and CUDA. On Apple silicon's CPU one row is 1.1e-3 off, and every decision is still the same.
 
 ## Limits

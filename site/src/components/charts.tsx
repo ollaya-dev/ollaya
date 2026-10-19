@@ -161,7 +161,8 @@ function segHitsBox([x1, y1, x2, y2]: Seg, b: Box): boolean {
  * Points with their labels. Each label goes in the nearest free spot around its point (right,
  * left, above, below, then the diagonals, further out each round); a label away from its point
  * gets a short leader line, and no leader crosses another leader, a label or a point. Crowded
- * points are labelled first, while the space around them is still free.
+ * points are labelled first, while the space around them is still free. A label with no free
+ * spot is left out rather than drawn over another; every point names itself on hover.
  */
 export function Scatter({
   points,
@@ -188,12 +189,12 @@ export function Scatter({
 }) {
   const W = compact ? 400 : 760
   const top = standalone && legend ? 40 : 16
-  const H = (compact ? 470 : 540) + top - 16
-  const m = { l: compact ? 40 : 52, r: compact ? 8 : 16, t: top, b: compact ? 44 : 52 }
+  const H = (compact ? 520 : 540) + top - 16
+  const m = { l: compact ? 40 : 52, r: compact ? 12 : 16, t: top, b: compact ? 44 : 52 }
   const fs = compact ? 10.5 : 11.5
   const x = logScale(xTicks[0]!, xTicks.at(-1)!, m.l, W - m.r)
   const y = linScale(yTicks[0]!, yTicks.at(-1)!, H - m.b, m.t)
-  const charW = compact ? 6.1 : 6.7
+  const charW = fs * 0.61 // the advance of a monospace glyph, with a little to spare
   const lh = compact ? 13 : 14
   const pts = points.map((p) => ({ p, px: x(p.x), py: y(p.y) }))
   const pointBoxes: Box[] = pts.map(({ px, py }) => ({ x: px - 7, y: py - 7, w: 14, h: 14 }))
@@ -212,16 +213,21 @@ export function Scatter({
   ]
   const labels = [...pts]
     .sort((a, b) => crowd(b) - crowd(a) || a.py - b.py)
-    .map(({ p, px, py }, _i) => {
+    .map(({ p, px, py }) => {
       const w = p.label.length * charW
       const self = pointBoxes[pts.findIndex((q) => q.p === p)]
-      for (const d of [9, 20, 32, 46, 62, 80, 100]) {
+      for (const d of [9, 14, 20, 26, 32, 40, 48, 58]) {
         for (const [dx, dy] of dirs) {
           const bx = dx > 0 ? px + d : dx < 0 ? px - d - w : px - w / 2
           const by = dy > 0 ? py + d - 4 : dy < 0 ? py - d - lh + 4 : py - lh / 2
           const box = { x: bx, y: by, w, h: lh }
           if (box.x < m.l + 2 || box.x + w > W - 2 || box.y < m.t - 12 || box.y + lh > H - m.b) continue
-          if (boxes.some((b) => overlaps(box, b))) continue
+          // A few pixels of air, so two labels never touch end to end, and no label sits on another's leader.
+          const air = { x: bx - 4, y: by - 1, w: w + 8, h: lh + 2 }
+          if (boxes.some((b) => overlaps(b === self ? box : air, b)) || leaders.some((s) => segHitsBox(s, air))) continue
+          // A label without a leader is closer to its own point than to any other, so a reader pairs them right.
+          const near = (q: { px: number; py: number }) => Math.hypot(q.px - (bx + w / 2), q.py - (by + lh / 2))
+          if (d === 9 && pts.some((q) => q.p !== p && near(q) < near({ px, py }))) continue
           const ex = Math.max(bx, Math.min(px, bx + w))
           const ey = Math.max(by, Math.min(py, by + lh))
           const lead = d > 9
@@ -235,9 +241,9 @@ export function Scatter({
           return { p, x: bx, y: by + 11, lead, ex, ey, px, py }
         }
       }
-      boxes.push({ x: px + 9, y: py - 7, w, h: lh })
-      return { p, x: px + 9, y: py + 4, lead: false, ex: 0, ey: 0, px, py }
+      return null
     })
+    .filter((l) => l !== null)
   const sa = standaloneParts(W, H, standalone)
   return (
     <svg viewBox={`0 0 ${W} ${H}`} class="h-auto w-full" role="img" aria-label={label} {...sa.attrs}>
@@ -268,7 +274,10 @@ export function Scatter({
       </text>
       {labels.map((l) => (l.lead ? <line x1={l.px} y1={l.py} x2={l.ex} y2={l.ey} class="stroke-line-strong" stroke-width="1" /> : null))}
       {pts.map(({ p, px, py }) => (
-        <MarkSvg cx={px} cy={py} r={compact ? 5 : 6} tone={p.tone} mark={p.mark} />
+        <g>
+          <title>{`${p.label}: ${fmt(p.y)}, ${Math.round(p.x)} ms`}</title>
+          <MarkSvg cx={px} cy={py} r={compact ? 5 : 6} tone={p.tone} mark={p.mark} />
+        </g>
       ))}
       {labels.map((l) => (
         <text
@@ -303,7 +312,7 @@ export function Bars({ rows, max, label }: { rows: BarRow[]; max: number; label:
       {rows.map((r) => (
         <div class="contents" role="listitem">
           <span class="flex min-h-9 flex-col justify-center py-0.5 leading-tight">
-            <span class="truncate font-mono text-xs text-fg sm:text-[13px]">{r.label}</span>
+            <span class="font-mono text-xs [overflow-wrap:anywhere] text-fg sm:text-[13px]">{r.label}</span>
             {r.note ? <span class="text-[11px] text-muted sm:text-xs">{r.note}</span> : null}
           </span>
           <span class="flex min-h-9 items-center">
@@ -357,7 +366,7 @@ export function Heatmap({
             <tr>
               <th
                 scope="row"
-                class="sticky left-0 z-10 bg-canvas pr-2 text-left font-mono text-[11px] font-normal whitespace-nowrap sm:text-xs"
+                class="sticky left-0 z-10 bg-canvas pr-2 text-left font-mono text-[11px] font-normal sm:text-xs sm:whitespace-nowrap"
                 style={r.tone && r.tone !== 'us' ? `color:${toneVar(r.tone)}` : undefined}
               >
                 {r.tone && r.tone !== 'us' ? r.label : <span class="text-fg">{r.label}</span>}
@@ -409,7 +418,9 @@ export function DotPlot({
 }) {
   const W = compact ? 400 : 760
   const rowH = compact ? 22 : 24
-  const m = { l: compact ? 122 : 150, r: compact ? 10 : 16, t: standalone ? 34 : 8, b: 34 }
+  // Wide enough for the longest model name (a monospace glyph is about 0.61 em).
+  const labelW = Math.max(0, ...rows.map((r) => r.label.length)) * (compact ? 10 : 11) * 0.61
+  const m = { l: Math.max(compact ? 122 : 150, Math.ceil(labelW) + 12), r: compact ? 14 : 16, t: standalone ? 34 : 8, b: 34 }
   const shown = compact ? ticks.filter((t) => [10, 100, 1000, 10000, 100000].includes(t)) : ticks
   const H = m.t + rows.length * rowH + m.b
   const x = logScale(ticks[0]!, ticks.at(-1)!, m.l, W - m.r)

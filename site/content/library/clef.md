@@ -22,10 +22,10 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `clef
 
 ## How it works
 
-- **One sequence per request.** Ollaya builds the prompt exactly as Cloudflare's `encode_record` does: the state, then every question with its options as a schema. The head reads the hidden states over each question's instructions and each option, routes evidence from the state to every option, and scores all options of all questions at once.
+- **One sequence per request.** The prompt is built exactly as Cloudflare's `encode_record` builds it: the state, then every question with its options as a schema. The head scores all options of all questions at once, from the hidden states over each question and option.
 - **Weights.** Cloudflare's four BF16 shards and the head's `joint_head.safetensors` download from Hugging Face, pinned to a commit and verified by sha256. Ollaya hosts only the ONNX graph (11 MB).
 - **Parity.** Ollaya's Rust runtime matches Cloudflare's own code in fp32 on CUDA: identical token ids and spans, and the same decision on all 571 test questions, probabilities within 6.3e-6.
-- **fp16 tag.** `clef:flash-fp16` computes the trunk in fp16 on NVIDIA GPUs, with the norms, the recurrent state, the attention softmax and the heads in fp32 ([how](https://github.com/ollaya-dev/ollaya/blob/main/docs/decisions/0008-fp16-decoder-tags.md)): {{result clef:flash-fp16 gpu.p50_ms 0}} ms for five questions on the RTX 5090 instead of {{result clef:flash gpu.p50_ms 0}} ms, {{result clef:flash-fp16 parity.cuda.decisions_same 0}} of {{result clef:flash-fp16 parity.cuda.questions 0}} decisions the same as `clef:flash` on the parity set, and {{result clef:flash-fp16 typed.accuracy 3}} on typed decisions. On a CPU use `clef:flash`.
+- **fp16 tag.** `clef:flash-fp16` runs the trunk in fp16 on NVIDIA GPUs ([how](https://github.com/ollaya-dev/ollaya/blob/main/docs/decisions/0008-fp16-decoder-tags.md)): {{result clef:flash-fp16 gpu.p50_ms 0}} ms for five questions on the RTX 5090 instead of {{result clef:flash gpu.p50_ms 0}} ms, {{result clef:flash-fp16 parity.cuda.decisions_same 0}} of {{result clef:flash-fp16 parity.cuda.questions 0}} decisions the same as `clef:flash` on the parity set, and {{result clef:flash-fp16 typed.accuracy 3}} on typed decisions. On a CPU use `clef:flash`.
 
 ## Limits
 

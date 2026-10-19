@@ -1,6 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { Icon } from '../components/Icon'
 import { btnPrimary, CodeBlock, textLink } from '../components/ui'
+import { benchGpu, result } from '../data/numbers'
 import { DOCKER_IMAGE, LATEST_DOWNLOAD, LOCAL_PORT, RELEASES_URL, WINDOWS_APP_SIGNED } from '../site'
 
 type Os = 'macos' | 'windows' | 'linux' | 'docker'
@@ -139,8 +140,8 @@ export function DownloadPage({ origin }: { origin: string }) {
             <Step title="Run a model">
               <CodeBlock code="ollaya run winnow:e4b" />
               <Note>
-                The recommended model: close to Jev's accuracy, in about 90 ms on an NVIDIA GPU with 10 GB or more (an 8 GB
-                download). Otherwise, <code class="font-mono">ollaya run laya</code> answers in a fraction of a second, on the
+                The recommended model: close to Jev's accuracy, in {result('winnow:e4b', 'gpu.p50_ms', 0)} ms on an {benchGpu}. It needs an
+                NVIDIA GPU with 10 GB or more (an 8 GB download). Otherwise, <code class="font-mono">ollaya run laya</code> answers in a fraction of a second, on the
                 CPU too.
               </Note>
             </Step>
@@ -185,8 +186,8 @@ export function DownloadPage({ origin }: { origin: string }) {
             <Step title="Run a model">
               <CodeBlock code="ollaya run winnow:e4b" />
               <Note>
-                The recommended model: close to Jev's accuracy, in about 90 ms on an NVIDIA GPU with 10 GB or more (an 8 GB
-                download). Otherwise, <code class="font-mono">ollaya run laya</code> answers in a fraction of a second, on the
+                The recommended model: close to Jev's accuracy, in {result('winnow:e4b', 'gpu.p50_ms', 0)} ms on an {benchGpu}. It needs an
+                NVIDIA GPU with 10 GB or more (an 8 GB download). Otherwise, <code class="font-mono">ollaya run laya</code> answers in a fraction of a second, on the
                 CPU too.
               </Note>
             </Step>

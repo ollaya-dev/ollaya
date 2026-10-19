@@ -18,7 +18,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `pplx
 
 ## Speed
 
-- **RTX 5090, over HTTP (Ollaya Bench):** five-question triage requests take {{result pplx-decider:flash gpu.p50_ms 0}} ms at the median, all questions in one forward pass; {{result pplx-decider:flash public.median_ms 0}} ms per question at the median on Bespoke Labs' public benchmark, {{result pplx-decider:flash typed.median_ms 0}} ms per five-question typed-decisions request.
+- **RTX 5090, over HTTP (Ollaya Bench):** {{result pplx-decider:flash gpu.p50_ms 0}} ms at the median for five triage questions (one forward pass), {{result pplx-decider:flash public.median_ms 0}} ms per question on Bespoke Labs' public benchmark and {{result pplx-decider:flash typed.median_ms 0}} ms per five-question typed-decisions request.
 
 ## Accuracy
 
@@ -26,11 +26,11 @@ Measured by Ollaya on an RTX 5090: {{result pplx-decider:flash public.macro_accu
 
 ## How it works
 
-- **One sequence per request.** Every question reads the state and the other questions: the model's full-attention layers see the whole request, not only what comes before. The model card finds the flash model more accurate with one question per request on most multi-question tasks, so send related questions together and independent ones apart.
+- **One sequence per request.** Every question sees the state and the other questions. The model card finds the flash model more accurate with one question per request on most multi-question tasks: send related questions together and independent ones apart.
 - **Calibrated.** The readout logits are divided by the temperature Perplexity fitted on held-out requests (1.55).
 - **Weights.** The files download from Hugging Face, pinned to a commit and verified by sha256, byte for byte Perplexity's. Ollaya hosts only the ONNX graph (11 MB).
 - **Parity.** Ollaya's Rust runtime matches upstream `pplx_decider` in fp32: identical token sequences, the same rejections and the same decision on all 696 test questions, probabilities within 6.8e-6.
-- **fp16 tag.** `pplx-decider:flash-fp16` computes the trunk in fp16 on NVIDIA GPUs, with the norms, the recurrent state, the attention softmax and the heads in fp32 ([how](https://github.com/ollaya-dev/ollaya/blob/main/docs/decisions/0008-fp16-decoder-tags.md)): {{result pplx-decider:flash-fp16 gpu.p50_ms 0}} ms for five questions on the RTX 5090 instead of {{result pplx-decider:flash gpu.p50_ms 0}} ms, {{result pplx-decider:flash-fp16 parity.cuda.decisions_same 0}} of {{result pplx-decider:flash-fp16 parity.cuda.questions 0}} decisions the same as `pplx-decider:flash` on the parity set, and {{result pplx-decider:flash-fp16 typed.accuracy 3}} on typed decisions. On a CPU use `pplx-decider:flash`.
+- **fp16 tag.** `pplx-decider:flash-fp16` runs the trunk in fp16 on NVIDIA GPUs ([how](https://github.com/ollaya-dev/ollaya/blob/main/docs/decisions/0008-fp16-decoder-tags.md)): {{result pplx-decider:flash-fp16 gpu.p50_ms 0}} ms for five questions on the RTX 5090 instead of {{result pplx-decider:flash gpu.p50_ms 0}} ms, {{result pplx-decider:flash-fp16 parity.cuda.decisions_same 0}} of {{result pplx-decider:flash-fp16 parity.cuda.questions 0}} decisions the same as `pplx-decider:flash` on the parity set, and {{result pplx-decider:flash-fp16 typed.accuracy 3}} on typed decisions. On a CPU use `pplx-decider:flash`.
 
 ## Limits
 

@@ -21,8 +21,8 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `deci
 ## Speed
 
 - **RTX 5090, through the HTTP API (Ollaya Bench):** a five-question request with a short message takes {{result decision:eos gpu.p50_ms 0}} ms at the median (`kev:0.8b` {{result kev:0.8b gpu.p50_ms 0}} ms, `decider:0.8b` {{result decider:0.8b gpu.p50_ms 0}} ms).
-- **CPU:** the same request takes about 0.85 s on a Mac mini (M4 Pro), through the daemon.
-- **State length:** every question reads the whole context again, so the cost grows with the number of questions times the context length. Five typed-decisions questions about a JSON state (about 1,050 tokens in all) take about 0.2 s on the RTX 4090, 0.84 s on the Mac mini and 2.1 s on a 24-core x86 CPU, measured in the runtime without HTTP.
+- **CPU:** the same request takes {{result decision:eos cpu.p50_ms 0}} ms on the Threadripper 3960X (24 cores).
+- **State length:** every question reads the whole context again, so the cost grows with the number of questions times the context length.
 
 ## How it works
 

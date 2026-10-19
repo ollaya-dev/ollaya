@@ -5,7 +5,7 @@ import { LogoMark } from '../components/Logo'
 import { Legend } from '../components/charts'
 import { btnPrimary, Code, CodeBlock, textLink } from '../components/ui'
 import { catalog, comingNext, featuredTags, fullName } from '../data/catalog'
-import { result } from '../data/numbers'
+import { benchEdition, benchGpu, measured, result, rowsOf, trainedOnTyped } from '../data/numbers'
 import { publicBench, shortName } from '../data/results'
 import { hero, type HeroOption, type HeroQuestion } from '../data/hero'
 import { GITHUB_URL, LOCAL_API } from '../site'
@@ -282,36 +282,23 @@ function Section({
   )
 }
 
-// Accuracy: the typed-decisions test split (400 states, 2,000 questions, argmax against the
-// majority label), as published on each model's page; Jev's is from Winnow's benchmark report on
-// the same 2,000 questions. Latency: median of 15 warm five-question requests (the triage preset on
-// the hero's message) through the HTTP API on an RTX 4090, each model in its shipped precision;
-// Jev's is the hosted API's median request in third-party benchmarks, network included.
-// laya:typed-decisions (0.766) and jeb (0.79-0.80) are left out: both were trained on this dataset's train split. clm's latency is a new
-// message whose five questions are already cached (a repeated request takes under a millisecond).
-const scoreboard: { tag: string; acc: number; ms: number; pick?: boolean; note?: string }[] = [
-  { tag: 'winnow:e4b', acc: 0.722, ms: 89, pick: true },
-  { tag: 'kev:9b', acc: 0.722, ms: 498 },
-  { tag: 'clef:flash', acc: 0.703, ms: 532 },
-  { tag: 'winnow:12b', acc: 0.702, ms: 131 },
-  { tag: 'cygnet:12b', acc: 0.683, ms: 202 },
-  { tag: 'decider:4b', acc: 0.68, ms: 520 },
-  { tag: 'jeeves:9b', acc: 0.68, ms: 838 },
-  { tag: 'kev:4b', acc: 0.669, ms: 354 },
-  { tag: 'nimble:9b', acc: 0.665, ms: 2297 },
-  { tag: 'snap:2b', acc: 0.648, ms: 68 },
-  { tag: 'jevk5:4b', acc: 0.625, ms: 105 },
-  { tag: 'decider:2b', acc: 0.591, ms: 190 },
-  { tag: 'nli', acc: 0.548, ms: 20 },
-  { tag: 'decider:0.8b', acc: 0.506, ms: 155 },
-  { tag: 'decima:base', acc: 0.495, ms: 15 },
-  { tag: 'gliclass', acc: 0.477, ms: 15 },
-  { tag: 'kev:0.8b', acc: 0.46, ms: 128 },
-  { tag: 'von', acc: 0.447, ms: 23 },
-  { tag: 'decima:small', acc: 0.432, ms: 7 },
-  { tag: 'laya:en', acc: 0.361, ms: 10 },
-  { tag: 'clm:8b', acc: 0.357, ms: 149, note: 'questions cached' },
-]
+// Accuracy: typed-decisions (400 states, 2,000 questions, argmax against the majority label); latency: the median
+// five-question request on the edition's GPU. Both from results/ (data/numbers.ts). One row per family, its most accurate
+// tag; -fp16 tags sit under their base tag, and models trained on the dataset's train split are left out.
+// Jev's accuracy is TypeSafe's report; its latency is the hosted API in third-party benchmarks, network included.
+const scoreboard: { tag: string; acc: number; ms: number; pick?: boolean; note?: string }[] = (() => {
+  const best = new Map<string, { tag: string; acc: number; ms: number }>()
+  for (const [tag, row] of rowsOf('typed')) {
+    const acc = row.accuracy as number
+    const ms = measured(tag, 'gpu.p50_ms')
+    if (tag.endsWith('-fp16') || trainedOnTyped(tag) || !acc || ms === undefined) continue
+    const family = tag.split(':')[0]!
+    if (!best.has(family) || best.get(family)!.acc < acc) best.set(family, { tag, acc, ms: Math.round(ms) })
+  }
+  return [...best.values()]
+    .sort((a, b) => b.acc - a.acc)
+    .map((r) => ({ ...r, pick: r.tag === 'winnow:e4b', note: r.tag === 'clm:8b' ? 'questions cached' : undefined }))
+})()
 const JEV = { acc: 0.738, text: '236–276 ms' }
 const ACC_SCALE = 0.8
 const ACC_AXIS = [0, 0.2, 0.4, 0.6, 0.8]
@@ -360,10 +347,10 @@ function Fast() {
       id="fast"
       title="Fast and accurate"
       lead={`Close to Jev's accuracy, in ${result('winnow:e4b', 'gpu.p50_ms', 0)} ms.`}
-      body={`A decision model answers in a single forward pass, with no token-by-token generation. On an RTX 5090, winnow:e4b answers a five-question request in ${result('winnow:e4b', 'gpu.p50_ms', 0)} ms end to end, and scores ${result('winnow:e4b', 'typed.accuracy', 3)} on typed decisions; TypeSafe reports ${JEV_TYPED} for its hosted Jev. Smaller models such as laya:en answer in ${result('laya:en', 'gpu.p50_ms', 0)} ms, and run well on a CPU.`}
+      body={`One forward pass per request, no token-by-token generation. Small models such as laya:en answer in ${result('laya:en', 'gpu.p50_ms', 0)} ms and run well on a CPU.`}
     >
       <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-2">
-        <Stat value={result('winnow:e4b', 'gpu.p50_ms', 0)} unit="ms" label="winnow:e4b on Ollaya" detail={`RTX 5090, five questions · ${result('winnow:e4b', 'typed.accuracy', 3)} accuracy`} />
+        <Stat value={result('winnow:e4b', 'gpu.p50_ms', 0)} unit="ms" label="winnow:e4b on Ollaya" detail={`${benchGpu}, five questions · ${result('winnow:e4b', 'typed.accuracy', 3)} accuracy`} />
         <div class="border-t border-line sm:border-t-0 sm:border-l">
           <Stat value={JEV_TYPED} unit="" label="TypeSafe Jev" detail="Hosted API · typed-decisions accuracy as TypeSafe reports it" muted />
         </div>
@@ -371,8 +358,8 @@ function Fast() {
 
       <figure class="mt-14">
         <figcaption class="text-sm font-medium text-fg">
-          Accuracy and speed of every model{' '}
-          <span class="font-normal text-muted">· typed-decisions accuracy, higher is better; latency, lower is better</span>
+          Accuracy and speed, best tag of each model{' '}
+          <span class="font-normal text-muted">· typed-decisions; five questions on an {benchGpu}</span>
         </figcaption>
         <div class="mt-4">
           <Legend
@@ -397,7 +384,7 @@ function Fast() {
           <span class="relative mt-2 mr-[3.375rem] h-5 border-t border-line text-[11px] text-muted tabular-nums" aria-hidden="true">
             {ACC_AXIS.map((t) => (
               <span
-                class={`absolute top-1.5 whitespace-nowrap ${t === 0 ? '' : t === ACC_SCALE ? '-translate-x-full' : '-translate-x-1/2'}`}
+                class={`absolute top-1.5 whitespace-nowrap ${t === 0 ? '' : t === ACC_SCALE ? '-translate-x-full' : '-translate-x-1/2'} ${t === 0.2 || t === 0.6 ? 'max-sm:hidden' : ''}`}
                 style={`left:${accPct(t)}`}
               >
                 {t === 0 ? '0' : t.toFixed(1)}
@@ -407,18 +394,12 @@ function Fast() {
           <span></span>
         </div>
         <p class="mt-8 max-w-2xl text-[13px] leading-relaxed text-muted">
-          Accuracy: the typed-decisions test split (400 states, 2,000 questions) against the majority label; Jev's from Winnow's
-          report on the same questions. <span class="font-mono">laya:typed-decisions</span> and <span class="font-mono">jeb</span>{' '}
-          were trained on this dataset, so they are left out. Latency: the median five-question request through the HTTP API on an
-          RTX 4090 (<span class="font-mono">clm</span> with its questions cached); Jev's is the hosted API in third-party benchmarks (
+          2,000 questions. <span class="font-mono">laya:typed-decisions</span> and <span class="font-mono">jeb</span> were trained on
+          them and are left out. Jev: TypeSafe's accuracy, hosted latency from{' '}
           <a href="https://github.com/AbdelStark/jev-benchmarks" class={textLink}>
-            AbdelStark/jev-benchmarks
+            third-party benchmarks
           </a>
-          ,{' '}
-          <a href="https://github.com/nibzard/decision-model-benchmark" class={textLink}>
-            nibzard/decision-model-benchmark
-          </a>
-          ), network included, so compare orders of magnitude.
+          , network included.
         </p>
       </figure>
     </Section>
@@ -446,6 +427,7 @@ const vsRuns: VsRun[] = VS_TAGS.map(([tag, server]) => {
   return { tag, server, acc: r.macro_accuracy, ece: r.pooled_ece, ms: Math.round(r.median_ms) }
 }).sort((a, b) => b.acc - a.acc)
 const vs = (tag: string, server: VsRun['server']) => vsRuns.find((r) => r.tag === tag && r.server === server)!
+const OLLAMA = `Ollama ${publicBench?.servers.ollama ?? ''}`.trim()
 /** How many times faster Ollama is on the same weights, as a range over the pairs both serve. */
 function speedup() {
   const r = [['nimble:9b', 'nimble'], ['clef:flash', 'clef-flash'], ['kev:4b', 'kev:4b-q8_0']].map(([a, b]) => vs(a!, 'ollaya').ms / vs(b!, 'ollama').ms)
@@ -463,14 +445,13 @@ const VS_TICKS = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
 const vsPos = (a: number) => `${(((Math.min(Math.max(a, VS_MIN), VS_MAX) - VS_MIN) / (VS_MAX - VS_MIN)) * 100).toFixed(2)}%`
 
 const vsFeatures: { label: string; ollaya: string; ollama: string }[] = [
-  { label: 'Decision models', ollaya: '23 families: encoders (laya, nli, gliclass, von, decima) and decoders (winnow, clef, kev, decider, nimble, pplx-decider, strands-decider, jeb, jeeves, cygnet, snap, arbiter and more)', ollama: 'Nine, all decoders except Laya' },
-  { label: 'Small encoders (milliseconds, CPU-friendly)', ollaya: 'laya, nli, gliclass, von, decima', ollama: 'Laya' },
-  { label: 'Probabilities', ollaya: "Calibrated with each author's fitted temperature, refittable in a Modelfile", ollama: "Mostly raw softmax; Nimble's and Strands Decider's temperatures not applied" },
-  { label: 'Options per question', ollaya: 'Up to 255, as TypeSafe', ollama: 'Up to 26 (255 for Kev and Strands Decider)' },
-  { label: 'Questions per request', ollaya: 'Up to 256, as TypeSafe', ollama: 'Up to 64' },
-  { label: 'TypeSafe endpoints', ollaya: '/v1/systemone, /v1/decisions, /v1/models', ollama: '/v1/systemone' },
-  { label: 'Language routing', ollaya: 'laya picks English or multilingual per request', ollama: 'None' },
-  { label: 'Weights', ollaya: "The author's files, pinned by commit and sha256", ollama: 'Converted to GGUF and re-hosted' },
+  { label: 'Decision models', ollaya: `${catalog.length} families`, ollama: '9' },
+  { label: 'CPU-fast encoders', ollaya: 'laya, nli, gliclass, von, decima', ollama: 'laya' },
+  { label: 'Probabilities', ollaya: "Author's temperature", ollama: 'Raw softmax' },
+  { label: 'Options per question', ollaya: '255', ollama: '26 (Kev, Strands: 255)' },
+  { label: 'Questions per request', ollaya: '256', ollama: '64' },
+  { label: 'TypeSafe endpoints', ollaya: 'systemone, decisions, models', ollama: 'systemone' },
+  { label: 'Weights', ollaya: "Author's files, sha256-pinned", ollama: 'Re-hosted GGUF' },
 ]
 
 /**
@@ -485,7 +466,7 @@ function VsBar({ run }: { run: VsRun }) {
     <li class={VS_GRID}>
       <span class="order-1 flex min-h-9 flex-col justify-center leading-tight sm:order-none">
         <span class="font-mono text-xs text-fg sm:text-[13px]">{run.tag}</span>
-        <span class="text-xs text-muted">{ollama ? 'on Ollama 0.40.6' : 'on Ollaya'}</span>
+        <span class="text-xs text-muted">{ollama ? `on ${OLLAMA}` : 'on Ollaya'}</span>
       </span>
       <span class="relative order-5 col-span-4 flex h-6 items-center sm:order-none sm:col-span-1 sm:h-9" aria-hidden="true">
         <span class="relative h-px w-full bg-line">
@@ -511,12 +492,12 @@ function VersusOllama() {
       id="vs-ollama"
       title="Ollaya and Ollama"
       lead="Inspired by Ollama, measured side by side."
-      body={`Ollaya borrows Ollama's design: one binary, pull and run, a local API. Ollama 0.40 serves nine decision models, so we ran all of them on the same RTX 5090 over Bespoke Labs' public benchmark: 3,880 human-labeled questions from 13 datasets, scored with Bespoke's own code. Perplexity's models score highest: the 4B flash model on Ollaya (${vs('pplx-decider:flash', 'ollaya').acc.toFixed(3)}), then the 27B on Ollama (${vs('pplx-decider', 'ollama').acc.toFixed(3)}). On the same weights Ollama is ${speedup()} times faster. Ollaya runs more models, applies each author's temperature, and checks every model against its author's code.`}
+      body={`${OLLAMA}'s nine decision models and Ollaya's, on the same ${benchGpu} and 3,880 human-labeled questions. Ollama is ${speedup()} times faster on the same weights; Ollaya applies each author's temperature and runs more models.`}
     >
       <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-3">
         <Stat value={vs('pplx-decider:flash', 'ollaya').acc.toFixed(3)} unit="" label="Most accurate on Ollaya: pplx-decider:flash" detail={`Ollama's best: ${vs('pplx-decider', 'ollama').acc.toFixed(3)} (pplx-decider, 27B)`} />
         <div class="border-t border-line sm:border-t-0 sm:border-l">
-          <Stat value="23" unit="" label="Decision model families on Ollaya" detail="Ollama 0.40: nine models" />
+          <Stat value={String(catalog.length)} unit="" label="Decision model families on Ollaya" detail={`${OLLAMA}: nine models`} />
         </div>
         <div class="border-t border-line sm:border-t-0 sm:border-l">
           <Stat value={`${(vs('nimble', 'ollama').ece / vs('nimble:9b', 'ollaya').ece).toFixed(1)}×`} unit="" label="Lower calibration error, same Nimble" detail={`ECE ${vs('nimble:9b', 'ollaya').ece.toFixed(3)} on Ollaya, ${vs('nimble', 'ollama').ece.toFixed(3)} on Ollama`} />
@@ -532,7 +513,7 @@ function VersusOllama() {
           <Legend
             items={[
               { label: 'Ollaya', tone: 'us' },
-              { label: 'Ollama 0.40.6', tone: 'them', mark: 'ring' },
+              { label: OLLAMA, tone: 'them', mark: 'ring' },
             ]}
           />
         </div>
@@ -573,21 +554,21 @@ function VersusOllama() {
             <tr>
               <th scope="col" class="w-[30%] px-6 py-3 text-left text-[13px] font-medium text-muted"></th>
               <th scope="col" class="px-6 py-3 text-left text-[13px] font-medium text-fg">Ollaya</th>
-              <th scope="col" class="px-6 py-3 text-left text-[13px] font-medium text-muted">Ollama 0.40</th>
+              <th scope="col" class="px-6 py-3 text-left text-[13px] font-medium text-muted">{OLLAMA}</th>
             </tr>
           </thead>
           <tbody class="block divide-y divide-line md:table-row-group">
             {vsFeatures.map((f) => (
               <tr class="block px-5 py-4 md:table-row md:p-0">
-                <th scope="row" class="block pb-1 text-left text-[15px] font-medium text-fg md:table-cell md:px-6 md:py-4 md:align-top">
+                <th scope="row" class="block pb-1 text-left text-[15px] font-medium text-fg md:table-cell md:px-6 md:py-3 md:align-top">
                   {f.label}
                 </th>
-                <td class="flex gap-3 pt-1.5 md:table-cell md:px-6 md:py-4 md:align-top">
+                <td class="flex gap-3 pt-1.5 md:table-cell md:px-6 md:py-3 md:align-top">
                   <span class="w-24 shrink-0 text-[13px] leading-6 text-muted md:hidden">Ollaya</span>
                   <span class="text-[15px] leading-6 text-body">{f.ollaya}</span>
                 </td>
-                <td class="flex gap-3 pt-1.5 md:table-cell md:px-6 md:py-4 md:align-top">
-                  <span class="w-24 shrink-0 text-[13px] leading-6 text-muted md:hidden">Ollama 0.40</span>
+                <td class="flex gap-3 pt-1.5 md:table-cell md:px-6 md:py-3 md:align-top">
+                  <span class="w-24 shrink-0 text-[13px] leading-6 text-muted md:hidden">{OLLAMA}</span>
                   <span class="text-[15px] leading-6 text-muted">{f.ollama}</span>
                 </td>
               </tr>
@@ -597,9 +578,7 @@ function VersusOllama() {
       </div>
       <p class="mt-8 max-w-2xl text-[13px] leading-relaxed text-muted">
         <a href="https://github.com/bespokelabsai/nimble/blob/main/docs/PUBLIC_BENCHMARKS.md" class={textLink}>Bespoke Labs' public benchmark</a>,
-        one request at a time with Ollaya 0.8.0 and Ollama 0.35.0. Accuracy is the mean over the 13 datasets; ECE is the
-        calibration error of the top probability; latency is the median request, HTTP included. Ollama runs Nimble as Q8_0 on
-        llama.cpp, Ollaya in fp32 with the author's temperature.
+        one request at a time: Ollaya Bench {benchEdition.id}, {OLLAMA}. ECE: calibration error of the top probability.
       </p>
       <p class="mt-4">
         <a href={benchUrl()} class="inline-flex items-center gap-1.5 text-sm font-medium text-fg underline-offset-4 hover:underline">
@@ -699,7 +678,7 @@ function modelRows(): { href: string; name: string; summary: string; meta: strin
   return catalog.slice(0, 8).map((m) => ({
     href: `/library/${m.name}`,
     name: m.name,
-    summary: m.description,
+    summary: (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).split(': ')[0]!.replace(/\.$/, ''), // who made it and on what; the model page has the rest
     meta: m.sizes.join(' · '),
   }))
 }
@@ -714,7 +693,7 @@ function OpenModels() {
       lead="Open weights, ready to pull."
       body={
         laya
-          ? 'Pick by what you need: winnow:e4b balances accuracy and speed best, laya is the fastest and runs well on a CPU, kev and decider scale up to 9B and 4B, von reads up to 8,192 tokens, and qwen3guard screens text for safety. The models page shows each one’s accuracy and speed.'
+          ? 'winnow:e4b balances accuracy and speed best; laya is the fastest and runs well on a CPU.'
           : 'Open decision models from their authors, pulled by name.'
       }
     >
@@ -806,14 +785,14 @@ const platforms: { name: string; detail: string; app: Support; cli: Support; gpu
     detail: '10 and 11, x64',
     app: { ok: true, text: 'Desktop app', note: '.exe or .msi' },
     cli: { ok: true, text: 'PowerShell script' },
-    gpu: { ok: true, text: 'NVIDIA, CUDA 13 or 12', note: 'Command line' },
+    gpu: { ok: true, text: 'NVIDIA, CUDA 12/13', note: 'Command line' },
   },
   {
     name: 'Linux',
     detail: 'x86-64',
     app: { ok: true, text: 'Desktop app', note: 'AppImage, .deb, .rpm' },
     cli: { ok: true, text: 'Install script', note: 'systemd service' },
-    gpu: { ok: true, text: 'NVIDIA, CUDA 13 or 12' },
+    gpu: { ok: true, text: 'NVIDIA, CUDA 12/13' },
   },
   {
     name: 'Linux',
@@ -827,14 +806,14 @@ const platforms: { name: string; detail: string; app: Support; cli: Support; gpu
     detail: 'Linux on Windows',
     app: { ok: false },
     cli: { ok: true, text: 'Install script', note: 'Same as Linux' },
-    gpu: { ok: true, text: 'NVIDIA, CUDA 13 or 12' },
+    gpu: { ok: true, text: 'NVIDIA, CUDA 12/13' },
   },
   {
     name: 'Docker',
     detail: 'amd64 and arm64',
     app: { ok: false },
     cli: { ok: true, text: 'Image on GHCR' },
-    gpu: { ok: true, text: 'NVIDIA, CUDA 13 or 12', note: ':cuda and :cuda12, amd64' },
+    gpu: { ok: true, text: 'NVIDIA, CUDA 12/13', note: ':cuda and :cuda12, amd64' },
   },
 ]
 
@@ -897,7 +876,7 @@ function Platforms() {
         <a href="/download" class="inline-flex items-center gap-1.5 text-sm font-medium text-fg underline-offset-4 hover:underline">
           Install for your platform <Icon name="arrowRight" class="size-4" />
         </a>
-        <p class="max-w-md text-[13px] text-muted sm:text-right">
+        <p class="max-w-md text-[13px] text-muted">
           NVIDIA GPUs need driver R525 or newer; the install scripts fetch the CUDA libraries only when they find one.
           On a Mac, laya and nli run on the Apple GPU through MLX; other models, AMD and Intel GPUs, and the Windows and Linux desktop apps without the command line installed use the CPU.
         </p>

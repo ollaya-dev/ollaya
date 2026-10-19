@@ -24,8 +24,8 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `winn
 
 ## Speed
 
-- **RTX 5090, through the HTTP API (Ollaya Bench):** the triage preset (five questions) on a short customer message takes {{result winnow:e4b gpu.p50_ms 0}} ms on `e4b` and {{result winnow:12b gpu.p50_ms 0}} ms on `12b` at the median. On the parity fixtures, measured in the runner, the medians are 96 ms and 154 ms.
-- **CPU:** `e4b` takes about 5.1 s for the same request on a 24-core x86 CPU. Use a GPU.
+- **RTX 5090, through the HTTP API (Ollaya Bench):** the triage preset (five questions) on a short customer message takes {{result winnow:e4b gpu.p50_ms 0}} ms on `e4b` and {{result winnow:12b gpu.p50_ms 0}} ms on `12b` at the median.
+- **CPU:** `e4b` takes {{result winnow:e4b cpu.p50_ms 0}} ms for the same request on the Threadripper 3960X (24 cores). Use a GPU.
 
 ## How it works
 
@@ -34,11 +34,11 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `winn
 - **Labels.** Up to 64 options per question: `A` to `Z`, then two-letter labels, each a single token.
 - **Calibration.** `winnow:12b` uses temperature 1, the author's default: the author fitted no calibration for it. `winnow:e4b` uses 1.2574, the temperature the author fitted for its Q8_0 file on 778 held-out questions.
 - **Engine.** llama.cpp v0.5.0, ggml-org's own release build, runs inside Ollaya's runner process. It uses an NVIDIA GPU (CUDA) or an Apple silicon GPU (Metal) when the model fits, and the CPU otherwise.
-- **Parity.** Ollaya's runner matches stock llama.cpp (`llama-server` of the same build, on the same file): the same decision on all 505 test questions, probabilities within 3.0e-6, on CUDA (RTX 4090, both models) and an x86-64 CPU (`e4b`). On Windows the CPU check covered 15 questions. Against the author's own server, `e4b` agrees on all 503 decisions. Not checked yet: Metal and the Apple CPU, Linux on ARM, and the full `12b` text suite on the CPU.
+- **Parity.** Ollaya's runner matches stock `llama-server` of the same build on the same file: the same decision on all 505 test questions, probabilities within 3.0e-6, on CUDA (both models) and an x86-64 CPU (`e4b`). Against the author's own server, `e4b` agrees on all 503 decisions. Not checked yet: Metal, the Apple CPU, Linux on ARM and the full `12b` text suite on the CPU.
 
 ## Limits
 
-- **Size.** These are large language models. `winnow:12b` needs about 14 GB of GPU memory and `winnow:e4b` about 9 GB at the 8,192-token context; on the CPU they are much slower than the encoder models. `winnow:12b-vision` needs about 0.4 GB more: on an RTX 5090, CUDA context included, it peaked at 16,263 MiB against 15,877 MiB for `winnow:12b`, so a 16 GB GPU is marginal for it.
+- **Size.** `winnow:12b` needs about 14 GB of GPU memory and `winnow:e4b` about 9 GB at the 8,192-token context; on the CPU both are much slower than the encoders. `winnow:12b-vision` needs about 0.4 GB more than `winnow:12b`, so a 16 GB GPU is marginal for it.
 - **Context.** State, question and options share 8,192 tokens. A longer state is cut to 6,144 tokens.
 - **Options.** 2 to 64 options per question and up to 256 questions per request. Probabilities are conditional on the options offered.
 - **Images.** The vision tags read images: up to 16 PNGs per request, sharing the 8,192-token context with the state. `/v1/*` and the other tags are text only.

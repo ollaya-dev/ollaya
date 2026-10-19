@@ -32,5 +32,5 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `deci
 ## Limits
 
 - **State.** 512 tokens per question (2,048 for `decima:agent`), the question included. `/v1/systemone` answers a longer state with `STATE_TRUNCATED`, as the author's server does; `/api/decide` answers from its first tokens.
-- **Options.** Each option row holds the question and the option in 64 tokens. When they don't fit, `decima:agent` keeps the option whole and shortens the question's copy beside it (the full question is still read with the state), as the author's 2.2 runtime does. `decima:base` and `decima:small` keep cutting the row on the right, which their training saw, except when that would make two options identical. 2 to 255 choices, 2 to 10 score levels.
+- **Options.** 2 to 255 choices, 2 to 10 score levels. Each option row fits the question and the option in 64 tokens: `decima:agent` shortens the question's copy and keeps the option whole, as the author's 2.2 runtime does; `base` and `small` cut the row on the right, as in training, unless two options would become identical.
 - **Languages.** Multilingual. The author evaluated small in 20 languages (the weakest are Swahili and Hindi). For base, the author reports Persian about 5 points below English on the same tasks, and other languages less tested.

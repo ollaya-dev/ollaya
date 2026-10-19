@@ -41,7 +41,7 @@ function dateLabel(iso: string | undefined): string {
 }
 
 const shortLicense = (l: string) =>
-  l.startsWith('Apache-2.0 (') ? 'Apache-2.0 + Gemma' : l.replace('LFM Open License v1.0', 'LFM Open 1.0')
+  l.startsWith('Apache-2.0 (') ? 'Apache-2.0 + Gemma' : l.replace('LFM Open License v1.0', 'LFM Open 1.0').replace(/ \([^)]*\)/g, '').replace(' and ', ' + ')
 
 // ---------------------------------------------------------------------------------------------
 // Leaderboard
@@ -111,23 +111,23 @@ function LeaderTable({ d }: { d: Device }) {
         <td class="px-3 py-2.5 text-right tabular-nums" data-v={r.public?.macro_accuracy ?? -1}>
           {pct1(r.public?.macro_accuracy)}
         </td>
-        <td class="px-3 py-2.5 text-right tabular-nums" data-v={r.typed?.accuracy ?? -1}>
+        <td class="px-3 py-2.5 text-right whitespace-nowrap tabular-nums" data-v={r.typed?.accuracy ?? -1}>
           {pct1(r.typed?.accuracy)}
           {r.typed?.trained_on_split ? <span title="Trained on this dataset's train split"> *</span> : null}
         </td>
         <td class="px-3 py-2.5 text-right tabular-nums" data-v={r.public?.pooled_ece ?? 9}>
           {num3(r.public?.pooled_ece)}
         </td>
-        <td class="px-3 py-2.5 text-right font-medium text-fg tabular-nums" data-v={s?.p50_ms ?? 1e9}>
+        <td class="px-3 py-2.5 text-right font-medium whitespace-nowrap text-fg tabular-nums" data-v={s?.p50_ms ?? 1e9}>
           {s?.error ? <span class="font-normal text-muted" title={s.error}>failed</span> : fmtMs(s?.p50_ms)}
         </td>
-        <td class="px-3 py-2.5 text-right tabular-nums" data-v={mem ?? 1e9}>
+        <td class="px-3 py-2.5 text-right whitespace-nowrap tabular-nums" data-v={mem ?? 1e9}>
           {fmtMb(mem)}
         </td>
         <td class="px-3 py-2.5 text-right tabular-nums" data-v={paramsValue(r.params)}>
           {r.params ?? '–'}
         </td>
-        <td class="px-3 py-2.5 text-xs whitespace-nowrap text-muted" data-v={r.license}>
+        <td class="px-3 py-2.5 text-xs whitespace-nowrap text-muted" data-v={r.license} title={r.license}>
           {shortLicense(r.license)}
         </td>
       </tr>
@@ -517,7 +517,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
                           {p.device_detail ?? p.device}
                         </td>
                         <td class="px-3 py-2 text-right">{p.decisions ?? (p.decisions_same !== undefined ? `${p.decisions_same}/${p.questions}` : '–')}</td>
-                        <td class="px-3 py-2 text-right">{p.max_logit_diff == null ? '–' : p.max_logit_diff.toExponential(1)}</td>
+                        <td class="px-3 py-2 text-right whitespace-nowrap">{p.max_logit_diff == null ? '–' : p.max_logit_diff.toExponential(1)}</td>
                         <td class="px-3 py-2">
                           {p.pass === true ? (
                             <span class="font-medium text-pass">pass{p.gate === 'fp16' ? ' (fp16 gate)' : ''}</span>
@@ -627,7 +627,7 @@ export function MethodologyPage() {
       </section>
 
       <Section id="principles" title="Principles">
-        <ol class="grid gap-5 sm:grid-cols-2">
+        <ul class="grid gap-5 sm:grid-cols-2">
           {[
             ['Measured, not modeled', 'Every latency and memory figure is measured on a named machine. No adjustment factors, no costs modeled from price lists.'],
             ['The authors’ model', 'Each model runs from its author’s unmodified weights and passes a parity check against the author’s own code before it is benchmarked. The number belongs to their model, not to a broken port.'],
@@ -637,14 +637,13 @@ export function MethodologyPage() {
             ['No private pre-testing', 'We publish every version we measure. If Ollaya ever ships a model of its own, it runs under the same rules and is labeled as ours.'],
             ['Authors can respond', 'Each model runs with its author’s recommended temperature and precision. Corrections go through public GitHub issues.'],
             ['Contamination flagged', 'A model trained on a task’s train split carries a flag, and its score leaves that task out, so a result on seen data never counts as a held-out one.'],
-          ].map(([t, d], i) => (
+          ].map(([t, d]) => (
             <li class="rounded-xl border border-line p-4">
-              <p class="font-mono text-xs text-muted">{String(i + 1).padStart(2, '0')}</p>
-              <p class="mt-1 font-medium text-fg">{t}</p>
+              <p class="font-medium text-fg">{t}</p>
               <p class="mt-1 text-sm leading-relaxed text-body">{d}</p>
             </li>
           ))}
-        </ol>
+        </ul>
       </Section>
 
       <Section id="score" title="The score">
@@ -827,8 +826,8 @@ export function MethodologyPage() {
             machine:
           </p>
           <pre class="overflow-x-auto rounded-xl border border-line bg-subtle p-4 font-mono text-[12px] leading-relaxed text-fg">
-            {`python -m ollaya_convert.bench_run --machine community-<gpu> --out runs/ \
-    --models kev:4b d1:3b --suites latency-cuda typed \
+            {`python -m ollaya_convert.bench_run --machine community-<gpu> --out runs/ \\
+    --models kev:4b d1:3b --suites latency-cuda typed \\
     --typed-data typed-decisions-test.jsonl`}
           </pre>
           <p>

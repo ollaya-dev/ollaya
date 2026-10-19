@@ -21,8 +21,8 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `jevk
 ## Speed
 
 - **RTX 5090, through the HTTP API (Ollaya Bench):** the triage preset (five questions) on a short customer message takes {{result jevk5:4b gpu.p50_ms 0}} ms at the median.
-- **RTX 4090, in the runner:** on the parity fixtures, whose states are longer, five questions take about 288 ms at the median. Every question is its own pass over the whole prompt (see below), so the time grows with the state times the number of questions.
-- **CPU:** not measured by Ollaya. The author reports about 0.6 s per short decision on a 32- or 48-thread CPU server.
+- **State length:** every question is its own pass over the whole prompt (see below), so the time grows with the state times the number of questions.
+- **CPU:** {{result jevk5:4b cpu.p50_ms 0}} ms for the same request on the Threadripper 3960X (24 cores). The author reports about 0.6 s per short decision on a 32- or 48-thread CPU server.
 
 ## How it works
 
@@ -31,7 +31,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `jevk
 - **Options.** Up to 16 per question, labelled `A` to `P`. A yes/no question reads `true` as `A` and `false` as `B`.
 - **Calibration.** Temperature 1.22 over the letters, the value the author gives for the v0.3 4B files.
 - **Engine.** llama.cpp v0.5.0, ggml-org's own release build, runs inside Ollaya's runner process. It uses an NVIDIA GPU (CUDA) or an Apple silicon GPU (Metal) when the model fits, and the CPU otherwise.
-- **Parity.** Ollaya's runner matches stock llama.cpp (`llama-server` of the same build, on the same file) on CUDA (RTX 4090): the same decision on all 593 test questions, probabilities within 1.6e-6. The prompts are byte-identical to the author's `jevk5.prompt` on all 450 fixture prompts. Not checked yet: the CPU, Metal and Windows.
+- **Parity.** On CUDA, Ollaya's runner matches stock `llama-server` of the same build on the same file: the same decision on all {{result jevk5:4b parity.cuda.questions 0}} test questions, probabilities within 1.6e-6, with prompts byte-identical to the author's `jevk5.prompt`. Not checked yet: the CPU, Metal and Windows.
 
 ## Limits
 

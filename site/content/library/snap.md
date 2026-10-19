@@ -21,7 +21,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `snap
 
 ## How it works
 
-- **Prompt.** Ollaya builds snap's prompt exactly as snap 0.5.0 does: identical on all 573 test prompts, token for token. A structured state is written in TOON, snap's compact rendering of JSON; the question goes before the state or after it as snap decides for the whole request.
+- **Prompt.** Built exactly as snap 0.5.0 builds it, token for token on all 573 test prompts. A structured state is written in TOON, snap's compact JSON; the question goes before or after the state, as snap decides for the whole request.
 - **Options.** Each option is a letter, up to 26 per question, read in one pass. A yes/no question reads `A) Yes`, `B) No`.
 - **Calibration.** None: snap1-2b ships raw probabilities, and so does Ollaya.
 - **Engine.** llama.cpp v0.5.0, ggml-org's own build, on an NVIDIA GPU (CUDA), an Apple silicon GPU (Metal) or the CPU. About 3 GB of memory.

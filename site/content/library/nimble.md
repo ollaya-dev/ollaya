@@ -27,12 +27,12 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `nimb
 
 ## How it works
 
-- **Prompt.** Ollaya builds Nimble's prompt exactly as the author's code does (`serving_schema.prepare_prompts` in the model repository), and maps TypeSafe questions to Nimble's schema the way the author's own `/v1/systemone` server does: noul becomes a true/false field, choice an enum of its labels, score an enum of its levels.
+- **Prompt.** Built exactly as the author's `serving_schema.prepare_prompts` builds it, with TypeSafe questions mapped as the author's `/v1/systemone` server maps them: noul to a true/false field, choice to an enum of its labels, score to an enum of its levels.
 - **Calibrated.** Probabilities use the author's recommended temperature, 2.179 (`temperature_config.json`). A plain softmax of the code logits, what Ollama returns, is overconfident.
 - **Up to 255 options.** Questions with more than 26 options use the author's serving extension: two-letter codes and the "short code" prompt.
-- **Weights.** Qwen's Qwen3.5-9B shards and Bespoke Labs' adapter download from Hugging Face, pinned to a commit and verified by sha256. The adapter is applied at run time, not merged, so every file stays byte for byte the authors'. Ollaya hosts only the ONNX graph (14 MB).
+- **Weights.** Qwen3.5-9B from Qwen and Bespoke Labs' adapter, from Hugging Face, pinned to a commit and verified by sha256. The adapter is applied at run time, not merged; Ollaya hosts only the ONNX graph (14 MB).
 - **Parity.** Ollaya's Rust runtime matches the author's code in fp32 on CUDA: identical token rows, the same rejections and the same decision on all 492 test questions, probabilities within 6.5e-6. `nimble:9b-v3` matches the author's Decision Index engine the same way on 498 questions, probabilities within 1.1e-5.
-- **fp16 tag.** `nimble:9b-fp16` computes the trunk in fp16 on NVIDIA GPUs, with the norms, the recurrent state, the attention softmax and the heads in fp32 ([how](https://github.com/ollaya-dev/ollaya/blob/main/docs/decisions/0008-fp16-decoder-tags.md)): {{result nimble:9b-fp16 gpu.p50_ms 0}} ms for five questions on the RTX 5090 instead of {{result nimble:9b gpu.p50_ms 0}} ms, {{result nimble:9b-fp16 parity.cuda.decisions_same 0}} of {{result nimble:9b-fp16 parity.cuda.questions 0}} decisions the same as `nimble:9b` on the parity set, and {{result nimble:9b-fp16 typed.accuracy 3}} on typed decisions. On a CPU use `nimble:9b`.
+- **fp16 tag.** `nimble:9b-fp16` runs the trunk in fp16 on NVIDIA GPUs ([how](https://github.com/ollaya-dev/ollaya/blob/main/docs/decisions/0008-fp16-decoder-tags.md)): {{result nimble:9b-fp16 gpu.p50_ms 0}} ms for five questions on the RTX 5090 instead of {{result nimble:9b gpu.p50_ms 0}} ms, {{result nimble:9b-fp16 parity.cuda.decisions_same 0}} of {{result nimble:9b-fp16 parity.cuda.questions 0}} decisions the same as `nimble:9b` on the parity set, and {{result nimble:9b-fp16 typed.accuracy 3}} on typed decisions. On a CPU use `nimble:9b`.
 
 ## Limits
 

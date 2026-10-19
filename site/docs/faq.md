@@ -24,7 +24,7 @@ Ollama 0.35 (September 2026) added `/v1/systemone` for two decoder models, Bespo
 
 | | Ollaya | Ollama 0.40 |
 |---|---|---|
-| Models | 23 families: encoders (`laya`, `nli`, `gliclass`, `von`, `decima`) and decoders (`winnow`, `clef`, `kev`, `decider`, `nimble`, `pplx-decider`, `strands-decider`, `jeb`, `jeeves`, `cygnet`, `snap`, `arbiter` and more) | Nine decision models, all decoders except Laya |
+| Models | 23 families: encoders (`laya`, `nli`, `gliclass`, `von`, `decima`) and decoders, listed below | Nine decision models, all decoders except Laya |
 | Encoders | Read every question in one forward pass. `laya:en` answers five questions in {{result laya:en gpu.p50_ms 0}} ms on an RTX 5090 | Laya only |
 | Probabilities | Calibrated with each model's fitted temperatures, which you can refit on your own data in a [Modelfile](/docs/modelfile#calibration) | Mostly the softmax of the raw label scores: Nimble's and Strands Decider's fitted temperatures are not applied. `confidence` is one minus the normalized entropy |
 | Limits | TypeSafe's: 1 to 256 questions, 2 to 255 options, 2 to 10 score levels | 1 to 64 questions; 2 to 26 options for Nimble, Tev1 and Clef (255 for Kev and Strands Decider); 2 to 10 score levels; 64 KiB of text |

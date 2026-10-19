@@ -20,8 +20,8 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `clm`
 
 ## Speed
 
-- **RTX 5090, through the HTTP API (Ollaya Bench):** the triage preset (five questions) on a new short message takes {{result clm:8b gpu.p50_ms 0}} ms at the median once the questions are cached, and under a millisecond for a repeated request. With nothing cached, five questions take about 0.5 s.
-- **Memory:** the encoder's weights stay BF16, about 16 GB; use a GPU with 20 GB or more. On a 24-core CPU a request takes about 13 s.
+- **RTX 5090, through the HTTP API (Ollaya Bench):** five questions on a new short message take {{result clm:8b gpu.p50_ms 0}} ms at the median once the questions are cached, under a millisecond for a repeated request and about 0.5 s with nothing cached.
+- **Memory:** the encoder's weights stay BF16, about 16 GB; use a GPU with 20 GB or more. On the Threadripper 3960X (24 cores) a request takes {{result clm:8b cpu.p50_ms 0}} ms.
 
 ## How it works
 

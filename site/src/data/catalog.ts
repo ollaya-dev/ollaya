@@ -101,7 +101,7 @@ const overlays: Record<string, ModelOverlay> = {
     stats: stats('decider:4b'),
     title: 'decider',
     description:
-      `Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass. decider:4b scores ${result('decider:4b', 'typed.accuracy', 3)} on typed decisions, decider:2b ${result('decider:2b', 'typed.accuracy', 3)}.`,
+      `Decoder decision models by Mapika on Qwen3.5: the answer is read from option-letter logits in one forward pass.`,
     publisher: { name: 'Mapika', url: 'https://huggingface.co/Mapika' },
     capabilities: ['decision', 'long-context'],
     keywords: ['decider', 'decision', 'qwen', 'llm', 'classification', 'typesafe', 'jev', 'system one'],
