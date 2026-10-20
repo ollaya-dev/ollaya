@@ -1,6 +1,6 @@
 //! `decima-late-interaction-v1` and `-v2`: Decima (`amyrmahdy/decima-small`, `-base`, `-agent`), an
 //! encoder with a late-interaction option scorer. Requests follow the author's `decima/systemone.py`,
-//! `decima/model.py` and `decima/render.py` at v2.2.0 (`ollaya_convert.families.decima.layout`);
+//! `decima/model.py` and `decima/render.py` at v2.3.0 (`ollaya_convert.families.decima.layout`);
 //! `docs/families/decima.md` is the spec.
 //!
 //! Every question becomes one state row and one row per option, each encoded on its own:
@@ -14,10 +14,9 @@
 //! ```
 //!
 //! `option_text` is `render.py`'s `choice_texts`. v2 (`option_fit`, the author's `choice_fit`): an
-//! option whose full text fits `max_option_tokens` (or has at most `max_option_tokens - 2`
-//! characters) keeps it, any other is fitted. v1: every option keeps its full text, unless cutting
-//! them makes two of the question's rows identical; then the question's options are rendered as in
-//! v2.
+//! option whose full text fits `max_option_tokens` keeps it, any other is fitted. v1: every option
+//! keeps its full text, unless cutting them makes two of the question's rows identical; then the
+//! question's options are rendered as in v2.
 //!
 //! * `text` is the question's instructions (the question id when they are absent or null; JSON
 //!   other than a string as `json.dumps(ensure_ascii=False)`). A noul question whose criteria give
@@ -375,8 +374,7 @@ impl DecimaLayout {
             |head: usize, option: &str| format!("{prefix}{} … {option}", words[..head].join(" "));
         let mut out = Vec::with_capacity(options.len());
         for (option, full) in options.iter().zip(full) {
-            // Upstream's shortcut: a token is at least one character (Python's `len`).
-            if full.chars().count() <= max_len - 2 || self.tokens(enc, &full)? <= max_len {
+            if self.tokens(enc, &full)? <= max_len {
                 out.push(full);
                 continue;
             }
@@ -646,7 +644,7 @@ mod tests {
         [v1, v2]
     }
 
-    // The expected texts are upstream's `render.choice_texts` (v2.2.0) with the same toy tokenizers.
+    // The expected texts are upstream's `render.choice_texts` (v2.3.0) with the same toy tokenizers.
 
     #[test]
     fn fits_options_like_render_py() {
@@ -692,12 +690,10 @@ mod tests {
 
     #[test]
     fn fitting_follows_render_py_edges() {
-        // Upstream's shortcut counts characters: 16 characters keep the full text although they
-        // are 25 tokens, and the cut still makes both rows "p: ééééééééé ".
-        let want = [
-            "p: \u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9} yes",
-            "p: \u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9} no",
-        ];
+        // Tokens only (v2.3.0 dropped the 62-character shortcut): 16 characters that are 25 tokens
+        // are fitted, in v1 too because the cut makes both rows "p: ééééééééé ". The question's one
+        // word does not fit beside the option, so the option stands alone.
+        let want = ["p: yes", "p: no"];
         assert_eq!(
             texts(&Bytes, 24, &"\u{e9}".repeat(9), &["yes", "no"]),
             [want, want]

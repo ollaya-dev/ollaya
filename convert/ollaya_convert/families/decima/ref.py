@@ -1,5 +1,5 @@
-"""The PyTorch reference for Decima (amyrmahdy/decima-small, -base and -agent): the author's own code
-(github.com/amyrmahdy/decima at v2.2.0, pinned below) on each model repository's `pytorch/` checkpoint, in fp32.
+"""The PyTorch reference for Decima (amyrmahdy/decima-small, -base, -agent, -guard and -guard-small): the author's
+own code (github.com/amyrmahdy/decima at v2.3.0, pinned below) on each model repository's `pytorch/` checkpoint, in fp32.
 
     d = ref.load("cpu", "decima-base")                   # upstream decima.model.Decima (fp32, eval)
     code, message = ref.verdict(d, state, questions)     # serve.py's checks: None, INVALID_REQUEST or STATE_TRUNCATED
@@ -8,7 +8,7 @@
     answers = ref.answers(d, state, questions)           # decima.systemone.system_one, as /v1/systemone answers
 
 Decima is a late-interaction decision model: an encoder (intfloat/multilingual-e5-small for small, jhu-clsp/mmBERT-base
-for base and agent, both MIT) fine-tuned with a two-layer scorer (Apache-2.0). Per question, every text is encoded
+for base, agent and guard, jhu-clsp/mmBERT-small for guard-small, all MIT) fine-tuned with a two-layer scorer (Apache-2.0). Per question, every text is encoded
 on its own (the prefixes are e5's "query: " and "passage: " for small, empty for mmBERT):
 
     state row     state_prefix  + normalize(instructions + "\\n" + state)  (question_in_state)
@@ -32,7 +32,7 @@ Delegated to upstream code, so it cannot drift:
   * the network            DecimaModel.choice_scores and log_probs, as Decima.logits runs them (fp32)
   * request checks         decima.systemone (to_question, system_one's own checks)
   * answers                decima.systemone.system_one (rounding, confidence, noul = P(yes), expected score)
-Re-stated here, cited against decima/serve.py at v2.2.0 (`do_POST`, without its opt-in "long" and
+Re-stated here, cited against decima/serve.py at v2.3.0 (`do_POST`, without its opt-in "long" and
 "min_confidence" request fields):
   * the state as text      `state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)`
   * STATE_TRUNCATED        a question whose state row is over max_state_tokens tokens is a 422, checked in
@@ -58,21 +58,31 @@ MODELS = {
     # The tag v2.0, 2026-10-04: the mmBERT-base generation.
     "decima-base": {"repo": "amyrmahdy/decima-base", "revision": "2468005d5e48e95eb74072c32a6d9df164578071",
                     "tag": "v2.0", "base": "jhu-clsp/mmBERT-base (MIT)"},
-    # The tag v2.2, 2026-10-08: decima-base fine-tuned for agent decisions, states up to 2,048 tokens; its decima.json
-    # has "choice_fit": true. The tag v2.1 (2026-10-05, without choice_fit) was 86a07aab1c340fa5869bdb754e57d3851a1d288a.
-    "decima-agent": {"repo": "amyrmahdy/decima-agent", "revision": "5c14a460ff368b5bf3aaf086d1ab46292d668e32",
-                     "tag": "v2.2", "base": "amyrmahdy/decima-base, on jhu-clsp/mmBERT-base (MIT)"},
+    # The tag v2.3: decima-base fine-tuned for agent decisions, states up to 8,192 tokens, "choice_fit": true. The tag
+    # v2.2 (2026-10-08, 2,048 tokens) was 5c14a460ff368b5bf3aaf086d1ab46292d668e32; v2.1 (2026-10-05, without
+    # choice_fit) 86a07aab1c340fa5869bdb754e57d3851a1d288a.
+    "decima-agent": {"repo": "amyrmahdy/decima-agent", "revision": "652d90ac9d33088edd730692c95f1da381cb9174",
+                     "tag": "v2.3", "base": "amyrmahdy/decima-base, on jhu-clsp/mmBERT-base (MIT)"},
+    # The tag v1.0-preview: guards for LLM apps (inputs, tool results, replies), states up to 2,048 tokens,
+    # "choice_fit": true.
+    "decima-guard": {"repo": "amyrmahdy/decima-guard", "revision": "98d3f734c8323cb390d9ad750e1a606a8dd56f09",
+                     "tag": "v1.0-preview", "base": "amyrmahdy/decima-base-clean, on jhu-clsp/mmBERT-base (MIT)"},
+    "decima-guard-small": {"repo": "amyrmahdy/decima-guard-small",
+                           "revision": "ac11024887d51e9b7b9522b3b8ccc2d78ce7353d",
+                           "tag": "v1.0-preview", "base": "jhu-clsp/mmBERT-small (MIT)"},
 }
 DEFAULT = "decima-small"
 CHECKPOINT = "pytorch"   # encoder/ (config, model.safetensors, tokenizer), head.safetensors, decima.json
 FILES = ["LICENSE", "pytorch/decima.json", "pytorch/head.safetensors", "pytorch/encoder/config.json",
          "pytorch/encoder/model.safetensors", "pytorch/encoder/tokenizer.json", "pytorch/encoder/tokenizer_config.json"]
-# The release of decima-agent 2.2 (the annotated tag object 44470b2d on this commit). Its decima/render.py (the same at
-# v2.1.0, 097d9eb3) renders the options; the rest of what this reference runs gives v1.1.1's (2df60942) rows and
-# numbers, with which small, base and agent 2.1 were exported. system_one now batches a request's questions
-# (Decima.decide_many), which upstream states gives the same numbers as one by one.
-CODE = {"repo": "https://github.com/amyrmahdy/decima", "tag": "v2.2.0",
-        "commit": "efaefe2a3069d0085eeb73b95717efec5d92be94"}
+# The release of decima-agent 2.3 and decima-guard (the annotated tag object 6e3d2b92 on this commit). Against v2.2.0
+# (efaefe2a), under decima/ only render.py's choice_texts changed (the token count alone decides whether an option's
+# full text fits; the 62-character shortcut is gone) and systemone.py's opt-in "ordinal" choice, which no request
+# here sends. v2.2.0's render.py was v2.1.0's (097d9eb3); the rest of what this reference runs gives v1.1.1's
+# (2df60942) rows and numbers, with which small, base and agent 2.1 were exported. system_one batches a request's
+# questions (Decima.decide_many), which upstream states gives the same numbers as one by one.
+CODE = {"repo": "https://github.com/amyrmahdy/decima", "tag": "v2.3.0",
+        "commit": "1b07634e0385c71c97bbd0d74ce8a8345b0e7d0a"}
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "..", "out")
 
 
@@ -114,8 +124,8 @@ def code():
                         t.extract(m, src, filter="data")
             os.remove(tmp)
     with open(os.path.join(src, "pyproject.toml"), encoding="utf-8") as f:
-        if 'version = "2.2.0"' not in f.read():
-            raise SystemExit("%s is not decima 2.2.0 (%s at %s)" % (src, CODE["repo"], CODE["commit"]))
+        if 'version = "2.3.0"' not in f.read():
+            raise SystemExit("%s is not decima 2.3.0 (%s at %s)" % (src, CODE["repo"], CODE["commit"]))
     if src not in sys.path:
         sys.path.insert(0, src)
     return src
