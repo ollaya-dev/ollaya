@@ -1190,8 +1190,8 @@ Safe to retry.
 ### 7.11 Presets
 
 A preset is a named question set: `/api/decide` takes `preset` in place of `questions`, and
-`ollaya run --preset` takes its name. Six presets are built in (`triage`, `email`, `guard`,
-`moderation`, `router`, `agent`); they cannot be changed or deleted. Custom presets live in the
+`ollaya run --preset` takes its name. Seven presets are built in (`triage`, `email`, `guard`,
+`moderation`, `router`, `agent`, `decima-guard`); they cannot be changed or deleted. Custom presets live in the
 model store (`$OLLAYA_MODELS/presets/<name>.json`), so every client of the daemon sees the same
 ones. A custom preset is not a model: unlike a Modelfile's `QUESTIONS`, it works with any model.
 

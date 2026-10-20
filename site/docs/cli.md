@@ -50,7 +50,7 @@ ollaya run laya --preset triage "Your app crashed during checkout and I was char
 
 | Flag | Effect |
 |---|---|
-| `--preset NAME` | Use a preset: built-in (`triage`, `email`, `guard`, `moderation`, `router` or `agent`) or one you saved with [`ollaya preset create`](#ollaya-preset) |
+| `--preset NAME` | Use a preset: built-in (`triage`, `email`, `guard`, `moderation`, `router`, `agent` or `decima-guard`) or one you saved with [`ollaya preset create`](#ollaya-preset) |
 | `--questions FILE\|@FILE\|JSON` | Use these questions (question id → question), overriding the model's own: a file path, `@file` (`@-` for stdin), or inline JSON starting with `{` |
 | `--ask TEXT` | Ask a question; repeat for more. Alone it is a yes/no question; the `--choice` or `--level` flags after it make it a choice or a score. The questions are `q1`, `q2`, … in order |
 | `--choice LABEL[=DESC]` | An option of the `--ask` before it, with an optional description |
@@ -182,7 +182,7 @@ ollaya rm my-guardrail
 
 ## ollaya preset
 
-A preset is a named question set you can reuse with any model: `ollaya run MODEL --preset NAME`, or `"preset": "NAME"` on [`/api/decide`](/docs/api#presets). Six are built in. Save your own:
+A preset is a named question set you can reuse with any model: `ollaya run MODEL --preset NAME`, or `"preset": "NAME"` on [`/api/decide`](/docs/api#presets). Seven are built in. Save your own:
 
 ```shell
 ollaya preset create billing-check --questions billing.json --description "Billing, and how upset the customer is"
