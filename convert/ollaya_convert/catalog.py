@@ -832,11 +832,12 @@ CATALOG = {
                                    "140M", 2048),
         },
         "aliases": {"latest": "base"},
-        "parity": "Ollaya's Rust runtime matches the author's own code (decima/model.py, render.py and systemone.py, "
-                  "fp32) on 581 questions from 122 requests for each of small and base, and 591 questions from 132 "
-                  "requests for agent 2.2, ten of them too long for the option window, on CPU and CUDA (RTX 4090 and "
-                  "RTX 5090): identical token rows and truncation, the same 18 rejected requests, the same decision "
-                  "on every question, scores within 2.2e-5 and probabilities within 5.4e-6.",
+        "parity": "Ollaya's Rust runtime matches the author's own code at v2.3.0 (decima/model.py, render.py and "
+                  "systemone.py, fp32) on 599 questions from 154 requests for each of small, base, agent 2.3, guard "
+                  "and guard-small, on CPU and CUDA (RTX 4090): identical token rows and truncation, the same 18 "
+                  "rejected requests, the same decision on every question, scores within 3.2e-5 and probabilities "
+                  "within 8.2e-6. Agent's states run to 8,192 tokens: rows of 3,041, 5,986 and 8,076 tokens are "
+                  "kept whole, and one of 8,266 is truncated.",
     },
 }
 
