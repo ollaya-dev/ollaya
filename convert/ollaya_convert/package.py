@@ -297,6 +297,9 @@ def package_model(spec, blobs):
         }, indent=2).encode())
         layers = graphs + [weights, tokenizer, decision, calibration, lic] + arch_layers(v, blobs, v["checkpoint"])
         write_manifest(ns, model, tag, config, layers)
+        for alias, target in spec.get("aliases", {}).items():
+            if target == tag:
+                write_manifest(ns, model, alias, config, layers)
         # Precision-pinned variants: same layers plus a params layer the runtime honours.
         for precision in v["exports"]:
             params = blobs.put(MEDIA["params"], json.dumps({"precision": precision}).encode())

@@ -218,7 +218,7 @@ def export(name: str, out_dir: str, root: str) -> str:
     onnx.checker.check_model(path, full_check=True)
 
     # The tokenizer and decision config travel with the graph as their own layers.
-    src = os.path.join(root, laya_ref.CHECKPOINTS[name] or "")
+    src = laya_ref.checkpoint_dir(name, root)
     shutil.copy(os.path.join(src, "tokenizer", "tokenizer.json"), os.path.join(out_dir, "tokenizer.json"))
     with open(os.path.join(src, "rl_agent_config.json"), encoding="utf-8") as f:
         cfg = json.load(f)

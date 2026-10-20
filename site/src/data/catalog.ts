@@ -82,6 +82,20 @@ const overlays: Record<string, ModelOverlay> = {
       },
     },
   },
+  largha: {
+    stats: stats('largha:150m'),
+    title: 'Largha',
+    description:
+      "Phocinae's Largha: Laya's decision network on mmBERT-small (144M), fine-tuned on the typed-decisions workflows. Small enough for a CPU, on the Apple GPU through MLX.",
+    publisher: { name: 'Phocinae', url: 'https://huggingface.co/Phocinae' },
+    capabilities: ['multilingual', 'fine-tuned'],
+    keywords: ['largha', 'phocinae', 'laya', 'mmbert', 'mmbert-small', 'encoder', 'cpu', 'multilingual', 'decision', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 23,
+    tags: {
+      latest: { summary: 'Same as largha:150m.' },
+      '150m': { summary: `Largha v1.1 (mmBERT-small, 144M): ${result('largha:150m', 'public.macro_accuracy', 3)} on Bespoke Labs' public benchmark; ${result('largha:150m', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+    },
+  },
   nli: {
     stats: stats('nli:deberta-v3-large'),
     title: 'NLI zero-shot',

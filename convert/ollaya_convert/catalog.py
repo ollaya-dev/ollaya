@@ -6,27 +6,31 @@ refuses to run if its sha256 differs from the upstream file.
 """
 import os
 
-from .model_paths import DEFAULT_ROOT
+from .model_paths import DEFAULT_ROOT, LARGHA_ROOT
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "out")
 LICENSE_APACHE = open(os.path.join(os.path.dirname(__file__), "..", "..", "LICENSE"), encoding="utf-8").read()
 
 LAYA_REPO = "convaiinnovations/laya"
 LAYA_COMMIT = "aa8c91ca088ec597df95a0d1c76b3063cb2ae5e8"
+LARGHA_REPO = "Phocinae/Phocinae-Largha-150M-v1"
+LARGHA_COMMIT = "5300e85a7d991f4f0cdb68dc25813f76902752d4"  # tag v1.1
 
 
-def _laya(sub, description, params, ctx, languages, mlx=False):
-    """`mlx`: publish an arch layer (the tag passed its parity gate on Metal)."""
+def _laya(sub, description, params, ctx, languages, mlx=False, repo=LAYA_REPO, commit=LAYA_COMMIT,
+          root=DEFAULT_ROOT, slug=None):
+    """`mlx`: publish an arch layer (the tag passed its parity gate on Metal). `repo`, `commit` and
+    `root` name another author's laya checkpoint; `slug` then names its exports."""
     prefix = sub + "/" if sub else ""
-    slug = sub or "en"
+    slug = slug or sub or "en"
     arch = {"family": "laya", "config": prefix + "encoder/config.json",
             "agent_config": prefix + "rl_agent_config.json"} if mlx else None
     return {
-        "repo": LAYA_REPO,
-        "commit": LAYA_COMMIT,
+        "repo": repo,
+        "commit": commit,
         "weights": prefix + "model.safetensors",
         "tokenizer": prefix + "tokenizer/tokenizer.json",
-        "checkpoint": os.path.join(DEFAULT_ROOT, prefix, "model.safetensors"),
+        "checkpoint": os.path.join(root, prefix, "model.safetensors"),
         "prefix": "model.",
         "exports": {
             # fp32: the opset-23 export (fused Attention, CPU); fp16: derived from the opset-20 one.
@@ -188,6 +192,27 @@ CATALOG = {
                            "routes": {"english": "laya:en", "multilingual": "laya:multilingual"}},
             },
         },
+    },
+    "largha": {
+        "namespace": "library",
+        "model": "largha",
+        "family": "laya",
+        "author": "Phocinae",
+        "license": "Apache-2.0",
+        "license_text": "Phocinae-Largha-150M-v1 by Phocinae (https://huggingface.co/Phocinae/Phocinae-Largha-150M-v1)\n"
+                        "Licensed under the Apache License, Version 2.0. Its base encoder, jhu-clsp/mmBERT-small "
+                        "(https://huggingface.co/jhu-clsp/mmBERT-small), is MIT-licensed by JHU CLSP.\n\n"
+                        + LICENSE_APACHE,
+        "tags": {
+            "150m": _laya("", "Laya decision model on mmBERT-small, fine-tuned on the typed-decisions workflows.",
+                          "144M", 512, ["multilingual"], mlx=True, repo=LARGHA_REPO, commit=LARGHA_COMMIT,
+                          root=LARGHA_ROOT, slug="largha"),
+        },
+        "aliases": {"latest": "150m"},
+        "parity": "Ollaya's runtime matches laya's own loader (0.3.7, which renders TypeSafe questions as the 0.3.20 "
+                  "Largha was trained with) on the v1.1 checkpoint in fp32: 2,383 questions, identical token ids and "
+                  "markers, the same decision on every question, probabilities within 3.5e-6 on the CPU, CUDA and "
+                  "the Apple GPU (MLX). The fp16 graph agrees on 99.87% of decisions (3 near-ties).",
     },
     "nli": {
         "namespace": "library",

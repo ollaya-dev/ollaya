@@ -12,19 +12,26 @@ import torch
 from laya.common import QTYPES, build_sequence, collate_items, render_options
 
 from .families.von.ref import fp64_rotary
-from .model_paths import DEFAULT_ROOT
+from .model_paths import DEFAULT_ROOT, LARGHA_ROOT
 
 # Checkpoint name -> subfolder of the bundled Laya repo (None = repo root).
 CHECKPOINTS = {
     "en": None,
     "multilingual": "multilingual",
     "typed-decisions": "typed-decisions",
+    "largha": None,
 }
+# Laya checkpoints from another author's repo, which replaces the bundled Laya repo as the root.
+ROOTS = {"largha": LARGHA_ROOT}
+
+
+def checkpoint_dir(name: str, root: str = DEFAULT_ROOT) -> str:
+    return os.path.join(ROOTS.get(name, root), CHECKPOINTS[name] or "")
 
 
 def load(name: str, root: str = DEFAULT_ROOT, device: str = "cpu") -> laya.Agent:
     """Load a checkpoint in fp32 on `device` (CPU keeps the reference deterministic)."""
-    return laya.load(root, subfolder=CHECKPOINTS[name], device=device)
+    return laya.load(checkpoint_dir(name, root), device=device)
 
 
 def encode(agent: laya.Agent, state: Any, questions: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:

@@ -44,6 +44,7 @@ SEED = 20261014
 # Models trained on the train split of a task: their score on it is not a held-out measurement.
 TRAINED_ON = {
     "laya:typed-decisions": ["typed-decisions"],
+    "largha:150m": ["typed-decisions"],
     "jeb:4b": ["typed-decisions"],
     "jeb:9b": ["typed-decisions"],
     "jeb:27b": ["typed-decisions"],

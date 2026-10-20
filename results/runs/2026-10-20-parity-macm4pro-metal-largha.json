@@ -1,0 +1,29 @@
+{
+ "schema": 1,
+ "suite": "parity",
+ "date": "2026-10-20",
+ "machine": "mac-m4-pro",
+ "device": "metal",
+ "ollaya": "0.14.0 at 081ac1a with local changes",
+ "protocol": {
+  "reference": "goldens from each family's goldens.py: the authors' code in PyTorch fp32 (TF32 off) on the checkpoint the manifest names",
+  "gate": "fp32 tags: identical encodings and decisions, option logits within 1e-3, wire answers as the authors' code; -fp16 tags (docs/decisions/0008-fp16-decoder-tags.md): identical encodings, at least 99.5 % of decisions the same, differences reported",
+  "runner": "crates/ollaya-runner/examples/parity.rs (laya family), run by hand"
+ },
+ "results": [
+  {
+   "model": "largha:150m",
+   "questions": 2383,
+   "decisions_same": 2383,
+   "max_prob_diff": 3.5e-06,
+   "p99_prob_diff": 1.8e-06,
+   "pass": true,
+   "device": "metal",
+   "kind": "runtime",
+   "gate": "fp32",
+   "encoding_mismatches": 0,
+   "goldens": "convert/out/goldens-all/laya-largha.jsonl (477 cases, laya 0.3.7 fp32 on CPU)",
+   "engine": "mlx"
+  }
+ ]
+}
