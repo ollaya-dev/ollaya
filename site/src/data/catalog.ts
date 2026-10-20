@@ -401,7 +401,7 @@ const overlays: Record<string, ModelOverlay> = {
     tags: {
       latest: { summary: 'Same as decima:base.' },
       base: { summary: `Decima-base 2.0 (mmBERT-base, 321M), fp32: ${result('decima:base', 'typed.accuracy', 3)} on typed decisions; ${result('decima:base', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
-      agent: { summary: "Decima-agent 2.2: decima-base fine-tuned for coding-agent decisions (secret and command gates, tool and model choice) and knowledge-graph judgments; states up to 2,048 tokens, options kept whole beside long questions." },
+      agent: { summary: "Decima-agent 2.3: decima-base fine-tuned for coding-agent decisions (secret and command gates, tool and model choice) and knowledge-graph judgments; states up to 8,192 tokens, options kept whole beside long questions." },
       small: { summary: `Decima-small 1.1 (multilingual-e5-small, 122M), fp32: ${result('decima:small', 'typed.accuracy', 3)} on typed decisions; ${result('decima:small', 'cpu.p50_ms', 0)} ms for five questions on a CPU.` },
     },
   },

@@ -1,5 +1,5 @@
 """`decima-late-interaction-v1` and `-v2`: the request handling of the author's `decima/systemone.py`, `decima/model.py`
-and `decima/render.py` (github.com/amyrmahdy/decima at v2.2.0), written the way the Rust port is (HF `tokenizers` and
+and `decima/render.py` (github.com/amyrmahdy/decima at v2.3.0), written the way the Rust port is (HF `tokenizers` and
 `decision.json` only). `check.py` and `goldens.py` compare it id for id with upstream.
 
 Per question, in request order:
@@ -110,7 +110,7 @@ class DecimaLayout:
                 return full
         out = []
         for o, f in zip(options, full):
-            if len(f) <= max_len - 2 or self.tokens(f) <= max_len:
+            if self.tokens(f) <= max_len:
                 out.append(f)
                 continue
             opt = normalize(o)
