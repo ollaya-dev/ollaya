@@ -261,6 +261,20 @@ fn main() -> Result<()> {
         percentile(&prob_diffs, 99),
         1000.0 * forward / cases.len().max(1) as f64,
     );
+    // One JSON line for `ollaya_convert.parity_run`, which records it in results/runs/.
+    println!(
+        "record: {}",
+        serde_json::json!({
+            "questions": nq,
+            "decisions_same": nq - disagree,
+            "max_logit_diff": score_max,
+            "max_ordinal_diff": proj_max,
+            "max_prob_diff": prob_diffs.last().copied().unwrap_or(0.0),
+            "p99_prob_diff": percentile(&prob_diffs, 99),
+            "max_answer_diff": wire_max,
+            "answers_other_choice": wire_choice,
+        })
+    );
     if score_max.max(proj_max) > SCORE_TOL || prob_diffs.last().is_some_and(|d| d.is_nan()) {
         bail!("scores differ by more than {SCORE_TOL:e}");
     }
