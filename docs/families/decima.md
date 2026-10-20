@@ -140,6 +140,25 @@ Goldens: `python -m ollaya_convert.families.decima.goldens out/<slug>` runs the 
 outputs, the decisions and the `/v1/systemone` answers against upstream's `system_one`. On CPU the ONNX Runtime is
 pyke's 1.28.0, linked statically; on CUDA it is Microsoft's 1.28.2 from the CUDA 13 pack.
 
+**Decima 2.3 (measured 2026-10-20).** Upstream `v2.3.0` (`1b07634e`): 154 requests per model, the 150 below and four
+long agent states (3,041, 5,986, 8,076 and 8,266 tokens), 18 rejected upstream. Cut states: 7 for small and base,
+1 for agent (the 8,266-token one), 4 for guard and guard-small.
+
+| Model | Device | Questions | Rows | Decisions | Scores max | Probabilities max |
+|---|---|---|---|---|---|---|
+| small 1.1 | x86-64 CPU | 599 | 2,986 identical | 599/599 | 1.2e-5 | 2.2e-6 |
+| small 1.1 | CUDA, RTX 4090 | 599 | 2,986 identical | 599/599 | 1.1e-5 | 1.8e-6 |
+| base 2.0 | x86-64 CPU | 599 | 2,986 identical | 599/599 | 2.0e-5 | 3.8e-6 |
+| base 2.0 | CUDA, RTX 4090 | 599 | 2,986 identical | 599/599 | 1.0e-5 | 3.5e-6 |
+| agent 2.3 | x86-64 CPU | 599 | 2,986 identical | 599/599 | 1.9e-5 | 5.4e-6 |
+| agent 2.3 | CUDA, RTX 4090 | 599 | 2,986 identical | 599/599 | 3.2e-5 | 8.2e-6 |
+| guard 1.0 preview | x86-64 CPU | 599 | 2,986 identical | 599/599 | 1.8e-5 | 5.8e-6 |
+| guard 1.0 preview | CUDA, RTX 4090 | 599 | 2,986 identical | 599/599 | 2.0e-5 | 7.3e-6 |
+| guard-small 1.0 preview | x86-64 CPU | 599 | 2,986 identical | 599/599 | 1.8e-5 | 7.5e-6 |
+| guard-small 1.0 preview | CUDA, RTX 4090 | 599 | 2,986 identical | 599/599 | 9.1e-6 | 4.8e-6 |
+
+The ordinal projections are within 9.9e-5, and every `/v1/systemone` answer matches upstream's to 4 decimals.
+
 **Decima-agent 2.2 (measured 2026-10-13).** Upstream `v2.2.0`: 150 requests, the 140 below and the 10
 `fit_cases`, 18 rejected upstream.
 
