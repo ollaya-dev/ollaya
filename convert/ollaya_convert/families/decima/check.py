@@ -10,7 +10,8 @@ flag (upstream's 422 STATE_TRUNCATED), and rejections must match. Requests Ollay
 first are counted on their own.
 
 The shared set is `llm_common.cases` (the edge cases and typed-decisions rows); `extra_cases` adds the inputs
-Decima's mapping treats specially, and `fit_cases` the questions too long for the option window (render.py).
+Decima's mapping treats specially and `long_cases` (states that fill decima-agent's 8,192-token window, and one over
+it), and `fit_cases` the questions too long for the option window (render.py).
 """
 from __future__ import annotations
 
@@ -87,7 +88,27 @@ def extra_cases():
         ("decima/255_choices", "hi", wire({"q": {"type": "choice", "instructions": "x",
                                                  "criteria": ["c%d" % i for i in range(255)]}})),
         ("decima/empty_instructions_state", "", wire({"q": {"type": "noul", "instructions": ""}})),
-    ]
+    ] + long_cases()
+
+
+def agent_log(steps):
+    """A coding agent's transcript of `steps` test runs, about 95 mmBERT tokens each."""
+    return "".join("[step %d] $ cargo test -p billing --release\n   Compiling billing v0.4.%d (/work/billing)\n"
+                   "running 48 tests\ntest refund::partial_refund_keeps_the_order_open ... ok\n"
+                   "test refund::refund_over_total_is_rejected ... %s\nassistant: The refund check compares with >= "
+                   "now; I will read billing/refund.py again before I edit it.\n"
+                   % (i, i % 10, "FAILED" if i % 3 else "ok") for i in range(steps))
+
+
+def long_cases():
+    """States for decima-agent's 8,192-token window: state rows (question included) of about 3k, 6k and 8.1k
+    mmBERT tokens, which agent keeps whole, and 8.3k, which upstream answers with STATE_TRUNCATED. Every other tag
+    truncates all four (512 or 2,048 tokens)."""
+    qs = wire({"passed": {"type": "noul", "instructions": "Did every test in the last run pass?"},
+               "next": {"type": "choice", "instructions": "What should the agent do next?",
+                        "criteria": {"edit": "change the code", "rerun": "run the tests again", "ask": None}}})
+    return [("decima/long_%s" % name, agent_log(steps), qs)
+            for name, steps in (("3k", 32), ("6k", 63), ("8100", 85), ("8300_truncated", 87))]
 
 
 # A question long enough to push every option out of the 64-token option window on its own.
