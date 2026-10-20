@@ -13,7 +13,11 @@
   "2026-10-19-latency-rtx5090-cuda.json",
   "2026-10-19-latency-rtx5090-cpu.json",
   "2026-10-19-public-benchmark-rtx5090-cuda.json",
-  "2026-10-19-typed-decisions-rtx5090-cuda.json"
+  "2026-10-19-typed-decisions-rtx5090-cuda.json",
+  "2026-10-20-latency-rtx5090-cuda.json",
+  "2026-10-20-latency-rtx5090-cpu.json",
+  "2026-10-20-public-benchmark-rtx5090-cuda.json",
+  "2026-10-20-typed-decisions-rtx5090-cuda.json"
  ],
  "models": [
   "decima:small",
@@ -54,7 +58,10 @@
   "jeb:27b",
   "nimble:9b-v3",
   "pplx-decider:flash",
-  "strands-decider:2b"
+  "strands-decider:2b",
+  "decima:guard",
+  "decima:guard-small",
+  "largha:150m"
  ],
  "score": {
   "definition": "Mean over 14 tasks (13 public subsets and typed-decisions, equal weight) of the chance-corrected accuracy 100 * (accuracy - chance) / (1 - chance); chance is the mean of 1/K over the task's questions. A model trained on a task's train split is scored on the other tasks",
@@ -823,23 +830,48 @@
     "score": 27.87,
     "score_ci": [
      25.69,
-     29.87
+     30.14
     ],
     "tasks": {
-     "vitaminc-dev": 44.66,
-     "massive-en-US": 82.76,
-     "massive-de-DE": 79.43,
-     "boolq": 20.0,
-     "squad2": 14.38,
-     "paws": 2.4,
-     "multinli": 66.89,
-     "civil_comments": 53.33,
-     "aegis2": 16.8,
-     "helpsteer2": -3.92,
-     "summeval-relevance": 6.77,
-     "summeval-consistency": -18.92,
-     "pubmedqa": 4.6,
-     "typed-decisions": 20.95
+     "vitaminc-dev": 47.66,
+     "massive-en-US": 80.94,
+     "massive-de-DE": 77.92,
+     "boolq": 19.33,
+     "squad2": 7.69,
+     "paws": 4.8,
+     "multinli": 68.9,
+     "civil_comments": 40.0,
+     "aegis2": 15.2,
+     "helpsteer2": -3.41,
+     "summeval-relevance": 17.71,
+     "summeval-consistency": -16.32,
+     "pubmedqa": 5.8,
+     "typed-decisions": 23.96
+    },
+    "trained_on": []
+   },
+   {
+    "model": "decima:guard",
+    "score": 25.77,
+    "score_ci": [
+     23.67,
+     28.07
+    ],
+    "tasks": {
+     "vitaminc-dev": 37.65,
+     "massive-en-US": 54.32,
+     "massive-de-DE": 46.15,
+     "boolq": -4.67,
+     "squad2": -2.34,
+     "paws": -2.4,
+     "multinli": 69.9,
+     "civil_comments": 40.67,
+     "aegis2": 49.6,
+     "helpsteer2": -11.95,
+     "summeval-relevance": -9.38,
+     "summeval-consistency": 67.01,
+     "pubmedqa": 13.6,
+     "typed-decisions": 12.67
     },
     "trained_on": []
    },
@@ -994,6 +1026,31 @@
     "trained_on": []
    },
    {
+    "model": "decima:guard-small",
+    "score": 14.77,
+    "score_ci": [
+     12.34,
+     16.86
+    ],
+    "tasks": {
+     "vitaminc-dev": 24.87,
+     "massive-en-US": 30.72,
+     "massive-de-DE": 18.62,
+     "boolq": -11.33,
+     "squad2": -0.33,
+     "paws": -4.0,
+     "multinli": 49.83,
+     "civil_comments": 44.0,
+     "aegis2": 47.2,
+     "helpsteer2": -11.45,
+     "summeval-relevance": -0.52,
+     "summeval-consistency": 9.72,
+     "pubmedqa": -2.6,
+     "typed-decisions": 12.09
+    },
+    "trained_on": []
+   },
+   {
     "model": "clm:8b",
     "score": 9.28,
     "score_ci": [
@@ -1017,6 +1074,33 @@
      "typed-decisions": 5.79
     },
     "trained_on": []
+   },
+   {
+    "model": "largha:150m",
+    "score": 9.05,
+    "score_ci": [
+     6.56,
+     11.55
+    ],
+    "tasks": {
+     "vitaminc-dev": 21.37,
+     "massive-en-US": 57.95,
+     "massive-de-DE": 44.64,
+     "boolq": 19.33,
+     "squad2": -6.35,
+     "paws": -3.2,
+     "multinli": 5.18,
+     "civil_comments": 8.67,
+     "aegis2": 14.4,
+     "helpsteer2": -10.44,
+     "summeval-relevance": -19.79,
+     "summeval-consistency": -10.24,
+     "pubmedqa": -3.8,
+     "typed-decisions": 82.34
+    },
+    "trained_on": [
+     "typed-decisions"
+    ]
    }
   ]
  },
@@ -1065,6 +1149,24 @@
     "pplx-decider:flash-fp16",
     "strands-decider:2b",
     "strands-decider:2b-fp16"
+   ]
+  },
+  {
+   "release": "0.15.0",
+   "date": "2026-10-20",
+   "runs": [
+    "2026-10-20-latency-rtx5090-cuda.json",
+    "2026-10-20-latency-rtx5090-cpu.json",
+    "2026-10-20-public-benchmark-rtx5090-cuda.json",
+    "2026-10-20-typed-decisions-rtx5090-cuda.json"
+   ],
+   "models": [
+    "decima:agent",
+    "decima:base",
+    "decima:guard",
+    "decima:guard-small",
+    "decima:small",
+    "largha:150m"
    ]
   }
  ]

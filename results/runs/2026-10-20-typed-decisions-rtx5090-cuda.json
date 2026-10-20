@@ -1,0 +1,147 @@
+{
+ "schema": 1,
+ "date": "2026-10-20",
+ "edition": "2026.10",
+ "machine": "rtx-5090",
+ "device": "cuda",
+ "suite": "typed-decisions",
+ "ollaya": "0.14.0",
+ "protocol": {
+  "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each (2,000 questions: 600 choice, 600 noul, 800 score)",
+  "source": "https://huggingface.co/datasets/LocalLLaMA/typed-decisions",
+  "runner": "convert/ollaya_convert/bench_typed.py",
+  "client": "one request (one state, its five questions) at a time over HTTP to /v1/systemone, timed by the client",
+  "accuracy": "argmax of the returned probabilities against the gold label, over all 2,000 questions; a rejected request counts as wrong on its five questions; 95 % bootstrap interval over states",
+  "ece": "ten-bin expected calibration error of the top probability, pooled over the answered questions"
+ },
+ "results": [
+  {
+   "model": "largha:150m",
+   "digest": "d5727855d1b4f8eb43180058b038c34560971c1833098bbe7d9140c27a142c5d",
+   "answered_by": [
+    "largha:150m"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 11,
+   "accuracy": 0.8795,
+   "accuracy_ci": [
+    0.86,
+    0.8985
+   ],
+   "by_type": {
+    "choice": 0.8883,
+    "noul": 0.9133,
+    "score": 0.8475
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.886,
+    "customer_service": 0.798,
+    "invoice_processing": 0.94,
+    "security_incidents": 0.894
+   },
+   "ece": 0.2502,
+   "brier": 0.256,
+   "soft_ce": 0.8213,
+   "median_ms": 18.1,
+   "p95_ms": 25.4,
+   "trained_on_split": true
+  },
+  {
+   "model": "decima:agent",
+   "digest": "e14e614ce4ab1ae2e7a0f1203b91e4d38fb645d100202726abe59f78e2c0077b",
+   "answered_by": [
+    "decima:agent"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.481,
+   "accuracy_ci": [
+    0.4595,
+    0.5025
+   ],
+   "by_type": {
+    "choice": 0.44,
+    "noul": 0.6617,
+    "score": 0.3762
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.484,
+    "customer_service": 0.484,
+    "invoice_processing": 0.42,
+    "security_incidents": 0.536
+   },
+   "ece": 0.181,
+   "brier": 0.6665,
+   "soft_ce": 1.3785,
+   "median_ms": 28.3,
+   "p95_ms": 37.0,
+   "trained_on_split": false
+  },
+  {
+   "model": "decima:guard",
+   "digest": "6365b94a39ba2a6c385fd3e31746bcae24b863d07eb4b2f3b0335c812e8e76cf",
+   "answered_by": [
+    "decima:guard"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.404,
+   "accuracy_ci": [
+    0.3795,
+    0.4295
+   ],
+   "by_type": {
+    "choice": 0.3283,
+    "noul": 0.4933,
+    "score": 0.3937
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.414,
+    "customer_service": 0.52,
+    "invoice_processing": 0.222,
+    "security_incidents": 0.46
+   },
+   "ece": 0.2141,
+   "brier": 0.7331,
+   "soft_ce": 1.397,
+   "median_ms": 28.4,
+   "p95_ms": 37.8,
+   "trained_on_split": false
+  },
+  {
+   "model": "decima:guard-small",
+   "digest": "1285576f6cd12494c9ad22cfb754743c1e8d0ba7eea60e7c4871eb1f06bf96df",
+   "answered_by": [
+    "decima:guard-small"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.4,
+   "accuracy_ci": [
+    0.378,
+    0.4225
+   ],
+   "by_type": {
+    "choice": 0.3583,
+    "noul": 0.56,
+    "score": 0.3113
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.39,
+    "customer_service": 0.352,
+    "invoice_processing": 0.432,
+    "security_incidents": 0.426
+   },
+   "ece": 0.1837,
+   "brier": 0.7266,
+   "soft_ce": 1.3677,
+   "median_ms": 27.4,
+   "p95_ms": 35.4,
+   "trained_on_split": false
+  }
+ ]
+}
