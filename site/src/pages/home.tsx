@@ -284,24 +284,29 @@ function Section({
 
 // Accuracy: typed-decisions (400 states, 2,000 questions, argmax against the majority label); latency: the median
 // five-question request on the edition's GPU. Both from results/ (data/numbers.ts). One row per family, its most accurate
-// tag; -fp16 tags sit under their base tag, and models trained on the dataset's train split are left out.
+// tag; -fp16 tags sit under their base tag, and models trained on the dataset's train split carry an asterisk.
 // Jev's accuracy is TypeSafe's report; its latency is the hosted API in third-party benchmarks, network included.
-const scoreboard: { tag: string; acc: number; ms: number; pick?: boolean; note?: string }[] = (() => {
+const scoreboard: { tag: string; acc: number; ms: number; pick?: boolean; note?: string; trained?: boolean }[] = (() => {
   const best = new Map<string, { tag: string; acc: number; ms: number }>()
   for (const [tag, row] of rowsOf('typed')) {
     const acc = row.accuracy as number
     const ms = measured(tag, 'gpu.p50_ms')
-    if (tag.endsWith('-fp16') || trainedOnTyped(tag) || !acc || ms === undefined) continue
+    if (tag.endsWith('-fp16') || !acc || ms === undefined) continue
     const family = tag.split(':')[0]!
     if (!best.has(family) || best.get(family)!.acc < acc) best.set(family, { tag, acc, ms: Math.round(ms) })
   }
   return [...best.values()]
     .sort((a, b) => b.acc - a.acc)
-    .map((r) => ({ ...r, pick: r.tag === 'winnow:e4b', note: r.tag === 'clm:8b' ? 'questions cached' : undefined }))
+    .map((r) => ({
+      ...r,
+      pick: r.tag === 'winnow:e4b',
+      note: r.tag === 'clm:8b' ? 'questions cached' : undefined,
+      trained: trainedOnTyped(r.tag),
+    }))
 })()
 const JEV = { acc: 0.738, text: '236–276 ms' }
-const ACC_SCALE = 0.8
-const ACC_AXIS = [0, 0.2, 0.4, 0.6, 0.8]
+const ACC_SCALE = 1
+const ACC_AXIS = [0, 0.25, 0.5, 0.75, 1]
 const accPct = (a: number) => `${((a / ACC_SCALE) * 100).toFixed(2)}%`
 const msText = (ms: number) => `${ms} ms`
 
@@ -321,11 +326,16 @@ function Stat({ value, unit, label, detail, muted }: { value: string; unit: stri
 }
 
 /** One scoreboard row: the tag, an accuracy bar with its value, and the latency. */
-function ScoreRow({ label, note, acc, latency, pick, muted }: { label: string; note?: string; acc: number; latency: string; pick?: boolean; muted?: boolean }) {
+function ScoreRow(
+  { label, note, acc, latency, pick, muted, trained }: { label: string; note?: string; acc: number; latency: string; pick?: boolean; muted?: boolean; trained?: boolean },
+) {
   return (
     <li class="contents">
       <span class="flex h-9 flex-col justify-center leading-tight">
-        <span class={`font-mono text-xs sm:text-[13px] ${muted ? 'font-sans text-body' : 'text-fg'} ${pick ? 'font-semibold' : ''}`}>{label}</span>
+        <span class={`font-mono text-xs sm:text-[13px] ${muted ? 'font-sans text-body' : 'text-fg'} ${pick ? 'font-semibold' : ''}`}>
+          {label}
+          {trained ? <span title="Trained on this dataset's train split"> *</span> : null}
+        </span>
         {note ? <span class="text-xs text-muted">{note}</span> : null}
       </span>
       <span class="relative flex h-9 items-center">
@@ -369,33 +379,33 @@ function Fast() {
             ]}
           />
         </div>
-        <div class="mt-6 grid grid-cols-[6.5rem_minmax(0,1fr)_5.25rem] gap-x-3 sm:grid-cols-[9.5rem_minmax(0,1fr)_5.5rem] sm:gap-x-4">
+        <div class="mt-6 grid grid-cols-[6.5rem_minmax(0,1fr)_5.25rem] gap-x-3 sm:grid-cols-[11.5rem_minmax(0,1fr)_5.5rem] sm:gap-x-4">
           <span class="text-xs text-muted">Model</span>
           <span class="text-xs text-muted">Accuracy</span>
           <span class="text-right text-xs text-muted">Latency</span>
           <ul class="contents" role="list">
             <ScoreRow label="TypeSafe Jev" note="hosted API" acc={JEV.acc} latency={JEV.text} muted />
             {scoreboard.map((r) => (
-              <ScoreRow label={r.tag} note={r.note} acc={r.acc} latency={msText(r.ms)} pick={r.pick} />
+              <ScoreRow label={r.tag} note={r.note} acc={r.acc} latency={msText(r.ms)} pick={r.pick} trained={r.trained} />
             ))}
           </ul>
           <span></span>
           {/* The axis spans the bars' track: the column less the value beside each bar (ml-2.5 + w-11). */}
-          <span class="relative mt-2 mr-[3.375rem] h-5 border-t border-line text-[11px] text-muted tabular-nums" aria-hidden="true">
+          <span class="relative mt-2 mr-[3.375rem] h-5 border-t border-line text-[11px] text-muted tabular-nums max-[359px]:invisible" aria-hidden="true">
             {ACC_AXIS.map((t) => (
               <span
-                class={`absolute top-1.5 whitespace-nowrap ${t === 0 ? '' : t === ACC_SCALE ? '-translate-x-full' : '-translate-x-1/2'} ${t === 0.2 || t === 0.6 ? 'max-sm:hidden' : ''}`}
+                class={`absolute top-1.5 whitespace-nowrap ${t === 0 ? '' : t === ACC_SCALE ? '-translate-x-full' : '-translate-x-1/2'} ${t === 0.25 || t === 0.75 ? 'max-sm:hidden' : ''}`}
                 style={`left:${accPct(t)}`}
               >
-                {t === 0 ? '0' : t.toFixed(1)}
+                {t === 0 ? '0' : t.toFixed(2)}
               </span>
             ))}
           </span>
           <span></span>
         </div>
         <p class="mt-8 max-w-2xl text-[13px] leading-relaxed text-muted">
-          2,000 questions. <span class="font-mono">laya:typed-decisions</span> and <span class="font-mono">jeb</span> were trained on
-          them and are left out. Jev: TypeSafe's accuracy, hosted latency from{' '}
+          2,000 questions from the dataset's test split. * Trained on its train split, so these models have seen questions
+          like these. Jev: TypeSafe's accuracy, hosted latency from{' '}
           <a href="https://github.com/AbdelStark/jev-benchmarks" class={textLink}>
             third-party benchmarks
           </a>
