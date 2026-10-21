@@ -77,7 +77,7 @@ const overlays: Record<string, ModelOverlay> = {
         capabilities: ['multilingual'],
       },
       'typed-decisions': {
-        summary: `Fine-tuned on typed-decisions workflows: ${result('laya:typed-decisions', 'typed.accuracy', 3)} accuracy vs 0.727 published for Jev 1.13.`,
+        summary: `Fine-tuned on typed-decisions workflows: ${result('laya:typed-decisions', 'typed.accuracy', 3)} accuracy vs the 0.738 TypeSafe reports for Jev.`,
         capabilities: ['fine-tuned'],
       },
     },

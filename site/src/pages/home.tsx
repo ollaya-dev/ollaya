@@ -456,7 +456,7 @@ const vsPos = (a: number) => `${(((Math.min(Math.max(a, VS_MIN), VS_MAX) - VS_MI
 
 const vsFeatures: { label: string; ollaya: string; ollama: string }[] = [
   { label: 'Decision models', ollaya: `${catalog.length} families`, ollama: '9' },
-  { label: 'CPU-fast encoders', ollaya: 'laya, nli, gliclass, von, decima', ollama: 'laya' },
+  { label: 'CPU-fast encoders', ollaya: 'laya, largha, nli, gliclass, von, decima', ollama: 'laya' },
   { label: 'Probabilities', ollaya: "Author's temperature", ollama: 'Raw softmax' },
   { label: 'Options per question', ollaya: '255', ollama: '26 (Kev, Strands: 255)' },
   { label: 'Questions per request', ollaya: '256', ollama: '64' },

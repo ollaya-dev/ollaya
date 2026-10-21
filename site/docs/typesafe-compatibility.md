@@ -20,7 +20,7 @@ export TYPESAFE_DEFAULT_MODEL=winnow:e4b   # otherwise the SDK sends its default
 export NO_PROXY=localhost,127.0.0.1    # keep local requests off any system proxy
 ```
 
-- **Default model.** `winnow:e4b` comes closest to Jev ({{result winnow:e4b typed.accuracy 3}} on typed decisions, against the 0.738 TypeSafe reports) and answers five questions in {{result winnow:e4b gpu.p50_ms 0}} ms on an RTX 5090. Without an NVIDIA GPU, use `laya`, which answers in a fraction of a second on a CPU.
+- **Default model.** `winnow:e4b` is the recommended model. It scores {{result winnow:e4b typed.accuracy 3}} on typed decisions, against the 0.738 TypeSafe reports for Jev and within a few thousandths of the best open models, and answers five questions in {{result winnow:e4b gpu.p50_ms 0}} ms on an RTX 5090. Without an NVIDIA GPU, use `laya`, which answers in a fraction of a second on a CPU.
 - **API key.** Ollaya accepts any key, unless the server sets `OLLAYA_API_KEY`; then the SDK's key must match it.
 - **Request IDs.** Every response carries `x-typesafe-request-id`, so `response.request_id` works.
 - **Retries.** The SDK times out after 10 s and retries. The first request to a model waits while it loads, and a load that outlives the request continues, so the retry finds the model warm.
@@ -126,7 +126,7 @@ Compatibility covers the API, not the model:
 - **Long states.** TypeSafe reads up to 65,536 tokens; an open model's context is shorter (512 tokens for `laya:en`, 1,024 for `laya:multilingual`, including the questions). When a state doesn't fit, `/v1/*` returns `422 STATE_TRUNCATED` rather than answering from part of it. Use a model with a longer context, shorten the state, or call [`/api/decide`](/docs/api#decide), which truncates and reports `state_truncated`.
 - **`/v1/*` stays pure.** Native fields such as `keep_alive` and `extras` are ignored there; routing, timings and truncation are reported on [`/api/decide`](/docs/api#decide).
 - **Quality** comes from open models, so it differs from Jev's by task:
-  - `laya:typed-decisions` scores {{result laya:typed-decisions typed.accuracy 3}} on typed-decisions, against 0.727 published for Jev 1.13.
+  - `laya:typed-decisions`, which trains on this dataset, scores {{result laya:typed-decisions typed.accuracy 3}} on typed-decisions, against the 0.738 TypeSafe reports for Jev.
   - The base Laya checkpoints are near chance zero-shot on typed-decisions ({{result laya:en typed.accuracy 3}} for `laya:en`).
   - Choice questions with many options (more than ~20) are weaker: 0.425 on Banking77, against 0.870 for Jev.
 

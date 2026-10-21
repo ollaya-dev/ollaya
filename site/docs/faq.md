@@ -24,7 +24,7 @@ Ollama 0.35 (September 2026) added `/v1/systemone` for two decoder models, Bespo
 
 | | Ollaya | Ollama 0.40 |
 |---|---|---|
-| Models | 23 families: encoders (`laya`, `nli`, `gliclass`, `von`, `decima`) and decoders, listed below | Nine decision models, all decoders except Laya |
+| Models | 24 families: encoders (`laya`, `largha`, `nli`, `gliclass`, `von`, `decima`) and decoders, listed below | Nine decision models, all decoders except Laya |
 | Encoders | Read every question in one forward pass. `laya:en` answers five questions in {{result laya:en gpu.p50_ms 0}} ms on an RTX 5090 | Laya only |
 | Probabilities | Calibrated with each model's fitted temperatures, which you can refit on your own data in a [Modelfile](/docs/modelfile#calibration) | Mostly the softmax of the raw label scores: Nimble's and Strands Decider's fitted temperatures are not applied. `confidence` is one minus the normalized entropy |
 | Limits | TypeSafe's: 1 to 256 questions, 2 to 255 options, 2 to 10 score levels | 1 to 64 questions; 2 to 26 options for Nimble, Tev1 and Clef (255 for Kev and Strands Decider); 2 to 10 score levels; 64 KiB of text |
@@ -42,7 +42,7 @@ TypeSafe's closed Jev model created the decision-model category. Ollaya serves o
 
 ## Which models can I run?
 
-Open decision models from these families. See [Models](/search), which compares their accuracy and speed.
+Open decision models from 24 families; the most used are below. [Models](/search) lists them all and compares their accuracy and speed.
 
 - **`winnow`** from EldanRing: Winnow-E4B (`winnow:e4b`, the recommended model) and Winnow-12B (`winnow`), Gemma 4 fine-tunes published as GGUF files. Ollaya runs the author's file on llama.cpp, on an NVIDIA GPU, Apple silicon's GPU or the CPU. `winnow:e4b` scores {{result winnow:e4b typed.accuracy 3}} on typed decisions, close to the 0.738 TypeSafe reports for Jev, in {{result winnow:e4b gpu.p50_ms 0}} ms on an RTX 5090.
 - **`laya`** from Convai Innovations: `laya` (a router), `laya:en`, `laya:multilingual` and `laya:typed-decisions`, each also as `-fp16` and `-fp32`. `laya` sends English text to `laya:en` and other languages, Turkish for example, to `laya:multilingual`. It is the fastest.
@@ -53,9 +53,10 @@ Open decision models from these families. See [Models](/search), which compares 
 - **`decision`** from the vLLM Semantic Router contributors: `decision:eos`, Decision 1.0 Eos, a fully fine-tuned Qwen3.5-0.8B with an endpoint head that scores every option at its last token, calibrated, with rows of up to 16,384 tokens.
 - **`qwen3guard`** from the Qwen team: a safety guard in 119 languages. It answers its own built-in questions (safe, controversial or unsafe, and the unsafe category), so you send it only the text.
 - **`von`** from Victor Hugo Panisa: Von 1.1 on ModernBERT-large, which scores every option at its own marker in one pass and reads states of up to 8,192 tokens.
-- **`decima`** from A. M. Madani: `decima:base` (`decima`, mmBERT-base), `decima:agent` and `decima:small`, multilingual encoders with a late-interaction scorer that reads every option against the state, so the order of the options never changes the answer. `decima:agent` is fine-tuned for the decisions inside a coding agent's loop, and `decima:small` answers five questions in {{result decima:small cpu.p50_ms 0}} ms on a CPU.
+- **`decima`** from A. M. Madani: `decima:base` (`decima`, mmBERT-base), `decima:agent` and `decima:small`, multilingual encoders with a late-interaction scorer that reads every option against the state, so the order of the options never changes the answer. `decima:agent` is fine-tuned for the decisions inside a coding agent's loop, `decima:guard` and `decima:guard-small` check the text around an LLM app for prompt injection, jailbreaks and leaks, and `decima:small` answers five questions in {{result decima:small cpu.p50_ms 0}} ms on a CPU.
 - **`clm`** from Contrastive-LM: CLM-v0.1-8B, which embeds the state and each option with Qwen3-8B and picks the option closest to the state through two trained heads. Questions and options are cached, so repeated ones are nearly free. It scores {{result clm:8b typed.accuracy 3}} on typed decisions; its authors built it for agent, game and tool-calling states.
 - **`jevk5`** from alibiserikbay: JevK5 v0.3, a Qwen3.5-4B fine-tune published as GGUF files. Ollaya runs the author's 4B Q8_0 file on llama.cpp, with up to 16 options per question.
+- **Also:** `pplx-decider` (Perplexity AI), `credence` (Txoka, refinements of `winnow:e4b`), `clef` (Cloudflare), `nimble` (Bespoke Labs), `jeb` (frontier-infra), `jeeves` (PostHog), `strands-decider` (Strands Agents), `cygnet` (blockbrain-ai), `arbiter` (Codekins), `snap` (logitlab), `d1` (LiquidAI) and `largha` (Phocinae, Laya's network on mmBERT-small).
 
 ## Where do the weights come from?
 
@@ -67,7 +68,7 @@ Ollaya runs Laya as ONNX. Across 2,383 questions per checkpoint (`en`, `multilin
 
 ## How do the models compare with Jev?
 
-It depends on the model. On typed decisions (2,000 questions), `winnow:e4b` and `kev:9b` come closest, with {{result winnow:e4b typed.accuracy 3}} and {{result kev:9b typed.accuracy 3}} against the 0.738 TypeSafe reports for Jev, and `winnow:e4b` answers five questions in {{result winnow:e4b gpu.p50_ms 0}} ms on an RTX 5090. The small encoders, such as `laya`, are the fastest but fall well below Jev on harder questions. The [home page](/#fast) lists every model's accuracy and speed. For an independent comparison of open decision models with Jev, on accuracy and calibration, see the [Decision Index](https://huggingface.co/spaces/multimodalart/jev-decision-index). If you have labelled data for a fixed task, a model fine-tuned on it usually beats any general one.
+It depends on the model. On typed decisions (2,000 questions), the closest models that were not trained on the dataset are within a few thousandths of each other, against the 0.738 TypeSafe reports for Jev: `pplx-decider:flash` {{result pplx-decider:flash typed.accuracy 3}}, `credence:e4b` {{result credence:e4b typed.accuracy 3}}, `winnow:e4b` {{result winnow:e4b typed.accuracy 3}} and `kev:9b` {{result kev:9b typed.accuracy 3}}. `winnow:e4b` answers five questions in {{result winnow:e4b gpu.p50_ms 0}} ms on an RTX 5090. Models trained on the dataset's train split, such as `largha` and `laya:typed-decisions`, score higher, but on questions like the ones they learned from. The small encoders, such as `laya`, are the fastest but fall well below Jev on harder questions. The [home page](/#fast) lists every model's accuracy and speed. For an independent comparison of open decision models with Jev, on accuracy and calibration, see the [Decision Index](https://huggingface.co/spaces/multimodalart/jev-decision-index). If you have labelled data for a fixed task, a model fine-tuned on it usually beats any general one.
 
 ## How fast is it?
 
@@ -119,4 +120,4 @@ For an install without root (in `~/.local`), delete `~/.local/bin/ollaya`, `~/.l
 
 ## What is the license?
 
-Ollaya is Apache-2.0. Models carry their own licenses: `laya`, `decider`, `kev`, `decision`, `qwen3guard`, `gliclass`, `von`, `winnow`, `jevk5`, `clm` and `nli:modernbert-large` are Apache-2.0, and `nli:deberta-v3-large` is MIT.
+Ollaya is Apache-2.0. Models carry their own licenses, shown on each model's page. Most are Apache-2.0. The exceptions: `nli:deberta-v3-large` is MIT, `arbiter` adds the Gemma Terms of Use for its Gemma 3 base model, and `d1` is under LiquidAI's LFM Open License v1.0.
