@@ -110,7 +110,7 @@ Run `ollaya update`. It checks the latest release and, when there is a newer one
 On Linux and macOS, run the install script with `--uninstall`:
 
 ```shell
-curl -fsSL https://ollaya.dev/install.sh | sh -s -- --uninstall
+curl -fsSL {{SITE_ORIGIN}}/install.sh | sh -s -- --uninstall
 ```
 
 It removes the program, its libraries and the systemd service, from `/usr/local` or from `~/.local` for an install without root. The models stay: delete the service's, in `/usr/share/ollaya`, with `sudo userdel -r ollaya`, and your own with `rm -rf ~/.ollaya`.
