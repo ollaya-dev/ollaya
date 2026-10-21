@@ -38,7 +38,7 @@ jobs:
           - platform: linux-amd64
             runner: ubuntu-latest
             features: ollaya-runner/cuda
-            package-args: --cuda --cuda12
+            package-args: --cuda --cuda12 --rocm
           - platform: linux-arm64
             runner: ubuntu-24.04-arm
             features: ''
@@ -268,6 +268,16 @@ jobs:
               [ -z "$missing" ] || { echo "$so: $missing"; exit 1; }
             done
           done
+          # The ROCm pack (linux-amd64). libggml-hip.so links only libggml-base and the host's ROCm 7
+          # runtime, the three libraries scripts/install.sh checks for, which the runners do not have.
+          archive=dist/ollaya-$PLATFORM-rocm.tar.zst dir=$d/lib/ollaya/rocm
+          if [ -f "$archive" ]; then
+            zstd -dc "$archive" | tar -xf - -C "$d"
+            (cd "$dir" && sha256sum -c --quiet FILES.sha256)
+            missing=$(LD_LIBRARY_PATH="$d/lib/ollaya/llama" ldd "$dir/libggml-hip.so" | grep 'not found' |
+              grep -Ev 'lib(amdhip64\.so\.7|hipblas\.so\.3|rocblas\.so\.5) ' || true)
+            [ -z "$missing" ] || { echo "libggml-hip.so: $missing"; exit 1; }
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-${{ matrix.platform }}
@@ -277,6 +287,7 @@ jobs:
             dist/*.zip
             dist/*-cuda.sha256
             dist/*-cuda12.sha256
+            dist/*-rocm.sha256
             dist/*-mlx.sha256
             dist/*.key
           if-no-files-found: error

@@ -26,7 +26,7 @@ Each release on GitHub (`ollaya-dev/ollaya`, set with `OLLAYA_REPO`) carries:
 | `ollaya-linux-amd64-cuda.sha256` | The sha256 of every library in `lib/ollaya/cuda_v13/`, also installed there as `FILES.sha256` | 2 KiB |
 | `ollaya-linux-amd64-cuda12.tar.zst` | `lib/ollaya/cuda_v12/` (21 libraries, llama.cpp's CUDA 12.8 `libggml-cuda.so` included), `share/doc/ollaya/cuda_v12/`, for drivers without CUDA 13 support | 1568 MiB (3370 MiB unpacked) |
 | `ollaya-linux-amd64-cuda12.sha256` | The same for `lib/ollaya/cuda_v12/` | 2 KiB |
-| `ollaya-linux-amd64-rocm.tar.zst` | `lib/ollaya/rocm/libggml-hip.so` (llama.cpp ROCm/HIP backend), `share/doc/ollaya/rocm/` | about 46 MiB (140 MiB unpacked) |
+| `ollaya-linux-amd64-rocm.tar.zst` | `lib/ollaya/rocm/libggml-hip.so` (llama.cpp ROCm/HIP backend), `share/doc/ollaya/rocm/` | about 46 MiB (1053 MiB unpacked) |
 | `ollaya-linux-amd64-rocm.sha256` | The sha256 of `libggml-hip.so`, also installed there as `FILES.sha256` | 1 KiB |
 | `ollaya-linux-arm64.tar.zst` | `bin/ollaya` (CPU only), `lib/ollaya/llama/`, `lib/ollaya/ollaya-cuda-runner` (the GPU runner), `share/doc/ollaya/` | |
 | `ollaya-linux-arm64-cuda.tar.zst`, `ollaya-linux-arm64-cuda.sha256` | `lib/ollaya/cuda_v13/` for aarch64 (DGX Spark; see "The linux-arm64 pack" below), `share/doc/ollaya/cuda_v13/`, and its checksums | |
