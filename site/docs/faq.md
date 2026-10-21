@@ -107,15 +107,13 @@ Run `ollaya update`. It checks the latest release and, when there is a newer one
 
 ## How do I uninstall it?
 
-On Linux, after the installer set up the service:
+On Linux and macOS, run the install script with `--uninstall`:
 
 ```shell
-sudo systemctl disable --now ollaya && sudo rm /etc/systemd/system/ollaya.service
-sudo rm -rf /usr/local/bin/ollaya /usr/local/lib/ollaya /usr/local/share/doc/ollaya /usr/local/share/ollaya
-sudo userdel -r ollaya    # also deletes /usr/share/ollaya, including the models
+curl -fsSL https://ollaya.dev/install.sh | sh -s -- --uninstall
 ```
 
-For an install without root (in `~/.local`), delete `~/.local/bin/ollaya`, `~/.local/lib/ollaya`, `~/.local/share/doc/ollaya` and `~/.local/share/ollaya`, and the models in `~/.ollaya`.
+It removes the program, its libraries and the systemd service, from `/usr/local` or from `~/.local` for an install without root. The models stay: delete the service's, in `/usr/share/ollaya`, with `sudo userdel -r ollaya`, and your own with `rm -rf ~/.ollaya`.
 
 ## What is the license?
 

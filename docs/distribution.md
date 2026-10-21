@@ -512,13 +512,13 @@ Models for the service live in `/usr/share/ollaya/.ollaya/models` (`OLLAYA_MODEL
 change settings, run `sudo systemctl edit ollaya` and add `Environment=` lines: the drop-in it
 writes outlives updates, while a line added to the unit itself does not.
 
-To uninstall:
-
-```sh
-sudo systemctl disable --now ollaya && sudo rm /etc/systemd/system/ollaya.service
-sudo rm -rf /usr/local/bin/ollaya /usr/local/lib/ollaya /usr/local/share/doc/ollaya
-sudo userdel -r ollaya    # also deletes /usr/share/ollaya, including the models
-```
+To uninstall, run the script with `--uninstall` (`curl -fsSL https://ollaya.dev/install.sh | sh -s --
+--uninstall`). It finds the install in `/usr/local`, or in `~/.local` when only that has one
+(`OLLAYA_INSTALL_DIR` names another prefix). It removes the systemd service when its unit runs that
+binary, stops the user's background server, and deletes `bin/ollaya`, `lib/ollaya`,
+`share/doc/ollaya` and `share/ollaya/skills`. It keeps the models, the `ollaya` user and the
+service's drop-ins, and prints how to delete them: `sudo userdel -r ollaya` removes
+`/usr/share/ollaya` with the service's models, and `rm -rf ~/.ollaya` removes your own.
 
 ### Testing install.sh locally
 

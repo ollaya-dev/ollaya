@@ -3,6 +3,10 @@
 #
 #   curl -fsSL https://ollaya.dev/install.sh | sh
 #
+# Uninstall (the models stay; the script says where and how to delete them):
+#
+#   curl -fsSL https://ollaya.dev/install.sh | sh -s -- --uninstall
+#
 # Settings, passed as environment variables to the shell that runs the script
 # (curl -fsSL https://ollaya.dev/install.sh | OLLAYA_VERSION=0.1.0 sh):
 #   OLLAYA_VERSION      version to install, such as 0.1.0 (default: the latest release)
@@ -30,6 +34,14 @@ main() {
     error() { printf '%sERROR:%s %s\n' "$red" "$plain" "$*" >&2; exit 1; }
     available() { command -v "$1" >/dev/null 2>&1; }
     enabled() { case ${1:-} in '' | 0 | false | no) return 1 ;; *) return 0 ;; esac; }
+
+    UNINSTALL=false
+    for arg in "$@"; do
+        case $arg in
+            --uninstall) UNINSTALL=true ;;
+            *) error "unknown option: $arg (the only option is --uninstall)" ;;
+        esac
+    done
 
     REPO=${OLLAYA_REPO:-ollaya-dev/ollaya}
     PORT=11435
@@ -69,7 +81,7 @@ main() {
     esac
     [ "$WSL" != 1 ] || warn "WSL 1 is untested and has no GPU access; WSL 2 is recommended"
 
-    if [ "$OS" = Linux ]; then
+    if [ "$OS" = Linux ] && ! $UNINSTALL; then
         # pyke's ONNX Runtime build references glibc 2.38 symbols: Ubuntu 24.04, Debian 13,
         # Fedora 39, RHEL 10 or newer.
         glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{ print $2 }') || glibc=
@@ -87,11 +99,11 @@ main() {
     missing=
     for tool in curl tar awk mktemp; do available "$tool" || missing="$missing $tool"; done
     available sha256sum || available shasum || available openssl || missing="$missing sha256sum"
-    [ -z "$missing" ] || error "required tools are missing:$missing"
+    $UNINSTALL || [ -z "$missing" ] || error "required tools are missing:$missing"
     ZSTD=
     if available zstd; then
         ZSTD=zstd
-    elif [ "$OS" = Linux ]; then
+    elif [ "$OS" = Linux ] && ! $UNINSTALL; then
         error "zstd is needed to unpack Ollaya. Install it and re-run:
   Debian/Ubuntu: sudo apt-get install zstd
   Fedora/RHEL:   sudo dnf install zstd
@@ -134,6 +146,11 @@ main() {
     SUDO=
     IS_ROOT=false
     [ "$(id -u)" -ne 0 ] || IS_ROOT=true
+    # An install without root rights is in ~/.local; uninstall removes it without asking for sudo.
+    if $UNINSTALL && [ -z "${OLLAYA_INSTALL_DIR:-}" ] && [ ! -e /usr/local/bin/ollaya ] &&
+        [ -e "${HOME:-}/.local/bin/ollaya" ]; then
+        OLLAYA_INSTALL_DIR=$HOME/.local
+    fi
     if [ -n "${OLLAYA_INSTALL_DIR:-}" ]; then
         PREFIX=${OLLAYA_INSTALL_DIR%/}
         case $PREFIX in /*) ;; *) error "OLLAYA_INSTALL_DIR must be an absolute path" ;; esac
@@ -147,6 +164,7 @@ main() {
             if get_sudo "$PREFIX"; then
                 SUDO=sudo
             else
+                ! $UNINSTALL || error "removing Ollaya from /usr/local needs root or sudo"
                 [ -n "${HOME:-}" ] || error "cannot write to /usr/local, no sudo, and HOME is not set"
                 PREFIX=$HOME/.local
                 status "No root access: installing to $PREFIX instead"
@@ -157,6 +175,37 @@ main() {
     # Root-level changes (system user, systemd unit) are only made with root rights we have anyway.
     PRIVILEGED=false
     if $IS_ROOT || [ -n "$SUDO" ]; then PRIVILEGED=true; fi
+
+    # --- uninstall -------------------------------------------------------------------------
+
+    if $UNINSTALL; then
+        [ -e "$BINDIR/ollaya" ] || [ -d "$PREFIX/lib/ollaya" ] || error "no Ollaya install found in $PREFIX"
+        # Only the service this install created, the one that runs this binary.
+        unit=/etc/systemd/system/ollaya.service
+        if $SUDO grep -qxF "ExecStart=$BINDIR/ollaya serve" "$unit" 2>/dev/null; then
+            $PRIVILEGED || error "removing the ollaya systemd service needs root or sudo"
+            status "Removing the ollaya systemd service"
+            $SUDO systemctl disable --now ollaya >/dev/null 2>&1 || :
+            $SUDO rm -f "$unit"
+            $SUDO systemctl daemon-reload 2>/dev/null || :
+        fi
+        # A server this user's CLI started in the background.
+        [ ! -x "$BINDIR/ollaya" ] || "$BINDIR/ollaya" stop >/dev/null 2>&1 || :
+        $SUDO rm -rf "$BINDIR/ollaya" "$PREFIX/lib/ollaya" "$PREFIX/share/doc/ollaya" "$PREFIX/share/ollaya/skills"
+        # With a /usr prefix, share/ollaya is also the service's home, which holds its models.
+        $SUDO rmdir "$PREFIX/share/ollaya" 2>/dev/null || :
+        status "Removed Ollaya from $PREFIX"
+        if id ollaya >/dev/null 2>&1; then
+            status "Kept the ollaya system user and the service's models in /usr/share/ollaya. To delete them: sudo userdel -r ollaya"
+        fi
+        if [ -d /etc/systemd/system/ollaya.service.d ]; then
+            status "Kept the service settings in /etc/systemd/system/ollaya.service.d"
+        fi
+        if [ -d "${HOME:-}/.ollaya" ]; then
+            status "Kept your models, logs and history in $HOME/.ollaya. To delete them: rm -rf ~/.ollaya"
+        fi
+        exit 0
+    fi
 
     TMP=$(mktemp -d "${TMPDIR:-/tmp}/ollaya-install.XXXXXX")
     STAGE=
