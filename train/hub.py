@@ -61,6 +61,7 @@ def main():
     for _ in range(2):  # a value may hold {{keys}} itself (card-web.md)
         for k, v in values:
             card = card.replace("{{%s}}" % k, v)
+    card = re.sub(r"\n{3,}", "\n\n", card)  # an empty value (web= for an fp model) leaves no gap
     left = set(re.findall(r"{{(\w+)}}", card))
     assert not left, f"the card still has {sorted(left)}"
     with open(os.path.join(a.out, "README.md"), "w") as f:
