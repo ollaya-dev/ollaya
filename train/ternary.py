@@ -1,7 +1,6 @@
-"""Ternary weights (one scale per output row) and low-bit embeddings, trained and packed.
+"""Ternary weights (one scale per output row) and low-bit embeddings, trained (`train.py --quant`).
 
-    python ternary.py pack <checkpoint> <out-dir>     # model.packed, for the browser
-    python ternary.py check <checkpoint> <out-dir>    # unpack and compare with model.safetensors, byte for byte
+    python ternary.py      # self-test
 
 Training (`train.py --quant`): every weight matrix of the encoder layers and of the decision head goes through
 a parametrization, so the forward pass sees the quantized weight and the gradient reaches the latent one
@@ -15,23 +14,11 @@ a parametrization, so the forward pass sees the quantized weight and the gradien
 Both give exactly {-g, 0, +g} per row once finalized. Token embeddings can be fake-quantized to 4 or 8 bits per
 row (symmetric, s = max(|row|) / (2^(b-1) - 1)).
 
-Packed (`model.packed`): a little-endian u64 length, that many bytes of JSON, then the tensor data. The JSON holds
-the checkpoint's safetensors header verbatim and, per tensor, its kind and place in the data: ternary rows as four
-2-bit codes per byte (0 -> 0, 1 -> +g, 2 -> -g) plus g as float32 per row; int4 rows as two nibbles per byte and
-int8 rows as bytes, each with a float32 scale per row; everything else as raw float32. Unpacking multiplies in
-float32 and writes each tensor where the header puts it, so it rebuilds model.safetensors byte for byte: the
-graph addresses that file by its sha256 (web/ollaya.js `unpackWeights` does the same in the browser).
+webgraph.py turns a finished checkpoint's graph into the browser's, with the weights at 2 and 4 bits.
 """
 from __future__ import annotations
 
-import contextlib
-import hashlib
-import io
-import json
 import math
-import os
-import struct
-import sys
 
 import numpy as np
 import torch
@@ -124,7 +111,7 @@ def finalize_(model):
             continue
         for name in list(m.parametrizations.keys()):
             p = m.parametrizations[name]
-            # + 0.0 turns -0.0 into +0.0: both pack to one code, and the packed file must round-trip byte for byte
+            # + 0.0 turns -0.0 into +0.0: the same weight, and one byte pattern for each value
             q = p[0].quantize(p.original.float()).to(p.original.dtype) + 0.0
             parametrize.remove_parametrizations(m, name, leave_parametrized=False)
             getattr(m, name).copy_(q)
@@ -163,121 +150,6 @@ def _int_rows(w, bits):
     return (s, q.astype(np.int8)) if ok.all() else None
 
 
-def _header(path):
-    """The raw safetensors header (JSON text, with its alignment padding)."""
-    with open(path, "rb") as f:
-        n = struct.unpack("<Q", f.read(8))[0]
-        return f.read(n).decode("utf-8")
-
-
-def pack(ckpt, out):
-    from safetensors.numpy import load_file, save_file
-
-    path = os.path.join(ckpt, "model.safetensors")
-    weights = load_file(path)
-    if any(np.signbit(w[w == 0]).any() for w in weights.values()):
-        # Checkpoints finalized before finalize_ dropped -0.0: rewrite with +0.0, the same model.
-        meta = json.loads(_header(path)).get("__metadata__")
-        save_file({k: w + np.float32(0) for k, w in weights.items()}, path, metadata=meta)
-        weights = load_file(path)
-        print("rewrote %s without -0.0" % path)
-    header = _header(path)
-    assert all(e["dtype"] == "F32" for k, e in json.loads(header).items() if k != "__metadata__"), "not float32"
-    os.makedirs(out, exist_ok=True)
-    index, blob = {}, bytearray()
-    for name, w in weights.items():
-        entry = {"shape": list(w.shape), "offset": len(blob)}
-        matrix = w.ndim == 2 and w.shape[0] > 1
-        g = _row_scale(w) if matrix else None
-        i4 = _int_rows(w, 4) if matrix and g is None else None
-        i8 = _int_rows(w, 8) if matrix and g is None and i4 is None else None
-        if g is not None:
-            codes = np.where(w > 0, 1, np.where(w < 0, 2, 0)).astype(np.uint8).reshape(-1)
-            codes = np.concatenate([codes, np.zeros((-len(codes)) % 4, np.uint8)]).reshape(-1, 4)
-            entry["kind"] = "ternary"
-            blob += g.astype("<f4").tobytes()
-            blob += (codes[:, 0] | (codes[:, 1] << 2) | (codes[:, 2] << 4) | (codes[:, 3] << 6)).astype(np.uint8).tobytes()
-        elif i4 is not None:
-            s, q = i4
-            nib = (q.reshape(-1).astype(np.int16) & 0xF).astype(np.uint8)
-            nib = np.concatenate([nib, np.zeros(len(nib) % 2, np.uint8)]).reshape(-1, 2)
-            entry["kind"] = "int4"
-            blob += s.astype("<f4").tobytes()
-            blob += (nib[:, 0] | (nib[:, 1] << 4)).astype(np.uint8).tobytes()
-        elif i8 is not None:
-            s, q = i8
-            entry["kind"] = "int8"
-            blob += s.astype("<f4").tobytes()
-            blob += q.tobytes()
-        else:
-            entry["kind"] = "f32"
-            blob += w.astype("<f4").tobytes()
-        entry["bytes"] = len(blob) - entry["offset"]
-        blob += b"\0" * ((-len(blob)) % 4)
-        index[name] = entry
-    meta = json.dumps({"safetensors_header": header, "tensors": index}).encode("utf-8")
-    meta += b" " * ((-len(meta)) % 8)
-    with open(os.path.join(out, "model.packed"), "wb") as f:
-        f.write(struct.pack("<Q", len(meta)) + meta + bytes(blob))
-    kinds = {}
-    for e in index.values():
-        kinds[e["kind"]] = kinds.get(e["kind"], 0) + e["bytes"]
-    print("packed %d tensors, %.1f MB: %s" % (len(index), (8 + len(meta) + len(blob)) / 1e6,
-                                             {k: round(v / 1e6, 1) for k, v in kinds.items()}))
-
-
-def unpack(out):
-    """(tensors, safetensors header) from `out`/model.packed."""
-    with open(os.path.join(out, "model.packed"), "rb") as f:
-        data = f.read()
-    n = struct.unpack_from("<Q", data)[0]
-    meta = json.loads(data[8:8 + n])
-    blob = memoryview(data)[8 + n:]
-    res = {}
-    for name, e in meta["tensors"].items():
-        shape, off = e["shape"], e["offset"]
-        count = int(np.prod(shape))
-        if e["kind"] == "f32":
-            res[name] = np.frombuffer(blob, "<f4", count, off).reshape(shape)
-            continue
-        rows, cols = shape
-        s = np.frombuffer(blob, "<f4", rows, off)
-        if e["kind"] == "int8":
-            q = np.frombuffer(blob, np.int8, count, off + 4 * rows).reshape(rows, cols).astype(np.float32)
-        elif e["kind"] == "int4":
-            b = np.frombuffer(blob, np.uint8, (count + 1) // 2, off + 4 * rows)
-            nib = np.stack([b & 0xF, b >> 4], 1).reshape(-1)[:count].astype(np.int8)
-            q = np.where(nib > 7, nib - 16, nib).reshape(rows, cols).astype(np.float32)
-        else:
-            packed = np.frombuffer(blob, np.uint8, (count + 3) // 4, off + 4 * rows)
-            codes = np.stack([(packed >> sh) & 3 for sh in (0, 2, 4, 6)], 1).reshape(-1)[:count].reshape(rows, cols)
-            q = np.where(codes == 1, np.float32(1), np.where(codes == 2, np.float32(-1), np.float32(0)))
-        res[name] = (q * s[:, None]).astype(np.float32)
-    return res, meta["safetensors_header"]
-
-
-def unpack_safetensors(out) -> bytes:
-    """The model.safetensors that `out`/model.packed was packed from, rebuilt byte for byte."""
-    tensors, header = unpack(out)
-    hdr = header.encode("utf-8")
-    entries = {k: e for k, e in json.loads(header).items() if k != "__metadata__"}
-    base = 8 + len(hdr)
-    buf = bytearray(base + max(e["data_offsets"][1] for e in entries.values()))
-    buf[:base] = struct.pack("<Q", len(hdr)) + hdr
-    for name, w in tensors.items():
-        b, e = entries[name]["data_offsets"]
-        buf[base + b:base + e] = w.astype("<f4").tobytes()
-    return bytes(buf)
-
-
-def check(ckpt, out):
-    with open(os.path.join(ckpt, "model.safetensors"), "rb") as f:
-        want = hashlib.sha256(f.read()).hexdigest()
-    got = hashlib.sha256(unpack_safetensors(out)).hexdigest()
-    assert got == want, "unpacked sha256 %s, model.safetensors %s" % (got, want)
-    print("unpacked model.safetensors identical: sha256-%s" % got)
-
-
 def _self_test():
     torch.manual_seed(0)
     w = torch.randn(7, 13)
@@ -292,24 +164,8 @@ def _self_test():
     for bits in (4, 8):
         e = IntRows(bits).quantize(torch.randn(5, 9)).numpy()
         assert _int_rows(e, bits) is not None
-    import tempfile
-    from safetensors.numpy import save_file
-
-    t = absmean_ternary(torch.randn(6, 11)).numpy()
-    t[0, :2] = (0.0, -0.0)
-    t = t * np.float32(1)
-    with tempfile.TemporaryDirectory() as d:
-        save_file({"t": t, "i4": IntRows(4).quantize(torch.randn(5, 9)).numpy(),
-                   "i8": IntRows(8).quantize(torch.randn(3, 300)).numpy(), "f": np.random.randn(7).astype(np.float32)},
-                  os.path.join(d, "model.safetensors"))
-        with contextlib.redirect_stdout(io.StringIO()):
-            pack(d, d)
-            check(d, d)
 
 
 if __name__ == "__main__":
     _self_test()
-    if len(sys.argv) == 4 and sys.argv[1] in ("pack", "check"):
-        {"pack": pack, "check": check}[sys.argv[1]](sys.argv[2], sys.argv[3])
-    else:
-        print(__doc__)
+    print("ok")

@@ -19,7 +19,7 @@ the token embeddings optionally at 4 or 8 bits (`--emb-bits`). Start from the fp
 from it (`--kd-from`): its option distributions (`--kd`, temperature `--kd-tau`), MiniLM-style the Q-Q, K-K
 and V-V relations of one late global-attention layer (`--rel`), and every layer's output (`--hid`); the
 weights can blend from fp to quantized over the first steps (`--quant-warmup`). The saved weights are exactly quantized, so
-Ollaya runs them as ordinary weights and `ternary.py` packs them bit for bit. Norms, the type embedding and the
+Ollaya runs them as ordinary weights and `webgraph.py` keeps them at 2 bits for the browser. Norms, the type embedding and the
 scorer stay full precision.
 """
 from __future__ import annotations

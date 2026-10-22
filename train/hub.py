@@ -1,21 +1,17 @@
 """A model's Hugging Face repository, staged as a directory to upload.
 
-    python hub.py <checkpoint> <ollaya model dir> <out-dir> --card <README.md> [--packed]
+    python hub.py <checkpoint> <out-dir> --card <README.md> [--web <dir>]
 
 The checkpoint is Laya's format (rl_agent_config.json, model.safetensors, encoder/config.json, tokenizer/), which
-`laya` loads as it is and Ollaya's registry points its weights layer at. The Ollaya model dir is what
-`ollaya_convert.package` makes of it (model.onnx reading the weights by their blob name, sha256-<hex>, plus
-tokenizer.json, decision.json, calibration.json; for a ternary model also model.packed from `ternary.py pack`).
-Its files go in too, so the repository alone runs the model in a browser (web/ollaya.js `fromHub`).
+`laya` loads as it is and Ollaya's registry points its weights layer at. For a ternary model, `--web` adds the
+browser's files (web/ollaya.js `fromHub`): the graph from webgraph.py as onnx/model.onnx, and Ollaya's
+tokenizer.json, decision.json and calibration.json from `ollaya_convert.export`.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import shutil
-
-import onnx
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ETTIN = """The encoder is initialised from Ettin (https://huggingface.co/jhu-clsp), under the MIT License:
@@ -41,37 +37,23 @@ The training data's sources and their licenses are listed in DATA_SOURCES.tsv.
 """
 
 
-def sha256(path: str) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for b in iter(lambda: f.read(1 << 20), b""):
-            h.update(b)
-    return h.hexdigest()
-
-
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("checkpoint")
-    p.add_argument("model_dir")
     p.add_argument("out")
     p.add_argument("--card", required=True)
-    p.add_argument("--packed", action="store_true")
+    p.add_argument("--web", help="a dir with webgraph.py's model.onnx and the export's tokenizer, decision, calibration")
     a = p.parse_args()
 
-    weights = os.path.join(a.checkpoint, "model.safetensors")
-    blob = "sha256-" + sha256(weights)
-    graph = os.path.join(a.model_dir, "model.onnx")
-    locations = {e.value for t in onnx.load(graph, load_external_data=False).graph.initializer
-                 for e in t.external_data if e.key == "location"}
-    assert locations == {blob}, f"the graph reads {locations}, the checkpoint is {blob}"
-
-    os.makedirs(os.path.join(a.out, "onnx"), exist_ok=True)
+    os.makedirs(a.out, exist_ok=True)
     for f in ("model.safetensors", "rl_agent_config.json", "encoder", "tokenizer"):
         src, dst = os.path.join(a.checkpoint, f), os.path.join(a.out, f)
         (shutil.copytree(src, dst, dirs_exist_ok=True) if os.path.isdir(src) else shutil.copy(src, dst))
-    shutil.copy(graph, os.path.join(a.out, "onnx", "model.onnx"))
-    for f in ("tokenizer.json", "decision.json", "calibration.json") + (("model.packed",) if a.packed else ()):
-        shutil.copy(os.path.join(a.model_dir, f), os.path.join(a.out, f))
+    if a.web:
+        os.makedirs(os.path.join(a.out, "onnx"), exist_ok=True)
+        shutil.copy(os.path.join(a.web, "model.onnx"), os.path.join(a.out, "onnx", "model.onnx"))
+        for f in ("tokenizer.json", "decision.json", "calibration.json"):
+            shutil.copy(os.path.join(a.web, f), os.path.join(a.out, f))
     shutil.copy(a.card, os.path.join(a.out, "README.md"))
     shutil.copy(os.path.join(HERE, "..", "LICENSE"), os.path.join(a.out, "LICENSE"))
     with open(os.path.join(a.out, "NOTICE"), "w") as f:
@@ -82,7 +64,7 @@ def main():
         o.write("source\tlicense\trows\n")
         o.writelines(f"{r[0]}\t{r[1]}\t{r[8]}\n" for r in rows[1:] if r[2] == "keep")
         o.writelines(f"{s}\t{lic}\t{n}\n" for s, lic, n in INDOMAIN)
-    print("staged", a.out, "weights", blob)
+    print("staged", a.out)
 
 
 INDOMAIN = [

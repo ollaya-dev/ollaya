@@ -1,7 +1,7 @@
 // Ollaya encoder decision models (layout laya-markers-v1) in the browser.
 //
 //   import { fromHub, fromManifest, load } from './ollaya.js';
-//   const model = await load(fromManifest(manifest));     // or fromHub('<org>/<repo>', { packed: true })
+//   const model = await load(fromManifest(manifest));     // or fromHub('<org>/<repo>')
 //   const response = await model.decide({ state, questions });   // the /api/decide body
 //
 // Tokenizer, layout, calibration and answers run in WebAssembly built from crates/ollaya-web (the
@@ -42,15 +42,14 @@ export function fromManifest(manifest, precision = 'fp32') {
 }
 
 /**
- * The files `load` takes, as URLs, from a model's Hugging Face repository laid out as Ollaya's own models are:
- * `onnx/model.onnx`, `tokenizer.json`, `decision.json`, `calibration.json` and `model.safetensors`, or, with
- * `packed: true`, `model.packed` (ternary; about a tenth of the download) in its place.
+ * The files `load` takes, as URLs, from the Hugging Face repository of one of Ollaya's own ternary models:
+ * `onnx/model.onnx` (train/webgraph.py: weights at 2 and 4 bits inside the graph, so no weights file),
+ * `tokenizer.json`, `decision.json` and `calibration.json`.
  */
-export function fromHub(repo, { revision = 'main', packed = false, endpoint = 'https://huggingface.co' } = {}) {
+export function fromHub(repo, { revision = 'main', endpoint = 'https://huggingface.co' } = {}) {
   const url = (f) => `${endpoint}/${repo}/resolve/${revision}/${f}`;
   return {
     graph: url('onnx/model.onnx'),
-    weights: [{ packed, data: url(packed ? 'model.packed' : 'model.safetensors') }],
     tokenizer: url('tokenizer.json'),
     decision: url('decision.json'),
     calibration: url('calibration.json'),
@@ -89,69 +88,7 @@ async function text(file, progress) {
 }
 
 /**
- * `model.packed` (train/ternary.py: ternary, int4 and int8 rows with a float32 scale each) back to the
- * model.safetensors it was packed from, byte for byte.
- */
-export function unpackWeights(packed) {
-  if (packed.byteOffset % 8) packed = packed.slice();
-  const buf = packed.buffer;
-  const metaLen = Number(new DataView(buf, packed.byteOffset).getBigUint64(0, true));
-  const meta = JSON.parse(new TextDecoder().decode(packed.subarray(8, 8 + metaLen)));
-  const blob = packed.byteOffset + 8 + metaLen;
-  const header = new TextEncoder().encode(meta.safetensors_header);
-  const entries = JSON.parse(meta.safetensors_header);
-  delete entries.__metadata__;
-  const base = 8 + header.length;
-  const out = new Uint8Array(base + Math.max(...Object.values(entries).map((e) => e.data_offsets[1])));
-  new DataView(out.buffer).setBigUint64(0, BigInt(header.length), true);
-  out.set(header, 8);
-  for (const [name, t] of Object.entries(meta.tensors)) {
-    const n = t.shape.reduce((a, b) => a * b, 1);
-    const dst = new Float32Array(out.buffer, base + entries[name].data_offsets[0], n);
-    const at = blob + t.offset;
-    if (t.kind === 'f32') {
-      dst.set(new Float32Array(buf, at, n));
-      continue;
-    }
-    const [rows, cols] = t.shape;
-    const scale = new Float32Array(buf, at, rows);
-    const q = new Uint8Array(buf, at + 4 * rows);
-    // An integer times a float32 is exact in float64, so storing it rounds as numpy's float32 product does.
-    for (let r = 0, i = 0; r < rows; r++) {
-      const s = scale[r];
-      for (let c = 0; c < cols; c++, i++) {
-        let v;
-        if (t.kind === 'int8') v = (q[i] << 24) >> 24;
-        else if (t.kind === 'int4') v = (((q[i >> 1] >> ((i & 1) * 4)) & 15) << 28) >> 28;
-        else v = [0, 1, -1, 0][(q[i >> 2] >> ((i & 3) * 2)) & 3];
-        dst[i] = v * s;
-      }
-    }
-  }
-  return out;
-}
-
-async function sha256Name(data) {
-  const hex = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))]
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `sha256-${hex}`;
-}
-
-// A weights file, unpacked if packed. The graph names the blob it reads by its sha256: a file without a path
-// gets that name, and an unpacked one must hash to the path it was given.
-async function weightsFile(w, progress) {
-  let data = await bytes(w.data, progress);
-  if (w.packed) data = unpackWeights(data);
-  else if (w.path !== undefined) return { path: w.path, data };
-  const name = await sha256Name(data);
-  if (w.path !== undefined && w.path !== name) throw new Error(`unpacked weights are ${name}, not ${w.path}`);
-  return { path: name, data };
-}
-
-/**
- * Load a model from its files: `{graph, weights: [{path, data, packed?}], tokenizer, decision, calibration}`.
- * A `packed` weights file is `model.packed`. A weights file's `path` may be left out: its sha256 names it.
+ * Load a model from its files: `{graph, weights: [{path, data}], tokenizer, decision, calibration}`.
  * Options: `name` (the model name answers carry, e.g. 'largha:150m'), `wasm` (ollaya_web_bg.wasm as a
  * URL or bytes; default next to pkg/ollaya_web.js), `device` ('wasm' or 'webgpu'), `sessionOptions`
  * (merged into onnxruntime-web's), `onProgress` (called with `{loaded, total}` bytes as the files download;
@@ -168,7 +105,7 @@ export async function load(files, { name = 'web', wasm, device = 'wasm', session
     text(files.decision, progress),
     text(files.calibration, progress),
     bytes(files.graph, progress),
-    Promise.all((files.weights ?? []).map((w) => weightsFile(w, progress))),
+    Promise.all((files.weights ?? []).map(async (w) => ({ path: w.path, data: await bytes(w.data, progress) }))),
   ]);
   const model = new Model(tokenizer, decision, calibration);
   const session = await ort.InferenceSession.create(graph, {
