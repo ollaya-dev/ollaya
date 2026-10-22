@@ -39,7 +39,7 @@ from safetensors.torch import save_file
 from safetensors.torch import load_file
 from transformers import AutoModel, AutoTokenizer
 
-from ternary import finalize_, quantize_, zero_ratio
+from ternary import finalize_, quantize_, set_mix, zero_ratio
 
 
 def load_rows(path, teacher_path=None, alpha=0.5):
@@ -263,6 +263,8 @@ def main():
     ap.add_argument("--rel", type=float, default=0.0, help="weight of the Q/K/V relation KL to --kd-from")
     ap.add_argument("--rel-rows", type=int, default=16, help="batch rows used for the relation loss (memory)")
     ap.add_argument("--wd", type=float, default=0.01)
+    ap.add_argument("--quant-warmup", type=float, default=0.0,
+                    help="share of the steps over which the weights blend linearly from fp to quantized")
     ap.add_argument("--alpha", type=float, default=0.5, help="weight of gold vs teacher when a question has both")
     ap.add_argument("--epochs", type=float, default=1.0)
     ap.add_argument("--bs", type=int, default=32)
@@ -274,6 +276,7 @@ def main():
     ap.add_argument("--head-max-len", type=int, default=192)
     ap.add_argument("--eval-every", type=int, default=2000)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--grad-ckpt", action="store_true", help="recompute the encoder's activations (for 400m+ on 24 GB)")
     ap.add_argument("--name", default="")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
@@ -286,6 +289,8 @@ def main():
 
     tok = AutoTokenizer.from_pretrained(os.path.join(a.init, "tokenizer") if a.init else a.backbone)
     model = load_model(a.backbone, a.init)
+    if a.grad_ckpt:
+        model.encoder.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     if a.quant != "none":
         quantize_(model, a.quant, a.emb_bits)
     model.to(dev)
@@ -329,6 +334,8 @@ def main():
             if b is None:
                 continue
             b = to_dev(b, dev)
+            if a.quant != "none" and a.quant_warmup:
+                set_mix(model, min(1.0, step / (a.quant_warmup * total)))
             with torch.autocast(dev.type, dtype=amp, enabled=dev.type == "cuda"):
                 logits, act = forward(model, b)
                 if teacher is not None:

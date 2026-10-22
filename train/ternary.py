@@ -42,11 +42,12 @@ def _ste_round(x):
 
 
 class Ternary(nn.Module):
-    """Parametrization: the forward sees the ternary weight, the gradient flows to the latent one."""
+    """Parametrization: the forward sees the ternary weight, the gradient flows to the latent one.
+    `mix` < 1 blends in the latent weight (quantization warm-up, `set_mix`)."""
 
     def __init__(self, w: torch.Tensor, learned: bool = False):
         super().__init__()
-        self.learned = learned
+        self.learned, self.mix = learned, 1.0
         if learned:
             self.scale = nn.Parameter(1.5 * w.detach().abs().mean(dim=1, keepdim=True).float().clamp_min(1e-6))
             k = 1.0 / math.sqrt(w.shape[1])
@@ -60,9 +61,10 @@ class Ternary(nn.Module):
 
     def forward(self, w):
         if not self.learned:
-            return w + (absmean_ternary(w) - w).detach()
+            return w + (self.mix * (absmean_ternary(w) - w)).detach()
         a = self.scale.abs().clamp_min(1e-6)
-        return _ste_round(1.5 * (w / a).clamp(-0.99, 0.99)) * (a / 1.5)
+        q = _ste_round(1.5 * (w / a).clamp(-0.99, 0.99)) * (a / 1.5)
+        return q if self.mix >= 1 else w + self.mix * (q - w)
 
 
 class IntRows(nn.Module):
@@ -70,14 +72,14 @@ class IntRows(nn.Module):
 
     def __init__(self, bits: int):
         super().__init__()
-        self.top = 2 ** (bits - 1) - 1
+        self.top, self.mix = 2 ** (bits - 1) - 1, 1.0
 
     def quantize(self, w):
         s = (w.abs().amax(dim=1, keepdim=True) / self.top).clamp_min(1e-12)
         return (w / s).round().clamp(-self.top, self.top) * s
 
     def forward(self, w):
-        return w + (self.quantize(w) - w).detach()
+        return w + (self.mix * (self.quantize(w) - w)).detach()
 
 
 def ternary_targets(model):
@@ -98,6 +100,13 @@ def quantize_(model, quant: str, emb_bits: int = 32):
         parametrize.register_parametrization(m, name, Ternary(getattr(m, name), learned=quant == "learned"))
     if emb_bits < 32:
         parametrize.register_parametrization(model.encoder.embeddings.tok_embeddings, "weight", IntRows(emb_bits))
+
+
+def set_mix(model, mix: float):
+    """Quantization warm-up: the forward sees w + mix * (q(w) - w); 1 is fully quantized."""
+    for m in model.modules():
+        if isinstance(m, (Ternary, IntRows)):
+            m.mix = mix
 
 
 @torch.no_grad()
@@ -230,6 +239,8 @@ def _self_test():
         q = t.quantize(w).detach().numpy()
         assert _row_scale(q) is not None
         assert torch.allclose(t(w), t.quantize(w), atol=1e-6)
+        t.mix = 0.0
+        assert torch.allclose(t(w), w, atol=1e-6)
     assert np.allclose(_row_scale(absmean_ternary(w).numpy()), np.abs(w.numpy()).mean(1), rtol=1e-6)
     for bits in (4, 8):
         e = IntRows(bits).quantize(torch.randn(5, 9)).numpy()
