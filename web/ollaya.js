@@ -1,7 +1,7 @@
 // Ollaya encoder decision models (layout laya-markers-v1) in the browser.
 //
-//   import { fromManifest, load } from './ollaya.js';
-//   const model = await load(fromManifest(manifest));
+//   import { fromHub, fromManifest, load } from './ollaya.js';
+//   const model = await load(fromManifest(manifest));     // or fromHub('<org>/<repo>', { packed: true })
 //   const response = await model.decide({ state, questions });   // the /api/decide body
 //
 // Tokenizer, layout, calibration and answers run in WebAssembly built from crates/ollaya-web (the
@@ -38,6 +38,22 @@ export function fromManifest(manifest, precision = 'fp32') {
     tokenizer: one(MEDIA.tokenizer).urls[0],
     decision: one(MEDIA.decision).urls[0],
     calibration: one(MEDIA.calibration)?.urls[0],
+  };
+}
+
+/**
+ * The files `load` takes, as URLs, from a model's Hugging Face repository laid out as Ollaya's own models are:
+ * `onnx/model.onnx`, `tokenizer.json`, `decision.json`, `calibration.json` and `model.safetensors`, or, with
+ * `packed: true`, `model.packed` (ternary; about a tenth of the download) in its place.
+ */
+export function fromHub(repo, { revision = 'main', packed = false, endpoint = 'https://huggingface.co' } = {}) {
+  const url = (f) => `${endpoint}/${repo}/resolve/${revision}/${f}`;
+  return {
+    graph: url('onnx/model.onnx'),
+    weights: [{ packed, data: url(packed ? 'model.packed' : 'model.safetensors') }],
+    tokenizer: url('tokenizer.json'),
+    decision: url('decision.json'),
+    calibration: url('calibration.json'),
   };
 }
 
@@ -103,19 +119,20 @@ async function sha256Name(data) {
   return `sha256-${hex}`;
 }
 
-// A weights file; a packed one is unpacked and must hash to its path, as the graph names the blob it reads.
+// A weights file, unpacked if packed. The graph names the blob it reads by its sha256: a file without a path
+// gets that name, and an unpacked one must hash to the path it was given.
 async function weightsFile(w) {
-  const data = await bytes(w.data);
-  if (!w.packed) return { path: w.path, data };
-  const unpacked = unpackWeights(data);
-  const name = await sha256Name(unpacked);
+  let data = await bytes(w.data);
+  if (w.packed) data = unpackWeights(data);
+  else if (w.path !== undefined) return { path: w.path, data };
+  const name = await sha256Name(data);
   if (w.path !== undefined && w.path !== name) throw new Error(`unpacked weights are ${name}, not ${w.path}`);
-  return { path: name, data: unpacked };
+  return { path: name, data };
 }
 
 /**
  * Load a model from its files: `{graph, weights: [{path, data, packed?}], tokenizer, decision, calibration}`.
- * A `packed` weights file is `model.packed`; its `path` may be left out, the unpacked file's sha256 names it.
+ * A `packed` weights file is `model.packed`. A weights file's `path` may be left out: its sha256 names it.
  * Options: `name` (the model name answers carry, e.g. 'largha:150m'), `wasm` (ollaya_web_bg.wasm as a
  * URL or bytes; default next to pkg/ollaya_web.js), `device` ('wasm' or 'webgpu'), `sessionOptions`
  * (merged into onnxruntime-web's).
