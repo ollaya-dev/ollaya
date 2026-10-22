@@ -279,6 +279,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         prob_diffs.last().copied().unwrap_or(0.0),
         percentile(&prob_diffs, 99),
     );
+    // An empty or truncated goldens file (an export that stopped early) must not pass the gate.
+    if questions == 0 {
+        return Err(format!("{}: no questions to check", goldens.display()).into());
+    }
 
     if latency {
         // A different state every request, so no request reuses the previous one's prefix.
