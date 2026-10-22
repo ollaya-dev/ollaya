@@ -12,6 +12,7 @@
 //!
 //! The server and the client both build on these types, so the contract lives in one place.
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod client;
 pub mod decide;
 pub mod error;
@@ -21,6 +22,7 @@ pub mod models;
 pub mod presets;
 pub mod validate;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use client::{Client, ClientError};
 pub use decide::{
     Answer, ChoiceAnswer, ChoiceCriteria, ChoiceQuestion, DecideAnswer, DecideRequest,

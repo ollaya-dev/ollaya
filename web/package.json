@@ -1,0 +1,16 @@
+{
+  "name": "@ollaya/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Ollaya encoder decision models (layout laya-markers-v1) in the browser",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "ollaya.js",
+  "scripts": {
+    "build": "sh build.sh",
+    "parity": "node parity.mjs"
+  },
+  "dependencies": {
+    "onnxruntime-web": "1.30.0"
+  }
+}

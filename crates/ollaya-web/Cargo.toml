@@ -1,0 +1,22 @@
+[package]
+name = "ollaya-web"
+description = "Encoder decision models (layout laya-markers-v1) in the browser: tokenizer, layout and answers as WebAssembly"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+indexmap.workspace = true
+ollaya-api.workspace = true
+ollaya-decision.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# unstable_wasm: the pure-Rust regex backend and getrandom's JS source, so a wasm32 build
+# tokenizes byte for byte as the native runner does.
+tokenizers = { workspace = true, features = ["unstable_wasm"] }
+wasm-bindgen.workspace = true
