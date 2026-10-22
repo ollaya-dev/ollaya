@@ -1,7 +1,7 @@
 // The /try demo (src/pages/try.tsx). The model and the asset URLs come from #try-app's data attributes, the
-// examples from #try-examples. The runtime (web/ollaya.js with onnxruntime-web) is a separate bundle, imported
-// only when the visitor presses Load: /static/ollaya-wasm.js, or ollaya-webgpu.js (onnxruntime-web's JSPI build,
-// the only WebGPU build under Cloudflare's 25 MiB file limit) when WebGPU is ticked.
+// examples from #try-examples. The runtime (web/ollaya.js with onnxruntime-web's WebAssembly build) is a separate
+// bundle, /static/ollaya-wasm.js, imported only when the visitor presses Load. No WebGPU: the 2-bit graph's
+// MatMulNBits ran slower there than on WebAssembly (1.8 s against 0.24 s a call).
 
 const app = document.getElementById('try-app')
 const examples = JSON.parse(document.getElementById('try-examples').textContent)
@@ -18,10 +18,13 @@ if (params.get('repo')) {
   $('[data-model-repo]').href = `${endpoint}/${repo}`
 }
 
-const webgpu = $('[data-webgpu]')
-const jspi = typeof WebAssembly === 'object' && 'Suspending' in WebAssembly
-webgpu.disabled = !('gpu' in navigator && jspi)
-if (webgpu.disabled) webgpu.parentElement.title = 'Needs a browser with WebGPU and WebAssembly JSPI, such as Chrome 137 or later'
+// Three questions over a state of about 200 tokens, the size of an example.
+const WARM_UP = {
+  state: 'The order arrived late and the box was damaged. '.repeat(20),
+  questions: Object.fromEntries(
+    ['a', 'b', 'c'].map((id) => [id, { type: 'choice', instructions: 'Which fits best?', criteria: { x: 'one', y: 'two', z: 'three' } }]),
+  ),
+}
 
 const status = (text) => ($('[data-status]').textContent = text)
 const mb = (n) => (n / 1e6).toFixed(1)
@@ -189,21 +192,18 @@ $('[data-decide]').addEventListener('click', decide)
 
 $('[data-load]').addEventListener('click', async () => {
   const btn = $('[data-load]')
-  const gpu = webgpu.checked
   btn.disabled = true
-  webgpu.disabled = true
   const progress = $('[data-progress]')
   const fill = $('[data-progress-bar]')
   const t = performance.now()
   try {
     status('Starting the runtime…')
-    const { ort, fromHub, load } = await import(gpu ? d.runtimeWebgpu : d.runtimeWasm)
+    const { ort, fromHub, load } = await import(d.runtimeWasm)
     // Served from this site, so no third-party CDN is involved.
-    ort.env.wasm.wasmPaths = gpu ? { wasm: d.ortJspiWasm, mjs: d.ortJspiMjs } : { wasm: d.ortWasm, mjs: d.ortMjs }
+    ort.env.wasm.wasmPaths = { wasm: d.ortWasm, mjs: d.ortMjs }
     model = await load(fromHub(repo, { endpoint }), {
       name: d.name,
       wasm: d.ollayaWasm,
-      device: gpu ? 'webgpu' : 'wasm',
       onProgress: ({ loaded, total }) => {
         const p = total ? Math.min(1, loaded / total) : 0
         fill.style.width = `${(p * 100).toFixed(1)}%`
@@ -213,17 +213,25 @@ $('[data-load]').addEventListener('click', async () => {
     })
     fill.style.width = '100%'
     progress.setAttribute('aria-valuenow', '100')
+    // Chrome runs onnxruntime's WebAssembly as baseline code until its kernels have run a while (the first calls
+    // take seconds, then 0.2-0.3 s on a laptop): warm up until the calls stop getting faster, for at most 8 s.
+    status('Warming up…')
+    for (let prev = Infinity, end = performance.now() + 8000; performance.now() < end; ) {
+      const s = performance.now()
+      await model.decide(WARM_UP)
+      const ms = performance.now() - s
+      if (ms > 0.8 * prev) break
+      prev = ms
+    }
     const threads = ort.env.wasm.numThreads
-    const backend = gpu ? 'WebGPU' : `WebAssembly${threads > 1 ? `, ${threads} threads` : ''}`
+    const backend = `WebAssembly${threads > 1 ? `, ${threads} threads` : ''}`
     status(`Loaded in ${((performance.now() - t) / 1000).toFixed(1)} s · ${backend}`)
     btn.hidden = true
-    webgpu.parentElement.hidden = true
     $('[data-decide]').disabled = false
     $('[data-decide-hint]').textContent = 'Edits re-run on their own.'
     decide()
   } catch (e) {
     status(`Could not load the model: ${e.message ?? e}`)
     btn.disabled = false
-    webgpu.disabled = !('gpu' in navigator && jspi)
   }
 })

@@ -94,28 +94,25 @@ if (tailwind.status !== 0) {
   throw new Error('tailwindcss failed')
 }
 
-// 2b. The /try demo runs ../web/ollaya.js in the browser. Its page script and two runtime bundles (web/ollaya.js
-// with onnxruntime-web's WebAssembly build, and with its JSPI build for WebGPU; the other WebGPU builds' .wasm is
-// over Cloudflare's 25 MiB file limit) go to dist/static with the .wasm and .mjs files they load, so no CDN is
+// 2b. The /try demo runs ../web/ollaya.js in the browser. Its page script and the runtime bundle (web/ollaya.js
+// with onnxruntime-web's WebAssembly build) go to dist/static with the .wasm and .mjs files they load, so no CDN is
 // needed. web/pkg is built from Rust (sh ../web/build.sh) and CI does not build it: without it /try is left out.
 const web = join(root, '..', 'web')
 const ortDist = join(web, 'node_modules', 'onnxruntime-web', 'dist')
-const ortFiles = ['ort-wasm-simd-threaded.wasm', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.jspi.wasm', 'ort-wasm-simd-threaded.jspi.mjs']
+const ortFiles = ['ort-wasm-simd-threaded.wasm', 'ort-wasm-simd-threaded.mjs']
 if ((await stat(join(web, 'pkg', 'ollaya_web_bg.wasm')).catch(() => null)) && (await stat(ortDist).catch(() => null))) {
   const browser = { bundle: true, format: 'esm', platform: 'browser', target: 'es2022', minify: true, logLevel: 'warning' }
   await build({ ...browser, entryPoints: [join(root, 'src', 'client', 'try.js')], outfile: join(dist, 'static', 'try.js') })
-  for (const [variant, ortBuild] of [['wasm', 'onnxruntime-web/wasm'], ['webgpu', 'onnxruntime-web/jspi']]) {
-    await build({
-      ...browser,
-      entryPoints: [join(web, 'ollaya.js')],
-      outfile: join(dist, 'static', `ollaya-${variant}.js`),
-      alias: { 'onnxruntime-web': ortBuild },
-      // An alias resolves from the working directory: onnxruntime-web is web/'s dependency, and this condition picks
-      // the build that loads its .mjs and .wasm from env.wasm.wasmPaths rather than inlining them.
-      nodePaths: [join(web, 'node_modules')],
-      conditions: ['onnxruntime-web-use-extern-wasm'],
-    })
-  }
+  await build({
+    ...browser,
+    entryPoints: [join(web, 'ollaya.js')],
+    outfile: join(dist, 'static', 'ollaya-wasm.js'),
+    alias: { 'onnxruntime-web': 'onnxruntime-web/wasm' },
+    // An alias resolves from the working directory: onnxruntime-web is web/'s dependency, and this condition picks
+    // the build that loads its .mjs and .wasm from env.wasm.wasmPaths rather than inlining them.
+    nodePaths: [join(web, 'node_modules')],
+    conditions: ['onnxruntime-web-use-extern-wasm'],
+  })
   await cp(join(web, 'pkg', 'ollaya_web_bg.wasm'), join(dist, 'static', 'ollaya_web_bg.wasm'))
   for (const f of ortFiles) await cp(join(ortDist, f), join(dist, 'static', f))
 } else {

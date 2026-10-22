@@ -97,12 +97,9 @@ export function TryPage() {
         data-repo={MODEL.repo}
         data-name={modelName}
         data-runtime-wasm={asset('ollaya-wasm.js')}
-        data-runtime-webgpu={asset('ollaya-webgpu.js')}
         data-ollaya-wasm={asset('ollaya_web_bg.wasm')}
         data-ort-wasm={asset('ort-wasm-simd-threaded.wasm')}
         data-ort-mjs={asset('ort-wasm-simd-threaded.mjs')}
-        data-ort-jspi-wasm={asset('ort-wasm-simd-threaded.jspi.wasm')}
-        data-ort-jspi-mjs={asset('ort-wasm-simd-threaded.jspi.mjs')}
       >
         {/* The model: what it is, its download and the backend it runs on. */}
         <section aria-labelledby="model-title" class={`${card} p-5 sm:p-6`}>
@@ -123,10 +120,6 @@ export function TryPage() {
               </p>
             </div>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
-              <label class="inline-flex items-center gap-2 text-sm text-body has-[:disabled]:text-muted">
-                <input type="checkbox" class="size-4 accent-current" data-webgpu disabled />
-                WebGPU
-              </label>
               <button type="button" class={`${btnPrimary} disabled:opacity-50`} data-load>
                 <Icon name="download" class="size-4" />
                 Load the model ({MODEL.size})
