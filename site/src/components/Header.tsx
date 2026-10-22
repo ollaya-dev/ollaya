@@ -1,18 +1,22 @@
+import { hasAsset } from '../lib/assets'
 import { benchUrl } from '../lib/bench'
 import { githubStars } from '../lib/stars'
 import { GITHUB_URL } from '../site'
 import { Icon } from './Icon'
 import { Logo } from './Logo'
 
-export type NavKey = 'models' | 'results' | 'docs' | 'download'
+export type NavKey = 'models' | 'results' | 'docs' | 'download' | 'try'
 
-const links: { key: NavKey | 'github'; href: string; label: string }[] = [
+const allLinks: { key: NavKey | 'github'; href: string; label: string }[] = [
   { key: 'models', href: '/search', label: 'Models' },
+  { key: 'try', href: '/try', label: 'Try' },
   // Ollaya Bench, on its own host: the href is set at render time (benchUrl needs the build's origin).
   { key: 'results', href: '', label: 'Bench' },
   { key: 'docs', href: '/docs', label: 'Docs' },
   { key: 'github', href: GITHUB_URL, label: 'GitHub' },
 ]
+// /try exists only when the build bundled the in-browser runtime (scripts/build.mjs).
+const navLinks = () => allLinks.filter((l) => l.key !== 'try' || hasAsset('try.js'))
 
 /** The GitHub link's label with the star count the build read, e.g. "GitHub ☆ 510". */
 function GithubLabel({ label }: { label: string }) {
@@ -111,7 +115,7 @@ function MobileMenu() {
           </button>
         </form>
         <ul class="mt-8 flex flex-col gap-1 text-2xl font-medium text-fg">
-          {links.map((l) => (
+          {navLinks().map((l) => (
             <li>
               <a href={l.key === 'results' ? benchUrl() : l.href} class="block py-2 hover:underline underline-offset-4">
                 {l.key === 'github' ? <GithubLabel label={l.label} /> : l.label}
@@ -138,7 +142,7 @@ export function Header({ active, hideSearch }: { active?: NavKey; hideSearch?: b
             <Logo />
           </a>
           <ul class="hidden items-baseline gap-6 text-sm md:flex">
-            {links.map((l) => (
+            {navLinks().map((l) => (
               <li class={l.key === 'github' ? 'lg:hidden' : undefined}>
                 <a
                   href={l.key === 'results' ? benchUrl() : l.href}

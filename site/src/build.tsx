@@ -32,6 +32,8 @@ import { accuracyScatter, ResultsPage, speedDots } from './pages/results'
 import { DotPlot, Scatter } from './components/charts'
 import { runs } from './data/results'
 import { SearchPage } from './pages/search'
+import { TryPage } from './pages/try'
+import { MODEL } from './data/try'
 
 export { withReadmeBlocks } from './data/readme'
 
@@ -103,6 +105,20 @@ function pages(origin: string): Page[] {
       },
       render: () => <DocsIndex />,
     },
+    // Only when the build bundled the in-browser runtime (scripts/build.mjs, step 2b).
+    ...(hasAsset('try.js')
+      ? [
+          {
+            url: '/try',
+            meta: {
+              title: 'Try it in your browser',
+              description: `${MODEL.name}:${MODEL.tag}, Ollaya's own open decision model, running in your browser. Nothing you type leaves the page.`,
+              nav: 'try' as const,
+            },
+            render: () => <TryPage />,
+          },
+        ]
+      : []),
     ...docPages.map((page) => ({
       url: `/docs/${page.slug}`,
       meta: { title: page.title, description: page.description, nav: 'docs' as const },
