@@ -1,0 +1,27 @@
+[project]
+name = "ollaya-train"
+version = "0.0.0"
+description = "Build-time training of Ollaya's own decision models (Laya network, distilled; optional ternary weights)"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+dependencies = [
+    # The network and its sequence layout, the same pin as convert/: the checkpoints this writes
+    # load with `laya.load` and export with convert/ unchanged.
+    "laya @ https://files.pythonhosted.org/packages/b5/fd/dd60f49451ef43af50c3fcd5d5d9b12aea590f5bcb9afb3e5ec5171b6fa6/laya-0.3.7.tar.gz",
+    "torch==2.14.*",
+    "transformers==5.17.*",
+    "tokenizers==0.23.*",
+    "safetensors>=0.4",
+    "numpy>=2",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130", marker = "sys_platform != 'darwin'" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
