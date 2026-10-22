@@ -93,13 +93,13 @@ pub fn answers(answers: &Value, verbose: bool) -> String {
             }
             _ => (a.to_string(), 0.0),
         };
+        // Pad before styling: the ANSI codes would otherwise count toward the column width.
         out.push_str(&format!(
-            "{:<width$}  {:<36}  {} {:.2}\n",
-            style.dim(&truncate(qid, width)),
-            style.bold(&truncate(&answer, 36)),
+            "{}  {}  {} {:.2}\n",
+            style.dim(&format!("{:<width$}", truncate(qid, width))),
+            style.bold(&format!("{:<36}", truncate(&answer, 36))),
             bar(p),
             p,
-            width = width + if style.on { 8 } else { 0 },
         ));
         if verbose && let Some(probs) = a["probabilities"].as_object() {
             for (label, p) in probs {
