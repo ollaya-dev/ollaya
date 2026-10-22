@@ -150,17 +150,33 @@ The model loads straight from its Hugging Face repository: `load(fromHub('<org>/
 - Web: an npm package and a demo page on ollaya.dev (`/try`); install guide: `ollaya pull <name>`, or
   `npm install` plus three lines of JavaScript, or one `<script type="module">` tag.
 
+### Steps once the name is chosen
+
+1. **Hugging Face** (on spark, whose token can write to `ollaya-dev`): for each tag,
+   `python train/hub.py <checkpoint> <dir> --card train/card.md --var web=@train/card-web.md --var name=… …`
+   (`--web <dir>` for a ternary tag), then `huggingface-cli upload ollaya-dev/<name>-<tag> <dir>`. Note each
+   repository's commit.
+2. **Registry**: a `<name>` entry in `convert/ollaya_convert/catalog.py` with `_laya(…, repo=…, commit=…)` per tag
+   (as `largha`), `license_text` with Ettin's MIT notice; then stages 2 to 4 of `docs/model-lifecycle.md`
+   (export, goldens, parity_run on the CPU, CUDA and Metal, package, bench_plan and bench_run on the RTX 5090).
+3. **Site**: the `catalog.ts` overlay and `site/content/library/<name>.md`; `MODEL` in `site/src/data/try.ts`;
+   deploy with `web/pkg` built (`sh web/build.sh`), which `/try` needs.
+4. **npm**: create the `ollaya` organization on npmjs.com, `npm login`, `cd web && npm publish --access public`.
+5. Release with the next batched version.
+
 ## Milestones
 
-1. Browser runtime with `largha:150m`, parity in Node and Chrome.
-2. Data and teacher labels.
-3. fp students (ettin-150m, then 400m, maybe 1b): benchmark, pick one.
-4. Ternary student: accuracy loss against the fp one, packed size.
+1. Browser runtime with `largha:150m`, parity in Node and Chrome. Done.
+2. Data and teacher labels. Done.
+3. fp students (ettin-150m, then 400m, maybe 1b): benchmark, pick one. 150m, 68m and 400m done; 1b training.
+4. Ternary student: accuracy loss against the fp one, size. 150m and 68m done (2-bit browser graph); 400m training.
 5. Name, Hugging Face repository, registry, demo page, install guide; release with the next batched version.
+   Demo page, npm package, card template and staging done; the rest waits for the name.
 
 ## Risks
 
 - Score questions are the encoders' weak spot (Laya models score 0.09–0.35 on the public benchmark's score
   subsets). The teacher's distributions and the RPS term target this; if it stays weak, the page says so.
 - 512 tokens is short for long agent traces; the model is for messages, tickets and small JSON states.
-- Ternary training may cost accuracy at 68M–150M parameters; the fp model ships either way.
+- Ternary training may cost accuracy at 68M–150M parameters; the fp model ships either way. Measured: 4% of val
+  accuracy at 150m.
