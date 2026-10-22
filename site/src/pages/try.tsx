@@ -18,8 +18,11 @@ import { fromHub, load } from '@ollaya/web'
 const model = await load(fromHub('${MODEL.repo}'))
 const { answers } = await model.decide({ state, questions })`
 
-const scriptCode = `<script type="module">
-  import { fromHub, load } from 'https://cdn.jsdelivr.net/npm/@ollaya/web/+esm'
+const scriptCode = `<script type="importmap">
+  { "imports": { "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.bundle.min.mjs" } }
+</script>
+<script type="module">
+  import { fromHub, load } from 'https://cdn.jsdelivr.net/npm/@ollaya/web@0.1.0/ollaya.js'
   const model = await load(fromHub('${MODEL.repo}'))
   console.log(await model.decide({ state, questions }))
 </script>`

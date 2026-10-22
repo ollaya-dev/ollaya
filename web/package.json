@@ -1,13 +1,30 @@
 {
   "name": "@ollaya/web",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Ollaya encoder decision models (layout laya-markers-v1) in the browser",
+  "version": "0.1.0",
+  "description": "Run Ollaya's decision models in the browser: the /api/decide request and answer, computed on the device",
   "license": "Apache-2.0",
   "type": "module",
   "main": "ollaya.js",
+  "exports": {
+    ".": "./ollaya.js"
+  },
+  "files": [
+    "ollaya.js",
+    "pkg/ollaya_web.js",
+    "pkg/ollaya_web_bg.wasm",
+    "pkg/ollaya_web.d.ts",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ollaya-dev/ollaya.git",
+    "directory": "web"
+  },
+  "homepage": "https://ollaya.dev/try",
+  "keywords": ["ollaya", "decision", "classification", "onnx", "webassembly", "browser", "laya"],
   "scripts": {
     "build": "sh build.sh",
+    "prepack": "sh build.sh",
     "parity": "node parity.mjs"
   },
   "dependencies": {
