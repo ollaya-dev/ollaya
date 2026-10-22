@@ -57,16 +57,35 @@ export function fromHub(repo, { revision = 'main', packed = false, endpoint = 'h
   };
 }
 
-// A file is a URL (string) or its contents (Uint8Array / ArrayBuffer).
-async function bytes(file) {
+// A file is a URL (string) or its contents (Uint8Array / ArrayBuffer). `progress(bytes, size)`, if given, hears
+// of a download as it arrives: once with 0 and the response's length, then with each chunk.
+async function bytes(file, progress) {
   if (typeof file !== 'string') return new Uint8Array(file);
   const res = await fetch(file);
   if (!res.ok) throw new Error(`${file}: HTTP ${res.status}`);
-  return new Uint8Array(await res.arrayBuffer());
+  if (!progress || !res.body) return new Uint8Array(await res.arrayBuffer());
+  const size = Number(res.headers.get('content-length')) || 0;
+  progress(0, size);
+  // Content-Length is the encoded size when the body is compressed, so the buffer grows if the body outruns it.
+  let out = new Uint8Array(size || 1 << 20);
+  let n = 0;
+  for (const reader = res.body.getReader(); ; ) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (n + value.length > out.length) {
+      const grown = new Uint8Array(Math.max(2 * out.length, n + value.length));
+      grown.set(out.subarray(0, n));
+      out = grown;
+    }
+    out.set(value, n);
+    n += value.length;
+    progress(value.length, 0);
+  }
+  return n === out.length ? out : out.slice(0, n);
 }
 
-async function text(file) {
-  return file === undefined ? '' : new TextDecoder().decode(await bytes(file));
+async function text(file, progress) {
+  return file === undefined ? '' : new TextDecoder().decode(await bytes(file, progress));
 }
 
 /**
@@ -121,8 +140,8 @@ async function sha256Name(data) {
 
 // A weights file, unpacked if packed. The graph names the blob it reads by its sha256: a file without a path
 // gets that name, and an unpacked one must hash to the path it was given.
-async function weightsFile(w) {
-  let data = await bytes(w.data);
+async function weightsFile(w, progress) {
+  let data = await bytes(w.data, progress);
   if (w.packed) data = unpackWeights(data);
   else if (w.path !== undefined) return { path: w.path, data };
   const name = await sha256Name(data);
@@ -135,17 +154,21 @@ async function weightsFile(w) {
  * A `packed` weights file is `model.packed`. A weights file's `path` may be left out: its sha256 names it.
  * Options: `name` (the model name answers carry, e.g. 'largha:150m'), `wasm` (ollaya_web_bg.wasm as a
  * URL or bytes; default next to pkg/ollaya_web.js), `device` ('wasm' or 'webgpu'), `sessionOptions`
- * (merged into onnxruntime-web's).
+ * (merged into onnxruntime-web's), `onProgress` (called with `{loaded, total}` bytes as the files download;
+ * `total` grows as each response's length becomes known).
  */
-export async function load(files, { name = 'web', wasm, device = 'wasm', sessionOptions = {} } = {}) {
+export async function load(files, { name = 'web', wasm, device = 'wasm', sessionOptions = {}, onProgress } = {}) {
   await init(wasm === undefined ? undefined : { module_or_path: wasm });
+  let loaded = 0;
+  let total = 0;
+  const progress = onProgress && ((n, size) => onProgress({ loaded: (loaded += n), total: (total += size) }));
   // Weights are fetched here, not by onnxruntime-web, which reads a string as a file path under Node.
   const [tokenizer, decision, calibration, graph, externalData] = await Promise.all([
-    text(files.tokenizer),
-    text(files.decision),
-    text(files.calibration),
-    bytes(files.graph),
-    Promise.all((files.weights ?? []).map(weightsFile)),
+    text(files.tokenizer, progress),
+    text(files.decision, progress),
+    text(files.calibration, progress),
+    bytes(files.graph, progress),
+    Promise.all((files.weights ?? []).map((w) => weightsFile(w, progress))),
   ]);
   const model = new Model(tokenizer, decision, calibration);
   const session = await ort.InferenceSession.create(graph, {
