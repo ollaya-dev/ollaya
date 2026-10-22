@@ -2,7 +2,7 @@
 
     uv run train.py --backbone jhu-clsp/ettin-encoder-150m --data data/train.jsonl \
         --teacher data/teacher.jsonl --val data/val.jsonl --out runs/fp150
-    uv run train.py ... --init runs/fp150 --ternary --out runs/t150      # ternary QAT from the fp model
+    uv run train.py ... --init runs/fp150 --quant absmean --kd-from runs/fp150 --kd 1 --rel 1 --wd 0 --out runs/t150
 
 Rows (JSONL, one state each):
     {"id", "source", "state", "questions": {qid: {"type", "instructions", "criteria"}},
@@ -13,10 +13,13 @@ criteria order, a score's levels, noul as [false, true] (the order `laya.common.
 The output directory is a Laya checkpoint (`rl_agent_config.json`, `model.safetensors`, `tokenizer/`,
 `encoder/config.json`): `laya.load(out)` reads it and Ollaya's convert/ exports it like any other.
 
-Ternary: every Linear weight of the encoder layers and the decision head (and the head's attention
-in-projection) is trained through absmean ternarization per output row (BitNet b1.58, straight-through
-estimator). The saved weights are exactly {-g_r, 0, +g_r} per row, so a 2-bit packing restores them
-bit for bit (`ternary.py`). Embeddings, norms, the type embedding and the small scorer stay full precision.
+Ternary (`--quant`, recipe and evidence in docs/ternary-research.md): every weight matrix of the encoder layers
+and the decision head is trained ternary per output row (absmean, or ParetoQ's form with a learned scale), and
+the token embeddings optionally at 4 or 8 bits (`--emb-bits`). Start from the fp model (`--init`) and distill
+from it (`--kd-from`): its option distributions (`--kd`, temperature `--kd-tau`) and, MiniLM-style, the Q-Q, K-K
+and V-V relations of one late global-attention layer (`--rel`). The saved weights are exactly quantized, so
+Ollaya runs them as ordinary weights and `ternary.py` packs them bit for bit. Norms, the type embedding and the
+scorer stay full precision.
 """
 from __future__ import annotations
 
@@ -33,10 +36,10 @@ import torch.nn.functional as F
 from laya.agent import Agent
 from laya.common import QTYPES, DecisionModel, build_sequence, collate_items, render_options
 from safetensors.torch import save_file
-from torch.nn.utils import parametrize
+from safetensors.torch import load_file
 from transformers import AutoModel, AutoTokenizer
 
-from ternary import Ternary, ternarize_, ternary_targets
+from ternary import finalize_, quantize_, zero_ratio
 
 
 def load_rows(path, teacher_path=None, alpha=0.5):
@@ -123,6 +126,53 @@ def losses(logits, act_logits, batch, w_rps):
     return loss.mean() + 0.1 * F.cross_entropy(act_logits.float(), act_t), ce.mean()
 
 
+def kd_kl(s, t, mask, tau):
+    """tau^2 * KL(teacher || student) over a question's options."""
+    s = (s / tau).masked_fill(~mask, -1e4)
+    pt = (t / tau).masked_fill(~mask, -1e4).softmax(-1)
+    return (pt * (pt.clamp_min(1e-12).log() - s.log_softmax(-1))).sum(-1).mean() * tau * tau
+
+
+def relation_kl(s, t, mask, heads):
+    """MiniLM-v2 relation distillation: KL between the teacher's and student's softmax(X X^T / sqrt(d)) for
+    X in (Q, K, V), per head, over the real tokens. s, t: the layer's Wqkv outputs [B, L, 3d]."""
+    B, L, _ = s.shape
+    keys = (~mask)[:, None, None, :]
+    rows = mask[:, None, :].float()
+    total = 0.0
+    for i in range(3):
+        xs = s.view(B, L, 3, heads, -1)[:, :, i].transpose(1, 2).float()
+        xt = t.view(B, L, 3, heads, -1)[:, :, i].transpose(1, 2).float()
+        scale = xs.shape[-1] ** -0.5
+        ls = (xs @ xs.transpose(-1, -2) * scale).masked_fill(keys, -1e4).log_softmax(-1)
+        pt = (xt @ xt.transpose(-1, -2) * scale).masked_fill(keys, -1e4).softmax(-1)
+        kl = (pt * (pt.clamp_min(1e-12).log() - ls)).sum(-1)
+        total = total + (kl * rows).sum() / (rows.sum() * heads)
+    return total / 3
+
+
+class Capture:
+    def __init__(self, module):
+        self.out = None
+        module.register_forward_hook(lambda m, i, o: setattr(self, "out", o))
+
+
+def last_global_layer(config):
+    types = getattr(config, "layer_types", None)
+    if types:
+        return max(i for i, t in enumerate(types) if t == "full_attention")
+    n = config.global_attn_every_n_layers
+    return max(i for i in range(config.num_hidden_layers) if i % n == 0)
+
+
+def load_model(backbone, ckpt=None):
+    model = DecisionModel(AutoModel.from_pretrained(backbone, attn_implementation="sdpa"), 2, 2)
+    if ckpt:
+        model.load_state_dict(load_file(os.path.join(ckpt, "model.safetensors")), strict=True)
+    model.encoder.config.reference_compile = False
+    return model
+
+
 def to_dev(batch, dev):
     return {k: v.to(dev, non_blocking=True) if torch.is_tensor(v) else v for k, v in batch.items()}
 
@@ -154,14 +204,19 @@ def evaluate(model, loader, dev, amp):
 def fit_temperatures(evals):
     """One temperature per type (choice, score, noul), minimizing NLL of the label; laya clamps to [0.5, 5]."""
     temps = []
+    grid = torch.arange(0.5, 5.0001, 0.01)
     for t in range(3):
         rows = [(z, y) for qt, z, _, y in evals if qt == t]
         if not rows:
             temps.append(1.0)
             continue
-        grid = [0.5 + 0.01 * i for i in range(451)]
-        nll = [sum(-F.log_softmax(z / T, -1)[y].item() for z, y in rows) for T in grid]
-        temps.append(grid[min(range(len(grid)), key=nll.__getitem__)])
+        k = max(len(z) for z, _ in rows)
+        z = torch.full((len(rows), k), -1e4)
+        for i, (zi, _) in enumerate(rows):
+            z[i, :len(zi)] = zi
+        y = torch.tensor([yi for _, yi in rows])
+        nll = torch.stack([F.cross_entropy(z / T, y, reduction="sum") for T in grid])
+        temps.append(round(float(grid[int(nll.argmin())]), 2))
     return temps
 
 
@@ -194,8 +249,14 @@ def main():
     ap.add_argument("--val", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--init", help="a checkpoint this script wrote, to continue from (e.g. fp -> ternary)")
-    ap.add_argument("--ternary", action="store_true")
-    ap.add_argument("--int8-embeddings", action="store_true", help="with --ternary: also round the token embeddings to int8 per row")
+    ap.add_argument("--quant", choices=["none", "absmean", "learned"], default="none")
+    ap.add_argument("--emb-bits", type=int, choices=[4, 8, 32], default=32)
+    ap.add_argument("--kd-from", help="an fp checkpoint of the same backbone to distill from (logits and relations)")
+    ap.add_argument("--kd", type=float, default=0.0, help="weight of the logit KL to --kd-from")
+    ap.add_argument("--kd-tau", type=float, default=2.0)
+    ap.add_argument("--rel", type=float, default=0.0, help="weight of the Q/K/V relation KL to --kd-from")
+    ap.add_argument("--rel-rows", type=int, default=16, help="batch rows used for the relation loss (memory)")
+    ap.add_argument("--wd", type=float, default=0.01)
     ap.add_argument("--alpha", type=float, default=0.5, help="weight of gold vs teacher when a question has both")
     ap.add_argument("--epochs", type=float, default=1.0)
     ap.add_argument("--bs", type=int, default=32)
@@ -218,18 +279,17 @@ def main():
     os.makedirs(a.out, exist_ok=True)
 
     tok = AutoTokenizer.from_pretrained(os.path.join(a.init, "tokenizer") if a.init else a.backbone)
-    if a.init:
-        enc = AutoModel.from_pretrained(a.backbone, attn_implementation="sdpa")
-        model = DecisionModel(enc, 2, 2)
-        from safetensors.torch import load_file
-        model.load_state_dict(load_file(os.path.join(a.init, "model.safetensors")), strict=True)
-    else:
-        model = DecisionModel(AutoModel.from_pretrained(a.backbone, attn_implementation="sdpa"), 2, 2)
-    model.encoder.config.reference_compile = False
-    if a.ternary:
-        for m, name in ternary_targets(model):
-            parametrize.register_parametrization(m, name, Ternary())
+    model = load_model(a.backbone, a.init)
+    if a.quant != "none":
+        quantize_(model, a.quant, a.emb_bits)
     model.to(dev)
+    teacher = cap_s = cap_t = None
+    if a.kd_from:
+        teacher = load_model(a.backbone, a.kd_from).to(dev).eval().requires_grad_(False)
+        layer = last_global_layer(model.encoder.config)
+        heads = model.encoder.config.num_attention_heads
+        cap_s = Capture(model.encoder.layers[layer].attn.Wqkv)
+        cap_t = Capture(teacher.encoder.layers[layer].attn.Wqkv)
 
     rows, skipped = load_rows(a.data, a.teacher, a.alpha)
     val_rows, _ = load_rows(a.val, None, a.alpha)
@@ -243,7 +303,7 @@ def main():
     head_params = [p for n, p in model.named_parameters() if not n.startswith("encoder.")]
     enc_params = [p for n, p in model.named_parameters() if n.startswith("encoder.")]
     opt = torch.optim.AdamW([{"params": enc_params, "lr": a.lr_enc}, {"params": head_params, "lr": a.lr_head}],
-                            weight_decay=0.01, betas=(0.9, 0.98))
+                            weight_decay=a.wd, betas=(0.9, 0.98))
     steps_per_epoch = math.ceil(len(rows) / a.bs)
     total = int(steps_per_epoch * a.epochs)
     warm = max(1, int(total * a.warmup))
@@ -251,7 +311,7 @@ def main():
         opt, lambda s: min(1.0, (s + 1) / warm) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / total))))
 
     log = open(os.path.join(a.out, "train.log.jsonl"), "a")
-    step, t0, run_loss, run_ce = 0, time.time(), 0.0, 0.0
+    step, t0, run = 0, time.time(), {}
     last = None
     epoch = 0
     while step < total:
@@ -265,35 +325,46 @@ def main():
             b = to_dev(b, dev)
             with torch.autocast(dev.type, dtype=amp, enabled=dev.type == "cuda"):
                 logits, act = forward(model, b)
+                if teacher is not None:
+                    with torch.no_grad():
+                        t_logits, _ = forward(teacher, b)
             loss, ce = losses(logits.float(), act, b, a.w_rps)
+            parts = {"loss": loss, "ce": ce}
+            if teacher is not None and a.kd:
+                parts["kd"] = kd_kl(logits.float(), t_logits.float(), b["marker_mask"], a.kd_tau)
+                loss = loss + a.kd * parts["kd"]
+            if teacher is not None and a.rel:
+                n = a.rel_rows
+                parts["rel"] = relation_kl(cap_s.out[:n], cap_t.out[:n], b["attention_mask"][:n].bool(), heads)
+                loss = loss + a.rel * parts["rel"]
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
             sched.step()
             step += 1
-            run_loss += loss.item()
-            run_ce += ce.item()
+            for k, v in parts.items():
+                run[k] = run.get(k, 0.0) + float(v)
             if step % 100 == 0:
-                rec = {"step": step, "of": total, "loss": round(run_loss / 100, 4), "ce": round(run_ce / 100, 4),
+                rec = {"step": step, "of": total, **{k: round(v / 100, 5) for k, v in run.items()},
                        "lr": sched.get_last_lr()[0], "min": round((time.time() - t0) / 60, 1)}
                 print(json.dumps(rec), flush=True)
                 log.write(json.dumps(rec) + "\n")
                 log.flush()
-                run_loss = run_ce = 0.0
+                run = {}
             if step % a.eval_every == 0 or step == total:
                 acc = report(evaluate(model, val_loader, dev, amp), [1.0, 1.0, 1.0])
                 rec = {"step": step, "val": acc}
+                if a.quant != "none":
+                    rec["zeros"] = round(zero_ratio(model), 4)
                 print(json.dumps(rec), flush=True)
                 log.write(json.dumps(rec) + "\n")
                 log.flush()
                 last = acc
         epoch += 1
 
-    if a.ternary:
-        for m, name in ternary_targets(model):
-            parametrize.remove_parametrizations(m, name, leave_parametrized=False)
-        ternarize_(model, a.int8_embeddings)
+    if a.quant != "none":
+        finalize_(model)
     evals = evaluate(model, val_loader, dev, amp)
     temps = fit_temperatures(evals)
     final = report(evals, temps)
@@ -307,7 +378,9 @@ def main():
         "model_name": a.name or os.path.basename(os.path.normpath(a.out)),
         "temperature": temps,
         "fine_tuned": True,
-        "training": {"backbone": a.backbone, "ternary": a.ternary, "int8_embeddings": a.int8_embeddings, "data": os.path.basename(a.data),
+        "training": {"backbone": a.backbone, "quant": a.quant, "emb_bits": a.emb_bits,
+                     "kd_from": a.kd_from and os.path.basename(os.path.normpath(a.kd_from)), "kd": a.kd,
+                     "kd_tau": a.kd_tau, "rel": a.rel, "wd": a.wd, "data": os.path.basename(a.data),
                      "teacher": os.path.basename(a.teacher) if a.teacher else None, "alpha": a.alpha,
                      "epochs": a.epochs, "batch": a.bs, "lr_encoder": a.lr_enc, "lr_head": a.lr_head,
                      "steps": step, "hours": round((time.time() - t0) / 3600, 3), "val": final, "last_eval": last},
