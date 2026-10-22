@@ -34,14 +34,16 @@ were trained on narrow data. The plan takes the encoder's shape and the decoder'
   with the gold label where the data has one.
 - **Backbones** (all ModernBERT-architecture, which Laya and Ollaya's export already handle):
 
-  | Backbone | License | Params (with head) | Languages | Ternary + int8 embeddings |
-  |---|---|---|---|---|
-  | `jhu-clsp/ettin-encoder-68m` | MIT | ~74M | English | ~38 MB |
-  | `jhu-clsp/ettin-encoder-150m` | MIT | ~163M | English | ~70 MB |
-  | `jhu-clsp/mmBERT-small` | MIT | ~144M (98M of it embeddings) | 100+ | ~110 MB, less with a pruned vocabulary |
+  | Backbone | License | Params (with head) | Ternary + int8 embeddings |
+  |---|---|---|---|
+  | `jhu-clsp/ettin-encoder-68m` | MIT | ~74M | ~38 MB |
+  | `jhu-clsp/ettin-encoder-150m` | MIT | ~163M | ~70 MB |
+  | `jhu-clsp/ettin-encoder-400m` | MIT | ~420M | ~145 MB |
+  | `jhu-clsp/ettin-encoder-1b` | MIT | ~1.05B | ~330 MB |
 
-  The first runs train ettin-150m and mmBERT-small and keep the better trade-off; Turkish matters for the
-  launch, which favours mmBERT if it is close.
+  English only: accuracy comes first. The 150m trains first (about half an hour per 400k questions on an RTX
+  4090), then the 400m; the 1b only if the 400m gains enough over the 150m to suggest more. The web page can
+  offer the most accurate one that still loads in reasonable time, with the smaller one as a fallback.
 
 ## Data
 
@@ -94,7 +96,7 @@ fetched from the model's Hugging Face repository, never from ollaya.dev.
 
 1. Browser runtime with `largha:150m`, parity in Node and Chrome.
 2. Data and teacher labels.
-3. fp students (ettin-150m, mmBERT-small): benchmark, pick one.
+3. fp students (ettin-150m, then 400m, maybe 1b): benchmark, pick one.
 4. Ternary student: accuracy loss against the fp one, packed size.
 5. Name, Hugging Face repository, registry, demo page, install guide; release with the next batched version.
 
