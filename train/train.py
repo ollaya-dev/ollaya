@@ -44,11 +44,17 @@ from ternary import finalize_, quantize_, zero_ratio
 
 def load_rows(path, teacher_path=None, alpha=0.5):
     teacher = {}
-    if teacher_path:
-        with open(teacher_path, encoding="utf-8") as f:
+    for p in (teacher_path or "").split(","):
+        if not p:
+            continue
+        with open(p, encoding="utf-8") as f:
             for line in f:
-                r = json.loads(line)
-                teacher[r["id"]] = r["teacher"]
+                try:
+                    r = json.loads(line)
+                except ValueError:  # a line cut off when a labeller was stopped
+                    continue
+                if "teacher" in r:  # rows the teacher rejected carry "error" instead
+                    teacher.setdefault(r["id"], r["teacher"])
     out, skipped = [], 0
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -245,7 +251,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--backbone", default="jhu-clsp/ettin-encoder-150m")
     ap.add_argument("--data", required=True)
-    ap.add_argument("--teacher")
+    ap.add_argument("--teacher", help="teacher label files, comma-separated (the first label of an id wins)")
     ap.add_argument("--val", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--init", help="a checkpoint this script wrote, to continue from (e.g. fp -> ternary)")
@@ -344,7 +350,7 @@ def main():
             sched.step()
             step += 1
             for k, v in parts.items():
-                run[k] = run.get(k, 0.0) + float(v)
+                run[k] = run.get(k, 0.0) + v.item()
             if step % 100 == 0:
                 rec = {"step": step, "of": total, **{k: round(v / 100, 5) for k, v in run.items()},
                        "lr": sched.get_last_lr()[0], "min": round((time.time() - t0) / 60, 1)}
