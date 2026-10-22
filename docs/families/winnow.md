@@ -125,6 +125,10 @@ The runner must match every decision, with option logits within 1e-3. Measured o
 | e4b Q8_0 | CPU, Windows x86-64 (against `llama-server.exe` win-cpu) | 15 | 15/15 | 7.6e-6 | 1.1e-6 |
 | e4b Q8_0 | CUDA, RTX 4090, Windows 11 (`ggml-cuda.dll` in the 0.7.4 CUDA pack; 2026-09-28) | 505 | 505/505 | 1.29e-5 | 3.0e-6 |
 | e4b Q8_0 | ROCm, Radeon RX 9070, Linux (ROCm pack; 2026-10-20) | 505 | 505/505 | 1.25e-5 | 3.0e-6 |
+| e4b Q8_0 | Metal, Apple M4 Pro, macOS (`macos-arm64` of the same build; 2026-10-22) | 505 | 505/505 | 1.14e-5 | 2.6e-6 |
+| e4b Q8_0 | CPU, Apple M4 Pro, macOS (2026-10-22) | 505 | 505/505 | 1.14e-5 | 2.6e-6 |
+| e4b Q8_0 | CPU, ARM64 Linux, DGX Spark (Cortex-X925; `ubuntu-arm64` of the same build; 2026-10-22) | 505 | 505/505 | 1.20e-5 | 2.6e-6 |
+| 12b Q8_0 | CPU, x86-64 Linux, Threadripper 3960X (2026-10-22) | 505 | 505/505 | 1.11e-5 | 2.1e-6 |
 
 - **Windows.** The golden replay on Windows stopped on a text-encoding error in the Python tool
   (cp1252), so the native Windows check covered only the first 3 requests.
@@ -142,7 +146,7 @@ The runner must match every decision, with option logits within 1e-3. Measured o
   ([measurements](../measurements/amd-rx9070-rocm-parity.md)). Against the CUDA goldens instead it
   differs by up to 0.33 in log-probability (500 of 505 decisions), about as far as the CPU backend
   (0.28, 501 of 505): ADR 0003, point 7.
-- **Not run.** Metal and the Apple CPU, linux-arm64, and the full 12b text suite on the CPU.
+- **Not run.** 12b on Metal, the Apple CPU and ARM64.
 - **Typed-decisions (measured here).** All 400 states, 2,000 decisions, argmax against the majority
   label: 12b 0.702 (ECE 0.155 at T 1, the shipped value), e4b 0.722 (ECE 0.022 with the shipped T
   1.2574, 0.060 at T 1).
@@ -231,7 +235,7 @@ gate on normalized option logits. The contributor ran a 2,048-token context, Oll
 - **Memory.** On the RTX 5090, CUDA context included: `12b-vision` 16,243 MiB once loaded and 16,263 MiB at the
   peak, with 16 images in one request; `winnow:12b` 15,877 MiB. A 16 GB GPU is marginal for `12b-vision`, and
   a 12 GB one cannot hold it.
-- **Not run yet.** Metal, Windows and Linux ARM image parity, and the 505 text questions of 12b on the CPU.
+- **Not run yet.** Metal, Windows and Linux ARM image parity.
 
 ```bash
 # Reference: stock llama-server of the pinned build, then the runner on the same device.
