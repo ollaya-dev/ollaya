@@ -35,8 +35,10 @@ jobs:
           # linux-arm64 is different: pyke publishes no aarch64 GPU build of ONNX Runtime, so its
           # base binary has no CUDA support at all and only the GPU runner, built below with
           # cuda-dynamic, uses the -cuda archive (docs/decisions/0005-arm64-cuda-pack.md).
+          # Pinned, not ubuntu-latest: the glibc of the build host is the oldest one the binary
+          # runs on, and install.sh promises 2.38 (Ubuntu 24.04).
           - platform: linux-amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             features: ollaya-runner/cuda
             package-args: --cuda --cuda12 --rocm
           - platform: linux-arm64
