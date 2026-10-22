@@ -56,6 +56,8 @@ thiserror = "2.0.20"
 # Pure-Rust regex backend keeps the binary free of C dependencies; the golden encoding
 # tests prove it tokenizes identically to the Python (onig) build laya uses.
 tokenizers = { version = "=0.23.2", default-features = false, features = ["fancy-regex"] }
+# The JS bindings of crates/ollaya-web. Pinned exactly: the wasm-bindgen CLI must be this version.
+wasm-bindgen = "=0.2.128"
 # ort is a release candidate with breaking renames between RCs: pin it exactly.
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "tracing", "api-24"] }
 

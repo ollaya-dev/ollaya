@@ -9,13 +9,16 @@ rust-version.workspace = true
 
 [dependencies]
 chrono.workspace = true
-futures-util.workspace = true
 indexmap.workspace = true
 ollaya-decision.workspace = true
-reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+# The HTTP client (`client`) is native only: the contract types also build for wasm32 (crates/ollaya-web).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+futures-util.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollaya in the browser</title>
+<!-- Serve the repository root (web/pkg built with web/build.sh) and open /web/demo/. -->
+<script type="importmap">
+{ "imports": { "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.bundle.min.mjs" } }
+</script>
+<style>
+  :root { color-scheme: light dark; font: 15px/1.5 system-ui, sans-serif; }
+  body { max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+  label { display: block; margin-top: 1rem; font-weight: 600; }
+  input, textarea { width: 100%; box-sizing: border-box; font: 13px/1.4 ui-monospace, monospace; }
+  textarea { height: 11rem; }
+  button { margin-top: 1rem; padding: .4rem 1rem; }
+  pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: 1rem; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>Ollaya in the browser</h1>
+<p>An encoder decision model (layout <code>laya-markers-v1</code>) running on this device: tokenizer and
+answers in WebAssembly, the graph in onnxruntime-web. Weights come from the author's Hugging Face repo.</p>
+
+<label for="manifest">Manifest URL</label>
+<input id="manifest" value="/registry/v2/library/largha/manifests/150m-fp32">
+<label for="blobs">Blob base URL (optional; replaces https://ollaya.dev/blobs/, which sends no CORS headers yet)</label>
+<input id="blobs" placeholder="/blobs/">
+<label><input type="checkbox" id="webgpu" style="width:auto"> WebGPU</label>
+<button id="load">Load model</button>
+
+<label for="request">Request (<code>/api/decide</code> body)</label>
+<textarea id="request">{
+  "state": "I was charged twice for order A-104 last week. Refund the duplicate today or I'm cancelling my plan.",
+  "questions": {
+    "refund": {"type": "noul", "instructions": "Is the customer asking for a refund?"},
+    "team": {"type": "choice", "instructions": "Which team handles this?",
+             "criteria": {"billing": "Payments, charges, invoices, refunds", "technical": "Bugs, outages, errors"}}
+  },
+  "extras": ["laya"]
+}</textarea>
+<button id="decide" disabled>Decide</button>
+<pre id="out" aria-live="polite">Not loaded.</pre>
+
+<script type="module">
+import { fromManifest, load } from '../ollaya.js';
+
+const $ = (id) => document.getElementById(id);
+const log = (s) => { $('out').textContent = s; };
+let model;
+
+$('load').onclick = async () => {
+  try {
+    const t = performance.now();
+    log('Loading…');
+    const url = new URL($('manifest').value, location.href);
+    const manifest = await (await fetch(url)).json();
+    const files = fromManifest(manifest);
+    const base = $('blobs').value;
+    if (base) {
+      for (const k of ['graph', 'decision', 'calibration']) {
+        if (files[k]) files[k] = files[k].replace('https://ollaya.dev/blobs/', base);
+      }
+    }
+    const name = url.pathname.split('/').slice(-3, -2)[0] + ':' + url.pathname.split('/').pop();
+    model = await load(files, { name, device: $('webgpu').checked ? 'webgpu' : 'wasm' });
+    $('decide').disabled = false;
+    log(`Loaded ${name} in ${((performance.now() - t) / 1000).toFixed(1)} s.`);
+  } catch (e) {
+    log(`Load failed: ${e.message ?? e}`);
+  }
+};
+
+$('decide').onclick = async () => {
+  try {
+    const t = performance.now();
+    const response = await model.decide(JSON.parse($('request').value));
+    log(`${(performance.now() - t).toFixed(0)} ms\n\n` + JSON.stringify(response, null, 2));
+  } catch (e) {
+    log(`Error${e.status ? ' ' + e.status : ''}: ${e.message}\n` + (e.body ? JSON.stringify(e.body, null, 2) : ''));
+  }
+};
+</script>
+</body>
+</html>
