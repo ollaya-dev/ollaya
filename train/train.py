@@ -16,8 +16,9 @@ The output directory is a Laya checkpoint (`rl_agent_config.json`, `model.safete
 Ternary (`--quant`, recipe and evidence in docs/ternary-research.md): every weight matrix of the encoder layers
 and the decision head is trained ternary per output row (absmean, or ParetoQ's form with a learned scale), and
 the token embeddings optionally at 4 or 8 bits (`--emb-bits`). Start from the fp model (`--init`) and distill
-from it (`--kd-from`): its option distributions (`--kd`, temperature `--kd-tau`) and, MiniLM-style, the Q-Q, K-K
-and V-V relations of one late global-attention layer (`--rel`). The saved weights are exactly quantized, so
+from it (`--kd-from`): its option distributions (`--kd`, temperature `--kd-tau`), MiniLM-style the Q-Q, K-K
+and V-V relations of one late global-attention layer (`--rel`), and every layer's output (`--hid`); the
+weights can blend from fp to quantized over the first steps (`--quant-warmup`). The saved weights are exactly quantized, so
 Ollaya runs them as ordinary weights and `ternary.py` packs them bit for bit. Norms, the type embedding and the
 scorer stay full precision.
 """
@@ -157,6 +158,17 @@ def relation_kl(s, t, mask, heads):
     return total / 3
 
 
+def hidden_mse(s_layers, t_layers, mask):
+    """TernaryBERT-style layer-to-layer distillation: MSE between the student's and teacher's normalized
+    layer outputs over the real tokens, averaged over layers."""
+    m = mask[..., None].float()
+    total = 0.0
+    for s, t in zip(s_layers, t_layers):
+        d = F.layer_norm(s.float(), s.shape[-1:]) - F.layer_norm(t.float(), t.shape[-1:])
+        total = total + (d.pow(2) * m).sum() / (m.sum() * s.shape[-1])
+    return total / len(s_layers)
+
+
 class Capture:
     def __init__(self, module):
         self.out = None
@@ -262,6 +274,7 @@ def main():
     ap.add_argument("--kd-tau", type=float, default=2.0)
     ap.add_argument("--rel", type=float, default=0.0, help="weight of the Q/K/V relation KL to --kd-from")
     ap.add_argument("--rel-rows", type=int, default=16, help="batch rows used for the relation loss (memory)")
+    ap.add_argument("--hid", type=float, default=0.0, help="weight of the every-layer hidden-state MSE to --kd-from")
     ap.add_argument("--wd", type=float, default=0.01)
     ap.add_argument("--quant-warmup", type=float, default=0.0,
                     help="share of the steps over which the weights blend linearly from fp to quantized")
@@ -301,6 +314,8 @@ def main():
         heads = model.encoder.config.num_attention_heads
         cap_s = Capture(model.encoder.layers[layer].attn.Wqkv)
         cap_t = Capture(teacher.encoder.layers[layer].attn.Wqkv)
+        hid_s = [Capture(m) for m in model.encoder.layers] if a.hid else []
+        hid_t = [Capture(m) for m in teacher.encoder.layers] if a.hid else []
 
     rows, skipped = load_rows(a.data, a.teacher, a.alpha)
     val_rows, _ = load_rows(a.val, None, a.alpha)
@@ -350,6 +365,9 @@ def main():
                 n = a.rel_rows
                 parts["rel"] = relation_kl(cap_s.out[:n], cap_t.out[:n], b["attention_mask"][:n].bool(), heads)
                 loss = loss + a.rel * parts["rel"]
+            if teacher is not None and a.hid:
+                parts["hid"] = hidden_mse([c.out for c in hid_s], [c.out for c in hid_t], b["attention_mask"].bool())
+                loss = loss + a.hid * parts["hid"]
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -393,7 +411,7 @@ def main():
         "fine_tuned": True,
         "training": {"backbone": a.backbone, "quant": a.quant, "emb_bits": a.emb_bits,
                      "kd_from": a.kd_from and os.path.basename(os.path.normpath(a.kd_from)), "kd": a.kd,
-                     "kd_tau": a.kd_tau, "rel": a.rel, "wd": a.wd, "data": os.path.basename(a.data),
+                     "kd_tau": a.kd_tau, "rel": a.rel, "hid": a.hid, "quant_warmup": a.quant_warmup, "wd": a.wd, "data": os.path.basename(a.data),
                      "teacher": os.path.basename(a.teacher) if a.teacher else None, "alpha": a.alpha,
                      "epochs": a.epochs, "batch": a.bs, "lr_encoder": a.lr_enc, "lr_head": a.lr_head,
                      "steps": step, "hours": round((time.time() - t0) / 3600, 3), "val": final, "last_eval": last},
