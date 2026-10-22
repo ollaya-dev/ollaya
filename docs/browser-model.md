@@ -56,6 +56,13 @@ Built by `train/data/` (see its README). Every source is permissively licensed a
   `LocalLLaMA/typed-decisions` (its train split is kept apart, for an optional fine-tuned variant whose
   typed-decisions score would then be marked as trained on the split).
 - Rows must fit the 512-token sequence. The teacher labels them through Ollaya on an RTX 5090.
+- **In-domain variant** (`train/data/indomain.py`): the *train* splits of ten of the public benchmark's
+  datasets (MNLI, BoolQ, PAWS, VitaminC, civil_comments, Aegis 2.0, HelpSteer2, PubMedQA artificial,
+  SQuAD 2.0, MASSIVE en-US), up to 20k rows each, asked exactly as the benchmark asks them (nimble's own
+  source modules build the records). Any row sharing a text of 30+ characters with a benchmark record is
+  dropped (195 rows, mostly BoolQ passages that recur across its splits). SummEval has no train split and
+  stays out. A model trained with these rows reports its public-benchmark score as in-domain, next to the
+  held-out model's zero-shot score, never in its place.
 
 ## Training
 
