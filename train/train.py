@@ -417,7 +417,7 @@ def main():
         "training": {"backbone": a.backbone, "quant": a.quant, "emb_bits": a.emb_bits,
                      "kd_from": a.kd_from and os.path.basename(os.path.normpath(a.kd_from)), "kd": a.kd,
                      "kd_tau": a.kd_tau, "rel": a.rel, "hid": a.hid, "quant_warmup": a.quant_warmup, "wd": a.wd, "data": os.path.basename(a.data),
-                     "teacher": os.path.basename(a.teacher) if a.teacher else None, "alpha": a.alpha,
+                     "teacher": [os.path.basename(t) for t in a.teacher.split(",")] if a.teacher else None, "alpha": a.alpha,
                      "epochs": a.epochs, "batch": a.bs, "lr_encoder": a.lr_enc, "lr_head": a.lr_head,
                      "steps": step, "hours": round((time.time() - t0) / 3600, 3), "val": final, "last_eval": last},
     }
