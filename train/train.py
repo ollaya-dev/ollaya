@@ -297,6 +297,10 @@ def main():
     random.seed(a.seed)
     torch.manual_seed(a.seed)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if dev.type == "cuda":
+        # Under WSL the driver spills past VRAM into system memory instead of failing, so the caching allocator
+        # grows into it and training runs several times slower; a cap makes it reuse its cache first.
+        torch.cuda.set_per_process_memory_fraction(0.9)
     amp = torch.bfloat16
     os.makedirs(a.out, exist_ok=True)
 
@@ -306,7 +310,8 @@ def main():
         model.encoder.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     if a.quant != "none":
         quantize_(model, a.quant, a.emb_bits)
-    model.to(dev)
+    # from_pretrained leaves the encoder in eval mode, where gradient checkpointing is off
+    model.to(dev).train()
     teacher = cap_s = cap_t = None
     if a.kd_from:
         teacher = load_model(a.backbone, a.kd_from).to(dev).eval().requires_grad_(False)
