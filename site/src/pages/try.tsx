@@ -1,5 +1,5 @@
 import { Icon } from '../components/Icon'
-import { btnPrimary, CodeTabs, OutlinePill, SizeBadge, textLink } from '../components/ui'
+import { btnPrimary, btnSecondary, CodeTabs, OutlinePill, SizeBadge, textLink } from '../components/ui'
 import { EXAMPLES, MODEL, type TryExample } from '../data/try'
 import { asset } from '../lib/assets'
 import { LOCAL_API } from '../site'
@@ -223,6 +223,10 @@ export function TryPage() {
             <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
               <button type="button" class={`${btnPrimary} disabled:opacity-50`} data-decide disabled>
                 Decide
+              </button>
+              <button type="button" class={btnSecondary} data-share>
+                <Icon name="copy" class="size-4" />
+                <span data-share-label>Copy link</span>
               </button>
               <p class="text-[13px] text-muted" data-decide-hint>
                 Load the model first.

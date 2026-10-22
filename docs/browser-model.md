@@ -133,8 +133,8 @@ memory for the 150m (onnxruntime-web holds several copies while it loads), which
 | Five requests | 1.6 s | 1.9 s |
 
 Parity, Ollaya's native runtime on the CPU against the checkpoint's PyTorch goldens (`parity_run`, 483
-questions): decisions 100% the same, probabilities within 3e-6 (fp150-id-T, fp400-id-T, t150-id-T3w,
-t68-id-T3w). The browser against the native runtime (`web/parity.mjs`, the 391 of those questions the API
+questions): decisions 100% the same, probabilities within 3e-6 (fp400-id-T 2.7e-6, t150-id-T3w 2.8e-6,
+t68-id-T3w 1.4e-6; fp150-id-T 6.2e-6, on a 512-token state). The browser against the native runtime (`web/parity.mjs`, the 391 of those questions the API
 accepts): decisions 100% the same, within 2e-6 (fp150-id-T; t150-id-T3w and t68-id-T3w float32 and 2-bit).
 
 The model loads straight from its Hugging Face repository: `load(fromHub('<org>/<repo>'))`.

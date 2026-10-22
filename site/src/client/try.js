@@ -83,6 +83,36 @@ app.querySelectorAll('[data-example]').forEach((btn) =>
   }),
 )
 
+// A shared link carries its request as JSON in the hash (Copy link). It is only drawn, escaped, until the visitor
+// loads the model; the link never carries ?repo=, so it always opens on the page's own model.
+function shared() {
+  try {
+    const r = JSON.parse(decodeURIComponent(location.hash.slice(1)))
+    if (typeof r?.state === 'string' && r.questions && typeof r.questions === 'object') return r
+  } catch {}
+}
+const fromLink = location.hash.length > 1 && shared()
+if (fromLink) {
+  request = { state: fromLink.state, questions: fromLink.questions }
+  app.querySelectorAll('[data-example]').forEach((b) => b.setAttribute('aria-pressed', 'false'))
+  $('[data-state]').value = request.state
+  writeJson()
+  drawQuestions()
+  drawPending()
+}
+
+$('[data-share]').addEventListener('click', async () => {
+  const url = `${location.origin}${location.pathname}#${encodeURIComponent(JSON.stringify(request))}`
+  history.replaceState(null, '', url)
+  const ok = await navigator.clipboard.writeText(url).then(
+    () => true,
+    () => false,
+  )
+  const label = $('[data-share-label]')
+  label.textContent = ok ? 'Copied' : 'Link in the address bar'
+  setTimeout(() => (label.textContent = 'Copy link'), 2000)
+})
+
 $('[data-state]').addEventListener('input', (e) => {
   request = { ...request, state: e.target.value }
   writeJson()
