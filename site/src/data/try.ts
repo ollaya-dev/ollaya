@@ -2,11 +2,18 @@
  * The /try demo: the model it loads in the browser and the ready examples. The page renders both;
  * src/client/try.js reads them back from the page (the model from #try-app's data attributes, the
  * examples from #try-examples). Query parameters override the model for testing:
- * ?repo=<org/name>&endpoint=<url>.
+ * ?repo=<org/name>&revision=<commit>&endpoint=<url>.
  */
 
-// TODO(name): the model's name is not chosen yet; repo, name and tag change together.
-export const MODEL = { repo: 'ollaya-dev/MODEL-150m-ternary', name: 'MODEL', tag: '150m-ternary', size: '66 MB' }
+// TODO(name): the model's name is not chosen yet; repo, name and tag change together. `revision` is the
+// repository's commit: the browser caches files at a commit, so a returning visitor loads without downloading.
+export const MODEL = {
+  repo: 'ollaya-dev/MODEL-150m-ternary',
+  revision: 'main',
+  name: 'MODEL',
+  tag: '150m-ternary',
+  size: '66 MB',
+}
 
 export type TryQuestion =
   | { type: 'noul'; instructions: string }

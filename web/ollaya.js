@@ -56,13 +56,32 @@ export function fromHub(repo, { revision = 'main', endpoint = 'https://huggingfa
   };
 }
 
+// A URL that names its content (a commit's `/resolve/<sha>/` on Hugging Face, a registry blob's sha256) never
+// changes, so the browser keeps it in Cache Storage and the next visit loads without downloading. A branch such
+// as `main` is fetched every time.
+const IMMUTABLE = /\/resolve\/[0-9a-f]{40}\/|\/sha256[-:][0-9a-f]{64}$/;
+
 // A file is a URL (string) or its contents (Uint8Array / ArrayBuffer). `progress(bytes, size)`, if given, hears
 // of a download as it arrives: once with 0 and the response's length, then with each chunk.
 async function bytes(file, progress) {
   if (typeof file !== 'string') return new Uint8Array(file);
+  // Cache Storage is missing outside secure contexts and in Node, and may throw in private windows.
+  const cache = IMMUTABLE.test(file) && typeof caches !== 'undefined' && (await caches.open('ollaya-web').catch(() => null));
+  const hit = cache && (await cache.match(file).catch(() => null));
+  if (hit) {
+    const out = new Uint8Array(await hit.arrayBuffer());
+    progress?.(0, out.length);
+    progress?.(out.length, 0);
+    return out;
+  }
   const res = await fetch(file);
   if (!res.ok) throw new Error(`${file}: HTTP ${res.status}`);
-  if (!progress || !res.body) return new Uint8Array(await res.arrayBuffer());
+  const out = progress && res.body ? await stream(res, progress) : new Uint8Array(await res.arrayBuffer());
+  if (cache) cache.put(file, new Response(out)).catch(() => {}); // a full disk only costs the next visit a download
+  return out;
+}
+
+async function stream(res, progress) {
   const size = Number(res.headers.get('content-length')) || 0;
   progress(0, size);
   // Content-Length is the encoded size when the body is compressed, so the buffer grows if the body outruns it.

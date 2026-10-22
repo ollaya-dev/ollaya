@@ -72,6 +72,10 @@ cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Orig
 credentialless` or `require-corp`); without them onnxruntime-web uses one thread. In Chrome the first few calls run
 slower while the browser optimizes the WebAssembly; a couple of warm-up calls after `load` take care of it.
 
+Files at a commit (`fromHub(repo, { revision: '<commit sha>' })`, and every registry manifest's URLs) never
+change, so the browser keeps them in Cache Storage (`ollaya-web`) and the next visit loads without downloading.
+`main` is downloaded every time.
+
 ## Build from source
 
 `pkg/` is built from `crates/ollaya-web` (`sh build.sh`; needs the `wasm32-unknown-unknown` Rust target and

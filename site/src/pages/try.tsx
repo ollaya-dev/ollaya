@@ -98,6 +98,7 @@ export function TryPage() {
         id="try-app"
         class="mx-auto mt-12 max-w-6xl px-4 md:mt-16 md:px-6"
         data-repo={MODEL.repo}
+        data-revision={MODEL.revision}
         data-name={modelName}
         data-runtime-wasm={asset('ollaya-wasm.js')}
         data-ollaya-wasm={asset('ollaya_web_bg.wasm')}

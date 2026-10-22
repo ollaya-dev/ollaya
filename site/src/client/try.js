@@ -8,9 +8,10 @@ const examples = JSON.parse(document.getElementById('try-examples').textContent)
 const $ = (sel) => app.querySelector(sel)
 const d = app.dataset
 
-// ?repo=<org/name>&endpoint=<url> override the model, for testing.
+// ?repo=<org/name>&revision=<commit>&endpoint=<url> override the model, for testing.
 const params = new URLSearchParams(location.search)
 const repo = params.get('repo') || d.repo
+const revision = params.get('repo') ? params.get('revision') || 'main' : d.revision
 const endpoint = params.get('endpoint') || 'https://huggingface.co'
 if (params.get('repo')) {
   $('[data-model-name]').textContent = repo
@@ -231,7 +232,7 @@ $('[data-load]').addEventListener('click', async () => {
     const { ort, fromHub, load } = await import(d.runtimeWasm)
     // Served from this site, so no third-party CDN is involved.
     ort.env.wasm.wasmPaths = { wasm: d.ortWasm, mjs: d.ortMjs }
-    model = await load(fromHub(repo, { endpoint }), {
+    model = await load(fromHub(repo, { revision, endpoint }), {
       name: d.name,
       wasm: d.ollayaWasm,
       onProgress: ({ loaded, total }) => {
