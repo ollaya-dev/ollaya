@@ -1,6 +1,6 @@
 """A model's Hugging Face repository, staged as a directory to upload.
 
-    python hub.py <checkpoint> <out-dir> --card <README.md> [--web <dir>]
+    python hub.py <checkpoint> <out-dir> --card card.md --var name=… --var title=… … [--web <dir>]
 
 The checkpoint is Laya's format (rl_agent_config.json, model.safetensors, encoder/config.json, tokenizer/), which
 `laya` loads as it is and Ollaya's registry points its weights layer at. For a ternary model, `--web` adds the
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -41,7 +42,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("checkpoint")
     p.add_argument("out")
-    p.add_argument("--card", required=True)
+    p.add_argument("--card", required=True, help="the model card's template; {{key}} takes --var key=value")
+    p.add_argument("--var", action="append", default=[], help="key=value for the card (a value may be @file)")
     p.add_argument("--web", help="a dir with webgraph.py's model.onnx and the export's tokenizer, decision, calibration")
     a = p.parse_args()
 
@@ -54,7 +56,15 @@ def main():
         shutil.copy(os.path.join(a.web, "model.onnx"), os.path.join(a.out, "onnx", "model.onnx"))
         for f in ("tokenizer.json", "decision.json", "calibration.json"):
             shutil.copy(os.path.join(a.web, f), os.path.join(a.out, f))
-    shutil.copy(a.card, os.path.join(a.out, "README.md"))
+    card = open(a.card).read()
+    values = [(k, open(v[1:]).read().rstrip("\n") if v.startswith("@") else v) for k, v in (kv.split("=", 1) for kv in a.var)]
+    for _ in range(2):  # a value may hold {{keys}} itself (card-web.md)
+        for k, v in values:
+            card = card.replace("{{%s}}" % k, v)
+    left = set(re.findall(r"{{(\w+)}}", card))
+    assert not left, f"the card still has {sorted(left)}"
+    with open(os.path.join(a.out, "README.md"), "w") as f:
+        f.write(card)
     shutil.copy(os.path.join(HERE, "..", "LICENSE"), os.path.join(a.out, "LICENSE"))
     with open(os.path.join(a.out, "NOTICE"), "w") as f:
         f.write(ETTIN)
