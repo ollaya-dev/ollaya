@@ -1,0 +1,756 @@
+source	license	decision	rows	holdout	license_dropped	non_english	fit_512	sampled_questions
+jev/AES2-essay-scoring	cc-by-nc-4.0	drop	2521	0	2521	0	0	0
+jev/AdjectiveScaleProbe-nli	unspecified	drop	199	0	199	0	0	0
+jev/AmbigNQ-clarifying-question	unspecified	drop	2253	0	2253	0	0	0
+jev/BeaverTails	cc-by-nc-4.0	drop	3406	0	3406	0	0	0
+jev/CONDAQA	apache-2.0, Apache License 2.0 (DPI)	keep	2320	0	0	0	2078	2078
+jev/CREAK	CC BY-SA 4.0 (DPI)	keep	469	0	0	0	469	469
+jev/ConTRoL-nli	CC BY-NC-SA 4.0 (DPI)	drop	8876	0	8876	0	0	0
+jev/Dilemmas_Disagreement	unspecified	drop	428	0	428	0	0	0
+jev/Dynasent_Disagreement	unspecified	drop	903	0	903	0	0	0
+jev/FLD.v2/default	unspecified	drop	2338	0	2338	0	0	0
+jev/FLD.v2/star	unspecified	drop	2378	0	2378	0	0	0
+jev/FLUTE	afl-3.0	keep	608	0	0	0	608	608
+jev/FOL-nli	apache-2.0	keep	12087	0	0	0	9972	3491
+jev/HatemojiBuild	cc-by-4.0	keep	767	0	0	0	767	767
+jev/HelpSteer/coherence	cc-by-4.0, CC BY 4.0 (DPI)	holdout	717	717	0	0	0	0
+jev/HelpSteer/complexity	cc-by-4.0, CC BY 4.0 (DPI)	holdout	717	717	0	0	0	0
+jev/HelpSteer/correctness	cc-by-4.0, CC BY 4.0 (DPI)	holdout	724	724	0	0	0	0
+jev/HelpSteer/helpfulness	cc-by-4.0, CC BY 4.0 (DPI)	holdout	723	723	0	0	0	0
+jev/HelpSteer/verbosity	cc-by-4.0, CC BY 4.0 (DPI)	holdout	706	706	0	0	0	0
+jev/HelpSteer2/coherence	cc-by-4.0	holdout	1011	1011	0	0	0	0
+jev/HelpSteer2/complexity	cc-by-4.0	holdout	1040	1040	0	0	0	0
+jev/HelpSteer2/correctness	cc-by-4.0	holdout	991	991	0	0	0	0
+jev/HelpSteer2/helpfulness	cc-by-4.0	holdout	990	990	0	0	0	0
+jev/HelpSteer2/verbosity	cc-by-4.0	holdout	1012	1012	0	0	0	0
+jev/HelpSteer3/edit_quality	cc-by-4.0	holdout	767	767	0	0	0	0
+jev/HelpSteer3/feedback	cc-by-4.0	holdout	1475	1475	0	0	0	0
+jev/HelpSteer3/preference	cc-by-4.0	holdout	814	814	0	0	0	0
+jev/HelpSteer3/preference_strength	cc-by-4.0	holdout	1417	1417	0	0	0	0
+jev/HelpSteer3/principle	cc-by-4.0	holdout	525	525	0	0	0	0
+jev/I2D2	apache-2.0	keep	509	0	0	0	509	509
+jev/IntentGrasp/all	cc-by-nc-sa-4.0	drop	13626	0	13626	0	0	0
+jev/LogicNLI	unspecified	drop	4160	0	4160	0	0	0
+jev/MOH	unspecified	drop	487	0	487	0	0	0
+jev/MSciNLI	cc-by-sa-4.0	keep	4325	0	0	0	4324	3491
+jev/MedQA-USMLE-4-options-hf	cc-by-sa-4.0	keep	5160	0	0	0	5145	3491
+jev/PARADISE	mit	keep	4362	0	0	0	4354	3491
+jev/PARARULE-Plus	mit	keep	2255	0	0	0	2002	2002
+jev/PKU-SafeRLHF/helpfulness	cc-by-nc-4.0	drop	804	0	804	0	0	0
+jev/PKU-SafeRLHF/safety	cc-by-nc-4.0	drop	4854	0	4854	0	0	0
+jev/Pol_NLI	unspecified	drop	1482	0	1482	0	0	0
+jev/Politeness_Disagreement	unspecified	drop	459	0	459	0	0	0
+jev/Prompt-injection-dataset/full	apache-2.0	keep	2768	0	0	42	2670	2670
+jev/PromptShield	apache-2.0	keep	2570	0	0	15	2362	2362
+jev/ReSQ	unspecified	drop	934	0	934	0	0	0
+jev/SBIC_Disagreement	unspecified	drop	443	0	443	0	0	0
+jev/SChem_Disagreement	unspecified	drop	412	0	412	0	0	0
+jev/SDOH-NLI	cc-by-4.0	keep	1548	0	0	0	1548	1548
+jev/SHP	Custom (DPI)	drop	789	0	789	0	0	0
+jev/Sarcasm_News_Headline	unspecified	drop	640	0	640	0	0	0
+jev/ScienceQA_text_only	unspecified	drop	746	0	746	0	0	0
+jev/ShellRisk-Bench	other	drop	3185	0	3185	0	0	0
+jev/SpaRTUN	unspecified	drop	2840	0	2840	0	0	0
+jev/SpaceNLI	mit	keep	4315	0	0	0	4315	3491
+jev/Touche23-ValueEval	cc-by-4.0, CC BY 4.0 (DPI)	keep	456	0	0	0	456	456
+jev/TroFi	gpl, Custom (DPI)	drop	547	0	547	0	0	0
+jev/TuringBench	apache-2.0, Apache License 2.0 (DPI)	keep	1308	0	0	0	958	958
+jev/UNLI	mit	keep	2002	0	0	0	2002	2002
+jev/UltraFeedback-paired	mit	keep	925	0	0	26	353	353
+jev/VUAC	unspecified	drop	457	0	457	0	0	0
+jev/WANLI	cc-by-4.0	holdout	12060	12060	0	0	0	0
+jev/acceptability-prediction/binary_votes	apache-2.0	keep	406	0	0	0	406	406
+jev/acceptability-prediction/rating_votes	apache-2.0	keep	2777	0	0	0	2777	2777
+jev/acord	cc-by-4.0	keep	141	0	0	0	121	121
+jev/add_one_rte	Non Commercial (DPI)	drop	1283	0	1283	0	0	0
+jev/ade_corpus_v2/Ade_corpus_v2_classification	unspecified	drop	555	0	555	0	0	0
+jev/ag_news	unspecified	drop	3421	0	3421	0	0	0
+jev/agent_action_safety	apache-2.0	keep	1858	0	0	0	1775	1775
+jev/ai2_arc/ARC-Challenge/challenge	cc-by-sa-4.0	keep	1302	0	0	0	1302	1302
+jev/ai2_arc/ARC-Easy/challenge	cc-by-sa-4.0	keep	2600	0	0	0	2600	2600
+jev/amazon_counterfactual/en	cc-by-4.0	keep	595	0	0	0	595	595
+jev/amazon_polarity/amazon_polarity	apache-2.0	keep	541	0	0	1	540	540
+jev/ambient	unspecified	drop	37	0	37	0	0	0
+jev/anli/a1	cc-by-nc-4.0	drop	4261	0	4261	0	0	0
+jev/anli/a2	cc-by-nc-4.0	drop	4218	0	4218	0	0	0
+jev/anli/a3	cc-by-nc-4.0	drop	4186	0	4186	0	0	0
+jev/antique	other, research-only (original ANTIQUE distribution) (original source)	drop	141	0	141	0	0	0
+jev/apt	unspecified	drop	509	0	509	0	0	0
+jev/arct	apache-2.0	keep	333	0	0	0	333	333
+jev/args_me	cc-by-4.0, CC BY 4.0 (DPI)	keep	449	0	0	0	298	298
+jev/argument-feedback	unspecified	drop	1888	0	1888	0	0	0
+jev/art	unspecified	drop	1649	0	1649	0	0	0
+jev/auditor_review	unspecified	drop	2688	0	2688	0	0	0
+jev/autotnli	apache-2.0	keep	39	0	0	0	39	39
+jev/avicenna	cc	drop	1333	0	1333	0	0	0
+jev/babi_nli/basic-coreference	bsd	keep	269	0	0	0	269	269
+jev/babi_nli/basic-deduction	bsd	keep	256	0	0	0	256	256
+jev/babi_nli/basic-induction	bsd	keep	254	0	0	0	254	254
+jev/babi_nli/compound-coreference	bsd	keep	257	0	0	0	257	257
+jev/babi_nli/conjunction	bsd	keep	267	0	0	0	267	267
+jev/babi_nli/counting	bsd	keep	238	0	0	0	238	238
+jev/babi_nli/indefinite-knowledge	bsd	keep	265	0	0	0	265	265
+jev/babi_nli/lists-sets	bsd	keep	264	0	0	0	264	264
+jev/babi_nli/path-finding	bsd	keep	251	0	0	0	251	251
+jev/babi_nli/positional-reasoning	bsd	keep	251	0	0	0	251	251
+jev/babi_nli/simple-negation	bsd	keep	271	0	0	0	271	271
+jev/babi_nli/single-supporting-fact	bsd	keep	243	0	0	0	243	243
+jev/babi_nli/size-reasoning	bsd	keep	245	0	0	0	245	245
+jev/babi_nli/three-arg-relations	bsd	keep	264	0	0	0	250	250
+jev/babi_nli/three-supporting-facts	bsd	keep	278	0	0	0	199	199
+jev/babi_nli/time-reasoning	bsd	keep	263	0	0	0	263	263
+jev/babi_nli/two-arg-relations	bsd	keep	268	0	0	0	268	268
+jev/babi_nli/two-supporting-facts	bsd	keep	246	0	0	0	246	246
+jev/babi_nli/yes-no-questions	bsd	keep	267	0	0	0	267	267
+jev/balanced-copa	cc-by-4.0, BSD 2-Clause License (DPI)	keep	210	0	0	0	210	210
+jev/banking77	cc-by-4.0, CC BY 4.0 (DPI)	keep	5558	0	0	0	249	249
+jev/biored/relation	unspecified	drop	151	0	151	0	0	0
+jev/biosift-nli	unspecified	drop	2530	0	2530	0	0	0
+jev/blog_authorship_corpus/age	apache-2.0	keep	1935	0	0	5	1577	1577
+jev/blog_authorship_corpus/gender	apache-2.0, Custom (DPI)	drop	562	0	562	0	0	0
+jev/boolq-natural-perturbations	unspecified	holdout	547	547	0	0	0	0
+jev/brainteasers/WP	unspecified	drop	412	0	412	0	0	0
+jev/breaking_nli	CC BY-SA 4.0 (DPI)	keep	3969	0	0	0	3969	3491
+jev/causal-news	cc0-1.0	keep	123	0	0	0	123	123
+jev/causal-reasoning/transitivity	mit	keep	130	0	0	0	130	130
+jev/cbt/cn	gfdl	drop	206	0	206	0	0	0
+jev/cbt/ne	gfdl	drop	208	0	208	0	0	0
+jev/cebab/ambiance	cc-by-4.0, cc-by-4.0 (original source)	keep	67	0	0	0	67	67
+jev/cebab/food	cc-by-4.0, cc-by-4.0 (original source)	keep	70	0	0	0	70	70
+jev/cebab/noise	cc-by-4.0, cc-by-4.0 (original source)	keep	65	0	0	0	65	65
+jev/cebab/rating	cc-by-4.0, cc-by-4.0 (original source)	keep	61	0	0	0	61	61
+jev/cebab/service	cc-by-4.0, cc-by-4.0 (original source)	keep	66	0	0	0	66	66
+jev/chaos-mnli-ambiguity/votes	unspecified	holdout	1315	1315	0	0	0	0
+jev/chatbot_arena_conversations	cc, CC BY 4.0 (DPI), CC BY-NC 4.0 (DPI), OpenAI (DPI)	drop	471	0	471	0	0	0
+jev/chemprot/chemprot_full_source	other	drop	2130	0	2130	0	0	0
+jev/cicero	mit	keep	3811	0	0	0	3801	3491
+jev/circa	cc-by-4.0	keep	2166	0	0	0	2166	2166
+jev/citation_intent	unspecified	drop	1632	0	1632	0	0	0
+jev/civil_comments/identity_attack_share	cc0-1.0	holdout	193	193	0	0	0	0
+jev/civil_comments/insult_share	cc0-1.0	holdout	479	479	0	0	0	0
+jev/civil_comments/obscene_share	cc0-1.0	holdout	119	119	0	0	0	0
+jev/civil_comments/severe_toxicity_share	cc0-1.0	holdout	4	4	0	0	0	0
+jev/civil_comments/sexual_explicit_share	cc0-1.0	holdout	60	60	0	0	0	0
+jev/civil_comments/threat_share	cc0-1.0	holdout	108	108	0	0	0	0
+jev/civil_comments/toxicity_share	cc0-1.0	holdout	471	471	0	0	0	0
+jev/clcd-english	apache-2.0	keep	484	0	0	0	484	484
+jev/clear/readability	cc-by-nc-sa-4.0 (original source)	drop	131	0	131	0	0	0
+jev/clinc_oos/plus	cc-by-3.0	keep	5219	0	0	0	205	205
+jev/cloth	mit	keep	4429	0	0	0	4429	3491
+jev/clutrr	unspecified	drop	4862	0	4862	0	0	0
+jev/cnli	unspecified	drop	3995	0	3995	0	0	0
+jev/codah/codah	odc-by	keep	2003	0	0	0	2003	2003
+jev/code_x_glue_cc_defect_detection	c-uda	drop	999	0	999	0	0	0
+jev/com2sense	unspecified	drop	417	0	417	0	0	0
+jev/commonsense_qa	mit	keep	5136	0	0	0	5136	3491
+jev/commonsense_qa_2.0	cc-by-4.0	keep	359	0	0	0	359	359
+jev/comve	cc-by-sa-4.0, cc-by-sa-4.0 (original source)	keep	191	0	0	0	191	191
+jev/conceptrules_v2	mit, Custom (DPI)	drop	2242	0	2242	0	0	0
+jev/conj_nli	unspecified	drop	203	0	203	0	0	0
+jev/conll2003/ner_tags	other, Academic Research Purposes Only (DPI), Request Form (DPI)	drop	8400	0	8400	0	0	0
+jev/contract-nli/contractnli_a/seg	cc-by-nc-sa-4.0	drop	2104	0	2104	0	0	0
+jev/contract-nli/contractnli_b/full	cc-by-nc-sa-4.0	drop	1955	0	1955	0	0	0
+jev/coqa/yesno	other	drop	128	0	128	0	0	0
+jev/corr2cause	mit	keep	6275	0	0	0	3354	3354
+jev/cosmos_qa	cc-by-4.0	keep	5407	0	0	0	5407	3491
+jev/counterfactually-augmented-imdb	unspecified	drop	426	0	426	0	0	0
+jev/counterfactually-augmented-snli	unspecified	drop	204	0	204	0	0	0
+jev/crowdflower/airline-sentiment	unspecified	drop	650	0	650	0	0	0
+jev/crowdflower/corporate-messaging	unspecified	drop	728	0	728	0	0	0
+jev/crowdflower/political-media-audience	unspecified	drop	269	0	269	0	0	0
+jev/crowdflower/political-media-bias	unspecified	drop	279	0	279	0	0	0
+jev/crowdflower/political-media-message	unspecified	drop	722	0	722	0	0	0
+jev/crowdflower/tweet_global_warming	unspecified	drop	276	0	276	0	0	0
+jev/cuad/answerability	cc-by-4.0	keep	126	0	0	0	0	0
+jev/cycic_classification	apache-2.0	keep	448	0	0	0	448	448
+jev/cycic_multiplechoice	apache-2.0	keep	3215	0	0	0	3215	3215
+jev/dadc-limit-nli	cc	drop	898	0	898	0	0	0
+jev/dataset_train_nli	unspecified	drop	2667	0	2667	0	0	0
+jev/dbpedia_14/dbpedia_14	cc-by-sa-3.0	keep	2741	0	0	1	2740	2740
+jev/ddi/relation	cc-by-nc-4.0	drop	139	0	139	0	0	0
+jev/defeasible-nli/atomic	apache-2.0, MIT License (DPI)	keep	789	0	0	0	789	789
+jev/defeasible-nli/snli	apache-2.0, MIT License (DPI)	keep	720	0	0	0	720	720
+jev/defeasible-nli/social	apache-2.0	keep	868	0	0	0	868	868
+jev/definite_pronoun_resolution	unspecified	drop	298	0	298	0	0	0
+jev/dgen	mit	keep	1487	0	0	0	1487	1487
+jev/discogem/relation	other	drop	78	0	78	0	0	0
+jev/discosense	apache-2.0, apache-2.0 (original source)	keep	2265	0	0	0	2265	2265
+jev/discovery/discovery	apache-2.0	keep	2664	0	0	0	115	115
+jev/disrpt/eng.dep.scidtb.rels	apache-2.0	keep	3428	0	0	0	3428	3428
+jev/dnc	Various (DPI)	drop	43	0	43	0	0	0
+jev/dnd_style_intents	apache-2.0	keep	5050	0	0	0	5050	3491
+jev/doc-nli	bsd	keep	11741	0	0	7	8033	3491
+jev/docred	mit	keep	3603	0	0	0	136	136
+jev/dream	unspecified	drop	2294	0	2294	0	0	0
+jev/dynahate	gpl	drop	1380	0	1380	0	0	0
+jev/dynasent/r1_votes	CC BY 4.0 (DPI)	keep	14813	0	0	13	14799	3491
+jev/dynasent/r2_votes	CC BY 4.0 (DPI)	keep	11466	0	0	0	11466	3491
+jev/e-CARE	BSD 2-Clause License (DPI)	keep	411	0	0	0	411	411
+jev/edos	cc0-1.0	keep	126	0	0	0	126	126
+jev/ekar_english	afl-3.0, CC BY-NC-SA 4.0 (DPI)	drop	947	0	947	0	0	0
+jev/emo/emo2019	mpl-2.0	drop	1728	0	1728	0	0	0
+jev/empathetic-dialogues/emotion	cc-by-nc-4.0	drop	2460	0	2460	0	0	0
+jev/english-grading/cohesion	unspecified	drop	368	0	368	0	0	0
+jev/english-grading/conventions	unspecified	drop	373	0	373	0	0	0
+jev/english-grading/grammar	unspecified	drop	369	0	369	0	0	0
+jev/english-grading/phraseology	unspecified	drop	357	0	357	0	0	0
+jev/english-grading/syntax	unspecified	drop	355	0	355	0	0	0
+jev/english-grading/vocabulary	unspecified	drop	371	0	371	0	0	0
+jev/equate	apache-2.0	keep	151	0	0	0	151	151
+jev/esci	apache-2.0	keep	2413	0	0	34	1697	1697
+jev/esconv/strategy	cc-by-nc-4.0, cc-by-nc-4.0 (original source)	drop	153	0	153	0	0	0
+jev/ethics/commonsense	mit	keep	258	0	0	0	181	181
+jev/ethics/deontology	mit	keep	297	0	0	0	297	297
+jev/ethics/justice	mit	keep	279	0	0	0	279	279
+jev/ethics/virtue	mit	keep	251	0	0	0	251	251
+jev/ethos/binary	unspecified	drop	499	0	499	0	0	0
+jev/ethos/multilabel	agpl-3.0	drop	691	0	691	0	0	0
+jev/evidence-inference	other	drop	139	0	139	0	0	0
+jev/fabsa/sentiment	unspecified	drop	139	0	139	0	0	0
+jev/faithdial/grounding	mit, mit (original source)	keep	127	0	0	0	111	111
+jev/feasibilityQA	mit	keep	569	0	0	0	569	569
+jev/fever-evidence-related	cc-by-sa-3.0, gpl-3.0, CC BY-SA 4.0 (DPI)	drop	764	0	764	0	0	0
+jev/few_rel/default	unspecified	drop	245	0	245	0	0	0
+jev/fig-qa	mit	keep	596	0	0	0	596	596
+jev/financial_phrasebank/sentences_allagree	cc-by-nc-sa-3.0	drop	1645	0	1645	0	0	0
+jev/fnc1/stance	other	drop	146	0	146	0	0	0
+jev/folio	cc, CC BY-SA 4.0 (DPI)	drop	1271	0	1271	0	0	0
+jev/fool-me-twice	apache-2.0	keep	2013	0	0	2	2009	2009
+jev/fracas	unspecified	drop	315	0	315	0	0	0
+jev/gap	apache-2.0, apache-2.0 (original source)	keep	109	0	0	0	101	101
+jev/github-issue-similarity	mit	keep	950	0	0	6	307	307
+jev/glue/cola	other	drop	610	0	610	0	0	0
+jev/glue/mnli	other	holdout	612	612	0	0	0	0
+jev/glue/mrpc	other	drop	559	0	559	0	0	0
+jev/glue/qnli	other	holdout	497	497	0	0	0	0
+jev/glue/qqp	other	drop	489	0	489	0	0	0
+jev/glue/rte	other	drop	562	0	562	0	0	0
+jev/glue/sst2	other	drop	494	0	494	0	0	0
+jev/glue/stsb	other	drop	5706	0	5706	0	0	0
+jev/glue/wnli	other	drop	614	0	614	0	0	0
+jev/go_emotions/simplified	apache-2.0	keep	3157	0	0	0	3156	3156
+jev/goal-step-wikihow/goal	mit	keep	1967	0	0	0	1967	1967
+jev/goal-step-wikihow/order	mit	keep	466	0	0	0	466	466
+jev/goal-step-wikihow/step	mit	keep	1294	0	0	0	1294	1294
+jev/google_wellformed_query	cc-by-sa-4.0	keep	563	0	0	0	563	563
+jev/hallmarks-of-cancer/yesno	gpl-3.0	drop	128	0	128	0	0	0
+jev/hans	unspecified	drop	52	0	52	0	0	0
+jev/hate_speech18	cc-by-sa-3.0, CC BY-SA 3.0 (DPI)	keep	573	0	0	0	573	573
+jev/hate_speech_offensive	unspecified	drop	3144	0	3144	0	0	0
+jev/hatexplain/majority	cc-by-4.0	keep	938	0	0	0	938	938
+jev/head_qa/en	mit, other	drop	3079	0	3079	0	0	0
+jev/headline_cause/en_simple	cc0-1.0	keep	2384	0	0	0	2384	2384
+jev/health_fact	mit	keep	4033	0	0	0	4033	3491
+jev/hellaswag	unspecified	drop	2862	0	2862	0	0	0
+jev/help-nli	cc, CC BY-SA 4.0 (DPI)	drop	1801	0	1801	0	0	0
+jev/hh-rlhf/harmless-base	MIT License (DPI)	keep	698	0	0	0	657	657
+jev/hh-rlhf/helpful-base	MIT License (DPI)	keep	718	0	0	0	668	668
+jev/hh-rlhf/helpful-online	MIT License (DPI)	keep	668	0	0	0	348	348
+jev/hh-rlhf/helpful-rejection-sampled	MIT License (DPI)	keep	709	0	0	0	595	595
+jev/hope_edi/english	cc-by-4.0	keep	2274	0	0	0	2274	2274
+jev/hotpotqa/supporting-fact	cc-by-sa-4.0	keep	126	0	0	0	126	126
+jev/hover	mit	keep	1919	0	0	0	1766	1766
+jev/humicroedit/subtask-1	unspecified	drop	1033	0	1033	0	0	0
+jev/humicroedit/subtask-2	unspecified	drop	1143	0	1143	0	0	0
+jev/hyperpartisan_news	CC BY 4.0 (DPI)	keep	287	0	0	3	108	108
+jev/idioms-nli	unspecified	drop	1494	0	1494	0	0	0
+jev/imdb	other	drop	544	0	544	0	0	0
+jev/implicatures	gpl	drop	208	0	208	0	0	0
+jev/implicit-hate-stg1	Request Form (DPI)	drop	3979	0	3979	0	0	0
+jev/infotabs	apache-2.0 (original source)	keep	141	0	0	0	121	121
+jev/insincere-questions	unspecified	drop	520	0	520	0	0	0
+jev/isarcasm/intended	unspecified	drop	1841	0	1841	0	0	0
+jev/it-support-tickets	cc-by-4.0	keep	1120	0	0	11	1109	1109
+jev/jigsaw_toxicity	apache-2.0	holdout	820	820	0	0	0	0
+jev/joci	unspecified	drop	4244	0	4244	0	0	0
+jev/knowref60k	cc-by-4.0, cc-by-4.0 (original source)	keep	207	0	0	0	207	207
+jev/language-identification	CC BY-NC 4.0 (DPI), CC BY-SA 4.0 (DPI), Custom (DPI)	drop	144	0	144	0	0	0
+jev/lewidi/hs_brexit	other	drop	191	0	191	0	0	0
+jev/lewidi/md_agreement	other	drop	570	0	570	0	0	0
+jev/lewidi/mp	other	drop	684	0	684	0	0	0
+jev/lex_glue/case_hold	cc-by-4.0	keep	12081	0	0	2	11994	3491
+jev/lex_glue/ledgar	cc-by-4.0	keep	1866	0	0	0	1181	1181
+jev/lex_glue/scotus	cc-by-4.0, Custom (DPI)	drop	1942	0	1942	0	0	0
+jev/lex_glue/unfair_tos	cc-by-4.0	keep	2110	0	0	0	2107	2107
+jev/lexical_relation_classification/BLESS	other, CC BY-NC 4.0 (DPI)	drop	207	0	207	0	0	0
+jev/lexical_relation_classification/CogALexV	other, CC BY-NC 4.0 (DPI)	drop	142	0	142	0	0	0
+jev/lexical_relation_classification/K&H+N	other, CC BY-NC 4.0 (DPI)	drop	146	0	146	0	0	0
+jev/lexical_relation_classification/ROOT09	other, CC BY-NC 4.0 (DPI)	drop	108	0	108	0	0	0
+jev/liar	unspecified	drop	2468	0	2468	0	0	0
+jev/lifecycle-entailment	unspecified	drop	56	0	56	0	0	0
+jev/lingnli	unspecified	drop	4316	0	4316	0	0	0
+jev/linguisticprobing/bigram_shift	unspecified	drop	12	0	12	0	0	0
+jev/linguisticprobing/coordination_inversion	unspecified	drop	13	0	13	0	0	0
+jev/linguisticprobing/obj_number	unspecified	drop	9	0	9	0	0	0
+jev/linguisticprobing/odd_man_out	unspecified	drop	12	0	12	0	0	0
+jev/linguisticprobing/past_present	unspecified	drop	9	0	9	0	0	0
+jev/linguisticprobing/subj_number	unspecified	drop	10	0	10	0	0	0
+jev/linguisticprobing/top_constituents	unspecified	drop	45	0	45	0	0	0
+jev/logical-entailment	apache-2.0	keep	2195	0	0	0	2195	2195
+jev/logical-fallacy	unspecified	drop	1254	0	1254	0	0	0
+jev/logiqa	unspecified	drop	7590	0	7590	0	0	0
+jev/logiqa-2.0-nli	cc, CC BY-NC-SA 4.0 (DPI)	drop	2414	0	2414	0	0	0
+jev/lonli	mit	keep	4317	0	0	0	4317	3491
+jev/lsat-ar	unspecified	drop	1820	0	1820	0	0	0
+jev/lsat-rc	unspecified	drop	2079	0	2079	0	0	0
+jev/lsat_qa/all	unspecified	drop	236	0	236	0	0	0
+jev/magpie/idiomatic	mit, cc-by-4.0 (original source)	keep	124	0	0	0	120	120
+jev/mams/atsa	apache-2.0 (original source)	keep	139	0	0	0	139	139
+jev/math_qa	apache-2.0	keep	12033	0	0	3	12030	3491
+jev/matres/temporal	unspecified	drop	140	0	140	0	0	0
+jev/maud/antitrust-efforts	cc-by-4.0	keep	42	0	0	0	30	30
+jev/maud/bringdown-timing	cc-by-4.0	keep	37	0	0	0	13	13
+jev/maud/consideration	cc-by-4.0	keep	37	0	0	0	26	26
+jev/maud/ordinary-course-consent	cc-by-4.0	keep	24	0	0	0	14	14
+jev/maud/ordinary-course-efforts	cc-by-4.0	keep	36	0	0	0	35	35
+jev/maud/specific-performance	cc-by-4.0	keep	20	0	0	0	19	19
+jev/maven-arg/role	unspecified	drop	168	0	168	0	0	0
+jev/maven-ere/causal	unspecified	drop	131	0	131	0	0	0
+jev/maven/event	unspecified	drop	168	0	168	0	0	0
+jev/mc_taco	unspecified	drop	482	0	482	0	0	0
+jev/mcscript2	other	drop	198	0	198	0	0	0
+jev/mctest-nli	unspecified	drop	738	0	738	0	0	0
+jev/medical_questions_pairs	unspecified	drop	492	0	492	0	0	0
+jev/medmcqa	apache-2.0	keep	5207	0	0	0	5207	3491
+jev/mindgames	apache-2.0, Apache License 2.0 (DPI)	keep	2061	0	0	0	2061	2061
+jev/missing-item-prediction/contrastive	unspecified	drop	889	0	889	0	0	0
+jev/monli	unspecified	drop	32	0	32	0	0	0
+jev/monotonicity-entailment	apache-2.0	keep	2015	0	0	0	2015	2015
+jev/moral_stories/full	mit, MIT License (DPI)	keep	642	0	0	0	642	642
+jev/mpe	unspecified	drop	4016	0	4016	0	0	0
+jev/multidogo/airline/intent	other, cdla-permissive-1.0 (original source)	drop	67	0	67	0	0	0
+jev/multidogo/fastfood/intent	other, cdla-permissive-1.0 (original source)	drop	67	0	67	0	0	0
+jev/multidogo/finance/intent	other, cdla-permissive-1.0 (original source)	drop	67	0	67	0	0	0
+jev/multidogo/insurance/intent	other, cdla-permissive-1.0 (original source)	drop	67	0	67	0	0	0
+jev/multidogo/media/intent	other, cdla-permissive-1.0 (original source)	drop	67	0	67	0	0	0
+jev/multidogo/software/intent	other, cdla-permissive-1.0 (original source)	drop	67	0	67	0	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/amh	cc-by-4.0	non-english	131	0	0	131	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/arq	cc-by-4.0	non-english	129	0	0	129	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/ary	cc-by-4.0	non-english	127	0	0	127	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/hau	cc-by-4.0	non-english	126	0	0	126	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/ibo	cc-by-4.0	non-english	115	0	0	115	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/kin	cc-by-4.0	non-english	133	0	0	133	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/pcm	cc-by-4.0	non-english	112	0	0	112	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/por	cc-by-4.0	non-english	133	0	0	133	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/swa	cc-by-4.0	non-english	121	0	0	121	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/tso	cc-by-4.0	non-english	113	0	0	113	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/twi	cc-by-4.0	non-english	100	0	0	100	0	0
+jev/multilingual/AfriSenti-twitter-sentiment/yor	cc-by-4.0	non-english	114	0	0	114	0	0
+jev/multilingual/MLMA_hate_speech	mit	non-english	533	0	0	533	0	0
+jev/multilingual/NusaX-senti/ace	cc-by-sa-4.0	non-english	121	0	0	121	0	0
+jev/multilingual/NusaX-senti/ban	cc-by-sa-4.0	non-english	123	0	0	123	0	0
+jev/multilingual/NusaX-senti/bbc	cc-by-sa-4.0	non-english	118	0	0	118	0	0
+jev/multilingual/NusaX-senti/bjn	cc-by-sa-4.0	non-english	131	0	0	131	0	0
+jev/multilingual/NusaX-senti/bug	cc-by-sa-4.0	non-english	110	0	0	110	0	0
+jev/multilingual/NusaX-senti/eng	cc-by-sa-4.0	non-english	127	0	0	127	0	0
+jev/multilingual/NusaX-senti/ind	cc-by-sa-4.0	non-english	134	0	0	134	0	0
+jev/multilingual/NusaX-senti/jav	cc-by-sa-4.0	non-english	128	0	0	128	0	0
+jev/multilingual/NusaX-senti/mad	cc-by-sa-4.0	non-english	115	0	0	115	0	0
+jev/multilingual/NusaX-senti/min	cc-by-sa-4.0	non-english	130	0	0	130	0	0
+jev/multilingual/NusaX-senti/nij	cc-by-sa-4.0	non-english	109	0	0	109	0	0
+jev/multilingual/NusaX-senti/sun	cc-by-sa-4.0	non-english	133	0	0	133	0	0
+jev/multilingual/amazon_reviews_multi/all_languages	other	non-english	704	0	0	704	0	0
+jev/multilingual/americas_nli/all_languages	cc-by-sa-4.0	non-english	369	0	0	369	0	0
+jev/multilingual/clue/afqmc	unspecified	non-english	86	0	0	86	0	0
+jev/multilingual/clue/ocnli	unspecified	non-english	328	0	0	328	0	0
+jev/multilingual/clue/tnews	unspecified	non-english	434	0	0	434	0	0
+jev/multilingual/disrpt/deu.rst.pcc.rels	apache-2.0	non-english	223	0	0	223	0	0
+jev/multilingual/disrpt/eus.rst.ert.rels	apache-2.0	non-english	297	0	0	297	0	0
+jev/multilingual/disrpt/fas.rst.prstc.rels	apache-2.0	non-english	294	0	0	294	0	0
+jev/multilingual/disrpt/fra.sdrt.annodis.rels	apache-2.0	non-english	266	0	0	266	0	0
+jev/multilingual/disrpt/nld.rst.nldt.rels	apache-2.0	non-english	334	0	0	334	0	0
+jev/multilingual/disrpt/por.rst.cstn.rels	apache-2.0	non-english	309	0	0	309	0	0
+jev/multilingual/disrpt/rus.rst.rrt.rels	apache-2.0	non-english	264	0	0	264	0	0
+jev/multilingual/disrpt/spa.rst.rststb.rels	apache-2.0	non-english	330	0	0	330	0	0
+jev/multilingual/disrpt/tha.pdtb.tdtb.rels	apache-2.0	non-english	323	0	0	323	0	0
+jev/multilingual/disrpt/zho.rst.gcdt.rels	apache-2.0	non-english	225	0	0	225	0	0
+jev/multilingual/exams/multilingual	cc-by-sa-4.0	non-english	919	0	0	919	0	0
+jev/multilingual/indic_glue/bbca.hi/news	other	non-english	318	0	0	318	0	0
+jev/multilingual/indic_glue/iitp-mr.hi/sentiment	other	non-english	198	0	0	198	0	0
+jev/multilingual/indic_glue/iitp-pr.hi/sentiment	other	non-english	193	0	0	193	0	0
+jev/multilingual/indic_glue/inltkh	other	non-english	209	0	0	209	0	0
+jev/multilingual/indic_glue/inltkh.te/sentiment	other	non-english	197	0	0	197	0	0
+jev/multilingual/indic_glue/md.hi/discourse_mode	other	non-english	323	0	0	323	0	0
+jev/multilingual/indic_glue/sna.bn/news	other	non-english	239	0	0	239	0	0
+jev/multilingual/indic_glue/wstp	other	non-english	810	0	0	810	0	0
+jev/multilingual/klue/nli	cc-by-sa-4.0	non-english	290	0	0	290	0	0
+jev/multilingual/klue/sts	cc-by-sa-4.0	non-english	62	0	0	62	0	0
+jev/multilingual/klue/ynat	cc-by-sa-4.0	non-english	457	0	0	457	0	0
+jev/multilingual/language-identification	CC BY-NC 4.0 (DPI), CC BY-SA 4.0 (DPI), Custom (DPI)	non-english	321	0	0	321	0	0
+jev/multilingual/masakhanews/amh	afl-3.0	non-english	124	0	0	124	0	0
+jev/multilingual/masakhanews/eng	afl-3.0	non-english	193	0	0	193	0	0
+jev/multilingual/masakhanews/fra	afl-3.0	non-english	130	0	0	130	0	0
+jev/multilingual/masakhanews/hau	afl-3.0	non-english	182	0	0	182	0	0
+jev/multilingual/masakhanews/ibo	afl-3.0	non-english	165	0	0	165	0	0
+jev/multilingual/masakhanews/lin	afl-3.0	non-english	141	0	0	141	0	0
+jev/multilingual/masakhanews/lug	afl-3.0	non-english	137	0	0	137	0	0
+jev/multilingual/masakhanews/orm	afl-3.0	non-english	129	0	0	129	0	0
+jev/multilingual/masakhanews/pcm	afl-3.0	non-english	109	0	0	109	0	0
+jev/multilingual/masakhanews/run	afl-3.0	non-english	175	0	0	175	0	0
+jev/multilingual/masakhanews/sna	afl-3.0	non-english	127	0	0	127	0	0
+jev/multilingual/masakhanews/som	afl-3.0	non-english	185	0	0	185	0	0
+jev/multilingual/masakhanews/swa	afl-3.0	non-english	178	0	0	178	0	0
+jev/multilingual/masakhanews/tir	afl-3.0	non-english	189	0	0	189	0	0
+jev/multilingual/masakhanews/xho	afl-3.0	non-english	135	0	0	135	0	0
+jev/multilingual/masakhanews/yor	afl-3.0	non-english	129	0	0	129	0	0
+jev/multilingual/massive	cc-by-4.0	holdout	730	730	0	0	0	0
+jev/multilingual/miam	cc-by-sa-4.0	non-english	403	0	0	403	0	0
+jev/multilingual/mms	other	non-english	458	0	0	458	0	0
+jev/multilingual/mtop	cc-by-sa-4.0	non-english	794	0	0	794	0	0
+jev/multilingual/multilingual-NLI-26lang-2mil7	unspecified	non-english	466	0	0	466	0	0
+jev/multilingual/multilingual-sentiments/all	apache-2.0	non-english	431	0	0	431	0	0
+jev/multilingual/oasst1_pairwise_rlhf_reward	unspecified	non-english	181	0	0	181	0	0
+jev/multilingual/offenseval_2020/ar	unspecified	non-english	57	0	0	57	0	0
+jev/multilingual/offenseval_2020/da	unspecified	non-english	60	0	0	60	0	0
+jev/multilingual/offenseval_2020/gr	unspecified	non-english	61	0	0	61	0	0
+jev/multilingual/offenseval_2020/tr	unspecified	non-english	56	0	0	56	0	0
+jev/multilingual/offenseval_dravidian/kannada	cc-by-4.0	non-english	323	0	0	323	0	0
+jev/multilingual/offenseval_dravidian/malayalam	cc-by-4.0	non-english	421	0	0	421	0	0
+jev/multilingual/offenseval_dravidian/tamil	cc-by-4.0	non-english	423	0	0	423	0	0
+jev/multilingual/paws-x/de	other	holdout	56	56	0	0	0	0
+jev/multilingual/paws-x/en	other	holdout	56	56	0	0	0	0
+jev/multilingual/paws-x/es	other	holdout	57	57	0	0	0	0
+jev/multilingual/paws-x/fr	other	holdout	54	54	0	0	0	0
+jev/multilingual/paws-x/ja	other	holdout	56	56	0	0	0	0
+jev/multilingual/paws-x/ko	other	holdout	53	53	0	0	0	0
+jev/multilingual/paws-x/zh	other	holdout	58	58	0	0	0	0
+jev/multilingual/tweet_sentiment_multilingual	cc-by-3.0	non-english	446	0	0	446	0	0
+jev/multilingual/tydi-as2-balanced	unspecified	non-english	55	0	0	55	0	0
+jev/multilingual/universal-joy	gpl	non-english	528	0	0	528	0	0
+jev/multilingual/wili_2018	odbl	non-english	755	0	0	755	0	0
+jev/multilingual/x-fact	unspecified	non-english	468	0	0	468	0	0
+jev/multilingual/x-stance	mit	non-english	106	0	0	106	0	0
+jev/multilingual/xcopa/et	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/ht	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/id	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcopa/it	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/qu	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcopa/sw	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcopa/ta	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcopa/th	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/tr	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcopa/translation-et	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/translation-ht	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/translation-id	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/translation-it	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/translation-sw	cc-by-4.0	non-english	11	0	0	11	0	0
+jev/multilingual/xcopa/translation-ta	cc-by-4.0	non-english	12	0	0	12	0	0
+jev/multilingual/xcopa/translation-th	cc-by-4.0	non-english	9	0	0	9	0	0
+jev/multilingual/xcopa/translation-tr	cc-by-4.0	non-english	14	0	0	14	0	0
+jev/multilingual/xcopa/translation-vi	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcopa/translation-zh	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcopa/vi	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcopa/zh	cc-by-4.0	non-english	13	0	0	13	0	0
+jev/multilingual/xcsr/X-CODAH-ar	mit	non-english	134	0	0	134	0	0
+jev/multilingual/xcsr/X-CODAH-de	mit	non-english	138	0	0	138	0	0
+jev/multilingual/xcsr/X-CODAH-en	mit	non-english	128	0	0	128	0	0
+jev/multilingual/xcsr/X-CODAH-es	mit	non-english	131	0	0	131	0	0
+jev/multilingual/xcsr/X-CODAH-fr	mit	non-english	132	0	0	132	0	0
+jev/multilingual/xcsr/X-CODAH-hi	mit	non-english	119	0	0	119	0	0
+jev/multilingual/xcsr/X-CODAH-it	mit	non-english	130	0	0	130	0	0
+jev/multilingual/xcsr/X-CODAH-jap	mit	non-english	131	0	0	131	0	0
+jev/multilingual/xcsr/X-CODAH-nl	mit	non-english	130	0	0	130	0	0
+jev/multilingual/xcsr/X-CODAH-pl	mit	non-english	127	0	0	127	0	0
+jev/multilingual/xcsr/X-CODAH-pt	mit	non-english	138	0	0	138	0	0
+jev/multilingual/xcsr/X-CODAH-ru	mit	non-english	135	0	0	135	0	0
+jev/multilingual/xcsr/X-CODAH-sw	mit	non-english	128	0	0	128	0	0
+jev/multilingual/xcsr/X-CODAH-ur	mit	non-english	126	0	0	126	0	0
+jev/multilingual/xcsr/X-CODAH-vi	mit	non-english	138	0	0	138	0	0
+jev/multilingual/xcsr/X-CODAH-zh	mit	non-english	136	0	0	136	0	0
+jev/multilingual/xcsr/X-CSQA-ar	mit	non-english	169	0	0	169	0	0
+jev/multilingual/xcsr/X-CSQA-de	mit	non-english	179	0	0	179	0	0
+jev/multilingual/xcsr/X-CSQA-en	mit	non-english	192	0	0	192	0	0
+jev/multilingual/xcsr/X-CSQA-es	mit	non-english	187	0	0	187	0	0
+jev/multilingual/xcsr/X-CSQA-fr	mit	non-english	177	0	0	177	0	0
+jev/multilingual/xcsr/X-CSQA-hi	mit	non-english	155	0	0	155	0	0
+jev/multilingual/xcsr/X-CSQA-it	mit	non-english	178	0	0	178	0	0
+jev/multilingual/xcsr/X-CSQA-jap	mit	non-english	138	0	0	138	0	0
+jev/multilingual/xcsr/X-CSQA-nl	mit	non-english	156	0	0	156	0	0
+jev/multilingual/xcsr/X-CSQA-pl	mit	non-english	167	0	0	167	0	0
+jev/multilingual/xcsr/X-CSQA-pt	mit	non-english	158	0	0	158	0	0
+jev/multilingual/xcsr/X-CSQA-ru	mit	non-english	146	0	0	146	0	0
+jev/multilingual/xcsr/X-CSQA-sw	mit	non-english	149	0	0	149	0	0
+jev/multilingual/xcsr/X-CSQA-ur	mit	non-english	165	0	0	165	0	0
+jev/multilingual/xcsr/X-CSQA-vi	mit	non-english	157	0	0	157	0	0
+jev/multilingual/xcsr/X-CSQA-zh	mit	non-english	144	0	0	144	0	0
+jev/multilingual/xglue/nc	unspecified	non-english	343	0	0	343	0	0
+jev/multilingual/xglue/qadsm	other	non-english	66	0	0	66	0	0
+jev/multilingual/xglue/qam	other	non-english	55	0	0	55	0	0
+jev/multilingual/xglue/wpr	other	non-english	232	0	0	232	0	0
+jev/multilingual/xlwic/xlwic_de_de	cc-by-nc-4.0, CC BY-NC 4.0 (DPI)	non-english	62	0	0	62	0	0
+jev/multilingual/xlwic/xlwic_en_ko	cc-by-nc-4.0, CC BY-NC 4.0 (DPI)	non-english	60	0	0	60	0	0
+jev/multilingual/xlwic/xlwic_fr_fr	cc-by-nc-4.0, CC BY-NC 4.0 (DPI)	non-english	62	0	0	62	0	0
+jev/multilingual/xlwic/xlwic_it_it	cc-by-nc-4.0, CC BY-NC 4.0 (DPI)	non-english	63	0	0	63	0	0
+jev/multilingual/xnli	unspecified	holdout	858	858	0	0	0	0
+jev/multilingual/xstory_cloze/ar	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	31	0	0	31	0	0
+jev/multilingual/xstory_cloze/en	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	31	0	0	31	0	0
+jev/multilingual/xstory_cloze/es	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	31	0	0	31	0	0
+jev/multilingual/xstory_cloze/eu	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	31	0	0	31	0	0
+jev/multilingual/xstory_cloze/hi	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	31	0	0	31	0	0
+jev/multilingual/xstory_cloze/id	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	29	0	0	29	0	0
+jev/multilingual/xstory_cloze/my	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	35	0	0	35	0	0
+jev/multilingual/xstory_cloze/ru	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	30	0	0	30	0	0
+jev/multilingual/xstory_cloze/sw	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	32	0	0	32	0	0
+jev/multilingual/xstory_cloze/te	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	33	0	0	33	0	0
+jev/multilingual/xstory_cloze/zh	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	non-english	30	0	0	30	0	0
+jev/multiwoz22/categorical-slot	apache-2.0	keep	118	0	0	0	99	99
+jev/multiwoz22/dialogue-act	apache-2.0	keep	114	0	0	0	105	105
+jev/mutual	unspecified	drop	3220	0	3220	0	0	0
+jev/nan-nli	cc-by-sa-4.0	keep	301	0	0	0	301	301
+jev/natural-language-satisfiability	unspecified	drop	2257	0	2257	0	0	0
+jev/naturallogic	apache-2.0	keep	194	0	0	0	194	194
+jev/nevir	mit	keep	101	0	0	0	99	99
+jev/newsmtsc	mit, MIT License (DPI)	keep	139	0	0	0	139	139
+jev/nlgraph	unspecified	drop	1830	0	1830	0	0	0
+jev/nli-veridicality-transitivity	cc	drop	53	0	53	0	0	0
+jev/nli4ct_semeval2024	unspecified	drop	1662	0	1662	0	0	0
+jev/nli_fever	unspecified	drop	4267	0	4267	0	0	0
+jev/nope	unspecified	drop	145	0	145	0	0	0
+jev/numer_sense	mit	keep	4243	0	0	0	4243	3491
+jev/oasst2/creativity	unspecified	drop	4205	0	4205	0	0	0
+jev/oasst2/helpfulness	unspecified	drop	5457	0	5457	0	0	0
+jev/oasst2/humor	unspecified	drop	4608	0	4608	0	0	0
+jev/oasst2/quality	unspecified	drop	4727	0	4727	0	0	0
+jev/oasst2/toxicity	unspecified	drop	4373	0	4373	0	0	0
+jev/oasst2/violence	unspecified	drop	3615	0	3615	0	0	0
+jev/oasst2_pairwise_rlhf_reward	unspecified	drop	968	0	968	0	0	0
+jev/olid/offensive	unspecified	drop	841	0	841	0	0	0
+jev/onestop_qa	cc-by-sa-4.0, CC BY-SA 4.0 (DPI)	keep	1506	0	0	0	1506	1506
+jev/open_question_type	cc-by-4.0, CC BY 4.0 (DPI), Custom (DPI)	drop	4735	0	4735	0	0	0
+jev/openbookqa	unspecified	drop	2915	0	2915	0	0	0
+jev/parade	unspecified	drop	426	0	426	0	0	0
+jev/patent-classification/abstract	unspecified	drop	4301	0	4301	0	0	0
+jev/patent-phrase-similarity	cc-by-4.0	keep	4468	0	0	0	4468	3491
+jev/path-naturalness-prediction	unspecified	drop	208	0	208	0	0	0
+jev/paws/labeled_final	other	holdout	327	327	0	0	0	0
+jev/paws/labeled_swap	other	holdout	364	364	0	0	0	0
+jev/perspectrum/stance	cc-by-sa-4.0, cc-by-sa-4.0 (original source)	keep	124	0	0	0	124	124
+jev/persuasion	cc-by-nc-sa-4.0	drop	1266	0	1266	0	0	0
+jev/phrase_similarity	cc-by-nc-4.0, CC BY-NC 4.0 (DPI)	drop	483	0	483	0	0	0
+jev/piqa	unspecified	drop	573	0	573	0	0	0
+jev/poem_sentiment	cc-by-4.0	keep	1154	0	0	0	1154	1154
+jev/pragmeval/emergent	unspecified	drop	340	0	340	0	0	0
+jev/pragmeval/emobank-dominance	unspecified	drop	123	0	123	0	0	0
+jev/pragmeval/gum	unspecified	drop	305	0	305	0	0	0
+jev/pragmeval/pdtb	unspecified	drop	345	0	345	0	0	0
+jev/pragmeval/persuasiveness-claimtype	unspecified	drop	210	0	210	0	0	0
+jev/pragmeval/persuasiveness-eloquence	unspecified	drop	110	0	110	0	0	0
+jev/pragmeval/persuasiveness-premisetype	unspecified	drop	320	0	320	0	0	0
+jev/pragmeval/persuasiveness-relevance	unspecified	drop	129	0	129	0	0	0
+jev/pragmeval/persuasiveness-specificity	unspecified	drop	119	0	119	0	0	0
+jev/pragmeval/persuasiveness-strength	unspecified	drop	129	0	129	0	0	0
+jev/pragmeval/sarcasm	unspecified	drop	203	0	203	0	0	0
+jev/pragmeval/squinky-formality	unspecified	drop	113	0	113	0	0	0
+jev/pragmeval/squinky-implicature	unspecified	drop	130	0	130	0	0	0
+jev/pragmeval/squinky-informativeness	unspecified	drop	110	0	110	0	0	0
+jev/pragmeval/stac	unspecified	drop	338	0	338	0	0	0
+jev/pragmeval/switchboard	unspecified	drop	305	0	305	0	0	0
+jev/pragmeval/verifiability	unspecified	drop	325	0	325	0	0	0
+jev/preco/coreference	research purposes (annotations)	drop	131	0	131	0	0	0
+jev/privacy-200k-Mistral-Large-3	unspecified	drop	4216	0	4216	0	0	0
+jev/prm800k_dpo/solution	mit	keep	2050	0	0	0	797	797
+jev/prm800k_dpo/step	mit	keep	1689	0	0	0	927	927
+jev/probability_words_nli/reasoning_1hop	Apache License 2.0 (DPI), CC BY-SA 4.0 (DPI)	keep	480	0	0	0	480	480
+jev/probability_words_nli/reasoning_2hop	Apache License 2.0 (DPI), CC BY-SA 4.0 (DPI)	keep	463	0	0	0	463	463
+jev/procedural-typed-decisions/arithmetic	apache-2.0	keep	6666	0	0	0	6666	3491
+jev/procedural-typed-decisions/entity_belief_tracking	apache-2.0	keep	6669	0	0	0	4978	3491
+jev/procedural-typed-decisions/event_state_reconstruction	apache-2.0	keep	6668	0	0	0	6668	3491
+jev/procedural-typed-decisions/event_triggered_execution	apache-2.0	keep	6666	0	0	0	2472	2472
+jev/procedural-typed-decisions/evidence_sufficiency	apache-2.0	keep	6666	0	0	0	4298	3491
+jev/procedural-typed-decisions/goal_directed_planning	apache-2.0	keep	6668	0	0	0	5466	3491
+jev/procedural-typed-decisions/graph_navigation	apache-2.0	keep	6667	0	0	0	3869	3491
+jev/procedural-typed-decisions/instruction_execution	apache-2.0	keep	6669	0	0	0	3795	3491
+jev/procedural-typed-decisions/multi_view_adjudication	apache-2.0	keep	6668	0	0	0	3272	3272
+jev/procedural-typed-decisions/needle_retrieval	apache-2.0	keep	6666	0	0	0	2509	2509
+jev/procedural-typed-decisions/partial_observation_calibration	apache-2.0	keep	6666	0	0	0	6666	3491
+jev/procedural-typed-decisions/policy_applicability	apache-2.0	keep	6666	0	0	0	3878	3491
+jev/procedural-typed-decisions/policy_under_uncertainty	apache-2.0	keep	6667	0	0	0	3596	3491
+jev/procedural-typed-decisions/record_aggregation	apache-2.0	keep	6668	0	0	0	3666	3491
+jev/procedural-typed-decisions/record_eligibility	apache-2.0	keep	6672	0	0	0	1729	1729
+jev/procedural-typed-decisions/state_perturbation	apache-2.0	keep	6668	0	0	0	2112	2112
+jev/procedural-typed-decisions/table_lookup	apache-2.0	keep	6667	0	0	0	5595	3491
+jev/procedural-typed-decisions/taxonomy_routing	apache-2.0	keep	6666	0	0	0	3201	3201
+jev/prompt-injection-dataset	mit	keep	2936	0	0	0	2936	2936
+jev/prompt-injections	apache-2.0	keep	607	0	0	86	520	520
+jev/proofwriter	unspecified	drop	4330	0	4330	0	0	0
+jev/propsegment/nli	cc-by-4.0	keep	2901	0	0	0	2340	2340
+jev/prosocial-dialog/safety	cc-by-4.0, cc-by-4.0 (original source)	keep	142	0	0	0	142	142
+jev/proto_qa/proto_qa	cc-by-4.0	keep	4248	0	0	0	4248	3491
+jev/pubmed-rct/role	other	holdout	145	145	0	0	0	0
+jev/qasc	cc-by-4.0	keep	4229	0	0	0	4229	3491
+jev/qasper/yesno	cc-by-4.0, CC BY 4.0 (DPI)	keep	40	0	0	0	0	0
+jev/quac/answerability	mit	keep	128	0	0	0	22	22
+jev/quail	cc-by-nc-sa-4.0	drop	5521	0	5521	0	0	0
+jev/quality	cc-by-4.0 (original source)	keep	119	0	0	0	0	0
+jev/quarel	unspecified	drop	457	0	457	0	0	0
+jev/quartz	cc-by-4.0	keep	588	0	0	0	588	588
+jev/race-c	Non Commercial (DPI)	drop	4979	0	4979	0	0	0
+jev/race/high	other	drop	5565	0	5565	0	0	0
+jev/race/middle	other	drop	4090	0	4090	0	0	0
+jev/ragtruth/grounding	mit (original source)	keep	126	0	0	0	18	18
+jev/recam	unknown (original source)	drop	185	0	185	0	0	0
+jev/recast/recast_factuality	CC BY-SA 4.0 (DPI)	keep	18	0	0	0	18	18
+jev/recast/recast_megaveridicality	CC BY-SA 4.0 (DPI)	keep	22	0	0	0	22	22
+jev/recast/recast_ner	CC BY-SA 4.0 (DPI)	keep	17	0	0	0	17	17
+jev/recast/recast_puns	CC BY-SA 4.0 (DPI)	keep	18	0	0	0	18	18
+jev/recast/recast_sentiment	CC BY-SA 4.0 (DPI)	keep	21	0	0	0	21	21
+jev/recast/recast_verbcorner	CC BY-SA 4.0 (DPI)	keep	18	0	0	0	18	18
+jev/recast/recast_verbnet	CC BY-SA 4.0 (DPI)	keep	23	0	0	0	23	23
+jev/recast_white/dpr	unspecified	drop	33	0	33	0	0	0
+jev/recast_white/fnplus	unspecified	drop	28	0	28	0	0	0
+jev/recast_white/sprl	unspecified	drop	29	0	29	0	0	0
+jev/reclor	other	drop	4439	0	4439	0	0	0
+jev/record/candidate	other	drop	128	0	128	0	0	0
+jev/redial/preference	cc-by-4.0	keep	140	0	0	0	119	119
+jev/regset	unspecified	drop	2179	0	2179	0	0	0
+jev/resnli	cc-by-4.0	keep	1096	0	0	1	1095	1095
+jev/riddle_sense	other, Request Form (DPI)	drop	4011	0	4011	0	0	0
+jev/robustLR	unspecified	drop	2732	0	2732	0	0	0
+jev/robust_nli/IS_CS	CC BY-SA 4.0 (DPI), MIT License (DPI), OANC (DPI)	drop	24	0	24	0	0	0
+jev/robust_nli/LI_LI	CC BY-SA 4.0 (DPI), MIT License (DPI), OANC (DPI)	drop	24	0	24	0	0	0
+jev/robust_nli/PI_CD	CC BY-SA 4.0 (DPI), MIT License (DPI), OANC (DPI)	drop	24	0	24	0	0	0
+jev/robust_nli/PI_SP	CC BY-SA 4.0 (DPI), MIT License (DPI), OANC (DPI)	drop	27	0	27	0	0	0
+jev/robust_nli/ST_LM	CC BY-SA 4.0 (DPI), MIT License (DPI), OANC (DPI)	drop	20	0	20	0	0	0
+jev/robust_nli/ST_NE	CC BY-SA 4.0 (DPI), MIT License (DPI), OANC (DPI)	drop	23	0	23	0	0	0
+jev/robust_nli/ST_SE	CC BY-SA 4.0 (DPI), MIT License (DPI), OANC (DPI)	drop	23	0	23	0	0	0
+jev/robust_nli/ST_WO	CC BY-SA 4.0 (DPI), MIT License (DPI), OANC (DPI)	drop	21	0	21	0	0	0
+jev/robust_nli_is_sd	OANC (DPI)	drop	14	0	14	0	0	0
+jev/robust_nli_li_ts	OANC (DPI)	drop	13	0	13	0	0	0
+jev/rotten_tomatoes	unspecified	drop	633	0	633	0	0	0
+jev/ruletaker	apache-2.0, Apache License 2.0 (DPI)	keep	2185	0	0	0	2124	2124
+jev/rumoureval_2019/RumourEval2019	cc-by-4.0, CC BY 4.0 (DPI), Custom (DPI)	drop	2714	0	2714	0	0	0
+jev/safe-guard-prompt-injection	unspecified	drop	2303	0	2303	0	0	0
+jev/sbic/intent	cc-by-4.0, cc-by-4.0 (original source)	keep	100	0	0	0	100	100
+jev/sbic/offensiveness	cc-by-4.0, cc-by-4.0 (original source)	keep	670	0	0	0	670	670
+jev/schema-guided/intent	cc-by-sa-4.0	keep	167	0	0	0	130	130
+jev/scicite	unspecified	drop	2725	0	2725	0	0	0
+jev/scientific-exaggeration-detection	gpl-3.0	drop	124	0	124	0	0	0
+jev/scifact_entailment	cc-by-nc-2.0	drop	1280	0	1280	0	0	0
+jev/sciie	unspecified	drop	3111	0	3111	0	0	0
+jev/scinli	apache-2.0, CC BY-SA 4.0 (DPI)	keep	4349	0	0	1	4348	3491
+jev/sciq	cc-by-nc-3.0	drop	5571	0	5571	0	0	0
+jev/scirepeval/search	other	drop	155	0	155	0	0	0
+jev/scitail/snli_format	unspecified	drop	1483	0	1483	0	0	0
+jev/scone	cc0-1.0	keep	47	0	0	0	47	47
+jev/scruples/verdict_votes	apache-2.0, Custom (DPI)	drop	7934	0	7934	0	0	0
+jev/seahorse_summarization_evaluation	cc	drop	4181	0	4181	0	0	0
+jev/sem_eval_2010_task_8	CC0 1.0 (DPI)	keep	4778	0	0	0	4775	3491
+jev/semantic_fragments_nli	unspecified	drop	204	0	204	0	0	0
+jev/semcor	other	drop	239	0	239	0	0	0
+jev/semeval2014-absa/laptops	unspecified	drop	388	0	388	0	0	0
+jev/semeval2014-absa/restaurants	unspecified	drop	98	0	98	0	0	0
+jev/sen-making/1	unspecified	drop	404	0	404	0	0	0
+jev/sen-making/2	unspecified	drop	1451	0	1451	0	0	0
+jev/sentfin	mit	keep	140	0	0	0	140	140
+jev/sentihood/sentiment	cc-by-4.0	keep	124	0	0	0	124	124
+jev/sharc	unspecified	drop	4183	0	4183	0	0	0
+jev/shell-safety-v2	mit	keep	4272	0	0	0	3945	3491
+jev/sherliic	CC BY 4.0 (DPI)	keep	28	0	0	0	28	28
+jev/sick/label	cc-by-nc-sa-3.0	drop	3965	0	3965	0	0	0
+jev/sick/relatedness	cc-by-nc-sa-3.0	drop	4439	0	4439	0	0	0
+jev/silicone/dyda_da	cc-by-sa-4.0, CC BY-NC-SA 4.0 (DPI)	drop	1123	0	1123	0	0	0
+jev/silicone/maptask	cc-by-sa-4.0, CC BY 4.0 (DPI)	keep	1153	0	0	0	1153	1153
+jev/silicone/oasis	cc-by-sa-4.0, CC BY-NC-SA 4.0 (DPI)	drop	1183	0	1183	0	0	0
+jev/silicone/sem	cc-by-sa-4.0, CC BY-NC-SA 4.0 (DPI)	drop	1060	0	1060	0	0	0
+jev/simple_pair	unspecified	drop	1538	0	1538	0	0	0
+jev/slurp/intent	cc-by-4.0	keep	117	0	0	0	117	117
+jev/slurp/slot-type	cc-by-4.0	keep	117	0	0	0	117	117
+jev/sms_spam	CC BY 4.0 (DPI)	keep	494	0	0	0	494	494
+jev/snips_built_in_intents	cc0-1.0, CC0 1.0 (DPI)	keep	396	0	0	0	396	396
+jev/snli	cc-by-sa-4.0	keep	4273	0	0	0	4273	3491
+jev/social_i_qa	CC BY 4.0 (DPI)	keep	3180	0	0	0	3180	3180
+jev/spartqa-mchoice	mit	keep	14660	0	0	0	14660	3491
+jev/spartqa-yn	apache-2.0	keep	6183	0	0	0	5916	3491
+jev/spider/column	cc-by-sa-4.0	keep	118	0	0	0	76	76
+jev/squad-v2/answerability	cc-by-sa-4.0	holdout	129	129	0	0	0	0
+jev/sst5	unspecified	drop	139	0	139	0	0	0
+jev/stackoverflow-questions	apache-2.0	keep	3959	0	0	1	2622	2622
+jev/starcon	CC0 1.0 (DPI)	keep	455	0	0	0	455	455
+jev/stepgame	mit	keep	5115	0	0	0	5093	3491
+jev/strategy-qa	unspecified	drop	1529	0	1529	0	0	0
+jev/streusle/noun	cc-by-sa-4.0	keep	108	0	0	0	108	108
+jev/streusle/verb	cc-by-sa-4.0	keep	109	0	0	0	109	109
+jev/sts-companion	apache-2.0	keep	4760	0	0	0	4760	3491
+jev/subjectivity	mit	keep	366	0	0	0	366	366
+jev/summarize_from_feedback/comparisons	Apache License 2.0 (DPI), CC BY 4.0 (DPI), OpenAI (DPI)	drop	1954	0	1954	0	0	0
+jev/super_glue/axg	other	drop	404	0	404	0	0	0
+jev/super_glue/boolq	other	holdout	299	299	0	0	0	0
+jev/super_glue/boolq_passage	other	holdout	217	217	0	0	0	0
+jev/super_glue/cb	other	drop	321	0	321	0	0	0
+jev/super_glue/copa	other	drop	402	0	402	0	0	0
+jev/super_glue/multirc	other	drop	562	0	562	0	0	0
+jev/super_glue/wic	other	drop	664	0	664	0	0	0
+jev/swag/regular	unspecified	drop	2070	0	2070	0	0	0
+jev/syntactic-augmentation-nli	mit	keep	177	0	0	0	177	177
+jev/synthetic-instruct-gptj-pairwise	unspecified	drop	584	0	584	0	0	0
+jev/synthetic-retrieval-NLI/binary	unspecified	drop	1349	0	1349	0	0	0
+jev/synthetic-retrieval-NLI/count	unspecified	drop	1397	0	1397	0	0	0
+jev/synthetic-retrieval-NLI/position	unspecified	drop	1380	0	1380	0	0	0
+jev/tab/identifier	mit, mit (original source)	keep	143	0	0	0	0	0
+jev/tabfact	cc-by-4.0	keep	131	0	0	2	76	76
+jev/tabmwp	cc-by-nc-sa-4.0, cc-by-nc-sa-4.0 (original source)	drop	172	0	172	0	0	0
+jev/tasksource_dpo_pairs	other	drop	1544	0	1544	0	0	0
+jev/temporal-nli	apache-2.0	keep	4312	0	0	0	4312	3491
+jev/tomi-nli	gpl-3.0	drop	2461	0	2461	0	0	0
+jev/topv2/intent	unspecified	drop	121	0	121	0	0	0
+jev/topv2/slot-type	unspecified	drop	121	0	121	0	0	0
+jev/toxic-chat/toxicchat0124/jailbreaking	cc-by-nc-4.0, CC BY-NC 4.0 (DPI), OpenAI (DPI)	drop	996	0	996	0	0	0
+jev/toxic-chat/toxicchat0124/toxicity	cc-by-nc-4.0, CC BY-NC 4.0 (DPI), OpenAI (DPI)	drop	1825	0	1825	0	0	0
+jev/toxic_conversations	unspecified	drop	969	0	969	0	0	0
+jev/toxigen-data/annotated	unspecified	drop	829	0	829	0	0	0
+jev/tracie	apache-2.0	keep	1014	0	0	0	1014	1014
+jev/trec	unspecified	drop	4551	0	4551	0	0	0
+jev/trip/cloze	unknown (original source)	drop	65	0	65	0	0	0
+jev/trip/order	unknown (original source)	drop	111	0	111	0	0	0
+jev/tweet_eval/emoji	unspecified	drop	475	0	475	0	0	0
+jev/tweet_eval/emotion	unspecified	drop	461	0	461	0	0	0
+jev/tweet_eval/hate	unspecified	drop	297	0	297	0	0	0
+jev/tweet_eval/irony	unspecified	drop	214	0	214	0	0	0
+jev/tweet_eval/offensive	unspecified	drop	277	0	277	0	0	0
+jev/tweet_eval/sentiment	unspecified	drop	406	0	406	0	0	0
+jev/tweet_eval/stance_abortion	unspecified	drop	451	0	451	0	0	0
+jev/tweet_eval/stance_atheism	unspecified	drop	439	0	439	0	0	0
+jev/tweet_eval/stance_climate	unspecified	drop	418	0	418	0	0	0
+jev/tweet_eval/stance_feminist	unspecified	drop	450	0	450	0	0	0
+jev/tweet_eval/stance_hillary	unspecified	drop	460	0	460	0	0	0
+jev/tweets_hate_speech_detection	gpl-3.0	drop	551	0	551	0	0	0
+jev/twentyquestions	unspecified	drop	3804	0	3804	0	0	0
+jev/twitter-financial-news-sentiment	mit	keep	2078	0	0	2	2076	2076
+jev/ukpconvarg/convincingness	cc-by-4.0, cc-by-4.0 (original source)	keep	187	0	0	0	187	187
+jev/utilitarianism	mit	keep	213	0	0	0	213	213
+jev/vitaminc	cc-by-sa-3.0	holdout	4345	4345	0	0	0	0
+jev/wands	mit	keep	141	0	0	0	25	25
+jev/webgpt_comparisons	OpenAI (DPI)	drop	634	0	634	0	0	0
+jev/webinstruct/binary	apache-2.0	keep	125	0	0	0	125	125
+jev/webinstruct/mc	apache-2.0	keep	220	0	0	0	219	219
+jev/weblinx/action	cc-by-nc-sa-4.0	drop	153	0	153	0	0	0
+jev/weblinx/dom-element	cc-by-nc-sa-4.0	drop	230	0	230	0	0	0
+jev/websrc/element	cc-by-4.0	keep	72	0	0	1	0	0
+jev/websrc/yesno	cc-by-4.0	keep	74	0	0	0	0	0
+jev/wice	cc-by-sa-4.0	keep	3946	0	0	16	77	77
+jev/wiki_hop/original	cc-by-sa-3.0	keep	5359	0	0	0	5359	3491
+jev/wiki_qa	other	drop	1805	0	1805	0	0	0
+jev/wikimedqa/medwiki	apache-2.0	keep	5788	0	0	0	4535	3491
+jev/wikipedia-detox/aggression	cc0-1.0	keep	896	0	0	0	868	868
+jev/wikipedia-detox/aggression_score	cc0-1.0	keep	896	0	0	0	867	867
+jev/wikipedia-detox/attack	cc0-1.0	keep	896	0	0	0	868	868
+jev/wikipedia-detox/toxicity	cc0-1.0	keep	896	0	0	1	861	861
+jev/wikipedia-detox/toxicity_score	cc0-1.0	keep	897	0	0	1	864	864
+jev/wikiqa	other, Microsoft Research WikiQA license (research and technology development only) (original source)	drop	126	0	126	0	0	0
+jev/wikisql/aggregation	unspecified	drop	112	0	112	0	0	0
+jev/wikisql/column	unspecified	drop	253	0	253	0	0	0
+jev/wikisql/operator	unspecified	drop	115	0	115	0	0	0
+jev/wildguardmix-cleaned/prompt_harm	odc-by	keep	1350	0	0	1	1337	1337
+jev/wildguardmix-cleaned/response_harm	odc-by	keep	1497	0	0	2	831	831
+jev/wildguardmix-cleaned/response_refusal	odc-by	keep	1354	0	0	5	794	794
+jev/winodict	cc-by-4.0	keep	1144	0	0	0	1144	1144
+jev/winogrande/winogrande_xl	unspecified	drop	1540	0	1540	0	0	0
+jev/winowhy	mit	keep	377	0	0	0	376	376
+jev/wiqa	unspecified	drop	1806	0	1806	0	0	0
+jev/wnut_17/wnut_17	cc-by-4.0	keep	4276	0	0	1	4275	3491
+jev/yahoo_answers_topics	unspecified	drop	5119	0	5119	0	0	0
+jev/yelp_review_full/yelp_review_full	other	drop	4159	0	4159	0	0	0
+fastino	apache-2.0	keep	1700	0	0	0	1700	2600
+n4ze3m	mit	keep	6682	0	0	3	5584	18725
+tasksource-procedural	apache-2.0	keep	30000	0	0	0	16306	50163
+tasksource-synthetic	apache-2.0	keep	6666	0	0	1	4147	12256
