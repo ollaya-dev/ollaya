@@ -161,7 +161,8 @@ The model loads straight from its Hugging Face repository: `load(fromHub('<org>/
 2. **Registry**: a `<name>` entry in `convert/ollaya_convert/catalog.py` with `_laya(…, repo=…, commit=…)` per tag
    (as `largha`), `license_text` with Ettin's MIT notice; then stages 2 to 4 of `docs/model-lifecycle.md`
    (export, goldens, parity_run on the CPU, CUDA and Metal, package, bench_plan and bench_run on the RTX 5090).
-3. **Site**: the `catalog.ts` overlay and `site/content/library/<name>.md`; `MODEL` in `site/src/data/try.ts`;
+3. **Site**: the `catalog.ts` overlay and `site/content/library/<name>.md`; `MODEL` in `site/src/data/try.ts` (repo, name, tag, and the repository's commit as `revision`, which the
+   browser caches);
    deploy with `web/pkg` built (`sh web/build.sh`), which `/try` needs.
 4. **npm**: create the `ollaya` organization on npmjs.com, `npm login`, `cd web && npm publish --access public`.
 5. Release with the next batched version.
