@@ -22,7 +22,9 @@ if (!out) {
   process.exit(2);
 }
 const read = (f) => fs.readFileSync(path.join(dir, f));
-const weights = fs.readdirSync(dir).filter((f) => f.startsWith('sha256-'));
+// model.packed (train/ternary.py) stands in for the weights blob it unpacks to.
+const packed = fs.existsSync(path.join(dir, 'model.packed'));
+const weights = packed ? ['model.packed'] : fs.readdirSync(dir).filter((f) => f.startsWith('sha256-'));
 
 let t = performance.now();
 const model = await load(
@@ -31,7 +33,7 @@ const model = await load(
     tokenizer: read('tokenizer.json'),
     decision: read('decision.json'),
     calibration: read('calibration.json'),
-    weights: weights.map((f) => ({ path: f, data: read(f) })),
+    weights: weights.map((f) => (packed ? { packed: true, data: read(f) } : { path: f, data: read(f) })),
   },
   { wasm: fs.readFileSync(new URL('./pkg/ollaya_web_bg.wasm', import.meta.url)) },
 );

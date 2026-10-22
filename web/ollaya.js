@@ -54,7 +54,68 @@ async function text(file) {
 }
 
 /**
- * Load a model from its files: `{graph, weights: [{path, data}], tokenizer, decision, calibration}`.
+ * `model.packed` (train/ternary.py: ternary, int4 and int8 rows with a float32 scale each) back to the
+ * model.safetensors it was packed from, byte for byte.
+ */
+export function unpackWeights(packed) {
+  if (packed.byteOffset % 8) packed = packed.slice();
+  const buf = packed.buffer;
+  const metaLen = Number(new DataView(buf, packed.byteOffset).getBigUint64(0, true));
+  const meta = JSON.parse(new TextDecoder().decode(packed.subarray(8, 8 + metaLen)));
+  const blob = packed.byteOffset + 8 + metaLen;
+  const header = new TextEncoder().encode(meta.safetensors_header);
+  const entries = JSON.parse(meta.safetensors_header);
+  delete entries.__metadata__;
+  const base = 8 + header.length;
+  const out = new Uint8Array(base + Math.max(...Object.values(entries).map((e) => e.data_offsets[1])));
+  new DataView(out.buffer).setBigUint64(0, BigInt(header.length), true);
+  out.set(header, 8);
+  for (const [name, t] of Object.entries(meta.tensors)) {
+    const n = t.shape.reduce((a, b) => a * b, 1);
+    const dst = new Float32Array(out.buffer, base + entries[name].data_offsets[0], n);
+    const at = blob + t.offset;
+    if (t.kind === 'f32') {
+      dst.set(new Float32Array(buf, at, n));
+      continue;
+    }
+    const [rows, cols] = t.shape;
+    const scale = new Float32Array(buf, at, rows);
+    const q = new Uint8Array(buf, at + 4 * rows);
+    // An integer times a float32 is exact in float64, so storing it rounds as numpy's float32 product does.
+    for (let r = 0, i = 0; r < rows; r++) {
+      const s = scale[r];
+      for (let c = 0; c < cols; c++, i++) {
+        let v;
+        if (t.kind === 'int8') v = (q[i] << 24) >> 24;
+        else if (t.kind === 'int4') v = (((q[i >> 1] >> ((i & 1) * 4)) & 15) << 28) >> 28;
+        else v = [0, 1, -1, 0][(q[i >> 2] >> ((i & 3) * 2)) & 3];
+        dst[i] = v * s;
+      }
+    }
+  }
+  return out;
+}
+
+async function sha256Name(data) {
+  const hex = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `sha256-${hex}`;
+}
+
+// A weights file; a packed one is unpacked and must hash to its path, as the graph names the blob it reads.
+async function weightsFile(w) {
+  const data = await bytes(w.data);
+  if (!w.packed) return { path: w.path, data };
+  const unpacked = unpackWeights(data);
+  const name = await sha256Name(unpacked);
+  if (w.path !== undefined && w.path !== name) throw new Error(`unpacked weights are ${name}, not ${w.path}`);
+  return { path: name, data: unpacked };
+}
+
+/**
+ * Load a model from its files: `{graph, weights: [{path, data, packed?}], tokenizer, decision, calibration}`.
+ * A `packed` weights file is `model.packed`; its `path` may be left out, the unpacked file's sha256 names it.
  * Options: `name` (the model name answers carry, e.g. 'largha:150m'), `wasm` (ollaya_web_bg.wasm as a
  * URL or bytes; default next to pkg/ollaya_web.js), `device` ('wasm' or 'webgpu'), `sessionOptions`
  * (merged into onnxruntime-web's).
@@ -67,7 +128,7 @@ export async function load(files, { name = 'web', wasm, device = 'wasm', session
     text(files.decision),
     text(files.calibration),
     bytes(files.graph),
-    Promise.all((files.weights ?? []).map(async (w) => ({ path: w.path, data: await bytes(w.data) }))),
+    Promise.all((files.weights ?? []).map(weightsFile)),
   ]);
   const model = new Model(tokenizer, decision, calibration);
   const session = await ort.InferenceSession.create(graph, {
