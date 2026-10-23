@@ -33,17 +33,36 @@ export function BlogIndex() {
   )
 }
 
+/** The post's h2 headings, for the table of contents (the Markdown renderer gives each an id). */
+const headings = (html: string) => [...html.matchAll(/<h2 id="([^"]+)"[^>]*>(?:<a[^>]*>)?([^<]+)/g)].map((m) => ({ id: m[1]!, text: m[2]! }))
+
 export function BlogPostView({ post, html }: { post: BlogPost; html: string }) {
+  const toc = headings(html)
   return (
-    <div class="max-w-[44rem] px-6 pt-10 pb-16 md:px-10 md:pt-14">
-      <a href="/blog" class="text-[13px] text-muted underline-offset-4 hover:text-fg hover:underline">
-        Blog
-      </a>
-      <h1 class="mt-3 text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl">{post.title}</h1>
-      <time datetime={post.date} class="mt-2 block text-[13px] text-muted">
-        {longDate(post.date)}
-      </time>
-      <article class="prose mt-8" dangerouslySetInnerHTML={{ __html: html }}></article>
+    <div class="px-6 pt-10 pb-16 md:px-10 md:pt-14 lg:grid lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-14">
+      <div class="min-w-0 max-w-[46rem]">
+        <a href="/blog" class="text-[13px] text-muted underline-offset-4 hover:text-fg hover:underline">
+          Blog
+        </a>
+        <h1 class="mt-3 text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl">{post.title}</h1>
+        <time datetime={post.date} class="mt-3 block text-[13px] text-muted">
+          {longDate(post.date)}
+        </time>
+        <article class="prose mt-8" dangerouslySetInnerHTML={{ __html: html }}></article>
+      </div>
+      {toc.length ? (
+        <nav aria-label="On this page" class="hidden lg:block">
+          <ul class="sticky top-24 space-y-2.5 border-l border-line text-sm" data-scrollspy>
+            {toc.map((h) => (
+              <li>
+                <a href={`#${h.id}`} class="-ml-px block border-l-2 border-transparent pl-4 text-muted hover:text-fg aria-[current=true]:border-fg aria-[current=true]:text-fg">
+                  {h.text}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
     </div>
   )
 }
