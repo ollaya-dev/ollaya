@@ -23,8 +23,8 @@ function Author({ model }: { model: Model }) {
 
 export function ContributorsPage() {
   return (
-    <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
-      <h1 class="text-[30px] leading-tight font-medium tracking-tight text-fg">Contributors</h1>
+    <div class="max-w-[64rem] px-6 pt-10 pb-16 md:px-10 md:pt-14">
+      <h1 class="text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl">Contributors</h1>
       <p class="mt-3 text-lg text-body">
         Ollaya runs other people's models. These are the people who trained them, and the people who brought them here.
       </p>
@@ -33,7 +33,7 @@ export function ContributorsPage() {
         <h2 id="models-title" class="text-base font-semibold text-fg">
           Models
         </h2>
-        <div class="mt-3 overflow-x-auto rounded-lg border border-line">
+        <div class="mt-3 overflow-x-auto rounded-md border border-line">
           <table class="w-full text-left text-sm">
             <thead class="bg-subtle text-[13px] text-muted">
               <tr>

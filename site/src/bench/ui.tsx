@@ -34,11 +34,11 @@ const links: { key: BenchNav; href: string; label: string }[] = [
 
 function Header({ active, main }: { active?: BenchNav; main: string }) {
   return (
-    <header class="sticky top-0 z-40 border-b border-line bg-canvas/95 backdrop-blur">
-      <nav aria-label="Main" class="mx-auto flex h-14 w-full max-w-6xl items-center gap-5 px-4 md:gap-6 md:px-6">
+    <header class="fixed inset-x-0 top-0 z-40 border-b border-line bg-canvas/70 backdrop-blur-xl">
+      <nav aria-label="Main" class="mx-auto flex h-14 w-full max-w-6xl items-center gap-5 px-5 md:gap-6">
         <a href="/" class="flex shrink-0 items-center gap-2 rounded-md text-fg" aria-label="Ollaya Bench home">
           <LogoMark class="size-7" />
-          <span class="font-mono text-[15px] font-semibold tracking-tight">
+          <span class="text-[17px] font-semibold tracking-[-0.035em]">
             ollaya <span class="font-medium text-muted">bench</span>
           </span>
         </a>
@@ -57,7 +57,7 @@ function Header({ active, main }: { active?: BenchNav; main: string }) {
         </ul>
         <div class="ml-auto flex items-center gap-4 text-sm">
           {edition ? (
-            <span class="hidden rounded-full border border-line px-2.5 py-0.5 font-mono text-xs text-muted md:inline">Edition {edition.id}</span>
+            <span class="hidden rounded-md border border-line px-2.5 py-0.5 font-mono text-xs text-muted md:inline">Edition {edition.id}</span>
           ) : null}
           <a href={main} class="hidden text-body underline-offset-4 hover:text-fg hover:underline sm:inline">
             {main.replace(/^https?:\/\//, '')} <span aria-hidden="true">↗</span>
@@ -70,8 +70,8 @@ function Header({ active, main }: { active?: BenchNav; main: string }) {
 
 function Footer({ main }: { main: string }) {
   return (
-    <footer class="mt-24 border-t border-line">
-      <div class="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-xs text-muted sm:flex-row sm:items-center sm:justify-between md:px-6">
+    <footer class="frame">
+      <div class="rule flex flex-col gap-4 px-6 py-8 text-[13px] text-muted sm:flex-row sm:items-center sm:justify-between md:px-10">
         <p class="max-w-xl">
           Ollaya Bench is run by{' '}
           <a href={main} class="text-body underline-offset-4 hover:text-fg hover:underline">
@@ -134,9 +134,8 @@ export function BenchLayout({
         <title>{title}</title>
         <meta name="description" content={description} />
         {meta.noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
-        <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-        <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
+        <meta name="color-scheme" content="dark" />
+        <meta name="theme-color" content="#0a0a0a" />
         <meta property="og:site_name" content={BENCH_NAME} />
         <meta property="og:type" content="website" />
         <meta property="og:title" content={meta.title ? `${meta.title} · ${BENCH_NAME}` : `${BENCH_NAME} · ${BENCH_TAGLINE}`} />
@@ -160,14 +159,15 @@ export function BenchLayout({
         <script src={asset('bench.js')} defer></script>
       </head>
       <body class="flex min-h-screen flex-col bg-canvas font-sans text-body antialiased">
+        <div class="grain" aria-hidden="true"></div>
         <a
           href="#main"
-          class="sr-only rounded-full bg-btn px-4 py-2 text-sm text-btn-fg focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60]"
+          class="sr-only rounded-md bg-btn px-4 py-2 text-sm text-btn-fg focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60]"
         >
           Skip to content
         </a>
         <Header active={meta.nav} main={main} />
-        <main id="main" class="flex-1">
+        <main id="main" class="frame flex-1 border-b border-line pt-14 pb-16">
           {children}
         </main>
         <Footer main={main} />
@@ -179,8 +179,8 @@ export function BenchLayout({
 /** A section with an anchor, a title and an optional lead. */
 export function Section({ id, title, lead, children, wide }: { id: string; title: string; lead?: Child; children: Child; wide?: boolean }) {
   return (
-    <section id={id} aria-labelledby={`${id}-title`} class={`mx-auto mt-16 px-4 md:px-6 ${wide ? 'max-w-6xl' : 'max-w-4xl'}`}>
-      <h2 id={`${id}-title`} class="text-xl font-semibold tracking-tight text-fg">
+    <section id={id} aria-labelledby={`${id}-title`} class={`mx-auto mt-16 px-6 md:px-10 ${wide ? 'max-w-6xl' : 'max-w-4xl'}`}>
+      <h2 id={`${id}-title`} class="text-2xl font-semibold tracking-[-0.02em] text-fg">
         {title}
       </h2>
       {lead ? <p class="mt-2 max-w-3xl text-[15px] leading-relaxed text-muted">{lead}</p> : null}
@@ -200,7 +200,7 @@ export function ModelLink({ name, class: cls = '' }: { name: string; class?: str
 /** A small label next to a model: why a number needs a second look. */
 export function Flag({ children, title }: { children: Child; title: string }) {
   return (
-    <span title={title} class="ml-1.5 inline-flex rounded-full bg-fill px-1.5 py-px align-[1px] font-sans text-[10.5px] font-medium text-muted">
+    <span title={title} class="ml-1.5 inline-flex rounded-md bg-fill px-1.5 py-px align-[1px] font-sans text-[10.5px] font-medium text-muted">
       {children}
     </span>
   )
@@ -231,8 +231,8 @@ export function ScoreBar({ score, ci, max, accent }: { score: number; ci: [numbe
   const pct = (v: number) => `${Math.max(0, Math.min(100, (v / max) * 100)).toFixed(2)}%`
   return (
     <span class="inline-flex items-center gap-2.5" title={`95 % interval ${ci[0].toFixed(1)} to ${ci[1].toFixed(1)}`}>
-      <span class="relative h-2 w-24 rounded-full bg-fill" aria-hidden="true">
-        <span class={`absolute inset-y-0 left-0 rounded-full ${accent ? 'bg-us' : 'bg-bar'}`} style={`width:${pct(score)}`}></span>
+      <span class="relative h-2 w-24 rounded-md bg-fill" aria-hidden="true">
+        <span class={`absolute inset-y-0 left-0 rounded-md ${accent ? 'bg-us' : 'bg-bar'}`} style={`width:${pct(score)}`}></span>
         <span class="absolute top-1/2 h-px -translate-y-1/2 bg-muted" style={`left:${pct(ci[0])};width:calc(${pct(ci[1])} - ${pct(ci[0])})`}></span>
         <span class="absolute top-[-2px] bottom-[-2px] w-px bg-muted" style={`left:${pct(ci[0])}`}></span>
         <span class="absolute top-[-2px] bottom-[-2px] w-px bg-muted" style={`left:${pct(ci[1])}`}></span>

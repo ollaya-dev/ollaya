@@ -1,10 +1,11 @@
-// A procedural ASCII field behind the hero (src/pages/design.tsx): a slow value field mapped onto a
-// character ramp, drawn on a canvas in the page's data colours at low opacity. The cursor sends a
-// ripple through the characters and lights the field around it. Reduced motion draws one still frame.
+// A sparse character field behind the hero (src/pages/home.tsx): a slow value field decides, cell by
+// cell, whether a letter of the page's words, a plus, a colon or nothing is drawn. Most cells stay
+// empty, so the field reads as texture at the edges and leaves the middle to the headline (the
+// .ascii element's mask clears the centre). One accent colour for the letters, ink for the rest.
+// The cursor lights the cells around it. Reduced motion draws one still frame.
 //
 // Cheap on purpose: every glyph is drawn once into an atlas and stamped with drawImage; the whole
-// field is redrawn eight times a second (it drifts slowly) and only the cells around the cursor are
-// redrawn between those frames.
+// field is redrawn a few times a second and only the cells around the cursor between those frames.
 ;(() => {
   const host = document.querySelector('[data-ascii]')
   if (!host) return
@@ -12,14 +13,17 @@
   const canvas = document.createElement('canvas')
   host.appendChild(canvas)
   const ctx = canvas.getContext('2d')
-  const ramp = " .`',:;!i<>+~-_?][}{)(|/tfjrxnuvczXYUJCLQ0"
-  const palette = ['#8cc8ff', '#9fe3b4', '#ffd080', '#d2a8ff']
-  const fs = 12
-  const cw = fs * 0.62
-  const ch = fs * 1.2
-  const base = 0.13
-  const SPARSE = 9 // the sparse end of the ramp stays empty, so the field has clearings
-  const R = 11 // the cursor's reach, in cells
+  const words = 'DECISION MODELS LOCALLY  OLLAYA  ROUTING GUARDRAILS TRIAGE  '
+  // Glyph slots: the words' letters, then the fill marks.
+  const glyphs = [...new Set(words.replace(/ /g, ''))].join('') + '+:.'
+  const PLUS = glyphs.length - 3
+  const COLON = glyphs.length - 2
+  const DOT = glyphs.length - 1
+  const inks = ['#8fd3ae', '#7a7a7a'] // letters, marks
+  const fs = 11
+  const cw = fs * 0.95
+  const ch = fs * 1.35
+  const R = 9 // the cursor's reach, in cells
   let dpr, W, H, cols, rows, atlas, aw, ah
   let mx = -1e9
   let my = -1e9
@@ -35,19 +39,19 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     cols = Math.ceil(W / cw)
     rows = Math.ceil(H / ch)
-    // The atlas: one row per colour, one cell per ramp character, at the device's resolution.
     aw = Math.ceil(cw * dpr)
     ah = Math.ceil(ch * dpr)
     atlas = document.createElement('canvas')
-    atlas.width = aw * ramp.length
-    atlas.height = ah * palette.length
+    atlas.width = aw * glyphs.length
+    atlas.height = ah * inks.length
     const a = atlas.getContext('2d')
     a.setTransform(dpr, 0, 0, dpr, 0, 0)
-    a.font = `${fs}px ui-monospace, SFMono-Regular, Menlo, monospace`
+    a.font = `500 ${fs}px ui-monospace, SFMono-Regular, Menlo, monospace`
     a.textBaseline = 'top'
-    palette.forEach((colour, p) => {
+    a.textAlign = 'center'
+    inks.forEach((colour, p) => {
       a.fillStyle = colour
-      for (let i = 0; i < ramp.length; i++) a.fillText(ramp[i], (i * aw) / dpr, (p * ah) / dpr)
+      for (let i = 0; i < glyphs.length; i++) a.fillText(glyphs[i], (i * aw) / dpr + cw / 2, (p * ah) / dpr + 1)
     })
   }
 
@@ -61,26 +65,40 @@
     mx = my = -1e9
   })
 
+  // Broad, slow bands: the field changes over tens of cells, not from one cell to the next.
   function field(x, y, t) {
     return (
-      (Math.sin(x * 0.09 + t * 0.5) +
-        Math.sin(y * 0.14 - t * 0.35) +
-        Math.sin((x + y) * 0.05 + t * 0.25) +
-        Math.sin(Math.hypot(x - cols * 0.62, y - rows * 0.38) * 0.11 - t * 0.7)) /
+      (Math.sin(x * 0.045 + t * 0.18) +
+        Math.sin(y * 0.11 - t * 0.12) +
+        Math.sin((x - y * 1.6) * 0.03 + t * 0.09) +
+        Math.sin(Math.hypot(x - cols * 0.5, (y - rows * 0.45) * 1.4) * 0.05 - t * 0.2)) /
       4
     )
   }
 
-  const n = ramp.length - 1
   function cell(c, r, t) {
-    const d = Math.hypot(c - mx, (r - my) * 1.9)
-    const ripple = d < R ? Math.cos(d * 0.7 - t * 3) * (1 - d / R) * 0.9 : 0
-    const v = Math.max(-1, Math.min(1, field(c, r, t) + ripple))
-    const i = Math.round(((v + 1) / 2) * n)
-    if (i < SPARSE) return
-    ctx.globalAlpha = base + (d < R ? (0.85 - base) * (1 - d / R) : 0)
-    const p = Math.floor((c / cols + (v + 1) / 2) * 2) % palette.length
-    ctx.drawImage(atlas, i * aw, p * ah, aw, ah, c * cw, r * ch, cw, ch)
+    const d = Math.hypot(c - mx, (r - my) * 1.4)
+    const near = d < R ? 1 - d / R : 0
+    const v = field(c, r, t) + near * 0.35
+    let g, ink, alpha
+    if (v > 0.5) {
+      // A letter of the words, read along the row so neighbouring cells spell them.
+      const letter = words[(c + r * 7) % words.length]
+      if (letter === ' ') return
+      g = glyphs.indexOf(letter)
+      ink = 0
+      alpha = 0.16
+    } else if (v > 0.28) {
+      g = (c + r) % 3 === 0 ? PLUS : COLON
+      ink = 1
+      alpha = 0.22
+    } else if (v > 0.1) {
+      g = DOT
+      ink = 1
+      alpha = 0.22
+    } else return
+    ctx.globalAlpha = Math.min(1, alpha + near * 0.6)
+    ctx.drawImage(atlas, g * aw, ink * ah, aw, ah, c * cw, r * ch, cw, ch)
   }
 
   /** The cells the cursor reaches, as a box to clear and redraw. */
@@ -88,8 +106,8 @@
     if (mx < -1e8) return null
     const c0 = Math.max(0, Math.floor(mx - R - 1))
     const c1 = Math.min(cols, Math.ceil(mx + R + 1))
-    const r0 = Math.max(0, Math.floor(my - R / 1.9 - 1))
-    const r1 = Math.min(rows, Math.ceil(my + R / 1.9 + 1))
+    const r0 = Math.max(0, Math.floor(my - R / 1.4 - 1))
+    const r1 = Math.min(rows, Math.ceil(my + R / 1.4 + 1))
     return { x: c0 * cw, y: r0 * ch, w: (c1 - c0) * cw, h: (r1 - r0) * ch, c0, c1, r0, r1 }
   }
   function drawBox(b, t) {
@@ -126,7 +144,7 @@
   function frame(now) {
     if (visible) {
       const t = now / 1000
-      if (now - lastAll > 125) {
+      if (now - lastAll > 200) {
         lastAll = now
         drawAll(t)
       } else if (now - lastNear > 33) {

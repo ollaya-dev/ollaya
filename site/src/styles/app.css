@@ -56,6 +56,7 @@
   }
   html {
     scroll-padding-top: 5rem;
+    overflow-x: clip;
   }
   body {
     background-color: var(--color-canvas);
@@ -369,7 +370,9 @@
  */
 @layer components {
 /* The frame: two rails down the page, with a cross where a section's rule meets them. */
-.frame { position: relative; max-width: 72rem; margin: 0 auto; border-left: 1px solid var(--color-line); border-right: 1px solid var(--color-line); }
+.frame { position: relative; width: 100%; max-width: 72rem; margin: 0 auto; border-left: 1px solid var(--color-line); border-right: 1px solid var(--color-line); }
+/* On a phone the rails are the screen's edges: no crosses, nothing to spill past them. */
+@media (max-width: 767px) { .rule::before, .rule::after { display: none; } }
 .rule { position: relative; border-top: 1px solid var(--color-line); }
 .rule::before, .rule::after { content: ''; position: absolute; top: -7px; width: 13px; height: 13px; pointer-events: none;
   background:
@@ -385,9 +388,13 @@
   background-size: 160px 160px; }
 /* Blurred colour fields behind the hero and the closer: what the panels blur. */
 .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.ascii { position: absolute; inset: 0; pointer-events: none; mask-image: linear-gradient(180deg, #000 55%, transparent); -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent); }
+.ascii { position: absolute; inset: 0; pointer-events: none;
+  /* The middle is the headline's: the field shows at the edges and fades out towards the bottom. */
+  mask-image: radial-gradient(ellipse 42% 55% at 50% 42%, transparent 30%, #000 100%), linear-gradient(180deg, #000 60%, transparent);
+  -webkit-mask-image: radial-gradient(ellipse 42% 55% at 50% 42%, transparent 30%, #000 100%), linear-gradient(180deg, #000 60%, transparent);
+  mask-composite: intersect; -webkit-mask-composite: source-in; }
 .ascii canvas { display: block; }
-@media (max-width: 640px) { .ascii { opacity: 0.45; } }
+@media (max-width: 640px) { .ascii { opacity: 0.6; } }
 .field i { position: absolute; display: block; border-radius: 9999px; filter: blur(90px); opacity: 0.5; }
 .field .a { width: 60vw; height: 60vw; left: -10vw; top: -20vw; background: #2d5a4a; }
 .field .b { width: 50vw; height: 50vw; right: -12vw; top: -8vw; background: #5a4a2d; }

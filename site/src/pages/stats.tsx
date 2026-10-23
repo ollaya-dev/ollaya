@@ -33,7 +33,7 @@ const head = 'px-4 py-2.5 text-right font-medium'
 
 function Tile({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div class="rounded-lg border border-line p-4">
+    <div class="bg-canvas p-5">
       <p class="text-[13px] text-muted">{label}</p>
       <p class="mt-1 text-2xl font-medium tracking-tight text-fg tabular-nums">{value}</p>
       <p class="mt-1 text-[13px] text-muted">{note}</p>
@@ -45,11 +45,11 @@ export function StatsPage() {
   const top = Object.entries(latest.pulls_by_model)
   const max = top[0]?.[1] ?? 1
   return (
-    <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
-      <h1 class="text-[30px] leading-tight font-medium tracking-tight text-fg">Stats</h1>
+    <div class="max-w-[64rem] px-6 pt-10 pb-16 md:px-10 md:pt-14">
+      <h1 class="text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl">Stats</h1>
       <p class="mt-3 text-lg text-body">How much Ollaya is used, week by week. The counts are requests, not people.</p>
 
-      <div class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="mt-8 grid gap-px border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
         <Tile label="Model pulls" value={fmt(latest.pulls)} note={range(latest.end)} />
         <Tile label="Install script runs" value={fmt(latest.install_sh + latest.install_ps1)} note={range(latest.end)} />
         <Tile label="GitHub stars" value={fmt(lastGithub?.stars ?? null)} note={lastGithub ? `on ${day(lastGithub.end, -1)}` : ''} />
@@ -64,7 +64,7 @@ export function StatsPage() {
         <h2 id="weeks-title" class="text-base font-semibold text-fg">
           Week by week
         </h2>
-        <div class="mt-3 overflow-x-auto rounded-lg border border-line">
+        <div class="mt-3 overflow-x-auto rounded-md border border-line">
           <table class="w-full text-sm">
             <thead class="bg-subtle text-[13px] text-muted">
               <tr>
@@ -118,8 +118,8 @@ export function StatsPage() {
               ) : (
                 <span class="font-mono text-fg">{model}</span>
               )}
-              <span class="h-2 rounded-full bg-fill">
-                <span class="block h-2 rounded-full bg-fg" style={`width:${((100 * n) / max).toFixed(1)}%`}></span>
+              <span class="h-2 rounded-md bg-fill">
+                <span class="block h-2 rounded-md bg-fg" style={`width:${((100 * n) / max).toFixed(1)}%`}></span>
               </span>
               <span class="text-right text-body tabular-nums">{fmt(n)}</span>
             </li>

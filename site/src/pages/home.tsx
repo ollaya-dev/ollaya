@@ -617,7 +617,7 @@ function Api() {
 export function ModelCard({ m }: { m: (typeof catalog)[number] }) {
   const summary = (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).replace(/\.$/, '')
   return (
-    <a href={`/library/${m.name}`} class="group flex h-full flex-col bg-canvas p-6 transition-colors hover:bg-subtle">
+    <a href={`/library/${m.name}`} class="group flex h-full w-full flex-col bg-canvas p-6 transition-colors hover:bg-subtle">
       <div class="flex items-baseline justify-between gap-3">
         <span class="font-mono text-[17px] text-fg group-hover:underline underline-offset-4">{m.name}</span>
         <span class="truncate text-xs text-muted">{m.publisher?.name ?? ''}</span>

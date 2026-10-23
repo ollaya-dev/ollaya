@@ -71,7 +71,7 @@ function Pending({ example }: { example: TryExample }) {
             <span class="font-mono text-[13px] text-fg">{id}</span>
             <span class="text-sm text-muted tabular-nums">–</span>
           </p>
-          <span class="mt-2 block h-1.5 rounded-full bg-fill-strong" aria-hidden="true"></span>
+          <span class="mt-2 block h-1.5 rounded-md bg-fill-strong" aria-hidden="true"></span>
         </li>
       ))}
     </ul>
@@ -79,13 +79,13 @@ function Pending({ example }: { example: TryExample }) {
 }
 
 const label = 'text-[13px] font-medium text-muted'
-const card = 'rounded-2xl border border-line'
+const card = 'rounded-md border border-line'
 
 export function TryPage() {
   return (
     <>
-      <section class="mx-auto max-w-6xl px-4 pt-10 md:px-6 md:pt-20" aria-labelledby="try-title">
-        <h1 id="try-title" class="max-w-3xl text-4xl leading-[1.05] font-medium tracking-tight text-fg md:text-5xl">
+      <section class="px-6 pt-12 md:px-10 md:pt-16" aria-labelledby="try-title">
+        <h1 id="try-title" class="max-w-3xl text-4xl leading-[1.05] font-semibold tracking-[-0.03em] text-fg md:text-5xl">
           Decisions computed on your device.
         </h1>
         <p class="mt-5 max-w-2xl text-lg text-body">
@@ -96,7 +96,7 @@ export function TryPage() {
 
       <div
         id="try-app"
-        class="mx-auto mt-12 max-w-6xl px-4 md:mt-16 md:px-6"
+        class="mt-10 px-6 md:px-10"
         data-repo={MODEL.repo}
         data-revision={MODEL.revision}
         data-name={modelName}
@@ -132,7 +132,7 @@ export function TryPage() {
           </div>
           <div class="mt-5">
             <div
-              class="h-1.5 overflow-hidden rounded-full bg-fill-strong"
+              class="h-1.5 overflow-hidden rounded-md bg-fill-strong"
               role="progressbar"
               aria-label="Download"
               aria-valuemin={0}
@@ -140,7 +140,7 @@ export function TryPage() {
               aria-valuenow={0}
               data-progress
             >
-              <span class="block h-full w-0 rounded-full bg-us transition-[width] duration-150" data-progress-bar></span>
+              <span class="block h-full w-0 rounded-md bg-us transition-[width] duration-150" data-progress-bar></span>
             </div>
             <p class="mt-2 min-h-5 text-[13px] text-muted tabular-nums" aria-live="polite" data-status>
               Not loaded. Nothing downloads until you press the button.
@@ -163,7 +163,7 @@ export function TryPage() {
                   type="button"
                   data-example={e.key}
                   aria-pressed={i === 0 ? 'true' : 'false'}
-                  class="rounded-full border border-line px-3 py-1.5 text-[13px] font-medium text-body hover:border-line-strong hover:text-fg aria-pressed:border-fg aria-pressed:bg-fg aria-pressed:text-canvas"
+                  class="rounded-md border border-line px-3 py-1.5 text-[13px] font-medium text-body hover:border-line-strong hover:text-fg aria-pressed:border-fg aria-pressed:bg-fg aria-pressed:text-canvas"
                 >
                   {e.label}
                 </button>
@@ -177,7 +177,7 @@ export function TryPage() {
               id="try-state"
               rows={4}
               spellcheck={false}
-              class="mt-2 block w-full resize-y rounded-lg border border-line bg-canvas px-3.5 py-3 text-[15px] leading-relaxed text-fg hover:border-line-strong focus:border-line-strong focus:ring-4 focus:ring-fill-strong focus:outline-none"
+              class="mt-2 block w-full resize-y rounded-md border border-line bg-canvas px-3.5 py-3 text-[15px] leading-relaxed text-fg hover:border-line-strong focus:border-line-strong focus:ring-4 focus:ring-fill-strong focus:outline-none"
               data-state
             >
               {first.state}
@@ -200,7 +200,7 @@ export function TryPage() {
                 id="try-json"
                 rows={14}
                 spellcheck={false}
-                class="mt-3 block w-full resize-y rounded-lg border border-line bg-code px-3.5 py-3 font-mono text-[12.5px] leading-relaxed text-fg focus:border-line-strong focus:ring-4 focus:ring-fill-strong focus:outline-none"
+                class="mt-3 block w-full resize-y rounded-md border border-line bg-code px-3.5 py-3 font-mono text-[12.5px] leading-relaxed text-fg focus:border-line-strong focus:ring-4 focus:ring-fill-strong focus:outline-none"
                 aria-describedby="try-json-error"
                 data-json
               >
@@ -246,11 +246,11 @@ export function TryPage() {
         <script type="application/json" id="try-examples" dangerouslySetInnerHTML={{ __html: JSON.stringify(EXAMPLES).replace(/</g, '\\u003c') }}></script>
       </div>
 
-      <section class="mx-auto mt-24 max-w-6xl px-4 md:mt-32 md:px-6" aria-labelledby="use-title">
-        <h2 id="use-title" class="text-base font-semibold text-fg">
+      <section class="rule mt-16 px-6 py-14 md:px-10 md:py-20" aria-labelledby="use-title">
+        <h2 id="use-title" class="text-[13px] tracking-[0.14em] text-muted uppercase">
           Use it in your app
         </h2>
-        <p class="mt-2 max-w-2xl text-2xl leading-tight font-medium tracking-tight text-fg md:text-3xl">
+        <p class="mt-3 max-w-2xl text-3xl leading-[1.05] font-semibold tracking-[-0.03em] text-fg md:text-4xl">
           The same model, three lines away.
         </p>
         <p class="mt-4 max-w-2xl text-base text-body md:text-lg">

@@ -82,7 +82,7 @@ export function Layout({ origin, path, meta, children }: LayoutProps) {
         </a>
         <Header active={meta.nav} hideSearch={meta.hideNavSearch} />
         <main id="main" class={meta.fullBleed ? 'flex-1 border-b border-line' : 'frame flex-1 border-b border-line pt-14'}>
-          {meta.fullBleed ? children : <div class="px-1 py-10 md:px-2 md:py-14">{children}</div>}
+          {children}
         </main>
         <Footer />
       </body>
