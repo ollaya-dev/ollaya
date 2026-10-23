@@ -599,18 +599,23 @@ separate Cargo workspace, so the engine's builds and CI never pull in the webvie
 - **The engine inside:** `desktop.yml` builds `ollaya` for the target and copies it to
   `desktop/src-tauri/binaries/ollaya-<target triple>`, which Tauri bundles next to the app
   (`externalBin`). The app runs `ollaya serve` from there, and `ollaya stop` for the server it
-  started when it quits.
-- **CPU only.** The engine inside is built without the `cuda` feature on every platform (on Windows
-  with pyke's `directml` set, whose `DirectML.dll` the app bundles), and the installers carry no GPU
-  pack. Using an installed pack would take three things: building the engine with
-  `ollaya-runner/cuda` while leaving the provider DLLs out of the bundle's resources, a pack
+  started when it quits. In a release, the Windows build takes the engine from the windows-amd64
+  archive `release.yml` has just packaged instead (its `bin\`), and compiles the app while it waits
+  for it.
+- **CPU only.** The installers carry no GPU pack. The engine inside is built without the `cuda`
+  feature (on Windows with pyke's `directml` set, whose `DirectML.dll` the app bundles), except the
+  released Windows one, which is the command line's: built with `ollaya-runner/cuda`, it runs on the
+  CPU while no pack is installed next to it. Using an installed pack would take three things:
+  building the engine with `ollaya-runner/cuda` while leaving the provider DLLs out of the bundle's
+  resources, a pack
   location the app's engine looks in (its `..\lib\ollaya\cuda_v13` is not the command line's), and
   a way to get the pack (the command line's `install.ps1`, or a download from the app with the same
   `FILES.sha256` check). The runner copy is already safe for a pack shared with the command line.
 - **Installers:** `Ollaya-macos-arm64.dmg`, `Ollaya-windows-x64-setup.exe` (NSIS, per-user),
   `Ollaya-windows-x64.msi`, `Ollaya-linux-x86_64.AppImage` and `Ollaya-linux-amd64.deb`. The names are
-  stable, so the website links `releases/latest/download/<name>`. A `v*` tag attaches them to its
-  release.
+  stable, so the website links `releases/latest/download/<name>`. For a `v*` tag `release.yml` runs
+  `desktop.yml` and attaches them once the release exists; `desktop.yml` on its own
+  (workflow_dispatch) builds them as workflow artifacts.
 - **Developing:** `cd desktop && npm ci`, copy a built `ollaya` into `src-tauri/binaries/` under its
   triple name, then `npx tauri dev`. `npm run preview` builds the page against a fake backend for
   design work in a browser. `OLLAYA_LIBRARY_URL` points the app at another library, such as
@@ -668,6 +673,9 @@ A prerelease tag (one with `-`) only gets the versioned tags.
   `/usr`.
 - The `cuda` target adds a stage that runs `package.sh --cuda --stage` (with `uvx pip`), and the
   `cuda12` target one that runs `package.sh --cuda12 --stage`.
+- `release.yml` builds `:cuda12` from the `cuda12-release` target instead: the `ollaya-linux-amd64`
+  and `-cuda12` archives its build job has just packaged, unpacked into the build context
+  `archives`, with no Rust build in Docker. `cuda12` stays the target for local builds.
 - So the images hold exactly the tarballs' files, and the library contract above applies unchanged
   (`/usr/bin/ollaya`, `/usr/lib/ollaya/cuda_v13` or `cuda_v12`).
 

@@ -4,6 +4,7 @@
 #   cpu (default)  linux/amd64 and linux/arm64   docker build -t ollaya .
 #   cuda           linux/amd64                   docker build --target cuda -t ollaya:cuda .
 #   cuda12         linux/amd64                   docker build --target cuda12 -t ollaya:cuda12 .
+# release.yml builds cuda12 as cuda12-release instead, from the archives it has just packaged.
 # All run `ollaya serve` as the unprivileged user ollaya (uid 1000), listen on 0.0.0.0:11435 and
 # keep models in the volume /home/ollaya/.ollaya. The cuda images need the NVIDIA Container
 # Toolkit and a host driver with CUDA 13 support (R580 or newer) for cuda, or CUDA 12 support
@@ -21,7 +22,9 @@ FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 # The full rust image already has g++ (ORT links libstdc++), unzip, file and binutils, which the
 # build and scripts/package.sh need, so the builder installs nothing.
-FROM rust:${RUST_VERSION}-${DEBIAN_RELEASE} AS build
+FROM rust:${RUST_VERSION}-${DEBIAN_RELEASE} AS toolchain
+
+FROM toolchain AS build
 ARG TARGETARCH
 ARG OLLAYA_BUILD_VERSION=0.0.0-dev
 WORKDIR /src
@@ -86,8 +89,9 @@ RUN groupadd --gid "${OLLAYA_UID}" ollaya \
         --shell /usr/sbin/nologin ollaya \
     && mkdir -p /home/ollaya/.ollaya/models \
     && chown -R ollaya:ollaya /home/ollaya/.ollaya
-# CA roots for pulling models over HTTPS, without apt in this stage.
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+# CA roots for pulling models over HTTPS, without apt in this stage, and without building Ollaya
+# for cuda12-release.
+COPY --from=toolchain /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --chmod=0755 packaging/docker-healthcheck.sh /usr/local/bin/ollaya-healthcheck
 ENV HOME=/home/ollaya \
     OLLAYA_HOST=0.0.0.0:11435 \
@@ -114,6 +118,15 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
 FROM runtime AS cuda12
 COPY --from=build-cuda12 /stage/base/ /usr/
 COPY --from=build-cuda12 /stage/ollaya-linux-amd64-cuda12/ /usr/
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# cuda12 from release.yml's linux-amd64 archives, unpacked into the build context `archives` as
+# base/ (ollaya-linux-amd64) and cuda12/ (ollaya-linux-amd64-cuda12): the same files as cuda12,
+# without compiling them a second time.
+FROM runtime AS cuda12-release
+COPY --from=archives base/ /usr/
+COPY --from=archives cuda12/ /usr/
 ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 

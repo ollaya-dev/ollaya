@@ -1,8 +1,10 @@
 name: Desktop app
 
 # Builds the Tauri app (desktop/) for macOS, Windows and Linux, with the `ollaya` engine bundled
-# inside (externalBin). A v* tag attaches the installers to that release; running it by hand
-# (workflow_dispatch) builds them as workflow artifacts only.
+# inside (externalBin), as workflow artifacts. For a v* tag, release.yml runs it and attaches the
+# installers to the release; the Windows build there takes the engine from the windows-amd64
+# archive release.yml has just packaged, and compiles the app while it waits for it. Running it
+# by hand (workflow_dispatch) builds every engine here.
 #
 # Signing is on when its secrets exist:
 #   macOS   APPLE_CERTIFICATE (base64 .p12 of the "Developer ID Application" certificate),
@@ -10,8 +12,12 @@ name: Desktop app
 #           APPLE_API_ISSUER, APPLE_API_KEY and APPLE_API_KEY_P8 (App Store Connect API key).
 #   Windows see docs/distribution.md, "Signing the desktop app".
 on:
-  push:
-    tags: ['v*']
+  workflow_call:
+    inputs:
+      windows-engine-from-release:
+        description: Take the Windows engine from release.yml's build job in the same run
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
@@ -23,7 +29,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
   # Secrets can't be tested in `if:`; these flags can.
   APPLE_NOTARY: ${{ secrets.APPLE_API_KEY_P8 != '' && 'yes' || '' }}
 
@@ -51,7 +56,10 @@ jobs:
             exe: ''
     runs-on: ${{ matrix.runner }}
     permissions:
-      contents: write
+      contents: read
+      actions: read
+    env:
+      RELEASE_ENGINE: ${{ inputs.windows-engine-from-release && matrix.triple == 'x86_64-pc-windows-msvc' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,6 +101,7 @@ jobs:
         # Xcode 26 ships the Metal compiler as a separate component.
         run: xcrun -sdk macosx metal --version || xcodebuild -downloadComponent MetalToolchain
       - name: Build the engine
+        if: env.RELEASE_ENGINE != 'true'
         shell: bash
         env:
           FEATURES: ${{ matrix.features }}
@@ -102,6 +111,30 @@ jobs:
             export MACOSX_DEPLOYMENT_TARGET=14.0
           fi
           cargo build --release --locked -p ollaya ${FEATURES:+--features "$FEATURES"}
+      - name: Compile the app while release.yml builds the engine
+        if: env.RELEASE_ENGINE == 'true'
+        shell: bash
+        # tauri-build only needs the engine to exist. The real one replaces this placeholder below,
+        # which rebuilds the app crate alone; the dependencies are compiled by then.
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          echo placeholder >"desktop/src-tauri/binaries/ollaya-${{ matrix.triple }}${{ matrix.exe }}"
+          cd desktop
+          npm ci
+          npx tauri build --no-bundle
+      - name: The engine from release.yml
+        if: env.RELEASE_ENGINE == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # ollaya.exe and the DLLs it links: bin/ of the windows-amd64 archive.
+        run: |
+          scripts/wait-artifact.sh engine-windows-amd64 "$RUNNER_TEMP/engine"
+          7z x -bd -bso0 -o"$RUNNER_TEMP/engine" "$RUNNER_TEMP/engine/ollaya-windows-amd64.zip"
+          mkdir -p target/release
+          cp "$RUNNER_TEMP"/engine/bin/* target/release/
+          ls -l target/release
+          target/release/ollaya.exe --version
       - name: Bundle the engine (externalBin)
         shell: bash
         run: |
@@ -217,12 +250,3 @@ jobs:
           name: desktop-${{ matrix.triple }}
           path: out/*
           if-no-files-found: error
-      - name: Attach to the release
-        if: env.PUBLISH == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # release.yml creates the release (about 40 minutes with both GPU packs); wait up to an hour.
-          for _ in $(seq 1 120); do gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break; sleep 30; done
-          gh release upload "$GITHUB_REF_NAME" out/* --clobber

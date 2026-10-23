@@ -18,6 +18,6 @@ Runs open decision models locally, the way Ollama runs LLMs (see `README.md`).
 - Batch releases: ship finished work together in one version bump, not one release per feature. Each release costs about 20 minutes of pipeline time.
 - Report progress every 20–30 minutes on long work, including under `/goal`: what is done, what is running, what is next. The user sees only final messages.
 - Slow local steps: CPU parity on 2B+ decoders (4+ minutes), downloading multi-GB weights, sha256 checks in `package.py`. Run them in the background, and do CUDA parity first for a quick signal.
-- Open idea, measured on 0.13.0: the slowest jobs are the desktop app's Windows build (the engine 7 min, then the app
-  9.5 min) and the cuda12 image (11.5 min, the Rust build again inside Docker). Both rebuild an engine `release.yml`
-  already builds; taking it from the linux-amd64 and windows-amd64 archives instead would save about 5 minutes.
+- `release.yml` runs `desktop.yml` too. The desktop app's Windows build takes its engine from the windows-amd64
+  archive, and the cuda12 image from the linux-amd64 archives, as soon as the build job has packaged them
+  (`scripts/wait-artifact.sh`); neither compiles it again.
