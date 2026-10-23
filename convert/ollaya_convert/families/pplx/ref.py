@@ -27,6 +27,10 @@ MODELS = {
     "pplx-decider-flash": {"repo": "perplexity-ai/pplx-decider-flash-v1.2",
                            "revision": "6d771ad7b5ecff5e93b8fc7b90d4c5ccc341954d",
                            "shards": ["model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors"]},
+    # Ollaya's own: Qwen3.5-0.8B-Base distilled from pplx-decider-flash in its joint format (train/sura.py).
+    "sura-0.8b": {"repo": "ollaya-dev/sura-0.8b",
+                  "revision": "9e991faa3250b255cc41d9cd8f5422f1ca9f7694",
+                  "shards": ["model.safetensors"]},
 }
 # Ollaya's window per sequence. Upstream's default is the backbone's 262,144 positions; the graph materializes
 # full attention (8 of 32 layers), so a sequence of n tokens takes 16 * n^2 * 4 bytes per such layer.
