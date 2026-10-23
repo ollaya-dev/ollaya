@@ -1,7 +1,7 @@
 //! Compare the `arbiter-fixed-v1` runtime against golden fixtures from
 //! `ollaya_convert.families.arbiter.goldens` (the reference prompt and model in fp32, LoRA merged).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_arbiter -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]
+//!     cargo run --release -p ollaya-runner --example parity_arbiter -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]
 //!
 //! Every case is checked for rows first:
 //! * a request the reference rejects must be rejected, and each of its questions exactly when the
@@ -16,7 +16,6 @@
 //! `--latency` then times full requests (`run`: tokenize, encode, forward) of 3 or more questions.
 
 use std::collections::HashMap;
-use std::io::BufRead;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -25,6 +24,8 @@ use ollaya_decision::Answer;
 use ollaya_runner::Device;
 use ollaya_runner::arbiter::ArbiterModel;
 use serde_json::Value;
+
+mod smoke;
 
 /// Largest slot-score difference accepted (ONNX Runtime vs PyTorch, both fp32 on the BF16 weights).
 const LOGIT_TOL: f64 = 1e-3;
@@ -63,9 +64,9 @@ fn rejects(model: &ArbiterModel, state: &Value, questions: &Value) -> Option<boo
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().collect();
+    let (args, smoke) = smoke::args();
     if args.len() < 3 {
-        bail!("usage: parity_arbiter <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]");
+        bail!("usage: parity_arbiter <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
@@ -76,10 +77,9 @@ fn main() -> Result<()> {
     let model = ArbiterModel::load(&PathBuf::from(&args[1]), device, None)?;
     println!("load {:.1}s on {device:?}", t.elapsed().as_secs_f64());
 
-    let file = std::fs::File::open(&args[2]).with_context(|| args[2].clone())?;
     let mut records = Vec::new();
-    for line in std::io::BufReader::new(file).lines() {
-        records.push(serde_json::from_str::<Value>(&line?)?);
+    for line in smoke::lines(&args[2], smoke)? {
+        records.push(serde_json::from_str::<Value>(&line)?);
     }
     let by_id: HashMap<&str, &Value> = records
         .iter()

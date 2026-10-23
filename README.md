@@ -218,6 +218,22 @@ cargo test --workspace
 cargo build --release -p ollaya --features cuda   # CUDA build (x86-64 Linux and Windows)
 ```
 
+Tests come in three tiers, all with the same parity tolerances:
+
+- **K1, every change:** the tests, and smoke parity for the families the change touches. A parity
+  example run with `--smoke` checks only the cases listed in
+  [`crates/ollaya-runner/examples/smoke/cases.txt`](crates/ollaya-runner/examples/smoke/cases.txt),
+  about 40 questions per family: every question type, refused requests, a long state and many options.
+  ```sh
+  cargo run --release -p ollaya-runner --example parity -- <model-dir> <goldens.jsonl> cpu --smoke
+  ```
+- **K2, every release:** the full goldens on every GPU device a release ships, and on the CPU the full
+  set for models of 4B and under and `--smoke` for larger ones. CPU goldens count only on the machine
+  and build that made them.
+- **K3, major releases, a llama.cpp or ONNX Runtime update, a new device or a new model:** full CPU
+  parity of the large models and the quality benchmarks. The site, this README and the reports are
+  updated from those results.
+
 `convert/` rebuilds models. It exports them, checks parity against the PyTorch reference,
 generates golden fixtures, and packages the result into `registry/`. See the module docstrings.
 `cd convert && uv sync` installs it: with CUDA 13 torch on Linux and Windows, and with the CPU and

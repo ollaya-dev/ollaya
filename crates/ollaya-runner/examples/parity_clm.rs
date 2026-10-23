@@ -1,7 +1,7 @@
 //! Compare the `clm-v1` runtime against golden fixtures from `ollaya_convert.families.clm.goldens`
 //! (upstream `clm.schema` and heads, the Qwen3-8B encoder in fp32 on its BF16 weights).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_clm -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]
+//!     cargo run --release -p ollaya-runner --example parity_clm -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]
 //!
 //! Every case is checked for texts first:
 //! * a request upstream rejects must be rejected, and each of its questions exactly when
@@ -19,7 +19,6 @@
 //! cached (a repeated request; repeated questions and options hit the cache the same way).
 
 use std::collections::HashMap;
-use std::io::BufRead;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -29,6 +28,8 @@ use ollaya_runner::Device;
 use ollaya_runner::clm::ClmModel;
 use ollaya_runner::engine::Engine;
 use serde_json::Value;
+
+mod smoke;
 
 /// Largest logit difference accepted (ONNX Runtime vs PyTorch, both fp32 on the BF16 weights).
 const LOGIT_TOL: f64 = 1e-3;
@@ -112,9 +113,9 @@ fn wire_diff(ours: &Value, upstream: &Value) -> Option<f64> {
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().collect();
+    let (args, smoke) = smoke::args();
     if args.len() < 3 {
-        bail!("usage: parity_clm <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]");
+        bail!("usage: parity_clm <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
@@ -125,10 +126,9 @@ fn main() -> Result<()> {
     let model = ClmModel::load(&PathBuf::from(&args[1]), device, None)?;
     println!("load {:.1}s on {device:?}", t.elapsed().as_secs_f64());
 
-    let file = std::fs::File::open(&args[2]).with_context(|| args[2].clone())?;
     let mut records = Vec::new();
-    for line in std::io::BufReader::new(file).lines() {
-        records.push(serde_json::from_str::<Value>(&line?)?);
+    for line in smoke::lines(&args[2], smoke)? {
+        records.push(serde_json::from_str::<Value>(&line)?);
     }
     let by_id: HashMap<&str, &Value> = records
         .iter()

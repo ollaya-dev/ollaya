@@ -56,6 +56,7 @@
   }
   html {
     scroll-padding-top: 5rem;
+    overflow-x: clip;
   }
   body {
     background-color: var(--color-canvas);
@@ -369,7 +370,9 @@
  */
 @layer components {
 /* The frame: two rails down the page, with a cross where a section's rule meets them. */
-.frame { position: relative; max-width: 72rem; margin: 0 auto; border-left: 1px solid var(--color-line); border-right: 1px solid var(--color-line); }
+.frame { position: relative; width: 100%; max-width: 72rem; margin: 0 auto; border-left: 1px solid var(--color-line); border-right: 1px solid var(--color-line); }
+/* On a phone the rails are the screen's edges: no crosses, nothing to spill past them. */
+@media (max-width: 767px) { .rule::before, .rule::after { display: none; } }
 .rule { position: relative; border-top: 1px solid var(--color-line); }
 .rule::before, .rule::after { content: ''; position: absolute; top: -7px; width: 13px; height: 13px; pointer-events: none;
   background:
@@ -380,15 +383,15 @@
 .panel { background: rgb(255 255 255 / 0.03); border: 1px solid var(--color-line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .panel-strong { background: rgb(12 12 12 / 0.78); }
 /* The grain: an SVG noise tile over everything, blended so it only breaks up the flat colour. */
-.grain { position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0.16; mix-blend-mode: screen;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 160px 160px; }
+.grain { position: fixed; top: -20vh; right: 0; bottom: -20vh; left: 0; z-index: 50; pointer-events: none; opacity: 0.16; mix-blend-mode: screen;
+  /* A 128px noise tile drawn once at 128px, so the grain is the same size on every screen and
+     density; it overshoots the viewport so a phone's address bar can slide without uncovering it. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px 128px; image-rendering: pixelated; }
+@supports (height: 100dvh) { .grain { top: 0; bottom: 0; height: 120dvh; } }
 /* Blurred colour fields behind the hero and the closer: what the panels blur. */
 .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.ascii { position: absolute; inset: 0; pointer-events: none; mask-image: linear-gradient(180deg, #000 55%, transparent); -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent); }
-.ascii canvas { display: block; }
-@media (max-width: 640px) { .ascii { opacity: 0.45; } }
-.field i { position: absolute; display: block; border-radius: 9999px; filter: blur(90px); opacity: 0.5; }
+.field i { position: absolute; display: block; border-radius: 9999px; filter: blur(110px); opacity: 0.6; }
 .field .a { width: 60vw; height: 60vw; left: -10vw; top: -20vw; background: #2d5a4a; }
 .field .b { width: 50vw; height: 50vw; right: -12vw; top: -8vw; background: #5a4a2d; }
 .field .c { width: 45vw; height: 45vw; left: 30vw; top: 20vw; background: #2d3f5a; opacity: 0.4; }

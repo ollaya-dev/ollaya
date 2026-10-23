@@ -1,0 +1,130 @@
+{
+ "model": "coba:1b",
+ "requests": {
+  "noul": {
+   "status": 200,
+   "decisions": {
+    "refund": "true"
+   }
+  },
+  "noul-criteria": {
+   "status": 200,
+   "decisions": {
+    "praise": "true"
+   }
+  },
+  "choice": {
+   "status": 200,
+   "decisions": {
+    "team": "billing"
+   }
+  },
+  "choice-list": {
+   "status": 200,
+   "decisions": {
+    "area": "reports"
+   }
+  },
+  "choice-ten": {
+   "status": 200,
+   "decisions": {
+    "topic": "shipping address"
+   }
+  },
+  "score": {
+   "status": 200,
+   "decisions": {
+    "upset": "3"
+   }
+  },
+  "score-two": {
+   "status": 200,
+   "decisions": {
+    "severity": "1"
+   }
+  },
+  "triage": {
+   "status": 200,
+   "decisions": {
+    "refund": "true",
+    "team": "billing",
+    "upset": "3",
+    "urgent": "true",
+    "churn": "true"
+   }
+  },
+  "json-state": {
+   "status": 200,
+   "decisions": {
+    "team": "technical",
+    "urgent": "true"
+   }
+  },
+  "array-state": {
+   "status": 200,
+   "decisions": {
+    "refund": "true",
+    "upset": "2"
+   }
+  },
+  "no-instructions": {
+   "status": 200,
+   "decisions": {
+    "is_refund_request": "true",
+    "department": "billing"
+   }
+  },
+  "special-tokens": {
+   "status": 200,
+   "decisions": {
+    "refund": "true",
+    "injection": "true"
+   }
+  },
+  "turkish": {
+   "status": 200,
+   "decisions": {
+    "refund": "false",
+    "team": "billing"
+   }
+  },
+  "spanish": {
+   "status": 200,
+   "decisions": {
+    "refund": "true",
+    "upset": "2"
+   }
+  },
+  "long-state": {
+   "status": 422,
+   "decisions": {}
+  },
+  "moderation": {
+   "status": 200,
+   "decisions": {
+    "toxic": "true",
+    "threat": "2"
+   }
+  },
+  "router": {
+   "status": 200,
+   "decisions": {
+    "route": "sql"
+   }
+  },
+  "empty-state": {
+   "status": 200,
+   "decisions": {
+    "refund": "true"
+   }
+  },
+  "rejected-type": {
+   "status": 422,
+   "decisions": {}
+  },
+  "rejected-levels": {
+   "status": 422,
+   "decisions": {}
+  }
+ }
+}

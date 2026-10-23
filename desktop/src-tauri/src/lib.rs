@@ -202,17 +202,19 @@ fn open_link(url: String) -> Result<(), String> {
     Ok(())
 }
 
-/// The `ollaya` that runs the server: the command-line install's when it can use the GPU, else
-/// the bundled one, with a line for `server.log` that says which and why.
+/// The `ollaya` that runs the server, with a line for `server.log` that says which and why,
+/// whether it uses the GPU, and the command-line install's `lib/ollaya` whose GPU pack the
+/// bundled one uses.
 ///
 /// On Windows and Linux the app bundles no GPU pack (1.4 GB and more); `install.ps1` and
-/// `install.sh` add one next to the command-line `ollaya` when they find an NVIDIA GPU. A server
-/// started from that install uses the GPU as `ollaya serve` in a terminal does (#44). It is used
-/// only when it is as new as this app, so the app never serves models with an older server.
-fn server_exe() -> (PathBuf, Option<String>, bool) {
+/// `install.sh` add one next to the command-line `ollaya` when they find an NVIDIA GPU. When it is
+/// the pack this app's release ships, the bundled server uses it (see [`shared_pack`]). Otherwise
+/// a server started from that install uses the GPU as `ollaya serve` in a terminal does (#44),
+/// but only when it is as new as this app, so the app never serves models with an older server.
+fn server_exe(app_lib: Option<&Path>) -> (PathBuf, Option<String>, bool, Option<PathBuf>) {
     let bundled = ollaya_exe();
     if cfg!(target_os = "macos") {
-        return (bundled, None, false);
+        return (bundled, None, false, None);
     }
     let app = VERSION;
     let mut note = None;
@@ -220,13 +222,20 @@ fn server_exe() -> (PathBuf, Option<String>, bool) {
         if !has_gpu_pack(&cli) {
             continue;
         }
+        if let Some(lib) = app_lib.and_then(|l| shared_pack(l, &cli)) {
+            let msg = format!(
+                "desktop app: the server uses the GPU pack in {}, the same as this app's release",
+                lib.display()
+            );
+            return (bundled, Some(msg), true, Some(lib));
+        }
         match cli_version(&cli) {
             Some(v) if version_at_least(&v, app) => {
                 let msg = format!(
                     "desktop app: starting the server from {} ({v}), which has a GPU pack",
                     cli.display()
                 );
-                return (cli, Some(msg), true);
+                return (cli, Some(msg), true, None);
             }
             v => {
                 note = Some(format!(
@@ -238,7 +247,30 @@ fn server_exe() -> (PathBuf, Option<String>, bool) {
             }
         }
     }
-    (bundled, note, false)
+    (bundled, note, false, None)
+}
+
+/// The `lib/ollaya` of the command-line install around `cli`, when the bundled server can use its
+/// GPU pack: the app bundles its own GPU runner in `app_lib` (desktop.yml), and the pack has the
+/// libraries of this app's release, by its `FILES.sha256`, as `install.ps1` decides to keep a pack.
+/// A pack of another release may hold another ONNX Runtime and llama.cpp than the app's runner
+/// and llama.cpp were built for.
+fn shared_pack(app_lib: &Path, cli: &Path) -> Option<PathBuf> {
+    let runner = if cfg!(windows) {
+        "ollaya-cuda-runner.exe"
+    } else {
+        "ollaya-cuda-runner"
+    };
+    if !app_lib.join(runner).is_file() {
+        return None;
+    }
+    let lib = cli.parent()?.parent()?.join("lib").join("ollaya");
+    // The pack the server picks: cuda_v13, else cuda_v12 (an install has one).
+    let pack = ["cuda_v13", "cuda_v12"]
+        .into_iter()
+        .find(|p| lib.join(p).join("FILES.sha256").is_file())?;
+    let want = std::fs::read(app_lib.join(format!("{pack}.FILES.sha256"))).ok()?;
+    (std::fs::read(lib.join(pack).join("FILES.sha256")).ok()? == want).then_some(lib)
 }
 
 /// This app's version, which is its bundled `ollaya`'s.
@@ -387,7 +419,18 @@ async fn start_server_now(app: &AppHandle) -> Result<Status, String> {
         .append(true)
         .open(logs.join("server.log"))
         .map_err(|e| e.to_string())?;
-    let (exe, note, gpu) = server_exe();
+    // GGUF models run on the llama.cpp build bundled in the app's resources (desktop.yml stages
+    // it there), and on Windows GPU runners start from the app's own runner; the bundled
+    // `ollaya serve` finds them through OLLAYA_LIBRARY_PATH. A command-line install uses its own,
+    // next to its GPU pack.
+    let app_lib = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|dir| dir.join("lib").join("ollaya"))
+        .filter(|lib| lib.join("llama").is_dir())
+        .filter(|_| std::env::var_os("OLLAYA_LIBRARY_PATH").is_none());
+    let (exe, note, gpu, shared) = server_exe(app_lib.as_deref());
     if let Some(note) = note {
         let _ = writeln!(&log, "{note}");
     }
@@ -395,17 +438,13 @@ async fn start_server_now(app: &AppHandle) -> Result<Status, String> {
     cmd.arg("serve")
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log);
-    // GGUF models run on the llama.cpp build bundled in the app's resources (desktop.yml stages
-    // it there); the bundled `ollaya serve` finds it through OLLAYA_LIBRARY_PATH. A command-line
-    // install uses its own, next to its GPU pack.
     if exe == ollaya_exe()
-        && std::env::var_os("OLLAYA_LIBRARY_PATH").is_none()
-        && let Ok(dir) = app.path().resource_dir()
+        && let Some(lib) = app_lib
     {
-        let lib = dir.join("lib").join("ollaya");
-        if lib.join("llama").is_dir() {
-            cmd.env("OLLAYA_LIBRARY_PATH", lib);
-        }
+        // The app's directory first: the server takes each library from the first that has it.
+        let dirs =
+            std::env::join_paths(std::iter::once(lib).chain(shared)).map_err(|e| e.to_string())?;
+        cmd.env("OLLAYA_LIBRARY_PATH", dirs);
     }
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
@@ -775,6 +814,39 @@ mod tests {
         assert!(has_gpu_pack(&exe));
         // The bundled binary itself is never a candidate.
         assert!(cli_candidates(&exe).iter().all(|p| p != &exe));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_bundled_server_shares_only_the_pack_of_its_release() {
+        let root =
+            std::env::temp_dir().join(format!("ollaya-desktop-share-{}", std::process::id()));
+        let (app, cli) = (root.join("app"), root.join("cli"));
+        let exe = cli.join("bin").join("ollaya");
+        let pack = cli.join("lib").join("ollaya").join("cuda_v13");
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::create_dir_all(&pack).unwrap();
+        std::fs::write(pack.join("FILES.sha256"), b"aaaa  onnxruntime.dll\n").unwrap();
+        std::fs::write(
+            app.join("cuda_v13.FILES.sha256"),
+            b"aaaa  onnxruntime.dll\n",
+        )
+        .unwrap();
+        // Without a runner of its own, the app never uses another install's pack.
+        assert_eq!(shared_pack(&app, &exe), None);
+        let runner = if cfg!(windows) {
+            "ollaya-cuda-runner.exe"
+        } else {
+            "ollaya-cuda-runner"
+        };
+        std::fs::write(app.join(runner), b"").unwrap();
+        assert_eq!(
+            shared_pack(&app, &exe),
+            Some(cli.join("lib").join("ollaya"))
+        );
+        // Another release's libraries.
+        std::fs::write(pack.join("FILES.sha256"), b"bbbb  onnxruntime.dll\n").unwrap();
+        assert_eq!(shared_pack(&app, &exe), None);
         std::fs::remove_dir_all(&root).unwrap();
     }
 

@@ -3,8 +3,10 @@ name: Release
 # A v* tag builds the tarballs, publishes a GitHub Release with them and sha256sum.txt, and pushes
 # ghcr.io/<owner>/ollaya:{<version>,latest} (cpu, amd64 + arm64), :{<version>-cuda,cuda} and
 # :{<version>-cuda12,cuda12}. Tags with a hyphen (v0.2.0-rc.1) become prereleases and don't move
-# latest, cuda or cuda12.
-# Running it by hand (workflow_dispatch) builds and packages everything but publishes nothing.
+# latest, cuda or cuda12. It also builds the desktop app (desktop.yml) and attaches its installers
+# once the release exists.
+# Running it by hand (workflow_dispatch) builds and packages everything but publishes nothing, and
+# smoke-tests the images.
 # darwin-arm64 is built with the MLX engine (docs/decisions/0001-mlx-engine.md) for macOS 14 and
 # later, and also packages ollaya-darwin-arm64-mlx (its Metal library).
 on:
@@ -190,6 +192,20 @@ jobs:
           esac
           # shellcheck disable=SC2086 # PACKAGE_ARGS is a list of flags
           scripts/package.sh --platform "$PLATFORM" $PACKAGE_ARGS target/release "$VERSION"
+      # The desktop app's Windows build (desktop.yml) takes its engine and GPU runner from this
+      # archive instead of building its own, without waiting for the GPU packs' upload below, and
+      # the packs' FILES.sha256 to tell which installed pack it can use.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: matrix.platform == 'windows-amd64'
+        with:
+          name: engine-windows-amd64
+          path: |
+            dist/ollaya-windows-amd64.zip
+            dist/ollaya-windows-amd64-cuda.sha256
+            dist/ollaya-windows-amd64-cuda12.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
       - name: Smoke test the Windows archives
         if: matrix.platform == 'windows-amd64'
         shell: bash
@@ -325,6 +341,36 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: ${{ !contains(github.ref_name, '-') }}
 
+  desktop:
+    name: Desktop
+    uses: ./.github/workflows/desktop.yml
+    with:
+      windows-engine-from-release: true
+    secrets: inherit
+    permissions:
+      contents: read
+      actions: read
+
+  desktop-release:
+    name: Attach the desktop installers
+    needs: [release, desktop]
+    # Whatever installers were built, even if one platform failed.
+    if: startsWith(github.ref, 'refs/tags/v') && !cancelled() && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: desktop-*
+          path: out
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l out
+          gh release upload "$GITHUB_REF_NAME" out/* --clobber --repo "$GITHUB_REPOSITORY"
+
   image:
     name: Image ${{ matrix.target }} ${{ matrix.arch }}
     strategy:
@@ -339,6 +385,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -354,6 +401,20 @@ jobs:
         if: startsWith(matrix.target, 'cuda')
         # The CUDA images stage 2.4 (cuda) or 3.4 GB (cuda12) of libraries on top of the Rust build.
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: The linux-amd64 archives
+        if: matrix.target == 'cuda12'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # cuda12 is the base archive plus the CUDA 12 pack, the files the build job has just packaged
+        # (Dockerfile target cuda12-release), instead of a second Rust build inside Docker.
+        run: |
+          scripts/wait-artifact.sh dist-linux-amd64 "$RUNNER_TEMP/dist"
+          a=$RUNNER_TEMP/archives
+          mkdir -p "$a/base" "$a/cuda12"
+          zstd -dc "$RUNNER_TEMP/dist/ollaya-linux-amd64.tar.zst" | tar -xf - -C "$a/base"
+          zstd -dc "$RUNNER_TEMP/dist/ollaya-linux-amd64-cuda12.tar.zst" | tar -xf - -C "$a/cuda12"
+          rm -rf "$RUNNER_TEMP/dist"
+          echo "ARCHIVES=archives=$a" >>"$GITHUB_ENV"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: env.PUBLISH == 'true'
@@ -367,14 +428,30 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          target: ${{ matrix.target }}
+          target: ${{ matrix.target == 'cuda12' && 'cuda12-release' || matrix.target }}
+          build-contexts: ${{ env.ARCHIVES }}
           platforms: linux/${{ matrix.arch }}
           build-args: OLLAYA_BUILD_VERSION=${{ steps.meta.outputs.version }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}
             org.opencontainers.image.licenses=Apache-2.0
-          outputs: type=image,name=${{ steps.meta.outputs.image }},push-by-digest=true,name-canonical=true,push=${{ env.PUBLISH }}
+          # A dry run loads the image into the runner's Docker for the smoke test below.
+          outputs: ${{ env.PUBLISH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', steps.meta.outputs.image) || 'type=docker,name=ollaya:smoke' }}
+      - name: Smoke test the image
+        if: env.PUBLISH != 'true'
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          docker run --rm ollaya:smoke --version
+          docker run --rm --entrypoint sh ollaya:smoke -c 'find /usr/bin/ollaya /usr/lib/ollaya -maxdepth 1 | sort'
+          case $TARGET in
+            cuda) pack=cuda_v13 ;;
+            cuda12) pack=cuda_v12 ;;
+            *) exit 0 ;;
+          esac
+          docker run --rm --entrypoint sh ollaya:smoke -c \
+            "test -x /usr/lib/ollaya/ollaya-cuda-runner && cd /usr/lib/ollaya/$pack && sha256sum -c --quiet FILES.sha256 && echo $pack: FILES.sha256 ok"
       - name: Record digest
         if: env.PUBLISH == 'true'
         env:

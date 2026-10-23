@@ -78,10 +78,10 @@ function deviceTone(s: DeviceSeries): Tone {
 function Section({ id, title, lead, body, children }: { id: string; title: string; lead: string; body?: Child; children: Child }) {
   return (
     <section id={id} aria-labelledby={`${id}-title`} class="scroll-mt-24" data-section>
-      <h2 id={`${id}-title`} class="text-base font-semibold text-fg">
-        {title}
+      <p class="text-[13px] tracking-[0.14em] text-muted uppercase">{title}</p>
+      <h2 id={`${id}-title`} class="mt-3 max-w-3xl text-3xl leading-[1.05] font-semibold tracking-[-0.03em] text-fg md:text-4xl">
+        {lead}
       </h2>
-      <p class="mt-2 max-w-3xl text-2xl leading-tight font-medium tracking-tight text-fg md:text-3xl">{lead}</p>
       {body ? <p class="mt-4 max-w-3xl text-base text-body md:text-lg">{body}</p> : null}
       <div class="mt-10">{children}</div>
     </section>
@@ -90,8 +90,8 @@ function Section({ id, title, lead, body, children }: { id: string; title: strin
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div class="px-6 py-6 sm:px-7">
-      <p class="text-4xl font-semibold tracking-tight whitespace-nowrap text-fg tabular-nums lg:text-5xl">{value}</p>
+    <div class="bg-canvas px-6 py-8">
+      <p class="text-4xl font-semibold tracking-[-0.03em] whitespace-nowrap text-fg tabular-nums">{value}</p>
       <p class="mt-2 text-sm text-muted">{label}</p>
     </div>
   )
@@ -115,17 +115,11 @@ function totals() {
 function Overview() {
   const t = totals()
   return (
-    <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-2 lg:grid-cols-4">
+    <div class="rule grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
       <Stat value={nf.format(t.answers)} label="benchmark answers scored against human labels" />
-      <div class="border-t border-line sm:border-t-0 sm:border-l">
-        <Stat value={nf.format(t.parityQuestions)} label="questions checked against the authors' own code" />
-      </div>
-      <div class="border-t border-line lg:border-t-0 lg:border-l">
-        <Stat value={`${t.models}`} label="model tags measured" />
-      </div>
-      <div class="border-t border-line sm:border-l lg:border-t-0">
-        <Stat value={nf.format(t.requests)} label="requests timed on our GPUs and CPUs" />
-      </div>
+      <Stat value={nf.format(t.parityQuestions)} label="questions checked against the authors' own code" />
+      <Stat value={`${t.models}`} label="model tags measured" />
+      <Stat value={nf.format(t.requests)} label="requests timed on our GPUs and CPUs" />
     </div>
   )
 }
@@ -223,7 +217,7 @@ function AccuracySpeed() {
 /** A long table folded under one line, so the charts above it stay the page's reading path. */
 function Fold({ title, children }: { title: string; children: Child }) {
   return (
-    <details class="group mt-10 rounded-2xl border border-line">
+    <details class="group mt-10 rounded-md border border-line">
       <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-medium text-fg [&::-webkit-details-marker]:hidden">
         {title}
         <span class="text-muted transition-transform group-open:rotate-90" aria-hidden="true">›</span>
@@ -452,7 +446,7 @@ function Parity() {
       lead="The same answers as the authors' own code."
       body="Before a model ships, every decision must match the authors' code (or llama.cpp for GGUF), each option score within 0.001. -fp16 tags: at least 99.5 % of decisions the same."
     >
-      <div class="overflow-x-auto rounded-2xl border border-line">
+      <div class="overflow-x-auto rounded-md border border-line">
         <table class="w-full min-w-[32rem] text-left text-[13px] tabular-nums">
           <caption class="sr-only">Runtime parity per model and device: passed or outside the gate, with the number of questions compared</caption>
           <thead class="border-b border-line bg-subtle text-muted">
@@ -555,7 +549,7 @@ function BenchColumn({ m }: { m: Machine }) {
           <ul class="mt-2 space-y-1.5 text-[13px] leading-snug text-body" role="list">
             {m.uses.map((u) => (
               <li class="flex gap-2">
-                <span class="mt-[0.45rem] size-1 shrink-0 rounded-full bg-muted" aria-hidden="true"></span>
+                <span class="mt-[0.45rem] size-1 shrink-0 rounded-md bg-muted" aria-hidden="true"></span>
                 {u}
               </li>
             ))}
@@ -633,24 +627,24 @@ export function ResultsPage() {
     .at(-1)
   return (
     <>
-      <header class="mx-auto max-w-6xl px-4 pt-10 md:px-6 md:pt-16">
-        <h1 class="text-4xl leading-[1.05] font-medium tracking-tight text-fg md:text-5xl">Results</h1>
+      <header>
+        <div class="px-6 py-12 md:px-10 md:py-16">
+        <h1 class="text-4xl leading-[1.05] font-semibold tracking-[-0.03em] text-fg md:text-5xl">Results</h1>
         <p class="mt-5 max-w-2xl text-lg text-body">
           Accuracy, calibration, speed and parity, measured on our own GPUs and CPUs, with the raw data.
         </p>
         {newest ? <p class="mt-4 text-sm text-muted">Newest measurement: {newest.slice(0, 10)}</p> : null}
-        <p class="mt-6 max-w-2xl rounded-xl border border-line bg-subtle px-4 py-3 text-sm text-body">
+        <p class="mt-6 text-sm text-body">
           Scores and a page per model:{' '}
           <a href={benchUrl()} class="font-medium text-fg underline underline-offset-4">
             Ollaya Bench
           </a>
           .
         </p>
-        <div class="mt-10">
-          <Overview />
         </div>
+        <Overview />
       </header>
-      <div class="mx-auto mt-20 max-w-6xl px-4 pb-24 md:mt-28 md:px-6 lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-16">
+      <div class="rule px-6 py-16 md:px-10 md:py-20 lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-16">
         <nav aria-label="Sections" class="hidden lg:block">
           <ul class="sticky top-28 -ml-3.5 space-y-2.5 text-sm" data-scrollspy>
             {sections.map((s) => (

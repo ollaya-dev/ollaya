@@ -1,7 +1,7 @@
 //! Compare the `decider-vision-v1` runtime against golden fixtures from
 //! `ollaya_convert.families.decider_vision.goldens` (upstream `VisionDecisionModel` in fp32).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_decider_vision -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]
+//!     cargo run --release -p ollaya-runner --example parity_decider_vision -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]
 //!
 //! Every case is encoded first, before anything runs through the graphs:
 //! * a request upstream rejects must be rejected;
@@ -18,7 +18,6 @@
 //!
 //! `--latency` then times full requests (decode, resize, both graphs) with an image.
 
-use std::io::BufRead;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -28,6 +27,8 @@ use ollaya_runner::Device;
 use ollaya_runner::decider_vision::{VisionDeciderModel, VisionEncoding};
 use ollaya_runner::vision::{self, Rgb};
 use serde_json::Value;
+
+mod smoke;
 
 /// Largest raw-logit difference accepted (ONNX Runtime vs PyTorch fp32, TF32 off).
 const LOGIT_TOL: f64 = 1e-3;
@@ -113,9 +114,11 @@ struct Case {
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().collect();
+    let (args, smoke) = smoke::args();
     if args.len() < 3 {
-        bail!("usage: parity_decider_vision <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]");
+        bail!(
+            "usage: parity_decider_vision <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]"
+        );
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
@@ -126,10 +129,9 @@ fn main() -> Result<()> {
     let model = VisionDeciderModel::load(&PathBuf::from(&args[1]), device, None)?;
     println!("load {:.1}s on {device:?}", t.elapsed().as_secs_f64());
 
-    let file = std::fs::File::open(&args[2]).with_context(|| args[2].clone())?;
     let mut records = Vec::new();
-    for line in std::io::BufReader::new(file).lines() {
-        records.push(serde_json::from_str::<Value>(&line?)?);
+    for line in smoke::lines(&args[2], smoke)? {
+        records.push(serde_json::from_str::<Value>(&line)?);
     }
 
     // Encoding: rejections, pixels, token rows, slots and positions.

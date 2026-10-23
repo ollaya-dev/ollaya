@@ -3,9 +3,26 @@ import { highlight } from '../lib/highlight'
 import { Icon } from './Icon'
 
 export const btnPrimary =
-  'inline-flex items-center justify-center gap-2 rounded-full bg-btn px-5 py-2.5 text-sm font-medium text-btn-fg hover:bg-btn-hover'
+  'inline-flex items-center justify-center gap-2 rounded-md bg-btn px-5 py-2.5 text-sm font-medium text-btn-fg hover:bg-btn-hover'
 export const btnSecondary =
-  'inline-flex items-center justify-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm font-medium text-fg hover:bg-fill'
+  'inline-flex items-center justify-center gap-2 rounded-md border border-line px-5 py-2.5 text-sm font-medium text-fg hover:bg-fill'
+
+/** A page's opening band in the frame: the title, a lead, and whatever the page puts under them (a search box, tabs). */
+export function PageHead({ title, lead, children, kicker }: { title: Child; lead?: Child; children?: Child; kicker?: string }) {
+  return (
+    <header class="rule px-6 py-12 md:px-10 md:py-16">
+      {kicker ? <p class="text-[13px] tracking-[0.14em] text-muted uppercase">{kicker}</p> : null}
+      <h1 class={`max-w-3xl text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl ${kicker ? 'mt-3' : ''}`}>{title}</h1>
+      {lead ? <p class="mt-5 max-w-2xl text-lg text-body">{lead}</p> : null}
+      {children}
+    </header>
+  )
+}
+
+/** A band of the frame under the head: content with the page's padding and a rule above. */
+export function Band({ children, class: cls = '' }: { children: Child; class?: string }) {
+  return <div class={`rule px-6 py-10 md:px-10 md:py-12 ${cls}`}>{children}</div>
+}
 export const textLink = 'text-fg underline decoration-line-strong underline-offset-4 hover:decoration-current'
 export const quietLink = 'underline-offset-4 hover:text-fg hover:underline'
 
@@ -24,7 +41,7 @@ export function SizeBadge({ children }: { children: Child }) {
 /** Neutral outlined pill, e.g. "latest". */
 export function OutlinePill({ children }: { children: Child }) {
   return (
-    <span class="inline-flex items-center rounded-full border border-line-strong px-2 py-[1px] text-[11px] font-medium text-muted">
+    <span class="inline-flex items-center rounded-md border border-line-strong px-2 py-[1px] text-[11px] font-medium text-muted">
       {children}
     </span>
   )
@@ -58,7 +75,7 @@ export function Code({ code, lang }: { code: string; lang?: string }) {
 export function CodeBlock({ code, lang = 'shell', class: cls = '' }: { code: string; lang?: string; class?: string }) {
   return (
     <div class={`relative ${cls}`} data-copy-scope>
-      <pre class="h-full overflow-x-auto rounded-lg bg-code py-4 pr-12 pl-4 font-mono text-[13px] leading-relaxed text-fg">
+      <pre class="h-full overflow-x-auto rounded-md bg-code py-4 pr-12 pl-4 font-mono text-[13px] leading-relaxed text-fg">
         <Code code={code} lang={lang} />
       </pre>
       <CopyButton />
@@ -78,7 +95,7 @@ export interface CodeTab {
 export function CodeTabs({ id, label, tabs, selected }: { id: string; label: string; tabs: CodeTab[]; selected?: string }) {
   const active = selected ?? tabs[0]?.key
   return (
-    <div class="overflow-hidden rounded-lg border border-line" data-copy-scope>
+    <div class="overflow-hidden rounded-md border border-line" data-copy-scope>
       <div class="flex items-center justify-between gap-2 border-b border-line pr-1.5 pl-2">
         <div role="tablist" aria-label={label} class="-mb-px flex overflow-x-auto">
           {tabs.map((t) => {

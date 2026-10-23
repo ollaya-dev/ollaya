@@ -41,9 +41,9 @@ function NavList({ current }: { current?: string }) {
 
 function DocsShell({ current, title, children }: { current?: string; title: string; children: Child }) {
   return (
-    <div class="mx-auto max-w-6xl px-4 pt-8 md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:gap-12 md:px-6 md:pt-12 lg:gap-16">
-      <aside>
-        <details class="group mb-8 rounded-lg border border-line md:hidden">
+    <div class="md:grid md:grid-cols-[14rem_minmax(0,1fr)]">
+      <aside class="border-line px-6 pt-8 md:border-r md:py-10">
+        <details class="group mb-8 rounded-md border border-line md:hidden">
           <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium text-fg">
             <span>
               <span class="text-muted">Docs · </span>
@@ -60,7 +60,7 @@ function DocsShell({ current, title, children }: { current?: string; title: stri
           <NavList current={current} />
         </nav>
       </aside>
-      <div class="min-w-0 max-w-3xl">{children}</div>
+      <div class="min-w-0 px-6 py-10 md:px-10 md:py-12"><div class="max-w-3xl">{children}</div></div>
     </div>
   )
 }
@@ -68,16 +68,16 @@ function DocsShell({ current, title, children }: { current?: string; title: stri
 export function DocsIndex() {
   return (
     <DocsShell title="Overview">
-      <h1 class="text-[30px] leading-tight font-medium tracking-tight text-fg">Documentation</h1>
+      <h1 class="text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl">Documentation</h1>
       <p class="mt-3 text-lg text-body">
         Ollaya downloads and serves open decision models locally. A decision model reads a state (text, an email, a
         ticket, JSON) plus typed questions, and returns typed answers with calibrated probabilities in a single
         forward pass. It never generates text.
       </p>
-      <ul class="mt-10 grid gap-4 sm:grid-cols-2" role="list">
+      <ul class="mt-10 grid gap-px border border-line bg-line sm:grid-cols-2" role="list">
         {docPages.map((p) => (
           <li>
-            <a href={`/docs/${p.slug}`} class="group block h-full rounded-lg border border-line p-5 hover:border-line-strong">
+            <a href={`/docs/${p.slug}`} class="group block h-full bg-canvas p-5 hover:bg-subtle">
               <span class="flex items-center justify-between text-sm font-semibold text-fg">
                 {p.title}
                 <Icon name="arrowRight" class="size-4 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
@@ -100,7 +100,7 @@ export function DocView({ page, html }: { page: DocPage; html: string }) {
       <article class="prose" dangerouslySetInnerHTML={{ __html: html }}></article>
       <nav aria-label="Previous and next" class="mt-16 grid gap-4 border-t border-line pt-8 sm:grid-cols-2">
         {prev ? (
-          <a href={`/docs/${prev.slug}`} class="group rounded-lg border border-line p-4 hover:border-line-strong">
+          <a href={`/docs/${prev.slug}`} class="group rounded-md border border-line p-4 hover:border-line-strong">
             <span class="block text-[13px] text-muted">Previous</span>
             <span class="mt-0.5 block text-sm font-medium text-fg">{prev.title}</span>
           </a>
@@ -108,7 +108,7 @@ export function DocView({ page, html }: { page: DocPage; html: string }) {
           <span class="hidden sm:block"></span>
         )}
         {next ? (
-          <a href={`/docs/${next.slug}`} class="group rounded-lg border border-line p-4 text-right hover:border-line-strong">
+          <a href={`/docs/${next.slug}`} class="group rounded-md border border-line p-4 text-right hover:border-line-strong">
             <span class="block text-[13px] text-muted">Next</span>
             <span class="mt-0.5 block text-sm font-medium text-fg">{next.title}</span>
           </a>

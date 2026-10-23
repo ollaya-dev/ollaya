@@ -699,12 +699,16 @@ function playground(): HTMLElement {
 
 /** One row per answer: the question, the answer, a meter of ten segments and its probability. */
 function results(r: DecideResponse): HTMLElement {
+  // qwen3guard's `category` is the harm it would name if it judged the text unsafe, whatever the
+  // text (docs/families/qwen3guard.md), so it means little while `unsafe` is low.
+  const guard = r.answers.unsafe?.type === 'noul' && !!state.builtin.get(state.runModel)?.includes('category') && 'category' in r.answers
+  const quiet = guard && (r.answers.unsafe?.noul ?? 0) < 0.5
   const rows = Object.entries(r.answers).map(([q, a]) => {
     const [text, note, p] = describe(a)
     const lit = Math.round(p * 10)
     return h(
       'li',
-      { class: 'border-b border-line px-4 py-2.5' },
+      { class: `border-b border-line px-4 py-2.5${quiet && q === 'category' ? ' opacity-50' : ''}` },
       h('p', { class: `${mono} text-muted` }, q),
       h(
         'div',
@@ -720,6 +724,7 @@ function results(r: DecideResponse): HTMLElement {
     {},
     h('ul', { role: 'list' }, ...rows),
     h('p', { class: 'px-4 py-2.5 text-[11px] text-muted' }, 'Answered by ', h('span', { class: `${mono} text-body` }, r.routing?.model ?? r.model), ' in ', h('span', { class: 'text-fg' }, `${ms(r.total_duration / 1e6)} ms`)),
+    guard ? h('p', { class: 'px-4 pb-3 text-[11px] text-muted' }, 'category is the kind of harm the model would name if it judged the text unsafe. It only means something when unsafe is high.') : null,
   )
 }
 

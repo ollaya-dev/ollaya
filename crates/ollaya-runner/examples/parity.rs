@@ -1,6 +1,6 @@
 //! Compare the Rust runtime against golden fixtures produced by the `laya` Python package.
 //!
-//!     cargo run --release -p ollaya-runner --example parity -- <model-dir> <goldens.jsonl> [cpu|cuda|metal]
+//!     cargo run --release -p ollaya-runner --example parity -- <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--smoke]
 //!
 //! Per question:
 //! * encoder token ids and marker positions must match exactly;
@@ -9,13 +9,14 @@
 //! * when the fixture carries laya's own answers, the final answer in laya's shape must match
 //!   (strings exactly, numbers within rounding).
 
-use std::io::BufRead;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use ollaya_decision::{Answer, parse_questions};
 use ollaya_runner::{Device, OnnxModel};
 use serde_json::Value;
+
+mod smoke;
 
 fn argmax(p: &[f64]) -> usize {
     p.iter()
@@ -30,9 +31,9 @@ fn argmax(p: &[f64]) -> usize {
 fn main() -> Result<()> {
     // SAFETY: first thing in main, before any thread starts (MLX reads its settings once).
     unsafe { ollaya_runner::prepare_process() };
-    let args: Vec<String> = std::env::args().collect();
+    let (args, smoke) = smoke::args();
     if args.len() < 3 {
-        bail!("usage: parity <model-dir> <goldens.jsonl> [cpu|cuda|metal]");
+        bail!("usage: parity <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--smoke]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
@@ -40,14 +41,13 @@ fn main() -> Result<()> {
         _ => Device::Cpu,
     };
     let model = OnnxModel::load(&PathBuf::from(&args[1]), device, None)?;
-    let file = std::fs::File::open(&args[2]).with_context(|| args[2].clone())?;
 
     let (mut cases, mut questions, mut enc_bad, mut disagree, mut ans_checked, mut ans_bad) =
         (0, 0, 0, 0, 0, 0);
     let mut prob_diffs = Vec::new();
     let mut worst = (0.0, String::new());
-    for line in std::io::BufReader::new(file).lines() {
-        let rec: Value = serde_json::from_str(&line?)?;
+    for line in smoke::lines(&args[2], smoke)? {
+        let rec: Value = serde_json::from_str(&line)?;
         let id = rec["id"].as_str().unwrap_or("?").to_owned();
         let qs = parse_questions(&rec["questions"])?;
         let encoded = model.encode(&rec["state"], &qs)?;

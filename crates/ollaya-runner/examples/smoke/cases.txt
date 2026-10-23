@@ -1,0 +1,46 @@
+# The smoke subset of the parity goldens (`--smoke`, tier K1 in CLAUDE.md). A parity example run with
+# `--smoke` checks only the cases of its goldens whose id is listed here, with the same tolerances.
+# The subset is fixed: change it here, in review, never per run. About 40 questions per family.
+
+# The shared cases (ollaya_convert.cases), in every family's goldens.
+edge/long_state                     # a 10,000-character state; list and rubric choices, noul criteria, 10- and 2-level scores, one option
+edge/zh_bug                         # the same seven questions on a Chinese state
+edge/conversation                   # the same seven on a list of messages
+edge/many_options_40                # many options: the option budget, refused where a family caps options
+edge/many_options_77
+edge/only_single_option             # one option: refused where a family needs two
+edge/empty_state
+preset/triage/en_injection          # a prompt injection in the state
+preset/triage/ar_complaint          # a right-to-left script
+td/agent_trace_observability_000000 # typed-decisions' first row, in every family's goldens however many rows it took
+
+# The decoder families' own (llm_common.cases).
+dec/many_options_30                 # past 26 option letters
+dec/control_tokens                  # chat and control tokens in the user's text
+dec/json_array                      # a long JSON array, floats, bools and null
+
+# Family cases (each family's goldens.py). An id another family's goldens lack is skipped there.
+pplx/split
+pplx/one_too_long
+pplx/falsy
+strands/long_question
+strands/cut_options
+strands/whitespace
+von/over_max_len
+decima/255_choices
+decima/256_choices
+decima/eleven_levels
+v3/blank_state
+v3/long_state
+guard/bomb
+guard/pii
+img/scene_256x240
+img/scene_40x30
+img/json_state
+state-2
+choice-27
+choice-40
+noul-missing
+twin
+extra/truncated_state
+extra/twin_questions

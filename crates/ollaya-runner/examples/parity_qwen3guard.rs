@@ -1,7 +1,7 @@
 //! Compare the `qwen3guard-gen-v1` runtime against golden fixtures from
 //! `ollaya_convert.families.qwen3guard.parity` (transformers fp32, TF32 off).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_qwen3guard -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]
+//!     cargo run --release -p ollaya-runner --example parity_qwen3guard -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]
 //!
 //! Every golden state is encoded with the model's preset first:
 //! * both rows' token ids (the chat template rendered upstream) and last positions must match;
@@ -15,15 +15,16 @@
 //!
 //! `--latency` then times full requests of the whole preset (`run`: tokenize, encode, forward).
 
-use std::io::BufRead;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use ollaya_decision::{Questions, parse_questions};
 use ollaya_runner::Device;
 use ollaya_runner::qwen3guard::GuardModel;
 use serde_json::{Value, json};
+
+mod smoke;
 
 /// Largest raw-logit difference accepted (ONNX Runtime vs PyTorch fp32, TF32 off).
 const LOGIT_TOL: f64 = 1e-3;
@@ -78,9 +79,11 @@ fn check_preset_rules(model: &GuardModel, preset: &Questions) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().collect();
+    let (args, smoke) = smoke::args();
     if args.len() < 3 {
-        bail!("usage: parity_qwen3guard <model-dir> <goldens.jsonl> [cpu|cuda] [--latency]");
+        bail!(
+            "usage: parity_qwen3guard <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]"
+        );
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
@@ -93,10 +96,9 @@ fn main() -> Result<()> {
     let preset = model.layout.preset.clone();
     check_preset_rules(&model, &preset)?;
 
-    let file = std::fs::File::open(&args[2]).with_context(|| args[2].clone())?;
     let mut records = Vec::new();
-    for line in std::io::BufReader::new(file).lines() {
-        records.push(serde_json::from_str::<Value>(&line?)?);
+    for line in smoke::lines(&args[2], smoke)? {
+        records.push(serde_json::from_str::<Value>(&line)?);
     }
 
     // Encoding: both rows of every state.

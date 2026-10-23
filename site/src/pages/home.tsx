@@ -163,7 +163,6 @@ function Hero({ origin }: { origin: string }) {
         <i class="b"></i>
         <i class="c"></i>
       </div>
-      <div class="ascii" data-ascii aria-hidden="true"></div>
       <div class="frame relative px-5 pt-32 pb-16 text-center md:pt-40">
         <h1 id="rd-hero" class="mx-auto max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
           The decision layer <br class="hidden md:block" />
@@ -238,14 +237,14 @@ function ExamplePanel({ ex, hidden }: { ex: Recording; hidden: boolean }) {
   return (
     <div data-example hidden={hidden}>
       <div class="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
-        <div class="border-b border-line p-5 md:border-r md:border-b-0">
-          <p class="text-[13px] text-muted">A support message comes in</p>
-          <blockquote class="term-row mt-3 text-[15px] leading-relaxed text-fg" style="--row:0">
+        <div class="flex flex-col border-b border-line p-6 md:border-r md:border-b-0">
+          <p class="text-sm text-muted">A support message comes in</p>
+          <blockquote class="term-row mt-4 text-xl leading-snug font-medium text-fg md:text-[22px]" style="--row:0">
             “{ex.message}”
           </blockquote>
-          <p class="mt-5 text-[13px] text-muted">
-            Ollaya asks <span class="font-mono text-[12px] text-body">{ex.model}</span> the {n} questions of the{' '}
-            <span class="font-mono text-[12px] text-body">{ex.preset}</span> preset, in one request.
+          <p class="mt-8 text-sm leading-relaxed text-muted md:mt-auto md:pt-8">
+            Ollaya asks <span class="font-mono text-[13px] text-body">{ex.model}</span> the {n} questions of the{' '}
+            <span class="font-mono text-[13px] text-body">{ex.preset}</span> preset, in one request.
           </p>
         </div>
         <ol class="divide-y divide-line" role="list">
@@ -617,7 +616,7 @@ function Api() {
 export function ModelCard({ m }: { m: (typeof catalog)[number] }) {
   const summary = (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).replace(/\.$/, '')
   return (
-    <a href={`/library/${m.name}`} class="group flex h-full flex-col bg-canvas p-6 transition-colors hover:bg-subtle">
+    <a href={`/library/${m.name}`} class="group flex h-full w-full flex-col bg-canvas p-6 transition-colors hover:bg-subtle">
       <div class="flex items-baseline justify-between gap-3">
         <span class="font-mono text-[17px] text-fg group-hover:underline underline-offset-4">{m.name}</span>
         <span class="truncate text-xs text-muted">{m.publisher?.name ?? ''}</span>

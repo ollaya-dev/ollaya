@@ -48,12 +48,12 @@ const shortLicense = (l: string) =>
 
 function DeviceSwitch({ current }: { current: Device }) {
   return (
-    <nav aria-label="Hardware" class="flex flex-wrap gap-1 rounded-full border border-line p-1">
+    <nav aria-label="Hardware" class="flex flex-wrap gap-1 rounded-md border border-line p-1">
       {devices.map((d) => (
         <a
           href={deviceUrl(d)}
           aria-current={d === current ? 'page' : undefined}
-          class={`rounded-full px-3.5 py-1.5 text-sm ${d === current ? 'bg-btn font-medium text-btn-fg' : 'text-body hover:bg-fill hover:text-fg'}`}
+          class={`rounded-md px-3.5 py-1.5 text-sm ${d === current ? 'bg-btn font-medium text-btn-fg' : 'text-body hover:bg-fill hover:text-fg'}`}
         >
           {d.name}
           <span class={`ml-1.5 text-xs ${d === current ? 'opacity-70' : 'text-muted'}`}>{d.device === 'cpu' ? 'CPU' : 'GPU'}</span>
@@ -134,7 +134,7 @@ function LeaderTable({ d }: { d: Device }) {
     )
   }
   return (
-    <div class="overflow-x-auto rounded-xl border border-line">
+    <div class="overflow-x-auto rounded-md border border-line">
       <table class="w-full min-w-[920px] text-left text-[13px]" data-sortable>
         <thead class="bg-subtle text-xs text-muted">
           <tr>
@@ -172,7 +172,7 @@ export function LeaderboardPage({ device }: { device: Device }) {
   const front = frontier(device)
   return (
     <>
-      <section class="mx-auto max-w-6xl px-4 pt-12 md:px-6 md:pt-16">
+      <section class="mx-auto max-w-6xl px-6 pt-12 md:px-10 md:pt-16">
         <p class="font-mono text-xs tracking-wide text-muted uppercase">
           Edition {edition.id} · {dateLabel(edition.date)} · Ollaya {edition.ollaya}
         </p>
@@ -191,7 +191,7 @@ export function LeaderboardPage({ device }: { device: Device }) {
         </dl>
       </section>
 
-      <section class="mx-auto mt-12 max-w-6xl px-4 md:px-6" aria-labelledby="board-title">
+      <section class="mx-auto mt-12 max-w-6xl px-6 md:px-10" aria-labelledby="board-title">
         <div class="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 id="board-title" class="text-xl font-semibold tracking-tight text-fg">
@@ -206,7 +206,7 @@ export function LeaderboardPage({ device }: { device: Device }) {
           {answers(device).map(({ q, r }) => {
             const s = r.speed.get(device.slug)
             return (
-              <div class="rounded-xl border border-line p-4">
+              <div class="rounded-md border border-line p-4">
                 <dt class="text-xs text-muted">{q}</dt>
                 <dd class="mt-1">
                   <ModelLink name={r.name} class="text-[15px] font-semibold" />
@@ -219,13 +219,13 @@ export function LeaderboardPage({ device }: { device: Device }) {
           })}
         </dl>
 
-        <figure class="mt-6 rounded-xl border border-line p-4 md:p-6">
+        <figure class="mt-6 rounded-md border border-line p-4 md:p-6">
           <figcaption class="flex flex-wrap items-baseline justify-between gap-2">
             <span class="text-sm font-medium text-fg">Score against latency</span>
             <span class="text-xs text-muted">
-              <span class="mr-1.5 inline-block size-2.5 rounded-full bg-us align-[-1px]"></span>Pareto frontier ({front.size}): nothing is
+              <span class="mr-1.5 inline-block size-2.5 rounded-md bg-us align-[-1px]"></span>Pareto frontier ({front.size}): nothing is
               both faster and higher scoring
-              <span class="mr-1.5 ml-4 inline-block size-2.5 rounded-full bg-faint align-[-1px]"></span>other models
+              <span class="mr-1.5 ml-4 inline-block size-2.5 rounded-md bg-faint align-[-1px]"></span>other models
             </span>
           </figcaption>
           <div class="mt-4 hidden sm:block">
@@ -309,7 +309,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
     `  --machine my-machine --device cuda --out latency.json`,
   ].join('\n')
   return (
-    <div class="mx-auto max-w-6xl px-4 pt-10 md:px-6">
+    <div class="mx-auto max-w-6xl px-6 pt-10 md:px-10">
       <nav aria-label="Breadcrumb" class="text-sm text-muted">
         <a href="/" class="underline-offset-4 hover:text-fg hover:underline">
           Leaderboard
@@ -335,7 +335,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
               <Stat label="typed-decisions" value={pct1(r.typed?.accuracy)} detail={r.typed?.trained_on_split ? 'trained on its train split' : 'accuracy, %'} />
             </dl>
           ) : (
-            <p class="mt-8 rounded-xl border border-line p-4 text-sm text-muted">
+            <p class="mt-8 rounded-md border border-line p-4 text-sm text-muted">
               {r.builtin
                 ? 'This model answers only its own built-in questions, so the accuracy tasks do not apply. Its speed and memory are below.'
                 : 'No score in this edition.'}
@@ -362,7 +362,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
               <h2 id="acc-title" class="text-lg font-semibold tracking-tight text-fg">
                 Accuracy and calibration
               </h2>
-              <div class="mt-4 overflow-x-auto rounded-xl border border-line">
+              <div class="mt-4 overflow-x-auto rounded-md border border-line">
                 <table class="w-full min-w-[560px] text-left text-sm">
                   <thead class="bg-subtle text-xs text-muted">
                     <tr>
@@ -433,7 +433,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
             <h2 id="speed-title" class="text-lg font-semibold tracking-tight text-fg">
               Speed and memory
             </h2>
-            <div class="mt-4 overflow-x-auto rounded-xl border border-line">
+            <div class="mt-4 overflow-x-auto rounded-md border border-line">
               <table class="w-full min-w-[640px] text-left text-sm">
                 <thead class="bg-subtle text-xs text-muted">
                   <tr>
@@ -499,7 +499,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
               Parity with the authors’ code
             </h2>
             {r.parity.length ? (
-              <div class="mt-4 overflow-x-auto rounded-xl border border-line">
+              <div class="mt-4 overflow-x-auto rounded-md border border-line">
                 <table class="w-full min-w-[560px] text-left text-sm">
                   <thead class="bg-subtle text-xs text-muted">
                     <tr>
@@ -556,7 +556,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
         </div>
 
         <aside class="min-w-0 space-y-6 lg:pt-2">
-          <div class="rounded-xl border border-line p-4">
+          <div class="rounded-md border border-line p-4">
             <dl>
               <Kv k="Runtime" v={r.runtime} />
               <Kv k="Parameters" v={r.params ?? '–'} />
@@ -565,7 +565,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
               <Kv k="Edition" v={edition ? edition.id : '–'} />
             </dl>
           </div>
-          <div class="rounded-xl border border-line p-4 text-sm">
+          <div class="rounded-md border border-line p-4 text-sm">
             <p class="font-medium text-fg">Run it</p>
             <div class="mt-2">
               <CodeBlock code={`ollaya run ${r.name}`} lang="shell" />
@@ -575,7 +575,7 @@ export function ModelPage({ r, origin, main }: { r: Row; origin: string; main: s
             </a>
           </div>
           {r.score ? (
-            <div class="rounded-xl border border-line p-4 text-sm">
+            <div class="rounded-md border border-line p-4 text-sm">
               <p class="font-medium text-fg">Badge</p>
               <img src={badgeUrl(r.name)} alt={`Ollaya Bench badge for ${r.name}`} class="mt-3" />
               <p class="mt-3 text-xs text-muted">For a model card or a README:</p>
@@ -617,7 +617,7 @@ export function MethodologyPage() {
   const flagged = Object.entries(edition?.trained_on ?? {})
   return (
     <div class="pb-8">
-      <section class="mx-auto max-w-4xl px-4 pt-12 md:px-6">
+      <section class="mx-auto max-w-4xl px-6 pt-12 md:px-10">
         <p class="font-mono text-xs tracking-wide text-muted uppercase">Methodology · Edition {edition?.id}</p>
         <h1 class="mt-3 text-4xl font-medium tracking-tight text-fg">How we measure</h1>
         <p class="mt-4 max-w-2xl text-[17px] leading-relaxed text-body">
@@ -638,7 +638,7 @@ export function MethodologyPage() {
             ['Authors can respond', 'Each model runs with its author’s recommended temperature and precision. Corrections go through public GitHub issues.'],
             ['Contamination flagged', 'A model trained on a task’s train split carries a flag, and its score leaves that task out, so a result on seen data never counts as a held-out one.'],
           ].map(([t, d]) => (
-            <li class="rounded-xl border border-line p-4">
+            <li class="rounded-md border border-line p-4">
               <p class="font-medium text-fg">{t}</p>
               <p class="mt-1 text-sm leading-relaxed text-body">{d}</p>
             </li>
@@ -651,7 +651,7 @@ export function MethodologyPage() {
           <p>
             A model’s score is the mean, over 14 tasks with equal weight, of its <em>chance-corrected accuracy</em> on each task:
           </p>
-          <p class="rounded-lg bg-code px-4 py-3 font-mono text-sm text-fg">skill = 100 × (accuracy − chance) / (1 − chance)</p>
+          <p class="rounded-md bg-code px-4 py-3 font-mono text-sm text-fg">skill = 100 × (accuracy − chance) / (1 − chance)</p>
           <p>
             where <em>chance</em> is the mean of 1/K over the task’s questions (K options), so 0 is what guessing gets and 100 is
             every answer right. A rejected request (a question with more options than the model takes, an input longer than its
@@ -671,7 +671,7 @@ export function MethodologyPage() {
       </Section>
 
       <Section id="tasks" title="The tasks" lead="5,880 questions per model: three answer types (choice, noul, score), human labels and gold distributions.">
-        <div class="overflow-x-auto rounded-xl border border-line">
+        <div class="overflow-x-auto rounded-md border border-line">
           <table class="w-full min-w-[720px] text-left text-sm">
             <thead class="bg-subtle text-xs text-muted">
               <tr>
@@ -759,7 +759,7 @@ export function MethodologyPage() {
           {[...new Set(devices.map((d) => d.machine))].map((id) => {
             const m = machines[id]!
             return (
-              <div class="rounded-xl border border-line p-4 text-sm">
+              <div class="rounded-md border border-line p-4 text-sm">
                 <p class="font-medium text-fg">{m.label}</p>
                 <dl class="mt-2">
                   <Kv k="GPU" v={m.gpus.join(', ')} />
@@ -825,7 +825,7 @@ export function MethodologyPage() {
             The tools are in the repository and need only Python's standard library and an Ollaya install. On your own
             machine:
           </p>
-          <pre class="overflow-x-auto rounded-xl border border-line bg-subtle p-4 font-mono text-[12px] leading-relaxed text-fg">
+          <pre class="overflow-x-auto rounded-md border border-line bg-subtle p-4 font-mono text-[12px] leading-relaxed text-fg">
             {`python -m ollaya_convert.bench_run --machine community-<gpu> --out runs/ \\
     --models kev:4b d1:3b --suites latency-cuda typed \\
     --typed-data typed-decisions-test.jsonl`}
@@ -873,7 +873,7 @@ export function DataPage() {
   const files = edition?.runs ?? []
   return (
     <div class="pb-8">
-      <section class="mx-auto max-w-4xl px-4 pt-12 md:px-6">
+      <section class="mx-auto max-w-4xl px-6 pt-12 md:px-10">
         <p class="font-mono text-xs tracking-wide text-muted uppercase">Data · Edition {edition?.id}</p>
         <h1 class="mt-3 text-4xl font-medium tracking-tight text-fg">Every number, as the tools wrote it</h1>
         <p class="mt-4 max-w-2xl text-[17px] leading-relaxed text-body">
@@ -882,7 +882,7 @@ export function DataPage() {
         </p>
       </section>
       <Section id="files" title="Files">
-        <ul class="divide-y divide-line rounded-xl border border-line">
+        <ul class="divide-y divide-line rounded-md border border-line">
           <li class="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3 text-sm">
             <a href="/api/v1/leaderboard.json" class="font-mono text-fg underline underline-offset-4">
               /api/v1/leaderboard.json
