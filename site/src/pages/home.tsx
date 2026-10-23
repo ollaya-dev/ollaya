@@ -204,7 +204,7 @@ function Scores({ answersOnly = false }: { answersOnly?: boolean }) {
   )
 }
 
-function TerminalMock() {
+export function TerminalMock() {
   const n = hero.questions.length
   return (
     // On wide screens the captions are taken out of the flow, so the hero text centres on the window.
@@ -288,7 +288,7 @@ function Section({
 // five-question request on the edition's GPU. Both from results/ (data/numbers.ts). One row per family, its most accurate
 // tag; -fp16 tags sit under their base tag, and models trained on the dataset's train split carry an asterisk.
 // Jev's accuracy is TypeSafe's report; its latency is the hosted API in third-party benchmarks, network included.
-const scoreboard: { tag: string; acc: number; ms: number; pick?: boolean; note?: string; trained?: boolean }[] = (() => {
+export const scoreboard: { tag: string; acc: number; ms: number; pick?: boolean; note?: string; trained?: boolean }[] = (() => {
   const best = new Map<string, { tag: string; acc: number; ms: number }>()
   for (const [tag, row] of rowsOf('typed')) {
     const acc = row.accuracy as number
@@ -306,7 +306,7 @@ const scoreboard: { tag: string; acc: number; ms: number; pick?: boolean; note?:
       trained: trainedOnTyped(r.tag),
     }))
 })()
-const JEV = { acc: 0.738, text: '236–276 ms' }
+export const JEV = { acc: 0.738, text: '236–276 ms' }
 const ACC_SCALE = 1
 const ACC_AXIS = [0, 0.25, 0.5, 0.75, 1]
 const accPct = (a: number) => `${((a / ACC_SCALE) * 100).toFixed(2)}%`
@@ -432,7 +432,7 @@ const VS_TAGS: [string, VsRun['server']][] = [
   ['nimble:9b', 'ollaya'], ['kev:4b', 'ollaya'], ['kev:4b-q8_0', 'ollama'], ['tev1:0.8b', 'ollama'],
   ['laya:multilingual', 'ollaya'],
 ]
-const vsRuns: VsRun[] = VS_TAGS.map(([tag, server]) => {
+export const vsRuns: VsRun[] = VS_TAGS.map(([tag, server]) => {
   // Ollama's names stay Ollama's: its `pplx-decider` is the 27B, not Ollaya's `pplx-decider:latest`.
   const r = publicBench?.results.find((x) => x.server === server && (server === 'ollama' ? x.model : shortName(x.model)) === tag)
   if (!r) throw new Error(`home: no ${server} public-benchmark row for ${tag} in results/`)
@@ -440,17 +440,17 @@ const vsRuns: VsRun[] = VS_TAGS.map(([tag, server]) => {
 }).sort((a, b) => b.acc - a.acc)
 // The section's copy says Ollaya runs the most accurate model; fail the build if results/ stop saying so.
 if (vsRuns[0]!.server !== 'ollaya') throw new Error(`home: ${vsRuns[0]!.tag} on Ollama is now the most accurate; update the vs-ollama copy`)
-const vs =(tag: string, server: VsRun['server']) => vsRuns.find((r) => r.tag === tag && r.server === server)!
-const OLLAMA = `Ollama ${publicBench?.servers.ollama ?? ''}`.trim()
+export const vs = (tag: string, server: VsRun['server']) => vsRuns.find((r) => r.tag === tag && r.server === server)!
+export const OLLAMA = `Ollama ${publicBench?.servers.ollama ?? ''}`.trim()
 /** How many times faster Ollama is on the same weights, as a range over the pairs both serve. */
-function speedup() {
+export function speedup() {
   const r = [['nimble:9b', 'nimble'], ['clef:flash', 'clef-flash'], ['kev:4b', 'kev:4b-q8_0']].map(([a, b]) => vs(a!, 'ollaya').ms / vs(b!, 'ollama').ms)
   const lo = Math.floor(Math.min(...r))
   const hi = Math.round(Math.max(...r))
   return lo === hi ? String(lo) : `${lo} to ${hi}`
 }
 // A number TypeSafe publishes for its hosted model (the typed-decisions dataset card); not one we measured.
-const JEV_TYPED = '0.738'
+export const JEV_TYPED = '0.738'
 // The accuracy axis of the comparison: a dot on a focused range, not a bar from zero, so the
 // differences between 0.58 and 0.77 are visible; the ticks print the range.
 const VS_MIN = 0.55
@@ -458,7 +458,7 @@ const VS_MAX = 0.85
 const VS_TICKS = [0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85]
 const vsPos = (a: number) => `${(((Math.min(Math.max(a, VS_MIN), VS_MAX) - VS_MIN) / (VS_MAX - VS_MIN)) * 100).toFixed(2)}%`
 
-const vsFeatures: { label: string; ollaya: string; ollama: string }[] = [
+export const vsFeatures: { label: string; ollaya: string; ollama: string }[] = [
   { label: 'Decision models', ollaya: `${catalog.length} families`, ollama: '9' },
   { label: 'CPU-fast encoders', ollaya: 'laya, largha, nli, gliclass, von, decima', ollama: 'laya' },
   { label: 'Probabilities', ollaya: "Author's temperature", ollama: 'Raw softmax' },
@@ -603,7 +603,7 @@ function VersusOllama() {
   )
 }
 
-const compatRequest = `# Point the TypeSafe SDK at Ollaya
+export const compatRequest = `# Point the TypeSafe SDK at Ollaya
 export TYPESAFE_BASE_URL=${LOCAL_API}
 export TYPESAFE_API_KEY=local        # any value works
 export TYPESAFE_DEFAULT_MODEL=winnow:e4b
@@ -625,7 +625,7 @@ curl ${LOCAL_API}/v1/systemone -d '{
     }
   }'`
 
-const compatResponse = `{
+export const compatResponse = `{
   "model": "winnow:e4b",
   "answers": {
     "intent": {
