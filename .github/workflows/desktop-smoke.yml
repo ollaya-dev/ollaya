@@ -1,0 +1,152 @@
+# Temporary: installs the desktop app from a desktop.yml run on a fresh Windows and Linux runner,
+# drives its server like a client and uploads screenshots of the window. Remove before merging.
+name: Desktop smoke test
+
+on:
+  push:
+    branches: [desktop-redesign]
+    paths: [.github/workflows/desktop-smoke.yml]
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  # The desktop.yml run whose installers to test, and the library the app shows.
+  RUN_ID: '39968630567'
+  OLLAYA_LIBRARY_URL: https://share.cobanov.dev/2d22a28b-0657-412f-bc74-7c8478e64aba.json
+  DECIDE: '{"model":"largha","preset":"triage","state":"I was charged twice this month"}'
+  UNKNOWN: '{"model":"nope","state":"x","questions":{"a":{"type":"noul","instructions":"?"}}}'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Download the installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download ${{ env.RUN_ID }} --repo ${{ github.repository }} --name desktop-x86_64-pc-windows-msvc --dir dl
+      - name: Install, run, drive, quit, uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory shots | Out-Null
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Add-Type @'
+          using System; using System.Runtime.InteropServices;
+          public static class W {
+            public struct RECT { public int Left, Top, Right, Bottom; }
+            [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+            [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+            [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, IntPtr e);
+            [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+          }
+          '@
+          [W]::SetProcessDPIAware() | Out-Null
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("shots\$name.png"); $g.Dispose(); $bmp.Dispose()
+          }
+          function Api($path, $body) { Invoke-RestMethod "http://127.0.0.1:11435$path" -Method Post -ContentType application/json -Body $body }
+
+          $setup = Get-ChildItem dl -Filter *-setup.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList '/S' -Wait
+          $dir = Join-Path $env:LOCALAPPDATA 'Ollaya'
+          Get-ChildItem $dir -Recurse -File | Format-Table FullName, Length -AutoSize | Out-String -Width 200
+          $exe = Get-ChildItem $dir -Filter *.exe | Where-Object { $_.Name -notmatch '^(ollaya|uninstall)\.exe$' } | Select-Object -First 1
+          $app = Start-Process $exe.FullName -PassThru
+          for ($i = 0; $i -lt 60; $i++) { try { Invoke-RestMethod http://127.0.0.1:11435/api/version; break } catch { Start-Sleep 1 } }
+          Start-Sleep 8
+          Shot 1-first-run
+          Get-Process | Where-Object { $_.Name -match 'ollaya|msedgewebview2|conhost' } | Format-Table Name, Id, MainWindowTitle -AutoSize
+
+          Api /api/pull '{"model":"largha","stream":false}'
+          1..60 | ForEach-Object { Api /api/decide $env:DECIDE | Out-Null }
+          try { Api /v1/decisions $env:UNKNOWN } catch { "expected: $($_.Exception.Message)" }
+          Start-Sleep 4
+          Shot 2-models
+
+          $app.Refresh()
+          $r = New-Object W+RECT
+          [W]::GetWindowRect($app.MainWindowHandle, [ref]$r) | Out-Null
+          "window: $($r.Left),$($r.Top) - $($r.Right),$($r.Bottom)"
+          [W]::SetForegroundWindow($app.MainWindowHandle) | Out-Null
+          # The sidebar's Overview entry, below the title bar and the header.
+          [W]::SetCursorPos($r.Left + 75, $r.Top + 120) | Out-Null
+          [W]::mouse_event(2, 0, 0, 0, [IntPtr]::Zero); [W]::mouse_event(4, 0, 0, 0, [IntPtr]::Zero)
+          Start-Sleep 3
+          Shot 3-overview
+          Invoke-RestMethod http://127.0.0.1:11435/api/activity | ConvertTo-Json -Depth 4 | Select-Object -First 1 | ForEach-Object { $_.Substring(0, [Math]::Min(400, $_.Length)) }
+
+          # Closing the window quits the app, which stops the server it started.
+          $app.CloseMainWindow() | Out-Null
+          Start-Sleep 6
+          $left = Get-Process | Where-Object { $_.Name -match '^ollaya' }
+          "after close: $(@($left).Count) ollaya processes"
+          try { Invoke-RestMethod http://127.0.0.1:11435/api/version -TimeoutSec 2; 'server still up' } catch { 'server stopped' }
+          $left | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          Start-Process (Join-Path $dir 'uninstall.exe') -ArgumentList '/S' -Wait
+          Start-Sleep 3
+          "after uninstall, install dir exists: $(Test-Path $dir)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smoke-windows
+          path: shots/*
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download the package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download ${{ env.RUN_ID }} --repo ${{ github.repository }} --name desktop-x86_64-unknown-linux-gnu --dir dl
+      - name: Install, run, drive, quit
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ./dl/Ollaya-linux-amd64.deb xvfb xdotool imagemagick >/dev/null
+          dpkg-deb -c dl/Ollaya-linux-amd64.deb | awk '{print $6}' | grep -E 'bin/|\.desktop$'
+          mkdir shots
+          Xvfb :99 -screen 0 1280x860x24 &
+          export DISPLAY=:99
+          sleep 2
+          app=$(dpkg-deb -c dl/Ollaya-linux-amd64.deb | awk '{print $6}' | grep '^./usr/bin/' | grep -v '/ollaya$' | sed 's/^\.//' | head -1)
+          "$app" > app.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:11435/api/version && break; sleep 1; done; echo
+          W=$(xdotool search --sync --onlyvisible --name Ollaya | head -1)
+          sleep 8
+          import -window root shots/1-first-run.png
+          curl -s localhost:11435/api/pull -d '{"model":"largha","stream":false}'; echo
+          for i in $(seq 1 60); do curl -s -o /dev/null localhost:11435/api/decide -d "$DECIDE"; done
+          curl -s localhost:11435/v1/decisions -d "$UNKNOWN"; echo
+          sleep 4
+          import -window root shots/2-models.png
+          xdotool mousemove --window "$W" 75 90 click 1
+          sleep 3
+          import -window root shots/3-overview.png
+          curl -s localhost:11435/api/activity | head -c 400; echo
+          xdotool windowclose "$W" || xdotool key --window "$W" ctrl+q
+          sleep 6
+          pgrep -fl ollaya || echo "no ollaya processes after close"
+          curl -s -m 2 localhost:11435/api/version || echo "server stopped"
+          cat app.log | tail -20
+      - name: The AppImage starts
+        run: |
+          pkill -f ollaya || true
+          chmod +x dl/Ollaya-linux-x86_64.AppImage
+          export DISPLAY=:98; Xvfb :98 -screen 0 1280x860x24 & sleep 2
+          ./dl/Ollaya-linux-x86_64.AppImage --appimage-extract-and-run > appimage.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:11435/api/version && break; sleep 1; done; echo
+          sleep 6
+          import -window root shots/4-appimage.png
+          tail -10 appimage.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smoke-linux
+          path: shots/*
