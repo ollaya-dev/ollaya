@@ -1,4 +1,4 @@
-Coba is Ollaya's own family of English **decision models**: Laya's decision network on the Ettin encoders, from 75M to 1.1B parameters, distilled from `pplx-decider:flash` on about 350,000 permissively licensed questions. It reads a *state* (a message, a ticket, a JSON object, an agent's next tool call) and typed questions, and returns calibrated probabilities for every question in one forward pass. It never generates text. The ternary tags also run in a web page, on the visitor's device: [try one]({{SITE_ORIGIN}}/try).
+Coba is Ollaya's own family of English **decision models**: Laya's decision network on the Ettin encoders, from 75M to 1.1B parameters, distilled from `pplx-decider:flash` on about 400,000 permissively licensed questions in 344,000 states. It reads a *state* (a message, a ticket, a JSON object, an agent's next tool call) and typed questions, and returns calibrated probabilities for every question in one forward pass. It never generates text. The ternary tags also run in a web page, on the visitor's device: [try one]({{SITE_ORIGIN}}/try).
 
 ## Models
 

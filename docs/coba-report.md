@@ -118,8 +118,8 @@ tags).[^26]
 The main set is capped at 400,000 questions. Each of the four datasets sampled whole may fill at most 25% of the cap;
 the jev sub-sources share the rest with one equal per-source cap, found by water-filling.[^27] The result is
 399,962 questions.[^19] They sit in 343,955 rows (states): 287,281 choice, 69,630 noul and 43,051 score
-questions.[^106] The model card and the library page describe the training data as "about 350,000" questions;[^28]
-that figure matches the row count, not the question count.
+questions.[^106] The model card and the library page round these to about 400,000 questions in 344,000
+states.[^28]
 
 ### 3.3 Teacher labels
 

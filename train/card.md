@@ -74,9 +74,9 @@ outputs on 2,383 questions (every decision the same, probabilities within {{pari
 - **Network**: Laya's (`laya` 0.3.7): the question, a `[MASK]` before every option and the state in one
   sequence of up to 512 tokens; a two-layer transformer head scores each option at its marker. Encoder:
   Ettin {{size}} (ModernBERT architecture, MIT).
-- **Data**: about 350,000 English questions from permissively licensed decision datasets (Apache-2.0, MIT,
-  CC BY, CC BY-SA, CC0, BSD; every source and its license is in `DATA_SOURCES.tsv`){{indomain_data}}. Rows from
-  datasets with a non-commercial or unknown license were dropped.
+- **Data**: about 400,000 English questions in 344,000 states from permissively licensed decision datasets
+  (Apache-2.0, MIT, CC BY, CC BY-SA, CC0, BSD; every source and its license is in `DATA_SOURCES.tsv`){{indomain_data}}.
+  Rows from datasets with a non-commercial or unknown license were dropped.
 - **Labels**: each question's gold answer where the data has one, mixed with the full probability distribution
   of `pplx-decider:flash` (Apache-2.0), computed through Ollaya.
 - **Recipe**: soft cross-entropy plus the ranked probability score on score questions; options shuffled half the
