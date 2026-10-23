@@ -13,19 +13,23 @@ import sys
 
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# tag: (run, backbone size, ternary?, typed, public, public kind, parity, web graph MB)
+# tag: (run, backbone size, ternary?, typed, public, public kind, parity, web graph MB). The release's measurements
+# (Ollaya 0.17.0, Ollaya Bench 2026.10), to three places: typed and public from results/runs/2026-10-23-typed-decisions-
+# and -public-benchmark-rtx5090-cuda.json, parity the largest fp32 difference over the CPU, CUDA and Metal runs
+# (results/runs/2026-10-23-parity-*-coba.json).
 LINEUP = {
-    "1b": ("fp1b-T", "1b", False, 0.621, 0.624, "zero-shot", "3.8e-6", None),
-    "400m": ("fp400-T", "400m", False, 0.606, 0.605, "zero-shot", "4.9e-6", None),
-    "400m-ternary": ("t400-id-T3w-e2", "400m", True, 0.571, 0.723, "in-domain", "1.9e-6", 147),
-    "150m-ternary": ("t150-id-T3w-e2", "150m", True, 0.547, 0.699, "in-domain", "3.4e-6", 66),
-    "68m-ternary": ("t68-id-T3w-e2", "68m", True, 0.493, 0.677, "in-domain", "1.4e-6", 35),
+    "1b": ("fp1b-T", "1b", False, 0.608, 0.561, "zero-shot", "4.9e-6", None),
+    "400m": ("fp400-T", "400m", False, 0.591, 0.561, "zero-shot", "1.4e-5", None),
+    "400m-ternary": ("t400-id-T3w-e2", "400m", True, 0.559, 0.654, "in-domain", "3.4e-6", 147),
+    "150m-ternary": ("t150-id-T3w-e2", "150m", True, 0.535, 0.622, "in-domain", "3.6e-6", 66),
+    "68m-ternary": ("t68-id-T3w-e2", "68m", True, 0.483, 0.603, "in-domain", "2.8e-6", 35),
 }
 
+# The edition's runs: pplx-decider:flash from 2026-10-19, the others from 2026-10-14.
 REFERENCE = [
     ("`pplx-decider:flash` (the teacher, 4B decoder)", "bf16", "0.726", "0.824 zero-shot"),
-    ("`decider:0.8b` (0.8B decoder)", "bf16", "0.46–0.51", "0.669 zero-shot"),
-    ("`laya:en` (Laya's English model)", "fp32", "–", "0.532"),
+    ("`decider:0.8b` (0.8B decoder)", "bf16", "0.506", "0.669 zero-shot"),
+    ("`laya:en` (Laya's English model)", "fp32", "0.358", "0.532"),
 ]
 
 TERNARY_VARIANT = (
