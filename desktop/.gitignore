@@ -6,3 +6,5 @@ src-tauri/gen/
 src-tauri/binaries/
 # llama.cpp's libraries, staged by scripts/llama-cpp.sh for the bundle's resources.
 src-tauri/lib/
+# MLX's Metal library, staged by the build for the bundle's resources.
+src-tauri/mlx_metal/

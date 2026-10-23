@@ -1,6 +1,15 @@
-// Ollaya desktop: the server's status and switch, the model library with downloads, and a panel to
-// run a model on a text or JSON state. Plain DOM, rendered from one state object.
-import { backend, type Answer, type DecideResponse, type LibraryModel, type Preset, type Status } from './backend'
+// Ollaya desktop: an overview of the local server (its address, endpoints, speed and the latest
+// requests) and the model library as cards, each opening a model page with downloads, a panel to
+// try it and its model card. Plain DOM, rendered from one state object.
+import {
+  backend,
+  type ActivityResponse,
+  type Answer,
+  type DecideResponse,
+  type LibraryModel,
+  type Preset,
+  type Status,
+} from './backend'
 
 // --- tiny DOM helper ------------------------------------------------------------------------------
 
@@ -20,15 +29,23 @@ function h(tag: string, attrs: Attrs = {}, ...children: Child[]): HTMLElement {
 }
 
 const OWL = `<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5.5 10.5 9.5Q16 7.5 21.5 9.5L26 5.5V19Q26 27.5 16 27.5T6 19Z"/><circle cx="11.5" cy="15.5" r="3.25"/><circle cx="20.5" cy="15.5" r="3.25"/><circle cx="11.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="20.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/><path d="M14.75 21 16 23l1.25-2"/></svg>`
+const svg = (body: string, width = 1.6) =>
+  `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
 const ICON = {
-  download: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v10m0 0 4-4m-4 4-4-4M4 16h12"/></svg>`,
-  check: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 10.5 3.2 3.2L15 7"/></svg>`,
-  x: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8"/></svg>`,
+  download: svg('<path d="M10 3v10m0 0 4-4m-4 4-4-4M4 16h12"/>'),
+  check: svg('<path d="m5 10.5 3.2 3.2L15 7"/>', 1.8),
+  x: svg('<path d="m6 6 8 8M14 6l-8 8"/>'),
+  back: svg('<path d="M16 10H4m0 0 5-5m-5 5 5 5"/>'),
+  external: svg('<path d="M11 4h5v5m0-5-7 7M8 5H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-3"/>'),
+  copy: svg('<rect x="7" y="7" width="9" height="9" rx="1.5"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7"/>'),
+  overview: svg('<path d="M3 10h3l2-5 4 10 2-5h3"/>'),
+  models: svg('<rect x="3.5" y="3.5" width="5" height="5" rx="1"/><rect x="11.5" y="3.5" width="5" height="5" rx="1"/><rect x="3.5" y="11.5" width="5" height="5" rx="1"/><rect x="11.5" y="11.5" width="5" height="5" rx="1"/>'),
+  search: svg('<circle cx="9" cy="9" r="5"/><path d="m16 16-3.5-3.5"/>'),
   spinner: `<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="spin"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><path d="M17 10a7 7 0 0 0-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
 }
-function icon(svg: string, cls: string): HTMLElement {
+function icon(markup: string, cls: string): HTMLElement {
   const s = h('span', { class: `inline-flex shrink-0 ${cls}` })
-  s.innerHTML = svg // constant markup, never data
+  s.innerHTML = markup // constant markup, never data
   return s
 }
 
@@ -40,7 +57,10 @@ interface Pulling {
   status: string
 }
 
+type View = { page: 'overview' } | { page: 'models' } | { page: 'model'; name: string }
+
 const state = {
+  view: { page: 'overview' } as View,
   status: null as Status | null,
   statusBusy: false,
   statusError: '',
@@ -49,7 +69,11 @@ const state = {
   library: [] as LibraryModel[],
   libraryError: '',
   installed: new Set<string>(),
-  selected: '',
+  loaded: [] as string[],
+  activity: null as ActivityResponse | null,
+  activityError: '',
+  query: '',
+  onlyInstalled: false,
   pulling: new Map<string, Pulling>(),
   pullError: '',
   presets: [] as Preset[],
@@ -62,22 +86,25 @@ const state = {
   running: false,
   result: null as DecideResponse | null,
   runError: '',
+  copied: '',
 }
 
+/** What `/api/decide` with `preset: triage` is shown with when someone asks for an example. */
+const EXAMPLE = "My order never arrived and support ignores me. Refund me today or I'm switching to your competitor."
+
 /**
- * The versions to offer: `<model>:latest` first (what `ollaya run <model>` uses, which the
- * library index doesn't always list), then the main tags. Precision variants (-fp16, -fp32) are
- * for pinning, not for picking.
+ * The versions to offer: `<model>:latest` first (what `ollaya run <model>` uses), then the main tags.
+ * Precision variants (-fp16, -fp32) are for pinning, not for picking.
  */
 const mainTags = (m: LibraryModel) => {
   const tags = m.tags.map((t) => t.name).filter((n) => !/-fp(16|32)$/.test(n))
   const latest = `${m.name}:latest`
   return [latest, ...tags.filter((t) => t !== latest)]
 }
-const tagSummary = (m: LibraryModel, tag: string) =>
-  m.tags.find((t) => t.name === tag)?.summary || (tag.endsWith(':latest') ? `The default version: ollaya run ${m.name}` : '')
+const tagOf = (m: LibraryModel, tag: string) => m.tags.find((t) => t.name === tag)
 const installedTags = (m: LibraryModel) => mainTags(m).filter((t) => state.installed.has(t))
-const selectedModel = () => state.library.find((m) => m.name === state.selected)
+const modelNamed = (name: string) => state.library.find((m) => m.name === name)
+const title = (m: LibraryModel) => m.title || m.name
 
 /** `builtinOf` requests, one per version. */
 const asking = new Map<string, Promise<string[] | null>>()
@@ -113,24 +140,24 @@ function forget(tag: string) {
 
 // --- actions --------------------------------------------------------------------------------------
 
-async function refreshInstalled() {
-  if (!state.status?.running) {
-    state.installed = new Set()
-    return
-  }
-  try {
-    state.installed = new Set((await backend.installed()).map((m) => m.name))
-  } catch {
-    state.installed = new Set()
-  }
-}
-
-/** Poll the server; redraw only when something changed, so an open menu or a caret survives. */
-async function refreshStatus() {
-  const before = JSON.stringify([state.status, [...state.installed]])
+/** Poll the server; redraw only when what is shown changed, so a caret or a selection survives. */
+async function refresh() {
+  const before = JSON.stringify([state.status, [...state.installed], state.loaded, state.activity, state.activityError])
   state.status = await backend.status()
-  await refreshInstalled()
-  if (JSON.stringify([state.status, [...state.installed]]) !== before) render()
+  if (state.status.running) {
+    const [installed, loaded, activity] = await Promise.allSettled([backend.installed(), backend.loaded(), backend.activity()])
+    state.installed = new Set(installed.status === 'fulfilled' ? installed.value.map((m) => m.name) : [])
+    state.loaded = loaded.status === 'fulfilled' ? loaded.value : []
+    state.activity = activity.status === 'fulfilled' ? activity.value : null
+    // A server older than 0.17.0 (a command-line install) has no activity log.
+    state.activityError = activity.status === 'rejected' ? String(activity.reason) : ''
+  } else {
+    state.installed = new Set()
+    state.loaded = []
+    state.activity = null
+  }
+  // The overview has no field to keep, and its per-second rate moves with the clock.
+  if (state.view.page === 'overview' || JSON.stringify([state.status, [...state.installed], state.loaded, state.activity, state.activityError]) !== before) render()
 }
 
 async function toggleServer() {
@@ -139,11 +166,11 @@ async function toggleServer() {
   render()
   try {
     state.status = state.status?.running ? await backend.stopServer() : await backend.startServer()
-    await refreshInstalled()
   } catch (e) {
     state.statusError = String(e)
   }
   state.statusBusy = false
+  await refresh()
   render()
 }
 
@@ -154,11 +181,11 @@ async function pull(tag: string) {
   try {
     await backend.pull(tag)
   } catch (e) {
-    state.pullError = String(e)
+    state.pullError = `${tag}: ${e}`
   }
   state.pulling.delete(tag)
   forget(tag)
-  await refreshInstalled()
+  await refresh()
   render()
 }
 
@@ -169,13 +196,13 @@ async function remove(tag: string) {
     state.pullError = String(e)
   }
   forget(tag)
-  await refreshInstalled()
+  await refresh()
   if (state.runModel === tag) state.runModel = ''
   render()
 }
 
 async function run() {
-  const model = state.runModel || installedTags(selectedModel()!)[0]
+  const model = state.runModel
   if (!model || !state.input.trim()) return
   state.running = true
   state.runError = ''
@@ -194,7 +221,6 @@ async function run() {
   state.running = false
   render()
   // Bring the answers into view inside the main pane (they land below the fold on a small window).
-  // Not scrollIntoView: it would also scroll the page and push the header out of sight.
   const pane = document.getElementById('main-pane')
   const answers = document.getElementById('answers')
   if (pane && answers) {
@@ -203,23 +229,75 @@ async function run() {
   }
 }
 
-function select(name: string) {
-  if (state.selected !== name) {
-    document.getElementById('main-pane')?.scrollTo({ top: 0 })
-    state.selected = name
+function go(view: View) {
+  document.getElementById('main-pane')?.scrollTo({ top: 0 })
+  if (view.page === 'model' && !(state.view.page === 'model' && state.view.name === view.name)) {
     state.runModel = ''
     state.result = null
     state.runError = ''
   }
+  state.view = view
   render()
 }
 
-// --- view -----------------------------------------------------------------------------------------
+async function copy(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // Older webviews (WebKitGTK) without the async clipboard.
+    const area = h('textarea', {}) as HTMLTextAreaElement
+    area.value = text
+    document.body.append(area)
+    area.select()
+    document.execCommand('copy')
+    area.remove()
+  }
+  state.copied = text
+  render()
+  setTimeout(() => {
+    if (state.copied === text) (state.copied = ''), render()
+  }, 1500)
+}
+
+// --- formatting -----------------------------------------------------------------------------------
+
+/** Bytes as `ollaya list` prints them. */
+function bytes(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)} GB`
+  if (n >= 1e6) return `${Math.round(n / 1e6)} MB`
+  return `${Math.max(1, Math.round(n / 1e3))} KB`
+}
+
+function ms(n: number): string {
+  return n < 10 ? n.toFixed(1) : String(Math.round(n))
+}
+
+function percent(p: { completed: number; total: number }): string {
+  return p.total > 0 ? `${Math.floor((p.completed / p.total) * 100)}%` : '…'
+}
+
+/** What the activity log says about speed: the median answer time, and requests per second now. */
+function speed(a: ActivityResponse) {
+  const times = a.requests
+    .filter((r) => !r.error)
+    .map((r) => r.total_duration / 1e6)
+    .sort((x, y) => x - y)
+  const median = times.length ? times[Math.floor(times.length / 2)]! : null
+  const now = Date.now()
+  const lastMinute = a.requests.filter((r) => now - Date.parse(r.at) < 60_000)
+  // A full log may cover less than a minute: count over the time it does cover.
+  const full = a.requests.length >= 100 && lastMinute.length === a.requests.length
+  const seconds = full ? Math.max(1, (now - Date.parse(a.requests.at(-1)!.at)) / 1000) : 60
+  return { median, perSecond: lastMinute.length / seconds, samples: times.length }
+}
+
+// --- view: frame ----------------------------------------------------------------------------------
 
 const btnPrimary =
   'inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-btn px-4 text-[13px] font-medium text-btn-fg hover:bg-btn-hover disabled:opacity-50'
 const btnSecondary =
   'inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-line-strong px-4 text-[13px] font-medium text-fg hover:bg-fill disabled:opacity-50'
+const card = 'rounded-xl border border-line'
 
 /** What the server's device means, for the status line's tooltip (#44). */
 function deviceHint(device: string | null): string {
@@ -240,7 +318,6 @@ function header(): HTMLElement {
       { class: 'flex items-center gap-2 text-fg' },
       icon(OWL, '-ml-[4px] size-6'),
       h('span', { class: 'text-[17px] leading-6 font-medium tracking-tight' }, 'ollaya'),
-      h('span', { class: 'rounded-full border border-line-strong px-[7px] text-[11px] leading-[17px] font-medium text-muted' }, 'Beta'),
     ),
     h(
       'div',
@@ -249,11 +326,7 @@ function header(): HTMLElement {
       state.update
         ? h(
             'button',
-            {
-              class: 'rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-fg hover:bg-fill',
-              title: 'Opens the download page',
-              onClick: () => void backend.openDownload(),
-            },
+            { class: 'rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-fg hover:bg-fill', title: 'Opens the download page', onClick: () => void backend.openDownload() },
             `Ollaya ${state.update} is available`,
           )
         : null,
@@ -261,7 +334,7 @@ function header(): HTMLElement {
         'span',
         { class: 'flex items-center gap-2 text-[13px] text-muted', title: running ? deviceHint(s?.device ?? null) : '' },
         h('span', { class: `size-2 rounded-full ${running ? 'bg-ok' : 'bg-faint'}` }),
-        s === null ? 'Checking…' : running ? ['Running', s.version, s.device].filter(Boolean).join(' · ') : 'Stopped',
+        s === null ? 'Checking…' : running ? ['Running', s.device].filter(Boolean).join(' · ') : 'Stopped',
       ),
       h(
         'button',
@@ -274,124 +347,392 @@ function header(): HTMLElement {
 }
 
 function sidebar(): HTMLElement {
+  const item = (label: string, svgIcon: string, view: View, on: boolean, note?: string) =>
+    h(
+      'button',
+      {
+        class: `flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] ${on ? 'bg-fill-strong font-medium text-fg' : 'text-body hover:bg-fill'}`,
+        'aria-current': on ? 'page' : undefined,
+        onClick: () => go(view),
+      },
+      icon(svgIcon, 'size-4'),
+      h('span', { class: 'flex-1' }, label),
+      note ? h('span', { class: 'text-xs text-muted tabular-nums' }, note) : null,
+    )
+  const page = state.view.page
+  const have = state.library.filter((m) => installedTags(m).length).length
   return h(
     'nav',
-    { class: 'flex w-60 shrink-0 flex-col border-r border-line bg-subtle', 'aria-label': 'Models' },
-    h('p', { class: 'px-5 pt-5 pb-2 text-[11px] font-semibold tracking-wide text-muted uppercase' }, 'Models'),
-    state.libraryError
-      ? h('p', { class: 'px-5 text-xs text-bad' }, state.libraryError)
-      : h(
-          'ul',
-          { class: 'space-y-0.5 px-2.5' },
-          ...state.library.map((m) => {
-            const tags = mainTags(m)
-            const pulling = tags.find((t) => state.pulling.has(t))
-            const have = installedTags(m).length > 0
-            const on = m.name === state.selected
-            return h(
-              'li',
-              {},
-              h(
-                'button',
-                {
-                  class: `flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-left text-[13px] ${on ? 'bg-fill-strong font-medium text-fg' : 'text-body hover:bg-fill'}`,
-                  'aria-current': on ? 'true' : undefined,
-                  onClick: () => select(m.name),
-                },
-                h('span', { class: 'font-mono' }, m.name),
-                pulling
-                  ? h('span', { class: 'text-xs text-muted tabular-nums' }, percent(state.pulling.get(pulling)!))
-                  : have
-                    ? icon(ICON.check, 'size-4 text-ok')
-                    : icon(ICON.download, 'size-4 text-faint'),
-              ),
-            )
-          }),
-        ),
+    { class: 'flex w-52 shrink-0 flex-col justify-between border-r border-line bg-subtle p-2.5', 'aria-label': 'Pages' },
+    h(
+      'div',
+      { class: 'space-y-0.5' },
+      item('Overview', ICON.overview, { page: 'overview' }, page === 'overview'),
+      item('Models', ICON.models, { page: 'models' }, page !== 'overview', have ? String(have) : undefined),
+    ),
+    h('p', { class: 'px-2.5 pb-1 text-[11px] text-faint' }, state.status?.version ? `Ollaya ${state.status.version}` : ''),
   )
-}
-
-function percent(p: { completed: number; total: number }): string {
-  return p.total > 0 ? `${Math.floor((p.completed / p.total) * 100)}%` : '…'
 }
 
 function main(): HTMLElement {
-  const m = selectedModel()
-  const body = h('div', { class: 'mx-auto w-full max-w-3xl px-8 py-8' })
-  if (!m) {
-    body.append(h('p', { class: 'pt-24 text-center text-sm text-muted' }, state.library.length ? 'Choose a model.' : 'Loading the model library…'))
-    return h('main', { id: 'main-pane', class: 'relative min-w-0 flex-1 overflow-y-auto' }, body)
-  }
-  const running = !!state.status?.running
-  const tags = mainTags(m)
-  body.append(
-    h('h1', { class: 'font-mono text-2xl font-semibold tracking-tight text-fg' }, m.name),
-    h('p', { class: 'mt-2 max-w-2xl text-sm leading-relaxed text-muted' }, m.description),
-    h(
-      'div',
-      { class: 'mt-3 flex flex-wrap gap-1.5' },
-      ...m.caps.map((c) => h('span', { class: 'rounded-md bg-fill px-2 py-0.5 text-xs text-body' }, c)),
-    ),
-    h('h2', { class: 'mt-8 text-[13px] font-semibold text-fg' }, 'Versions'),
-    h(
-      'div',
-      { class: 'mt-3 overflow-hidden rounded-xl border border-line' },
-      ...tags.map((t, i) => versionRow(m, t, i, running)),
-    ),
-  )
-  if (state.pullError) body.append(h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError))
-  if (!running) {
-    body.append(h('p', { class: 'mt-8 text-sm text-muted' }, 'Start the server to download and run models.'))
-  } else if (installedTags(m).length) {
-    body.append(runPanel(m))
-  }
-  return h('main', { id: 'main-pane', class: 'relative min-w-0 flex-1 overflow-y-auto' }, body)
+  const v = state.view
+  const body =
+    v.page === 'overview' ? overview() : v.page === 'models' ? models() : modelPage(modelNamed(v.name))
+  return h('main', { id: 'main-pane', class: 'relative min-w-0 flex-1 overflow-y-auto' }, h('div', { class: 'mx-auto w-full max-w-4xl px-8 py-8' }, body))
 }
 
-function versionRow(m: LibraryModel, tag: string, i: number, running: boolean): HTMLElement {
-  const summary = tagSummary(m, tag)
-  const have = state.installed.has(tag)
-  const p = state.pulling.get(tag)
-  let action: HTMLElement
-  if (p) {
-    action = h(
-      'span',
-      { class: 'flex w-40 items-center gap-2.5' },
+function pageTitle(text: string, sub: string): HTMLElement {
+  return h('div', {}, h('h1', { class: 'text-xl font-semibold tracking-tight text-fg' }, text), h('p', { class: 'mt-1 text-sm text-muted' }, sub))
+}
+
+function copyButton(text: string, label: string): HTMLElement {
+  const done = state.copied === text
+  return h(
+    'button',
+    { class: 'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-fill hover:text-fg', title: done ? 'Copied' : label, 'aria-label': label, onClick: () => void copy(text) },
+    icon(done ? ICON.check : ICON.copy, `size-4 ${done ? 'text-ok' : ''}`),
+  )
+}
+
+// --- view: overview -------------------------------------------------------------------------------
+
+function overview(): HTMLElement {
+  const s = state.status
+  const running = !!s?.running
+  const page = h('div', {}, pageTitle('Overview', 'The server on this computer, and what it has answered.'))
+  if (!running) {
+    page.append(
       h(
-        'span',
-        { class: 'h-1.5 flex-1 overflow-hidden rounded-full bg-fill-strong' },
-        h('span', { class: 'bar block h-full rounded-full transition-[width]', style: `width:${p.total ? (p.completed / p.total) * 100 : 2}%` }),
-      ),
-      h('span', { class: 'w-9 text-right text-xs text-muted tabular-nums' }, percent(p)),
-    )
-  } else if (have) {
-    action = h(
-      'span',
-      { class: 'flex items-center gap-1' },
-      h('span', { class: 'flex items-center gap-1 text-xs text-muted' }, icon(ICON.check, 'size-4 text-ok'), 'Installed'),
-      h(
-        'button',
-        { class: 'ml-2 inline-flex size-7 items-center justify-center rounded-full text-faint hover:bg-fill hover:text-fg', title: `Remove ${tag}`, 'aria-label': `Remove ${tag}`, onClick: () => void remove(tag) },
-        icon(ICON.x, 'size-4'),
+        'div',
+        { class: `${card} mt-6 flex items-center justify-between gap-4 px-5 py-4` },
+        h('p', { class: 'text-sm text-muted' }, s === null ? 'Checking the server…' : 'The server is stopped. Start it to download and run models.'),
+        h('button', { class: btnPrimary, disabled: state.statusBusy || s === null, onClick: toggleServer }, 'Start'),
       ),
     )
-  } else {
-    action = h('button', { class: btnSecondary, disabled: !running, onClick: () => void pull(tag) }, icon(ICON.download, 'size-4'), 'Download')
+    return page
   }
+  page.append(stats(), server(s!.url), endpoints(s!.url), recent())
+  return page
+}
+
+function stats(): HTMLElement {
+  const a = state.activity
+  const sp = a ? speed(a) : null
+  const tile = (label: string, value: string, note: string) =>
+    h(
+      'div',
+      { class: `${card} px-4 py-3.5` },
+      h('p', { class: 'text-xs text-muted' }, label),
+      h('p', { class: 'mt-1 text-2xl font-semibold tracking-tight text-fg tabular-nums' }, value),
+      h('p', { class: 'mt-0.5 text-[11px] text-faint' }, note),
+    )
+  const median = sp?.median ?? null
+  return h(
+    'div',
+    { class: 'mt-6 grid grid-cols-4 gap-3' },
+    tile('Requests', a ? a.total.toLocaleString() : '–', 'since the server started'),
+    tile('Per second', sp ? sp.perSecond.toFixed(sp.perSecond < 10 ? 1 : 0) : '–', 'over the last minute'),
+    tile('Response time', median === null ? '–' : `${ms(median)} ms`, sp?.samples ? `median of the last ${sp.samples}` : 'no requests yet'),
+    tile('Capacity', median === null ? '–' : `${Math.floor(1000 / median).toLocaleString()}/s`, 'one request at a time'),
+  )
+}
+
+function server(url: string): HTMLElement {
+  const row = (label: string, value: Node | string) =>
+    h('div', { class: 'flex min-h-11 items-center justify-between gap-4 border-t border-line px-4 py-2 first:border-t-0' }, h('span', { class: 'text-[13px] text-muted' }, label), value)
+  return h(
+    'section',
+    { class: 'mt-8', 'aria-labelledby': 'server-title' },
+    h('h2', { id: 'server-title', class: 'text-[13px] font-semibold text-fg' }, 'Server'),
+    h(
+      'div',
+      { class: `${card} mt-3` },
+      row('Address', h('span', { class: 'flex items-center gap-1' }, h('span', { class: 'font-mono text-[13px] text-fg' }, url), copyButton(url, 'Copy the address'))),
+      row(
+        'Loaded models',
+        state.loaded.length
+          ? h('span', { class: 'flex flex-wrap justify-end gap-1.5' }, ...state.loaded.map((m) => h('span', { class: 'rounded-md bg-fill px-2 py-0.5 font-mono text-xs text-body' }, m)))
+          : h('span', { class: 'text-[13px] text-faint' }, 'None. A model loads on its first request.'),
+      ),
+    ),
+  )
+}
+
+function endpoints(url: string): HTMLElement {
+  const list: [string, string, string][] = [
+    ['POST', '/api/decide', 'Answers questions about a text or JSON, with a preset or your own questions'],
+    ['POST', '/v1/decisions', 'TypeSafe-compatible: its SDKs work unchanged (also /v1/systemone)'],
+    ['GET', '/v1/models', 'The models on this computer'],
+  ]
+  const model = [...state.installed].sort()[0] ?? 'largha'
+  const example = `curl ${url}/api/decide -d '${JSON.stringify({ model: model.replace(/:latest$/, ''), preset: 'triage', state: 'I was charged twice this month.' })}'`
+  return h(
+    'section',
+    { class: 'mt-8', 'aria-labelledby': 'api-title' },
+    h(
+      'div',
+      { class: 'flex items-baseline justify-between' },
+      h('h2', { id: 'api-title', class: 'text-[13px] font-semibold text-fg' }, 'API'),
+      h('button', { class: 'inline-flex items-center gap-1 text-xs text-muted hover:text-fg', onClick: () => void backend.openLink('https://ollaya.dev/docs/api') }, 'Reference', icon(ICON.external, 'size-3.5')),
+    ),
+    h(
+      'div',
+      { class: `${card} mt-3` },
+      ...list.map(([method, path, what]) =>
+        h(
+          'div',
+          { class: 'flex min-h-11 items-center gap-3 border-t border-line px-4 py-2 first:border-t-0' },
+          h('span', { class: 'w-11 font-mono text-[11px] font-semibold text-muted' }, method),
+          h('span', { class: 'w-36 shrink-0 font-mono text-[13px] text-fg' }, path),
+          h('span', { class: 'min-w-0 flex-1 truncate text-[13px] text-muted', title: what }, what),
+          copyButton(url + path, `Copy ${path}`),
+        ),
+      ),
+      h(
+        'div',
+        { class: 'flex items-start gap-2 border-t border-line bg-code px-4 py-3 rounded-b-xl' },
+        h('code', { class: 'min-w-0 flex-1 font-mono text-xs leading-relaxed wrap-anywhere text-body' }, example),
+        copyButton(example, 'Copy the example'),
+      ),
+    ),
+  )
+}
+
+function recent(): HTMLElement {
+  const a = state.activity
+  const section = h('section', { class: 'mt-8', 'aria-labelledby': 'recent-title' }, h('h2', { id: 'recent-title', class: 'text-[13px] font-semibold text-fg' }, 'Recent requests'))
+  if (!a) {
+    section.append(h('p', { class: 'mt-3 text-sm text-muted' }, state.activityError ? 'This server does not list its requests. Update Ollaya to 0.17.0 or newer.' : 'Loading…'))
+    return section
+  }
+  if (!a.requests.length) {
+    section.append(
+      h(
+        'div',
+        { class: `${card} mt-3 px-4 py-6 text-center text-sm text-muted` },
+        'No requests yet. ',
+        h('button', { class: 'font-medium text-fg underline underline-offset-4', onClick: () => go({ page: 'models' }) }, 'Try a model'),
+        ', or call the API from your code.',
+      ),
+    )
+    return section
+  }
+  const cell = 'px-4 py-2'
+  section.append(
+    h(
+      'div',
+      { class: `${card} mt-3 overflow-hidden` },
+      h(
+        'table',
+        { class: 'w-full text-[13px]' },
+        h(
+          'thead',
+          { class: 'bg-subtle text-left text-xs text-muted' },
+          h('tr', {}, ...['Time', 'Model', 'Endpoint', 'Questions', 'Took'].map((t, i) => h('th', { class: `${cell} font-medium ${i > 2 ? 'text-right' : ''}` }, t))),
+        ),
+        h(
+          'tbody',
+          {},
+          ...a.requests.slice(0, 20).map((r) =>
+            h(
+              'tr',
+              { class: 'border-t border-line' },
+              h('td', { class: `${cell} text-muted tabular-nums` }, new Date(r.at).toLocaleTimeString()),
+              h('td', { class: `${cell} font-mono text-xs text-fg` }, r.model),
+              h('td', { class: `${cell} font-mono text-xs text-muted` }, r.endpoint),
+              h('td', { class: `${cell} text-right tabular-nums ${r.error ? 'text-bad' : 'text-body'}` }, r.error ? r.error.toLowerCase().replaceAll('_', ' ') : String(r.questions)),
+              h('td', { class: `${cell} text-right text-body tabular-nums` }, `${ms(r.total_duration / 1e6)} ms`),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+  return section
+}
+
+// --- view: models ---------------------------------------------------------------------------------
+
+function avatar(m: LibraryModel, size: string): HTMLElement {
+  return h('span', { class: `${size} flex shrink-0 items-center justify-center rounded-lg border border-line bg-subtle font-semibold text-fg` }, title(m).charAt(0).toUpperCase())
+}
+
+/** The Download button, or how far a download is, or that it is on this computer. */
+function pullState(tag: string, compact: boolean): HTMLElement {
+  const p = state.pulling.get(tag)
+  if (p)
+    return h(
+      'span',
+      { class: `flex items-center gap-2 ${compact ? 'w-24' : 'w-40'}` },
+      h('span', { class: 'h-1.5 flex-1 overflow-hidden rounded-full bg-fill-strong' }, h('span', { class: 'bar block h-full rounded-full transition-[width]', style: `width:${p.total ? (p.completed / p.total) * 100 : 2}%` })),
+      h('span', { class: 'w-8 text-right text-xs text-muted tabular-nums' }, percent(p)),
+    )
+  if (state.installed.has(tag)) return h('span', { class: 'flex items-center gap-1 text-xs text-muted' }, icon(ICON.check, 'size-4 text-ok'), compact ? 'On this computer' : 'Installed')
+  return h(
+    'button',
+    {
+      class: compact ? 'inline-flex h-7 items-center gap-1 rounded-full border border-line-strong px-2.5 text-xs font-medium text-fg hover:bg-fill disabled:opacity-50' : btnSecondary,
+      disabled: !state.status?.running,
+      title: state.status?.running ? undefined : 'Start the server first',
+      onClick: (e: Event) => (e.stopPropagation(), void pull(tag)),
+    },
+    icon(ICON.download, 'size-3.5'),
+    'Download',
+  )
+}
+
+function models(): HTMLElement {
+  const q = state.query.trim().toLowerCase()
+  const shown = state.library
+    .filter((m) => !state.onlyInstalled || installedTags(m).length)
+    .filter((m) => !q || [m.name, m.title, m.description, m.publisher ?? '', ...m.caps].join(' ').toLowerCase().includes(q))
+  const search = h('input', {
+    class: 'h-8 w-full rounded-lg border border-line-strong bg-canvas pr-3 pl-8 text-[13px] text-fg placeholder:text-faint focus:border-fg focus:outline-none',
+    type: 'search',
+    placeholder: 'Search models',
+    'aria-label': 'Search models',
+    onInput: (e: Event) => {
+      state.query = (e.target as HTMLInputElement).value
+      render()
+    },
+  }) as HTMLInputElement
+  search.value = state.query
+  const tab = (label: string, only: boolean) =>
+    h('button', { class: `rounded-md px-2.5 py-1 text-[13px] ${state.onlyInstalled === only ? 'bg-fill-strong font-medium text-fg' : 'text-muted hover:text-fg'}`, onClick: () => ((state.onlyInstalled = only), render()) }, label)
+  const page = h(
+    'div',
+    {},
+    pageTitle('Models', 'Open decision models that run on this computer. Pick one to download and try it.'),
+    h(
+      'div',
+      { class: 'mt-6 flex items-center gap-3' },
+      h('div', { class: 'relative w-64' }, icon(ICON.search, 'pointer-events-none absolute top-2 left-2.5 size-4 text-faint'), search),
+      h('div', { class: 'flex gap-1' }, tab('All', false), tab('On this computer', true)),
+    ),
+  )
+  if (state.pullError) page.append(h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError))
+  if (state.libraryError) page.append(h('p', { class: 'mt-6 text-sm text-bad' }, state.libraryError))
+  else if (!state.library.length) page.append(h('p', { class: 'mt-10 text-center text-sm text-muted' }, 'Loading the model library…'))
+  else if (!shown.length) page.append(h('p', { class: 'mt-10 text-center text-sm text-muted' }, state.onlyInstalled && !q ? 'No models on this computer yet.' : 'No model matches.'))
+  else page.append(h('div', { class: 'mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3' }, ...shown.map(modelCard)))
+  return page
+}
+
+function modelCard(m: LibraryModel): HTMLElement {
+  const latest = `${m.name}:latest`
+  const have = installedTags(m)
+  const size = tagOf(m, latest)?.size
+  return h(
+    'div',
+    {
+      class: `${card} flex cursor-default flex-col gap-3 p-4 hover:border-line-strong hover:bg-subtle`,
+      role: 'button',
+      tabindex: '0',
+      'aria-label': `${title(m)}: open`,
+      onClick: () => go({ page: 'model', name: m.name }),
+      onKeydown: (e: Event) => {
+        if ((e as KeyboardEvent).key === 'Enter') go({ page: 'model', name: m.name })
+      },
+    },
+    h(
+      'div',
+      { class: 'flex items-center gap-3' },
+      avatar(m, 'size-9 text-[15px]'),
+      h('div', { class: 'min-w-0' }, h('p', { class: 'truncate text-sm font-medium text-fg' }, title(m)), h('p', { class: 'truncate text-xs text-muted' }, m.publisher ? `by ${m.publisher}` : m.name)),
+    ),
+    h('p', { class: 'line-clamp-2 min-h-[2.5rem] text-[13px] leading-5 text-muted' }, m.description),
+    h(
+      'div',
+      { class: 'mt-auto flex h-7 items-center justify-between gap-2' },
+      h('span', { class: 'text-xs text-faint tabular-nums' }, size ? bytes(size) : ''),
+      have.length && !state.pulling.has(latest) ? pullState(have[0]!, true) : pullState(latest, true),
+    ),
+  )
+}
+
+// --- view: one model ------------------------------------------------------------------------------
+
+function modelPage(m: LibraryModel | undefined): HTMLElement {
+  if (!m) return h('p', { class: 'pt-24 text-center text-sm text-muted' }, 'Loading the model library…')
+  const running = !!state.status?.running
+  const page = h(
+    'div',
+    {},
+    h('button', { class: 'inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-fg', onClick: () => go({ page: 'models' }) }, icon(ICON.back, 'size-4'), 'Models'),
+    h(
+      'div',
+      { class: 'mt-5 flex items-start gap-4' },
+      avatar(m, 'size-12 text-xl'),
+      h(
+        'div',
+        { class: 'min-w-0 flex-1' },
+        h('h1', { class: 'text-xl font-semibold tracking-tight text-fg' }, title(m)),
+        h('p', { class: 'mt-0.5 text-[13px] text-muted' }, [m.publisher && `by ${m.publisher}`, m.license].filter(Boolean).join(' · ')),
+      ),
+      pullState(`${m.name}:latest`, false),
+    ),
+    h('p', { class: 'mt-4 max-w-2xl text-sm leading-relaxed text-body' }, m.description),
+    h('div', { class: 'mt-3 flex flex-wrap gap-1.5' }, ...m.caps.map((c) => h('span', { class: 'rounded-md bg-fill px-2 py-0.5 text-xs text-body' }, c))),
+  )
+  if (state.pullError) page.append(h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError))
+  if (!running) page.append(h('p', { class: 'mt-8 text-sm text-muted' }, 'Start the server to download and try models.'))
+  else if (installedTags(m).length) page.append(tryPanel(m))
+  page.append(
+    h('h2', { class: 'mt-10 text-[13px] font-semibold text-fg' }, 'Versions'),
+    h('div', { class: `${card} mt-3 overflow-hidden` }, ...mainTags(m).map((t, i) => versionRow(m, t, i))),
+  )
+  if (m.readme) page.append(readme(m))
+  page.append(
+    h(
+      'button',
+      { class: 'mt-10 inline-flex items-center gap-1 text-xs text-muted hover:text-fg', onClick: () => void backend.openLink(`https://ollaya.dev/library/${m.name}`) },
+      `${m.name} on ollaya.dev`,
+      icon(ICON.external, 'size-3.5'),
+    ),
+  )
+  return page
+}
+
+function versionRow(m: LibraryModel, tag: string, i: number): HTMLElement {
+  const t = tagOf(m, tag)
+  const summary = t?.summary || (tag.endsWith(':latest') ? `The default version: ollaya run ${m.name}` : '')
+  const have = state.installed.has(tag) && !state.pulling.has(tag)
   return h(
     'div',
     { class: `flex min-h-14 items-center justify-between gap-4 px-4 py-2.5 ${i ? 'border-t border-line' : ''}` },
     h(
       'div',
       { class: 'min-w-0' },
-      h('p', { class: 'font-mono text-[13px] text-fg' }, tag),
-      summary ? h('p', { class: 'mt-0.5 truncate text-xs text-muted' }, summary) : null,
+      h('p', { class: 'font-mono text-[13px] text-fg' }, tag, t?.size ? h('span', { class: 'ml-2 font-sans text-xs text-faint' }, bytes(t.size)) : null),
+      summary ? h('p', { class: 'mt-0.5 truncate text-xs text-muted', title: summary }, summary) : null,
     ),
-    action,
+    h(
+      'span',
+      { class: 'flex shrink-0 items-center gap-1' },
+      pullState(tag, false),
+      have
+        ? h('button', { class: 'ml-1 inline-flex size-7 items-center justify-center rounded-full text-faint hover:bg-fill hover:text-fg', title: `Remove ${tag}`, 'aria-label': `Remove ${tag}`, onClick: () => void remove(tag) }, icon(ICON.x, 'size-4'))
+        : null,
+    ),
   )
 }
 
-function runPanel(m: LibraryModel): HTMLElement {
+/** The model card from ollaya.dev. Its links open in the browser, never inside the app. */
+function readme(m: LibraryModel): HTMLElement {
+  const body = h('div', { class: 'prose mt-4' })
+  body.innerHTML = m.readme! // ollaya.dev's own HTML; the page's CSP runs none of its scripts
+  body.addEventListener('click', (e) => {
+    const a = (e.target as Element).closest('a')
+    if (!a) return
+    e.preventDefault()
+    const href = a.getAttribute('href') ?? ''
+    if (href.startsWith('#')) body.querySelector(href)?.scrollIntoView({ behavior: 'smooth' })
+    else void backend.openLink(new URL(href, `https://ollaya.dev/library/${m.name}`).href)
+  })
+  return h('section', { class: 'mt-10 border-t border-line pt-8', 'aria-label': 'Model card' }, h('h2', { class: 'text-[13px] font-semibold text-fg' }, 'Model card'), body)
+}
+
+function tryPanel(m: LibraryModel): HTMLElement {
   const tags = installedTags(m)
   if (!tags.includes(state.runModel)) state.runModel = tags[0] ?? ''
   // A model with built-in questions takes no preset or custom questions. Until the server says
@@ -417,12 +758,14 @@ function runPanel(m: LibraryModel): HTMLElement {
   textarea.value = state.input
   const panel = h(
     'section',
-    { class: 'mt-10', 'aria-labelledby': 'run-title' },
-    h('h2', { id: 'run-title', class: 'text-[13px] font-semibold text-fg' }, 'Run'),
+    { class: 'mt-8', 'aria-labelledby': 'run-title' },
+    h('h2', { id: 'run-title', class: 'text-[13px] font-semibold text-fg' }, 'Try it'),
     h(
       'div',
       { class: 'mt-3 flex flex-wrap items-center gap-2' },
-      labelled('Model', h('select', { class: selectCls, onChange: (e) => ((state.runModel = (e.target as HTMLSelectElement).value), render()) }, ...tags.map((t) => option(t, t, t === state.runModel)))),
+      tags.length > 1
+        ? labelled('Version', h('select', { class: selectCls, onChange: (e) => ((state.runModel = (e.target as HTMLSelectElement).value), render()) }, ...tags.map((t) => option(t, t, t === state.runModel))))
+        : null,
       own
         ? h('p', { class: 'text-[13px] text-muted' }, 'This model asks its own questions: ', h('span', { class: 'font-mono text-xs text-body' }, own.join(', ')))
         : own === null
@@ -453,9 +796,14 @@ function runPanel(m: LibraryModel): HTMLElement {
   panel.append(
     h(
       'div',
-      { class: 'mt-3 flex items-center justify-end gap-3' },
-      h('span', { class: 'text-xs text-faint' }, mac ? '⌘ Return' : 'Ctrl + Enter'),
-      h('button', { id: 'run-button', class: btnPrimary, disabled: state.running || !state.input.trim(), onClick: () => void run() }, state.running ? icon(ICON.spinner, 'size-3.5') : null, 'Run'),
+      { class: 'mt-3 flex items-center justify-between gap-3' },
+      h('button', { class: 'text-xs text-muted underline underline-offset-4 hover:text-fg', onClick: () => ((state.input = EXAMPLE), render()) }, 'Use an example'),
+      h(
+        'span',
+        { class: 'flex items-center gap-3' },
+        h('span', { class: 'text-xs text-faint' }, mac ? '⌘ Return' : 'Ctrl + Enter'),
+        h('button', { id: 'run-button', class: btnPrimary, disabled: state.running || !state.input.trim(), onClick: () => void run() }, state.running ? icon(ICON.spinner, 'size-3.5') : null, 'Run'),
+      ),
     ),
   )
   if (state.runError) panel.append(h('p', { class: 'mt-4 text-sm text-bad' }, state.runError))
@@ -484,12 +832,11 @@ function results(r: DecideResponse): HTMLElement {
       h('span', { class: 'text-right font-mono text-xs text-body tabular-nums' }, p.toFixed(2)),
     )
   })
-  const ms = r.total_duration / 1e6
   return h(
     'div',
     { id: 'answers', class: 'mt-6 pb-2' },
-    h('div', { class: 'rounded-xl border border-line px-4 py-1' }, ...rows),
-    h('p', { class: 'mt-3 text-xs text-muted' }, `Answered by ${r.routing?.model ?? r.model} in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms`),
+    h('div', { class: `${card} px-4 py-1` }, ...rows),
+    h('p', { class: 'mt-3 text-xs text-muted' }, `Answered by ${r.routing?.model ?? r.model} in ${ms(r.total_duration / 1e6)} ms`),
   )
 }
 
@@ -514,15 +861,15 @@ function describe(a: Answer): [string, string, number] {
 const root = document.getElementById('app')!
 
 function render() {
-  // Keep the focused textarea's caret across redraws.
-  const active = document.activeElement as HTMLTextAreaElement | null
-  const focusedLabel = active?.tagName === 'TEXTAREA' ? active.getAttribute('aria-label') ?? 'state' : null
-  const caret = focusedLabel ? ([active!.selectionStart, active!.selectionEnd] as const) : null
+  // Keep the focused field's caret across redraws.
+  const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
+  const field = active && ['TEXTAREA', 'INPUT'].includes(active.tagName) ? (active.getAttribute('aria-label') ?? 'state') : null
+  const caret = field ? ([active!.selectionStart, active!.selectionEnd] as const) : null
   const scrolled = document.getElementById('main-pane')?.scrollTop ?? 0
   root.replaceChildren(header(), h('div', { class: 'flex min-h-0 flex-1' }, sidebar(), main()))
   document.getElementById('main-pane')?.scrollTo({ top: scrolled })
-  if (focusedLabel && caret) {
-    const again = [...root.querySelectorAll('textarea')].find((t) => (t.getAttribute('aria-label') ?? 'state') === focusedLabel)
+  if (field && caret) {
+    const again = [...root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('textarea, input')].find((t) => (t.getAttribute('aria-label') ?? 'state') === field)
     again?.focus()
     again?.setSelectionRange(caret[0], caret[1])
   }
@@ -537,31 +884,29 @@ backend.onPullProgress((p) => {
 async function boot() {
   render()
   const [lib, presets] = await Promise.allSettled([backend.library(), backend.presets()])
-  if (lib.status === 'fulfilled') {
-    state.library = lib.value
-    state.selected = lib.value[0]?.name ?? ''
-  } else {
-    state.libraryError = `Could not load the model library: ${lib.reason}`
-  }
+  if (lib.status === 'fulfilled') state.library = [...lib.value].sort((a, b) => a.rank - b.rank)
+  else state.libraryError = `Could not load the model library: ${lib.reason}`
   if (presets.status === 'fulfilled') {
     state.presets = presets.value
     state.customQuestions = JSON.stringify(presets.value.find((p) => p.name === 'triage')?.questions ?? {}, null, 2)
   }
-  await refreshStatus()
-  render()
+  await refresh()
   // Like Ollama's app: the server runs while the app is open.
   if (!state.status?.running) await toggleServer()
+  // A first run has nothing to show on the overview: start where the models are.
+  if (!state.installed.size) state.view = { page: 'models' }
   // Custom presets live on the server, which may only have started just now.
   state.presets = await backend.presets().catch(() => state.presets)
   state.update = await backend.updateAvailable().catch(() => null)
   render()
-  setInterval(() => void refreshStatus(), 5000)
+  setInterval(() => void refresh(), 2000)
   // Preview only (npm run preview): #result shows a finished run, #pull a download in progress.
   if (__MOCK__ && location.hash === '#result') {
-    state.input = "My order never arrived and support ignores me. Refund me today or I'm switching to your competitor."
+    go({ page: 'model', name: 'laya' })
+    state.input = EXAMPLE
     await run()
   }
-  if (__MOCK__ && location.hash === '#pull') void pull('decider:latest'), select('decider')
+  if (__MOCK__ && location.hash === '#pull') void pull('decider:latest'), go({ page: 'model', name: 'decider' })
 }
 
 declare const __MOCK__: boolean

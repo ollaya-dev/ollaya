@@ -19,14 +19,16 @@ use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
 use ollaya_api::{
-    Client, DecideRequest, DecideResponse, PullRequest, Questions, TagsResponse, presets,
+    ActivityResponse, Client, DecideRequest, DecideResponse, PsResponse, PullRequest, Questions,
+    TagsResponse, presets,
 };
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
-/// Where the model library is listed: the website's search index.
-const LIBRARY_URL: &str = "https://ollaya.dev/search.json";
+/// Where the model library is listed: the website's index for this app (site/src/build.tsx).
+/// `OLLAYA_LIBRARY_URL` points at another one, such as a local build of the site.
+const LIBRARY_URL: &str = "https://ollaya.dev/data/library.json";
 
 /// Where a newer release is downloaded (the page picks the right installer for this system).
 const DOWNLOAD_URL: &str = "https://ollaya.dev/download";
@@ -188,6 +190,16 @@ async fn update_available(app: AppHandle) -> Option<String> {
 #[tauri::command]
 fn open_download() {
     open_url(DOWNLOAD_URL);
+}
+
+/// Open a web link from the page (a model card's links) in the browser, never in the app.
+#[tauri::command]
+fn open_link(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err(format!("not a web link: {url}"));
+    }
+    open_url(&url);
+    Ok(())
 }
 
 /// The `ollaya` that runs the server: the command-line install's when it can use the GPU, else
@@ -448,7 +460,8 @@ async fn library() -> Result<Value, String> {
 }
 
 async fn library_now() -> Result<Value, String> {
-    let body = reqwest::get(LIBRARY_URL)
+    let url = std::env::var("OLLAYA_LIBRARY_URL").unwrap_or_else(|_| LIBRARY_URL.to_owned());
+    let body = reqwest::get(url)
         .await
         .and_then(|r| r.error_for_status())
         .map_err(|e| format!("could not load the model library: {e}"))?;
@@ -459,6 +472,18 @@ async fn library_now() -> Result<Value, String> {
 #[tauri::command]
 async fn installed() -> Result<TagsResponse, String> {
     client()?.tags().await.map_err(|e| e.to_string())
+}
+
+/// The models loaded in memory.
+#[tauri::command]
+async fn loaded() -> Result<PsResponse, String> {
+    client()?.ps().await.map_err(|e| e.to_string())
+}
+
+/// The latest decision requests the server answered (a server older than 0.17.0 has none).
+#[tauri::command]
+async fn activity() -> Result<ActivityResponse, String> {
+    client()?.activity().await.map_err(|e| e.to_string())
 }
 
 /// Pull `model`, emitting `pull-progress` events with the bytes done over every layer.
@@ -680,12 +705,15 @@ pub fn run() {
             stop_server,
             library,
             installed,
+            loaded,
+            activity,
             pull,
             remove,
             preset_list,
             builtin_questions,
             update_available,
             open_download,
+            open_link,
             decide
         ])
         .build(tauri::generate_context!())
