@@ -83,6 +83,14 @@ export function ContributorsPage() {
             </tbody>
           </table>
         </div>
+        <p class="mt-3 text-body">
+          Releasing a decision model? Share it before you announce, and <code class="font-mono">ollaya run</code> works on launch day,
+          with a "Run on Ollaya" badge for your model card: see{' '}
+          <a href="/docs/model-authors" class={textLink}>
+            For model authors
+          </a>
+          .
+        </p>
       </section>
 
       <section class="mt-10" aria-labelledby="code-title">
