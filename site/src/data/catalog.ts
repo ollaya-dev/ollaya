@@ -357,7 +357,7 @@ const overlays: Record<string, ModelOverlay> = {
     stats: stats('gliclass:large'),
     title: 'GLiClass',
     description:
-      'Instruction-following zero-shot classifier by Knowledgator: all options of a question are scored in one pass, so cost barely grows with the number of options.',
+      'Instruction-following zero-shot classifier by Knowledgator: all options of a question are scored in one pass, so on a GPU the cost barely grows with the number of options; on a CPU it grows with them.',
     publisher: { name: 'Knowledgator', url: 'https://huggingface.co/knowledgator' },
     capabilities: ['zero-shot'],
     keywords: ['gliclass', 'zero-shot', 'classification', 'classifier', 'labels', 'typesafe', 'jev'],
