@@ -103,6 +103,7 @@ Ollaya's runtime gives the same answers (parity below).
 | fp400-T-e2 | 400m | fp | gold + teacher, 2 epochs | **0.839** | 0.577 | 0.604 zero-shot |
 | fp1b-T | 1b | fp | gold + teacher | 0.829 | **0.621** | 0.624 zero-shot |
 | fp400-id-T | 400m | fp | + in-domain | 0.811 | 0.573 | **0.749** in-domain |
+| fp1b-id-T | 1b | fp | + in-domain | 0.817 | 0.581 | 0.732 in-domain |
 | t150-T3w | 150m | ternary | gold + teacher | 0.718 | 0.502 | 0.478 zero-shot |
 | t150-id-T3w | 150m | ternary | + in-domain | 0.736 | 0.531 | 0.688 in-domain |
 | t150-id-T3w-e2 | 150m | ternary | + in-domain, 2 epochs | 0.764 | 0.547 | 0.699 in-domain |
@@ -120,6 +121,7 @@ For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed
   training distribution better, not the held-out suites. One epoch stays.
 - 150m to 400m gains 0.05–0.06 val, 0.03–0.065 typed and 0.01–0.044 public.
 - 400m to 1b gains 0.005 val, 0.015 typed and 0.019 zero-shot public, at 2.5 times the weights (4.2 GB of fp32).
+  In-domain, the 1b does not beat the 400m (public 0.732 against 0.749), so the lineup has no in-domain 1b.
 - Ternary (recipe T3w: QAT from the fp model, logit + relation + every-layer hidden-state distillation from it,
   quantization warm-up over 30% of the steps, 4-bit embeddings) keeps 96% of the fp model's val and 98% of its
   typed and in-domain public scores at 150m, and 96–98% at 400m. The ternary 400m beats the fp 150m on all three.
@@ -178,7 +180,7 @@ The model loads straight from its Hugging Face repository: `load(fromHub('<org>/
 
 ### Steps once the name is chosen
 
-1. **Hugging Face** (on spark, whose token can write to `ollaya-dev`): `train/stage.py <name> <models-dir>
+1. **Hugging Face** (spark's token writes to `ollaya-dev`; upload without the Mac's proxy, which slows it tenfold): `train/stage.py <name> <models-dir>
    <out-dir>` stages every tag of the lineup (`train/hub.py` with the card filled in), then
    `huggingface-cli upload ollaya-dev/<name>-<tag> <out-dir>/<tag>` for each. Note each repository's commit.
 2. **Registry**: a `<name>` entry in `convert/ollaya_convert/catalog.py` with `_laya(…, repo=…, commit=…)` per tag
@@ -195,7 +197,7 @@ The model loads straight from its Hugging Face repository: `load(fromHub('<org>/
 1. Browser runtime with `largha:150m`, parity in Node and Chrome. Done.
 2. Data and teacher labels. Done.
 3. fp students (ettin-150m, then 400m, maybe 1b): benchmark, pick one. 68m, 150m, 400m and 1b done; the 1b is
-   the most accurate zero-shot, and a second epoch did not help the 400m. In-domain 1b training.
+   the most accurate zero-shot; a second epoch did not help the 400m, nor in-domain data the 1b.
 4. Ternary student: accuracy loss against the fp one, size. 68m, 150m and 400m done (2-bit browser graph); a
    second epoch lifts the 150m, so the 68m and 400m are training for two epochs, and a zero-shot 400m too.
 5. Name, Hugging Face repository, registry, demo page, install guide; release with the next batched version.

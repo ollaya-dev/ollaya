@@ -45,6 +45,7 @@ def main():
     p.add_argument("--card", required=True, help="the model card's template; {{key}} takes --var key=value")
     p.add_argument("--var", action="append", default=[], help="key=value for the card (a value may be @file)")
     p.add_argument("--web", help="a dir with webgraph.py's model.onnx and the export's tokenizer, decision, calibration")
+    p.add_argument("--indomain", action="store_true", help="the model also trained on the benchmark's train splits")
     a = p.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
@@ -74,7 +75,8 @@ def main():
         rows = [line.rstrip("\n").split("\t") for line in f]
         o.write("source\tlicense\trows\n")
         o.writelines(f"{r[0]}\t{r[1]}\t{r[8]}\n" for r in rows[1:] if r[2] == "keep")
-        o.writelines(f"{s}\t{lic}\t{n}\n" for s, lic, n in INDOMAIN)
+        if a.indomain:
+            o.writelines(f"{s}\t{lic}\t{n}\n" for s, lic, n in INDOMAIN)
     print("staged", a.out)
 
 

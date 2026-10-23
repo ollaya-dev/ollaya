@@ -75,8 +75,8 @@ outputs on 483 questions (every decision the same, probabilities within {{parity
   sequence of up to 512 tokens; a two-layer transformer head scores each option at its marker. Encoder:
   Ettin {{size}} (ModernBERT architecture, MIT).
 - **Data**: about 350,000 English questions from permissively licensed decision datasets (Apache-2.0, MIT,
-  CC BY, CC BY-SA, CC0, BSD; every source and its license is in `DATA_SOURCES.tsv`), plus 180,000 from the
-  benchmark datasets' train splits. Rows from datasets with a non-commercial or unknown license were dropped.
+  CC BY, CC BY-SA, CC0, BSD; every source and its license is in `DATA_SOURCES.tsv`){{indomain_data}}. Rows from
+  datasets with a non-commercial or unknown license were dropped.
 - **Labels**: each question's gold answer where the data has one, mixed with the full probability distribution
   of `pplx-decider:flash` (Apache-2.0), computed through Ollaya.
 - **Recipe**: soft cross-entropy plus the ranked probability score on score questions; options shuffled half the

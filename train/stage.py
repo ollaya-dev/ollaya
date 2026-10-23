@@ -1,10 +1,11 @@
 """Stage every model of the lineup as a Hugging Face repository directory, with its card filled in.
 
-    cd convert && uv run python ../train/stage.py <name> <models-dir> <out-dir>
+    cd convert && uv run python ../train/stage.py <name> <models-dir> <out-dir> [tag ...]
 
 <models-dir> holds ckpt/<run> (train.py's checkpoints) and web/<run> (webgraph.py's onnx/model.onnx with the
 tokenizer, decision and calibration files) for each run in LINEUP: tag -> run, its scores and parity. Repos are
-ollaya-dev/<name>-<tag>; upload each with `huggingface-cli upload ollaya-dev/<name>-<tag> <out-dir>/<tag>`.
+ollaya-dev/<name>-<tag>; upload each with `huggingface-cli upload ollaya-dev/<name>-<tag> <out-dir>/<tag>`. Tags after
+<out-dir> stage only those (the others' checkpoints need not be on this machine).
 """
 import os
 import subprocess
@@ -14,6 +15,7 @@ R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # tag: (run, backbone size, ternary?, typed, public, public kind, parity, web graph MB)
 LINEUP = {
+    "1b": ("fp1b-T", "1b", False, 0.621, 0.624, "zero-shot", "3.8e-6", None),
     "400m": ("fp400-T", "400m", False, 0.606, 0.605, "zero-shot", "4.9e-6", None),
     "400m-ternary": ("t400-id-T3w", "400m", True, 0.548, 0.716, "in-domain", "8.2e-6", 147),
     "150m-ternary": ("t150-id-T3w-e2", "150m", True, 0.547, 0.699, "in-domain", "3.4e-6", 66),
@@ -32,9 +34,10 @@ TERNARY_VARIANT = (
     "the tokenizer); `model.safetensors` holds the same weights as float32, for `laya` and Ollaya. It trained "
     "**in-domain**: its data includes the *train* splits of ten of the public benchmark's datasets (see Results)."
 )
+FP_ROLE = {"1b": "The most accurate size", "400m": "Close to the 1b's accuracy at 40% of its size"}
 FP_VARIANT = (
-    "The most accurate size, for [Ollaya](https://ollaya.dev) on a CPU or GPU. It trained **zero-shot** with respect "
-    "to both benchmarks below: neither its data nor its teacher's labels include any of their datasets."
+    "{role}, for [Ollaya](https://ollaya.dev) on a CPU or GPU. It trained **zero-shot** with respect to both "
+    "benchmarks below: neither its data nor its teacher's labels include any of their datasets."
 )
 TERNARY_RECIPE = (
     "Ternary weights: quantization-aware training from the fp model of the same size (absmean per row, as BitNet "
@@ -55,9 +58,11 @@ def results(name, tag):
     return "\n".join(rows)
 
 
-def main(name, models, out):
+def main(name, models, out, *tags):
     os.makedirs(out, exist_ok=True)
-    for tag, (run, size, tern, _, _, _, parity, mb) in LINEUP.items():
+    for tag, (run, size, tern, _, _, kind, parity, mb) in LINEUP.items():
+        if tags and tag not in tags:
+            continue
         title = f"{name.capitalize()} {size}" + (" ternary" if tern else "")
         res = os.path.join(out, f".{tag}.results.md")
         with open(res, "w") as f:
@@ -65,13 +70,16 @@ def main(name, models, out):
         args = [sys.executable, f"{R}/train/hub.py", f"{models}/ckpt/{run}", f"{out}/{tag}", "--card", f"{R}/train/card.md"]
         if tern:
             args += ["--web", f"{models}/web/{run}"]
+        if kind == "in-domain":
+            args += ["--indomain"]
         v = {
             "name": name, "tag": tag, "size": size, "title": title, "repo": f"ollaya-dev/{name}-{tag}",
             "tags": "- ternary\n- bitnet" if tern else "", "parity": parity,
-            "variant": TERNARY_VARIANT.format(mb=mb) if tern else FP_VARIANT,
+            "variant": TERNARY_VARIANT.format(mb=mb) if tern else FP_VARIANT.format(role=FP_ROLE[tag]),
             "recipe": TERNARY_RECIPE if tern else "", "web_size": f"{mb} MB" if tern else "",
             "web_parity": WEB_PARITY if tern else "", "web": f"@{R}/train/card-web.md" if tern else "",
             "results": f"@{res}",
+            "indomain_data": ", plus 180,000 from the benchmark datasets' train splits" if kind == "in-domain" else "",
         }
         for k, val in v.items():
             args += ["--var", f"{k}={val}"]
@@ -79,4 +87,4 @@ def main(name, models, out):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:4])
+    main(*sys.argv[1:])
