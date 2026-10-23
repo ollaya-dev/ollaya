@@ -58,8 +58,9 @@ const tokens = `
   --color-line: rgb(255 255 255 / 0.1); --color-line-strong: rgb(255 255 255 / 0.2); --color-subtle: rgb(255 255 255 / 0.025);
   --color-code: rgb(255 255 255 / 0.04); --color-fill: rgb(255 255 255 / 0.06); --color-fill-strong: rgb(255 255 255 / 0.1);
   --color-btn: #fafafa; --color-btn-hover: #ffffff; --color-btn-fg: #0a0a0a; --color-term: rgb(10 10 10 / 0.78);
-  --color-tok-comment: #6b6b6b; --color-tok-string: #a9c7a0; --color-tok-number: #e3d7b4; --color-tok-keyword: #c4c4c4;
-  --color-tok-key: #fafafa; --color-tok-fn: #8cc8ff; --color-tok-punct: #6b6b6b;
+  /* Code in the hero's two colours: keys green, strings sand, numbers bright green, commands white. */
+  --color-tok-comment: #7a7a7a; --color-tok-string: #e6c98a; --color-tok-number: #b6ecc9; --color-tok-keyword: #d9b366;
+  --color-tok-key: #8fd3ae; --color-tok-fn: #fafafa; --color-tok-punct: #8a8a8a;
   /* The data colours are the hero's two fields, lit: Ollaya green, the other server amber. */
   --color-us: #8fd3ae; --color-them: #d9b366; --color-us-bright: #b6ecc9; --color-pass: #3fb950; --color-fail: #f85149;
   background: var(--color-canvas); color: var(--color-body); overflow-x: clip;
@@ -117,12 +118,16 @@ const tokens = `
 .rd .code .ln { display: grid; grid-template-columns: 2.5rem 1fr; }
 .rd .code .ln::before { counter-increment: l; content: counter(l); color: var(--color-faint); text-align: right; padding-right: 1rem; user-select: none; }
 .rd .code .tok-comment { font-style: normal; }
+.rd .code .tok-fn, .rd .code .tok-cmd { font-weight: 600; }
 /* The scatter: Ollaya's models are filled dots, Ollama's are rings; the one under the pointer lights up. */
 .rd .pt { cursor: default; outline: none; }
 .rd .pt circle { transition: r 0.15s, opacity 0.15s; }
 .rd .pt.is-on circle { r: 7; }
 .rd .pt.is-on .dot { fill: var(--color-us-bright); stroke: var(--color-us-bright); }
 .rd .pt.is-off { opacity: 0.12; pointer-events: none; }
+.rd .pt.is-kin .dot { stroke: var(--color-us-bright); stroke-width: 2.5; }
+.rd .pt.is-kin circle { r: 6; }
+.rd .links line { stroke: var(--color-us-bright); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
 .rd .pt:focus-visible circle { stroke: var(--color-us-bright); stroke-width: 2; }
 .rd .tip { position: absolute; z-index: 10; pointer-events: none; white-space: nowrap; }
 /* The confidence meter: ten segments, lit in turn. */
@@ -456,10 +461,19 @@ function scatterDots(): Dot[] {
 }
 
 const LOG_TICKS = [10, 20, 50, 100, 200, 500, 1000]
+/** The model behind a tag, on either server: `kev:4b` and Ollama's `kev:4b-q8_0` are both `kev`; `clef:flash` and `clef-flash` are `clef`. */
+const familyOf = (name: string) => name.split(':')[0]!.replace(/-flash$/, '')
+/** Ollaya's Pareto front: the tags no other Ollaya tag beats on both accuracy and latency, fastest first. */
+function frontier(dots: Dot[]): Dot[] {
+  const out: Dot[] = []
+  let best = -1
+  for (const d of [...dots].filter((d) => d.server === 'ollaya').sort((a, b) => a.ms - b.ms)) if (d.acc > best) (best = d.acc), out.push(d)
+  return out
+}
 
 function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
   const dots = scatterDots()
-  const m = { l: 44, r: 20, t: 16, b: 40 }
+  const m = { l: 58, r: 20, t: 16, b: 40 }
   const xs = dots.map((d) => d.ms)
   const xTicks = LOG_TICKS.filter((t, i) => (LOG_TICKS[i + 1] ?? Infinity) > Math.min(...xs) && (LOG_TICKS[i - 1] ?? 0) < Math.max(...xs))
   const lo = Math.floor(Math.min(...dots.map((d) => d.acc)) * 10) / 10
@@ -472,6 +486,12 @@ function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
   return (
     <div class="relative" data-chart>
       <div class="mb-4 flex flex-wrap items-center gap-2 text-[13px]">
+        <span class="mr-2 inline-flex items-center gap-2 text-muted">
+          <svg viewBox="0 0 24 12" class="h-3 w-6" aria-hidden="true">
+            <line x1="0" y1="6" x2="24" y2="6" class="stroke-us" stroke-width="1.5" stroke-dasharray="4 4" />
+          </svg>
+          Ollaya's frontier
+        </span>
         {(['ollaya', 'ollama'] as const).map((srv) => (
           <button type="button" data-series={srv} aria-pressed="true" class="inline-flex items-center gap-2 rounded-md border border-line px-2.5 py-1 text-body hover:border-line-strong aria-[pressed=false]:opacity-40">
             <svg viewBox="0 0 12 12" class="size-3" aria-hidden="true">
@@ -501,14 +521,28 @@ function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
         <text x={(m.l + W - m.r) / 2} y={H - 4} text-anchor="middle" font-size="11" class="fill-muted">
           median latency per question, ms (log scale)
         </text>
-        <text transform={`translate(12 ${(m.t + H - m.b) / 2}) rotate(-90)`} text-anchor="middle" font-size="11" class="fill-muted">
+        <text transform={`translate(11 ${(m.t + H - m.b) / 2}) rotate(-90)`} text-anchor="middle" font-size="11" class="fill-muted">
           accuracy
         </text>
+        <polyline
+          points={frontier(dots).map((d) => `${x(d.ms).toFixed(1)},${y(d.acc).toFixed(1)}`).join(' ')}
+          fill="none"
+          class="stroke-us"
+          stroke-width="1.5"
+          stroke-dasharray="4 4"
+          opacity="0.55"
+          stroke-linejoin="round"
+        >
+          <title>Ollaya's frontier: the most accurate model at each latency</title>
+        </polyline>
         {dots.map((d) => (
           <g
             class="pt"
             tabindex={0}
             data-name={d.name}
+            data-family={familyOf(d.name)}
+            data-x={x(d.ms).toFixed(1)}
+            data-y={y(d.acc).toFixed(1)}
             data-server={d.server === 'ollaya' ? 'ollaya' : OLLAMA}
             data-acc={d.acc.toFixed(3)}
             data-ece={d.ece.toFixed(3)}

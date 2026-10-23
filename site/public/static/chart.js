@@ -3,12 +3,29 @@
 ;(() => {
   for (const root of document.querySelectorAll('[data-chart]')) {
     const tip = root.querySelector('[data-tip]')
-    const svg = root.querySelector('svg')
+    const svg = root.querySelector('svg[role="img"]')
     if (!tip || !svg) continue
 
+    // The same model elsewhere on the chart (another tag, or the same weights on the other server) lights up with
+    // a line to it, so Ollaya and Ollama can be read pair by pair.
+    const links = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    links.setAttribute('class', 'links')
+    svg.appendChild(links)
     function show(pt) {
       const d = pt.dataset
-      tip.innerHTML = `<b>${d.name}</b> <span>on ${d.server}</span><br>accuracy ${d.acc} · ECE ${d.ece} · ${d.ms} ms`
+      const kin = [...svg.querySelectorAll(`.pt[data-family="${d.family}"]`)].filter((p) => p !== pt && !p.classList.contains('is-off'))
+      links.replaceChildren(
+        ...kin.map((k) => {
+          const l = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+          l.setAttribute('x1', d.x)
+          l.setAttribute('y1', d.y)
+          l.setAttribute('x2', k.dataset.x)
+          l.setAttribute('y2', k.dataset.y)
+          return l
+        }),
+      )
+      for (const k of kin) k.classList.add('is-kin')
+      tip.innerHTML = `<b>${d.name}</b> <span>on ${d.server}</span><br>accuracy ${d.acc} · ECE ${d.ece} · ${d.ms} ms${kin.length ? `<br><span>${kin.map((k) => `${k.dataset.name} on ${k.dataset.server}: ${k.dataset.acc}, ${k.dataset.ms} ms`).join(' · ')}</span>` : ''}`
       tip.hidden = false
       const r = pt.getBoundingClientRect()
       const b = root.getBoundingClientRect()
@@ -21,7 +38,8 @@
     }
     function hide() {
       tip.hidden = true
-      for (const p of svg.querySelectorAll('.pt')) p.classList.remove('is-on')
+      links.replaceChildren()
+      for (const p of svg.querySelectorAll('.pt')) p.classList.remove('is-on', 'is-kin')
     }
     for (const pt of svg.querySelectorAll('.pt')) {
       pt.addEventListener('pointerenter', () => show(pt))

@@ -112,10 +112,12 @@
   }
 
   size()
-  addEventListener('resize', () => {
+  // The hero grows when its example opens every option; the field follows its host's size.
+  new ResizeObserver(() => {
+    if (host.clientWidth === W && host.clientHeight === H) return
     size()
     drawAll(performance.now() / 1000)
-  })
+  }).observe(host)
   if (still) return drawAll(0)
   let visible = true
   new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(host)
