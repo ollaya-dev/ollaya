@@ -26,7 +26,7 @@ import { DocsIndex, DocView, withOrigin } from './pages/docs'
 import { DownloadPage } from './pages/download'
 import { HomePage } from './pages/home'
 import { LibraryRedirect, ModelPage, TagPage, TagsPage } from './pages/library'
-import { faqJsonLd, robotsTxt, sitemapXml, softwareJsonLd } from './pages/meta'
+import { faqJsonLd, modelJsonLd, robotsTxt, sitemapXml, softwareJsonLd } from './pages/meta'
 import { NotFoundPage } from './pages/notFound'
 import { accuracyScatter, ResultsPage, speedDots } from './pages/results'
 import { DotPlot, Scatter } from './components/charts'
@@ -143,7 +143,7 @@ function pages(origin: string): Page[] {
     list.push(
       {
         url: `/library/${model.name}`,
-        meta: { title: model.name, description: model.description, nav: 'models', ogImage },
+        meta: { title: model.name, description: model.description, nav: 'models', ogImage, jsonLd: modelJsonLd(model, origin) },
         render: () => <ModelPage model={model} origin={origin} />,
       },
       {

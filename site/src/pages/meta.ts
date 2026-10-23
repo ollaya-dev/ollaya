@@ -1,3 +1,4 @@
+import type { Model } from '../data/catalog'
 import { AUTHOR, GITHUB_URL, HF_URL, SITE_DESCRIPTION, SITE_NAME } from '../site'
 
 /** /v2/ (manifests) and /blobs/ belong to the static model registry, which is not for crawlers. */
@@ -22,6 +23,42 @@ export function softwareJsonLd(origin: string): object {
     keywords: 'decision models, Jev-compatible API, self-hosted, /v1/systemone, TypeSafe SDK, MCP server, local inference',
     author: { '@type': 'Person', name: AUTHOR.name, url: AUTHOR.url },
     sameAs: [GITHUB_URL, HF_URL],
+  }
+}
+
+/** schema.org for a model page: the model with its author, license and source, and its breadcrumb under Models. */
+export function modelJsonLd(model: Model, origin: string): object {
+  const url = `${origin}/library/${model.name}`
+  // A license id (Apache-2.0, MIT) has an SPDX page; a free-text license stays on the page only.
+  const license = /^[\w.+-]+$/.test(model.license) ? `https://spdx.org/licenses/${model.license}` : undefined
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'SoftwareApplication',
+        name: model.name,
+        alternateName: model.title !== model.name ? model.title : undefined,
+        description: model.description,
+        url,
+        applicationCategory: 'DeveloperApplication',
+        applicationSubCategory: 'Decision model',
+        operatingSystem: 'macOS, Windows, Linux',
+        softwareRequirements: `${SITE_NAME}, ${origin}/download`,
+        isAccessibleForFree: true,
+        author: model.publisher ?? undefined,
+        license,
+        isBasedOn: model.source ?? undefined,
+        dateModified: model.updated ?? undefined,
+        keywords: model.keywords.join(', '),
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Models', item: `${origin}/search` },
+          { '@type': 'ListItem', position: 2, name: model.name, item: url },
+        ],
+      },
+    ],
   }
 }
 
