@@ -20,7 +20,7 @@
   const base = 0.13
   const SPARSE = 9 // the sparse end of the ramp stays empty, so the field has clearings
   const R = 11 // the cursor's reach, in cells
-  let dpr, W, H, cols, rows, atlas
+  let dpr, W, H, cols, rows, atlas, aw, ah
   let mx = -1e9
   let my = -1e9
 
@@ -36,16 +36,18 @@
     cols = Math.ceil(W / cw)
     rows = Math.ceil(H / ch)
     // The atlas: one row per colour, one cell per ramp character, at the device's resolution.
+    aw = Math.ceil(cw * dpr)
+    ah = Math.ceil(ch * dpr)
     atlas = document.createElement('canvas')
-    atlas.width = Math.ceil(cw * dpr) * ramp.length
-    atlas.height = Math.ceil(ch * dpr) * palette.length
+    atlas.width = aw * ramp.length
+    atlas.height = ah * palette.length
     const a = atlas.getContext('2d')
     a.setTransform(dpr, 0, 0, dpr, 0, 0)
     a.font = `${fs}px ui-monospace, SFMono-Regular, Menlo, monospace`
     a.textBaseline = 'top'
     palette.forEach((colour, p) => {
       a.fillStyle = colour
-      for (let i = 0; i < ramp.length; i++) a.fillText(ramp[i], i * Math.ceil(cw * dpr) / dpr, p * Math.ceil(ch * dpr) / dpr)
+      for (let i = 0; i < ramp.length; i++) a.fillText(ramp[i], (i * aw) / dpr, (p * ah) / dpr)
     })
   }
 
@@ -70,8 +72,6 @@
   }
 
   const n = ramp.length - 1
-  const aw = Math.ceil(cw * dpr)
-  const ah = Math.ceil(ch * dpr)
   function cell(c, r, t) {
     const d = Math.hypot(c - mx, (r - my) * 1.9)
     const ripple = d < R ? Math.cos(d * 0.7 - t * 3) * (1 - d / R) * 0.9 : 0
