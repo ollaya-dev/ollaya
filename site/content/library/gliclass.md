@@ -1,4 +1,4 @@
-GLiClass is an instruction-following zero-shot classifier by [Knowledgator](https://huggingface.co/knowledgator). Ollaya writes a question's options as labels and its instructions as the task prompt, and the model scores all the labels in a single pass. The cost therefore barely grows with the number of options.
+GLiClass is an instruction-following zero-shot classifier by [Knowledgator](https://huggingface.co/knowledgator). Ollaya writes a question's options as labels and its instructions as the task prompt, and the model scores all the labels in a single pass, so a question takes one pass however many options it has. Each label adds tokens to that pass, though, so a question with dozens of options takes many times as long as a yes/no one.
 
 ## Models
 
