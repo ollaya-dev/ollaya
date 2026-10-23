@@ -99,11 +99,13 @@ Ollaya's runtime gives the same answers (parity below).
 | fp150-T | 150m | fp | gold + teacher | 0.765 | 0.541 | 0.594 zero-shot |
 | fp150-id-T | 150m | fp | + in-domain | 0.765 | 0.544 | 0.705 in-domain |
 | fp68-id-T | 68m | fp | + in-domain | 0.731 | 0.476 | 0.697 in-domain |
-| fp400-T | 400m | fp | gold + teacher | 0.824 | **0.606** | 0.605 zero-shot |
+| fp400-T | 400m | fp | gold + teacher | 0.824 | 0.606 | 0.605 zero-shot |
 | fp400-T-e2 | 400m | fp | gold + teacher, 2 epochs | **0.839** | 0.577 | 0.604 zero-shot |
+| fp1b-T | 1b | fp | gold + teacher | 0.829 | **0.621** | 0.624 zero-shot |
 | fp400-id-T | 400m | fp | + in-domain | 0.811 | 0.573 | **0.749** in-domain |
 | t150-T3w | 150m | ternary | gold + teacher | 0.718 | 0.502 | 0.478 zero-shot |
 | t150-id-T3w | 150m | ternary | + in-domain | 0.736 | 0.531 | 0.688 in-domain |
+| t150-id-T3w-e2 | 150m | ternary | + in-domain, 2 epochs | 0.764 | 0.547 | 0.699 in-domain |
 | t400-id-T3w | 400m | ternary | + in-domain | 0.791 | 0.548 | 0.716 in-domain |
 | t68-id-T3w | 68m | ternary | + in-domain | 0.705 | 0.448 | 0.664 in-domain |
 
@@ -117,9 +119,14 @@ For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed
 - A second epoch (fp400-T-e2) lifts val by 0.015 but costs 0.029 typed and leaves public flat: it fits the
   training distribution better, not the held-out suites. One epoch stays.
 - 150m to 400m gains 0.05–0.06 val, 0.03–0.065 typed and 0.01–0.044 public.
+- 400m to 1b gains 0.005 val, 0.015 typed and 0.019 zero-shot public, at 2.5 times the weights (4.2 GB of fp32).
 - Ternary (recipe T3w: QAT from the fp model, logit + relation + every-layer hidden-state distillation from it,
   quantization warm-up over 30% of the steps, 4-bit embeddings) keeps 96% of the fp model's val and 98% of its
   typed and in-domain public scores at 150m, and 96–98% at 400m. The ternary 400m beats the fp 150m on all three.
+- Unlike the fp runs, ternary training gains from a second epoch: t150-id-T3w-e2 adds 0.028 val, 0.016 typed
+  and 0.011 public. That matches the fp 150m on val (0.764 against 0.765) and typed (0.547 against 0.544), leaves
+  0.006 public, and draws level with the 1-epoch ternary 400m on typed. The 68m and 400m ternaries are training
+  for two epochs too.
 
 ## Browser runtime
 
@@ -187,8 +194,10 @@ The model loads straight from its Hugging Face repository: `load(fromHub('<org>/
 
 1. Browser runtime with `largha:150m`, parity in Node and Chrome. Done.
 2. Data and teacher labels. Done.
-3. fp students (ettin-150m, then 400m, maybe 1b): benchmark, pick one. 150m, 68m and 400m done (a second epoch did not help); 1b training.
-4. Ternary student: accuracy loss against the fp one, size. 150m, 68m and 400m done (2-bit browser graph); zero-shot 400m training.
+3. fp students (ettin-150m, then 400m, maybe 1b): benchmark, pick one. 68m, 150m, 400m and 1b done; the 1b is
+   the most accurate zero-shot, and a second epoch did not help the 400m. In-domain 1b training.
+4. Ternary student: accuracy loss against the fp one, size. 68m, 150m and 400m done (2-bit browser graph); a
+   second epoch lifts the 150m, so the 68m and 400m are training for two epochs, and a zero-shot 400m too.
 5. Name, Hugging Face repository, registry, demo page, install guide; release with the next batched version.
    Demo page, npm package, card template and staging done; the rest waits for the name.
 
