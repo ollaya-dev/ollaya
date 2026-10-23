@@ -4,7 +4,7 @@
 //! llama-server with the same fixed evaluation plan.
 //!
 //!     cargo run --release -p ollaya-runner --example parity_llama -- \
-//!         <model-dir> <goldens.jsonl> [auto|cpu|cuda|cuda:<n>] [--latency]
+//!         <model-dir> <goldens.jsonl> [auto|cpu|cuda|cuda:<n>] [--latency] [--smoke]
 //!
 //! `<model-dir>` holds `decision.json`, `calibration.json` and `model.gguf` (the author's GGUF, or
 //! a link to it). llama.cpp is loaded from `$OLLAYA_LIBRARY_PATH/llama`, and its CUDA backend from
@@ -34,6 +34,8 @@ use ollaya_decision::{Calibration, CalibrationFile, QType};
 use ollaya_runner::Error;
 use ollaya_runner::llama::{Libraries, LlamaModel, Target};
 use serde_json::Value;
+
+mod smoke;
 
 /// Largest option-logit difference accepted: the family tolerance of every Ollaya parity check.
 const LOGIT_TOL: f64 = 1e-3;
@@ -82,12 +84,13 @@ fn ids(v: &Value) -> Vec<i32> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let (args, smoke) = smoke::args();
+    let args = &args[1..];
     let latency = args.iter().any(|a| a == "--latency");
     let pos: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
     if pos.len() < 2 {
         return Err(
-            "usage: parity_llama <model-dir> <goldens.jsonl> [auto|cpu|cuda|cuda:<n>|rocm|rocm:<n>] [--latency]"
+            "usage: parity_llama <model-dir> <goldens.jsonl> [auto|cpu|cuda|cuda:<n>|rocm|rocm:<n>] [--latency] [--smoke]"
                 .into(),
         );
     }
@@ -142,15 +145,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         t0.elapsed().as_secs_f64()
     );
 
-    let text = std::fs::read_to_string(&goldens)?;
     let (mut cases, mut rejected, mut questions) = (0usize, 0usize, 0usize);
     let mut failures: Vec<String> = Vec::new();
     let mut logit_diffs: Vec<f64> = Vec::new();
     let mut prob_diffs: Vec<f64> = Vec::new();
     let mut agree = 0usize;
     let t_eval = Instant::now();
-    for line in text.lines().filter(|l| !l.trim().is_empty()) {
-        let case: Value = serde_json::from_str(line)?;
+    for line in smoke::lines(&goldens, smoke)? {
+        let case: Value = serde_json::from_str(&line)?;
         let id = case["id"].as_str().unwrap_or("?").to_owned();
         cases += 1;
         let enc = model.encode(&case["state"], &case["questions"]);

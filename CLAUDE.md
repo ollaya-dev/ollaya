@@ -10,6 +10,22 @@ Runs open decision models locally, the way Ollama runs LLMs (see `README.md`).
 - Invariant: never re-host model weights. They come unmodified from the author's Hugging Face repo, so never commit, upload or bundle them.
 - Project-specific overrides for the skills in `.claude/skills/`: see `.claude/skills/PROJECT_NOTES.md`.
 
+## Test tiers
+
+Every tier keeps the same tolerances; a tier chooses only the cases and the devices (COB-279).
+
+- **K1, every change (2–5 min, local):** `cargo test --workspace`, and the parity example of each family the change
+  touches with `--smoke`, on one GPU or, for a small model, the local CPU. `--smoke` checks only the cases listed in
+  `crates/ollaya-runner/examples/smoke/cases.txt`, about 40 questions per family: every question type, refused
+  requests, a long state and many options. The list is fixed; change it in review, never for one run.
+- **K2, every release (15–20 min, hope and choso in parallel):** the full goldens on every GPU device we ship (Linux
+  CUDA on hope's RTX 5090, Windows CUDA and Vulkan on choso's RTX 4090). On the CPU, the full set for models of 4B and
+  under and `--smoke` for 9B and over. CPU parity counts only against goldens made on the same machine and build. K2
+  never checks less than the release gate did before it.
+- **K3, major releases, a llama.cpp or ONNX Runtime update, a new device or a new model:** full CPU parity of the
+  large models on hope's Threadripper, typed-decisions, Bespoke's open benchmark and the Ollama comparison. The site,
+  the README, the family docs and the reports are updated from these results (`docs/model-lifecycle.md`, stage 4).
+
 ## Working efficiently on long tasks
 
 - Adding a model, changing a graph or the runtime, measuring or releasing: follow `docs/model-lifecycle.md`. Before measuring anything, run `python -m ollaya_convert.bench_plan` and measure what it lists, nothing more (ADR 0009). Numbers on the site come from `results/` through `{{result …}}` references, never typed in.

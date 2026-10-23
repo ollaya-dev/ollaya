@@ -23,6 +23,12 @@ The skills in this directory are generic, third-party guidance (see [THIRD_PARTY
   - the Rust runtime against the goldens, with `cargo run --release -p ollaya-runner --example parity`.
 
   If a change breaks parity, fix the change. Don't loosen a tolerance, drop a golden case or regenerate goldens unless the user explicitly asks.
+- Tests run in three tiers (K1, K2, K3 in `CLAUDE.md`), with the same tolerances in each:
+  - K1, every change: `cargo test --workspace` and the touched families' parity examples with `--smoke`, the fixed subset in `crates/ollaya-runner/examples/smoke/cases.txt`;
+  - K2, every release: the full goldens on every shipped GPU device, and on the CPU (`--smoke` for 9B and over);
+  - K3, major releases, engine updates, new devices and new models: full CPU parity and the quality benchmarks, then the site and reports.
+
+  A smoke pass is a K1 result: it doesn't replace K2 before a release, and it doesn't carry a model's accuracy after a graph change. Don't change the smoke list to make a run pass.
 - Rust tests: `cargo test --workspace`. The skills' npm and Jest commands are illustrations only.
 - Parity and benchmark runs need local weights, which are not in git. CUDA runs also need a GPU. If a run isn't possible, say so; never report it as passing.
 - Benchmark with `cargo run --release -p ollaya-runner --example bench`, on the same hardware, precision and inputs as the baseline. Revert any speedup that changes a decision or breaks parity. The database, cache and Core Web Vitals material applies to `site/` only.

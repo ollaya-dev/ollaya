@@ -1,7 +1,7 @@
 //! Compare the `nli-pairs-v1` runtime against golden fixtures from
 //! `ollaya_convert.families.nli.goldens` (the fp32 PyTorch reference, one unpadded pair at a time).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_nli -- <model-dir> <goldens.jsonl> [cpu|cuda|metal]
+//!     cargo run --release -p ollaya-runner --example parity_nli -- <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--smoke]
 //!
 //! Per case:
 //! * the premise, and which questions are rejected (400), must match;
@@ -9,7 +9,6 @@
 //! * row scores and option logits must be within `LOGIT_TOL` of the reference;
 //! * calibrated probabilities must pick the reference's option (max / p99 difference reported).
 
-use std::io::BufRead;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -18,6 +17,8 @@ use ollaya_decision::{Questions, parse_questions, serialize_state};
 use ollaya_runner::Device;
 use ollaya_runner::nli::NliModel;
 use serde_json::Value;
+
+mod smoke;
 
 /// Largest raw-logit difference accepted (ONNX Runtime vs PyTorch fp32, TF32 off).
 const LOGIT_TOL: f64 = 1e-3;
@@ -42,9 +43,9 @@ fn max_diff(a: &[f32], b: &[f64]) -> f64 {
 fn main() -> Result<()> {
     // SAFETY: first thing in main, before any thread starts (MLX reads its settings once).
     unsafe { ollaya_runner::prepare_process() };
-    let args: Vec<String> = std::env::args().collect();
+    let (args, smoke) = smoke::args();
     if args.len() < 3 {
-        bail!("usage: parity_nli <model-dir> <goldens.jsonl> [cpu|cuda|metal]");
+        bail!("usage: parity_nli <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--smoke]");
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
@@ -52,15 +53,14 @@ fn main() -> Result<()> {
         _ => Device::Cpu,
     };
     let model = NliModel::load(&PathBuf::from(&args[1]), device, None)?;
-    let file = std::fs::File::open(&args[2]).with_context(|| args[2].clone())?;
 
     let (mut cases, mut questions, mut rows, mut rej_bad, mut enc_bad, mut disagree) =
         (0, 0, 0, 0, 0, 0);
     let (mut score_max, mut logit_max) = (0f64, 0f64);
     let mut prob_diffs = Vec::new();
     let mut forward = 0f64;
-    for line in std::io::BufReader::new(file).lines() {
-        let rec: Value = serde_json::from_str(&line?)?;
+    for line in smoke::lines(&args[2], smoke)? {
+        let rec: Value = serde_json::from_str(&line)?;
         let id = rec["id"].as_str().unwrap_or("?").to_owned();
         let state = &rec["state"];
         cases += 1;

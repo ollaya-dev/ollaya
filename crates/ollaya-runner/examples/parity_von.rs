@@ -2,7 +2,7 @@
 //! `ollaya_convert.families.von.goldens` (upstream von 1.1 run in float64, one unpadded row at a
 //! time; see "Why the goldens are fp64" in `docs/families/von.md`).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_von -- <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency]
+//!     cargo run --release -p ollaya-runner --example parity_von -- <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency] [--smoke]
 //!
 //! Every case is encoded first, before anything runs through the graph:
 //! * the rendered state text, and its token count (the temperature map's input), must match;
@@ -21,7 +21,6 @@
 //!
 //! `--latency` then times full requests (`run`: render, tokenize, forward) of 5 questions.
 
-use std::io::BufRead;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -32,6 +31,8 @@ use ollaya_decision::{Questions, parse_questions};
 use ollaya_runner::Device;
 use ollaya_runner::von::{VonEncoding, VonModel};
 use serde_json::Value;
+
+mod smoke;
 
 /// Largest raw-logit difference accepted (ONNX Runtime in fp32 vs the network in float64).
 const LOGIT_TOL: f64 = 1e-3;
@@ -100,9 +101,11 @@ struct Case {
 fn main() -> Result<()> {
     // SAFETY: first thing in main, before any thread starts (MLX reads its settings once).
     unsafe { ollaya_runner::prepare_process() };
-    let args: Vec<String> = std::env::args().collect();
+    let (args, smoke) = smoke::args();
     if args.len() < 3 {
-        bail!("usage: parity_von <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency]");
+        bail!(
+            "usage: parity_von <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency] [--smoke]"
+        );
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
@@ -117,10 +120,9 @@ fn main() -> Result<()> {
         bail!("calibration.json has no usable temperature_map");
     }
 
-    let file = std::fs::File::open(&args[2]).with_context(|| args[2].clone())?;
     let mut records = Vec::new();
-    for line in std::io::BufReader::new(file).lines() {
-        records.push(serde_json::from_str::<Value>(&line?)?);
+    for line in smoke::lines(&args[2], smoke)? {
+        records.push(serde_json::from_str::<Value>(&line)?);
     }
 
     // Encoding: state text, rows, markers.
