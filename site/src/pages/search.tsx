@@ -13,56 +13,58 @@ export function SearchPage() {
   const models = [...catalog].sort((a, b) => a.rank - b.rank)
   return (
     <div>
-      <PageHead title="Models" lead={`${models.length} open decision models you can run locally with Ollaya, from their authors, pulled by name.`}>
-      <form id="search-form" action="/search" method="get" role="search" class="mt-8 max-w-3xl" data-search-form>
-        <div class="relative">
-          <label for="search-q" class="sr-only">
-            Search models
-          </label>
-          <span class="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted">
-            <Icon name="search" class="size-5" />
-          </span>
-          <input
-            id="search-q"
-            name="q"
-            type="search"
-            placeholder="Search models"
-            autocomplete="off"
-            spellcheck={false}
-            class="w-full rounded-md border border-line bg-canvas/60 py-3 pr-4 pl-12 text-base text-fg hover:border-line-strong focus:border-line-strong focus:ring-2 focus:ring-fill-strong focus:outline-none"
-          />
-        </div>
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <fieldset class="flex flex-wrap gap-2">
-            <legend class="sr-only">Filter by capability</legend>
-            {capabilityFilters.map((f) => (
-              <label class="relative inline-flex cursor-pointer items-center rounded-md border border-line px-3 py-1 text-[13px] text-body select-none hover:border-line-strong has-checked:border-fg has-checked:bg-fg has-checked:text-canvas has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-fg">
-                <input type="checkbox" name="c" value={f.id} class="sr-only" />
-                {f.label}
-              </label>
-            ))}
-          </fieldset>
-          <div class="flex items-center gap-2">
-            <label for="search-sort" class="text-[13px] text-muted">
+      <PageHead title="Models" lead={`${models.length} open decision models you can run locally with Ollaya, from their authors, pulled by name.`} />
+      {/* The toolbar: the search box across, the sort beside it at the same height, the filters under them. */}
+      <form id="search-form" action="/search" method="get" role="search" class="rule px-6 py-5 md:px-10" data-search-form>
+        <div class="flex flex-col gap-3 md:flex-row md:items-center">
+          <div class="relative min-w-0 flex-1">
+            <label for="search-q" class="sr-only">
+              Search models
+            </label>
+            <span class="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted">
+              <Icon name="search" class="size-5" />
+            </span>
+            <input
+              id="search-q"
+              name="q"
+              type="search"
+              placeholder="Search models"
+              autocomplete="off"
+              spellcheck={false}
+              class="h-12 w-full rounded-md border border-line bg-canvas/60 pr-4 pl-12 text-base text-fg hover:border-line-strong focus:border-line-strong focus:ring-2 focus:ring-fill-strong focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+            />
+          </div>
+          <p class="text-sm whitespace-nowrap text-muted md:px-2" data-results-count>
+            {models.length} {models.length === 1 ? 'model' : 'models'}
+          </p>
+          <div class="relative">
+            <label for="search-sort" class="sr-only">
               Sort
             </label>
-            <div class="relative">
-              <select
-                id="search-sort"
-                name="o"
-                class="appearance-none rounded-md border border-line bg-canvas py-1 pr-8 pl-3 text-[13px] text-fg hover:border-line-strong focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg"
-              >
-                <option value="popular" selected>
-                  Popular
-                </option>
-                <option value="newest">Newest</option>
-              </select>
-              <span class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-muted">
-                <Icon name="chevronDown" class="size-3.5" />
-              </span>
-            </div>
+            <select
+              id="search-sort"
+              name="o"
+              class="h-12 w-full appearance-none rounded-md border border-line bg-canvas/60 pr-10 pl-4 text-base text-fg hover:border-line-strong focus:border-line-strong focus:ring-2 focus:ring-fill-strong focus:outline-none md:w-48"
+            >
+              <option value="popular" selected>
+                Sort: Popular
+              </option>
+              <option value="newest">Sort: Newest</option>
+            </select>
+            <span class="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-muted">
+              <Icon name="chevronDown" class="size-4" />
+            </span>
           </div>
         </div>
+        <fieldset class="mt-3 flex flex-wrap gap-2">
+          <legend class="sr-only">Filter by capability</legend>
+          {capabilityFilters.map((f) => (
+            <label class="relative inline-flex h-9 cursor-pointer items-center rounded-md border border-line px-3.5 text-sm text-body select-none hover:border-line-strong has-checked:border-fg has-checked:bg-fg has-checked:text-canvas has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-fg">
+              <input type="checkbox" name="c" value={f.id} class="sr-only" />
+              {f.label}
+            </label>
+          ))}
+        </fieldset>
         <button
           type="submit"
           class="sr-only focus:not-sr-only focus:mt-4 focus:inline-flex focus:rounded-md focus:border focus:border-line focus:px-4 focus:py-1.5 focus:text-sm"
@@ -70,12 +72,8 @@ export function SearchPage() {
           Search
         </button>
       </form>
-      </PageHead>
 
       <div id="results" aria-live="polite">
-        <p class="sr-only" data-results-count>
-          {models.length} {models.length === 1 ? 'model' : 'models'}
-        </p>
         <ul class="rule grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-3" role="list" data-results-list>
           {models.map((m) => (
             <ModelRow model={m} />
