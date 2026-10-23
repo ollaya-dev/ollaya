@@ -17,11 +17,11 @@ LARGHA_REPO = "Phocinae/Phocinae-Largha-150M-v1"
 LARGHA_COMMIT = "5300e85a7d991f4f0cdb68dc25813f76902752d4"  # tag v1.1
 # Ollaya's own models: tag -> commit of ollaya-dev/coba-<tag>.
 COBA_COMMITS = {
-    "1b": "TODO",
-    "400m": "TODO",
-    "400m-ternary": "TODO",
-    "150m-ternary": "TODO",
-    "68m-ternary": "TODO",
+    "1b": "044c84cd2bb3fc5c0b3c4d32d5177bb54bfbb68d",
+    "400m": "b9db262294a2106c5953870ff29f5e13f8b4e556",
+    "400m-ternary": "7cfc8628cfa5889e00bd1730b38aa49e9758765a",
+    "150m-ternary": "3609cf41de228721ac41b0bae70a6c26e7c19f17",
+    "68m-ternary": "e0c9c8f84cef45e168748dc3e2bbe726bd1ac910",
 }
 
 
@@ -233,7 +233,7 @@ CATALOG = {
                         "(https://huggingface.co/jhu-clsp/ettin-encoder-150m and its sizes), are MIT-licensed by JHU CLSP.\n\n"
                         + LICENSE_APACHE,
         "tags": {
-            t: _laya("", d, params, 512, ["en"], repo="ollaya-dev/coba-" + t, commit=COBA_COMMITS[t],
+            t: _laya("", d, params, 512, ["en"], mlx=True, repo="ollaya-dev/coba-" + t, commit=COBA_COMMITS[t],
                      root=os.path.join(COBA_ROOT, t), slug="coba-" + t)
             for t, d, params in (
                 ("1b", "Ollaya's English decision model on Ettin 1B, zero-shot: the most accurate size.", "1.1B"),
@@ -246,7 +246,10 @@ CATALOG = {
             )
         },
         "aliases": {"latest": "400m"},
-        "parity": "TODO",
+        "parity": "Ollaya's runtime matches laya's own loader (0.3.7, which coba was trained with) on each checkpoint in "
+                  "fp32: 2,383 questions, identical token ids and markers, the same decision on every question, "
+                  "probabilities within 2e-5 on the CPU, CUDA and the Apple GPU (MLX). The fp16 graphs agree on "
+                  "99.7% to 99.8% of decisions (4 to 7 near-ties).",
     },
     "nli": {
         "namespace": "library",
