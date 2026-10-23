@@ -1,7 +1,7 @@
 ---
 title: FAQ
 description: How Ollaya relates to Ollama and TypeSafe, hardware, privacy, where weights come from, and licensing.
-order: 7
+order: 10
 ---
 
 # FAQ

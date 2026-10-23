@@ -32,6 +32,7 @@ import { accuracyScatter, ResultsPage, speedDots } from './pages/results'
 import { DotPlot, Scatter } from './components/charts'
 import { runs } from './data/results'
 import { SearchPage } from './pages/search'
+import { llmsFullTxt, llmsTxt } from './pages/llms'
 
 export { withReadmeBlocks } from './data/readme'
 
@@ -188,6 +189,8 @@ export async function renderSite({ origin, bench, assetVersions, stars }: BuildO
   out.push({ path: 'robots.txt', body: robotsTxt(origin) })
   out.push({ path: 'sitemap.xml', body: sitemapXml(origin, all.map((p) => p.url)) })
   out.push({ path: 'search.json', body: `${JSON.stringify(searchIndex())}\n` })
+  out.push({ path: 'llms.txt', body: llmsTxt(origin, bench, docPages, catalog) })
+  out.push({ path: 'llms-full.txt', body: llmsFullTxt(origin, docPages) })
   // The measurements behind /results, as the tools wrote them (../results/runs), under /data so they do not shadow the /results page.
   for (const { file, ...run } of runs) out.push({ path: `data/results/${file}`, body: `${JSON.stringify(run, null, 1)}\n` })
   // Two charts as their own .svg files, for the README (light and dark through prefers-color-scheme).
