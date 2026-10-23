@@ -112,7 +112,7 @@ For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed
 - The in-domain rows lift the public score by 0.11 (150m) and 0.14 (400m). They leave typed-decisions where it was
   at 150m (0.541 to 0.544) but cost 0.033 at 400m, nearly all of it on yes/no questions (0.702 to 0.582; at
   150m those went the other way, 0.638 to 0.687), so part of it may be noise on about 100 rows.
-- 150m to 400m gains 0.06 val, 0.03–0.065 typed and 0.01–0.044 public.
+- 150m to 400m gains 0.05–0.06 val, 0.03–0.065 typed and 0.01–0.044 public.
 - Ternary (recipe T3w: QAT from the fp model, logit + relation + every-layer hidden-state distillation from it,
   quantization warm-up over 30% of the steps, 4-bit embeddings) keeps 96% of the fp model's val and 98% of its
   typed and in-domain public scores at 150m.
