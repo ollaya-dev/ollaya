@@ -96,6 +96,24 @@ const overlays: Record<string, ModelOverlay> = {
       '150m': { summary: `Largha v1.1 (mmBERT-small, 144M): ${result('largha:150m', 'public.macro_accuracy', 3)} on Bespoke Labs' public benchmark; ${result('largha:150m', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
     },
   },
+  coba: {
+    stats: stats('coba:400m'),
+    title: 'coba',
+    description:
+      "Ollaya's own decision model: Laya's network on Ettin encoders, distilled from pplx-decider:flash. English. Full-precision 1b and 400m, and ternary sizes small enough for a browser.",
+    publisher: { name: 'Ollaya', url: 'https://huggingface.co/ollaya-dev' },
+    capabilities: ['zero-shot', 'browser'],
+    keywords: ['coba', 'ollaya', 'laya', 'ettin', 'encoder', 'ternary', 'bitnet', 'browser', 'webgpu', 'wasm', 'cpu', 'decision', 'classification', 'distilled'],
+    rank: 24,
+    tags: {
+      latest: { summary: 'Same as coba:400m.' },
+      '1b': { summary: `The most accurate size (Ettin 1B): ${result('coba:1b', 'typed.accuracy', 3)} on typed decisions, zero-shot.` },
+      '400m': { summary: `Ettin 400M: ${result('coba:400m', 'typed.accuracy', 3)} on typed decisions, zero-shot; ${result('coba:400m', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+      '400m-ternary': { summary: 'The 400m with ternary weights, in-domain: trained on the train splits of ten public benchmark tasks.', capabilities: ['fine-tuned'] },
+      '150m-ternary': { summary: 'Ternary Ettin 150M, in-domain; the model the /try page runs in the browser (66 MB).', capabilities: ['fine-tuned'] },
+      '68m-ternary': { summary: 'The smallest: ternary Ettin 68M, in-domain.', capabilities: ['fine-tuned'] },
+    },
+  },
   nli: {
     stats: stats('nli:deberta-v3-large'),
     title: 'NLI zero-shot',

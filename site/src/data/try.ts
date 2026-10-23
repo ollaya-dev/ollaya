@@ -5,12 +5,12 @@
  * ?repo=<org/name>&revision=<commit>&endpoint=<url>.
  */
 
-// TODO(name): the model's name is not chosen yet; repo, name and tag change together. `revision` is the
-// repository's commit: the browser caches files at a commit, so a returning visitor loads without downloading.
+// `revision` is the repository's commit: the browser caches files at a commit, so a returning visitor loads
+// without downloading.
 export const MODEL = {
-  repo: 'ollaya-dev/MODEL-150m-ternary',
-  revision: 'main',
-  name: 'MODEL',
+  repo: 'ollaya-dev/coba-150m-ternary',
+  revision: '3609cf41de228721ac41b0bae70a6c26e7c19f17',
+  name: 'coba',
   tag: '150m-ternary',
   size: '66 MB',
 }

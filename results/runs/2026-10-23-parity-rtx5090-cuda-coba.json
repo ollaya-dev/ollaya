@@ -71,21 +71,21 @@
       "model": "coba:400m-ternary",
       "questions": 2383,
       "decisions_same": 2383,
-      "max_prob_diff": 1.2e-06,
-      "p99_prob_diff": 8e-07,
+      "max_prob_diff": 1.6e-06,
+      "p99_prob_diff": 8.6e-07,
       "pass": true,
       "device": "cuda",
       "kind": "runtime",
       "gate": "fp32",
       "encoding_mismatches": 0,
       "goldens": "convert/out/goldens-all/laya-coba-400m-ternary.jsonl (477 cases, laya 0.3.7 fp32 on CPU)",
-      "export_sha256": "297085b694082968870e876da35ebbe625fbd5ec9af9ec5c406142fd084a1e8c"
+      "export_sha256": "5127480db99f5c68a4e14af3166699112e53e78c1808035d56330d4e502698a5"
     },
     {
       "model": "coba:400m-ternary-fp16",
       "questions": 2383,
-      "decisions_same": 2378,
-      "max_prob_diff": 0.0086,
+      "decisions_same": 2374,
+      "max_prob_diff": 0.0069,
       "p99_prob_diff": 0.0045,
       "pass": true,
       "device": "cuda",
@@ -93,7 +93,7 @@
       "gate": "fp16",
       "encoding_mismatches": 0,
       "goldens": "convert/out/goldens-all/laya-coba-400m-ternary.jsonl (477 cases, laya 0.3.7 fp32 on CPU)",
-      "export_sha256": "4ef13316854d0ece6266fa450a90ecbf12b256219e4a439e2d209635e0f009ff"
+      "export_sha256": "40b093e6ac84d201857a5d581a0d7a30299f8466fb1bb9ff8b11f16664126400"
     },
     {
       "model": "coba:150m-ternary",

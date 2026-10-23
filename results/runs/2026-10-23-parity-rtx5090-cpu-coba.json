@@ -43,15 +43,15 @@
       "model": "coba:400m-ternary",
       "questions": 2383,
       "decisions_same": 2383,
-      "max_prob_diff": 4.6e-06,
-      "p99_prob_diff": 1.2e-06,
+      "max_prob_diff": 2.7e-06,
+      "p99_prob_diff": 1.3e-06,
       "pass": true,
       "device": "cpu",
       "kind": "runtime",
       "gate": "fp32",
       "encoding_mismatches": 0,
       "goldens": "convert/out/goldens-all/laya-coba-400m-ternary.jsonl (477 cases, laya 0.3.7 fp32 on CPU)",
-      "export_sha256": "297085b694082968870e876da35ebbe625fbd5ec9af9ec5c406142fd084a1e8c"
+      "export_sha256": "5127480db99f5c68a4e14af3166699112e53e78c1808035d56330d4e502698a5"
     },
     {
       "model": "coba:150m-ternary",

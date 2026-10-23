@@ -1,11 +1,15 @@
+import importlib.util
 import unittest
 
-import numpy as np
-from onnx import TensorProto, helper, numpy_helper
+HAVE_ONNX = all(importlib.util.find_spec(m) for m in ("onnx", "numpy"))
+if HAVE_ONNX:
+    import numpy as np
+    from onnx import TensorProto, helper, numpy_helper
 
-from ollaya_convert.fp16 import to_fp16
+    from ollaya_convert.fp16 import to_fp16
 
 
+@unittest.skipUnless(HAVE_ONNX, "needs the convert environment (onnx, numpy)")
 class Fp16Test(unittest.TestCase):
     def test_weights_cast_plainly_and_constants_keep_the_clamp(self):
         w = np.full((64, 128), 0.5, np.float32)

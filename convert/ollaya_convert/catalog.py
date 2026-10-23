@@ -19,7 +19,7 @@ LARGHA_COMMIT = "5300e85a7d991f4f0cdb68dc25813f76902752d4"  # tag v1.1
 COBA_COMMITS = {
     "1b": "044c84cd2bb3fc5c0b3c4d32d5177bb54bfbb68d",
     "400m": "b9db262294a2106c5953870ff29f5e13f8b4e556",
-    "400m-ternary": "7cfc8628cfa5889e00bd1730b38aa49e9758765a",
+    "400m-ternary": "fd90709a8e7575bd220b3aa6c7d522c168d9e209",
     "150m-ternary": "3609cf41de228721ac41b0bae70a6c26e7c19f17",
     "68m-ternary": "e0c9c8f84cef45e168748dc3e2bbe726bd1ac910",
 }

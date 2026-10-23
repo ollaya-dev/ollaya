@@ -17,7 +17,7 @@ R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LINEUP = {
     "1b": ("fp1b-T", "1b", False, 0.621, 0.624, "zero-shot", "3.8e-6", None),
     "400m": ("fp400-T", "400m", False, 0.606, 0.605, "zero-shot", "4.9e-6", None),
-    "400m-ternary": ("t400-id-T3w", "400m", True, 0.548, 0.716, "in-domain", "8.2e-6", 147),
+    "400m-ternary": ("t400-id-T3w-e2", "400m", True, 0.571, 0.723, "in-domain", "1.9e-6", 147),
     "150m-ternary": ("t150-id-T3w-e2", "150m", True, 0.547, 0.699, "in-domain", "3.4e-6", 66),
     "68m-ternary": ("t68-id-T3w-e2", "68m", True, 0.493, 0.677, "in-domain", "1.4e-6", 35),
 }
