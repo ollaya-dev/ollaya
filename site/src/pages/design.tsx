@@ -60,7 +60,8 @@ const tokens = `
   --color-btn: #fafafa; --color-btn-hover: #ffffff; --color-btn-fg: #0a0a0a; --color-term: rgb(10 10 10 / 0.78);
   --color-tok-comment: #6b6b6b; --color-tok-string: #a9c7a0; --color-tok-number: #e3d7b4; --color-tok-keyword: #c4c4c4;
   --color-tok-key: #fafafa; --color-tok-fn: #8cc8ff; --color-tok-punct: #6b6b6b;
-  --color-us: #8cc8ff; --color-them: #f0a060; --color-pass: #3fb950; --color-fail: #f85149;
+  /* The data colours are the hero's two fields, lit: Ollaya green, the other server amber. */
+  --color-us: #8fd3ae; --color-them: #d9b366; --color-us-bright: #b6ecc9; --color-pass: #3fb950; --color-fail: #f85149;
   background: var(--color-canvas); color: var(--color-body); overflow-x: clip;
 }
 /* The frame: two rails down the page, with a cross where a section's rule meets them. */
@@ -120,9 +121,9 @@ const tokens = `
 .rd .pt { cursor: default; outline: none; }
 .rd .pt circle { transition: r 0.15s, opacity 0.15s; }
 .rd .pt.is-on circle { r: 7; }
-.rd .pt.is-on .dot { fill: var(--color-us); stroke: var(--color-us); }
+.rd .pt.is-on .dot { fill: var(--color-us-bright); stroke: var(--color-us-bright); }
 .rd .pt.is-off { opacity: 0.12; pointer-events: none; }
-.rd .pt:focus-visible circle { stroke: var(--color-us); stroke-width: 2; }
+.rd .pt:focus-visible circle { stroke: var(--color-us-bright); stroke-width: 2; }
 .rd .tip { position: absolute; z-index: 10; pointer-events: none; white-space: nowrap; }
 /* The confidence meter: ten segments, lit in turn. */
 .rd .meter { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
@@ -474,7 +475,7 @@ function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
         {(['ollaya', 'ollama'] as const).map((srv) => (
           <button type="button" data-series={srv} aria-pressed="true" class="inline-flex items-center gap-2 rounded-md border border-line px-2.5 py-1 text-body hover:border-line-strong aria-[pressed=false]:opacity-40">
             <svg viewBox="0 0 12 12" class="size-3" aria-hidden="true">
-              {srv === 'ollaya' ? <circle cx="6" cy="6" r="5" class="fill-fg" /> : <circle cx="6" cy="6" r="4" class="stroke-muted" fill="none" stroke-width="2" />}
+              {srv === 'ollaya' ? <circle cx="6" cy="6" r="5" class="fill-us" /> : <circle cx="6" cy="6" r="4" class="stroke-them" fill="none" stroke-width="2" />}
             </svg>
             {srv === 'ollaya' ? 'Ollaya' : OLLAMA}
           </button>
@@ -516,12 +517,12 @@ function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
             <title>{`${d.name} on ${d.server === 'ollaya' ? 'Ollaya' : OLLAMA}: accuracy ${d.acc.toFixed(3)}, ECE ${d.ece.toFixed(3)}, ${Math.round(d.ms)} ms`}</title>
             <circle cx={x(d.ms)} cy={y(d.acc)} r="12" fill="transparent" />
             {d.server === 'ollaya' ? (
-              <circle cx={x(d.ms)} cy={y(d.acc)} r="5" class="dot fill-fg stroke-canvas" stroke-width="1.5" />
+              <circle cx={x(d.ms)} cy={y(d.acc)} r="5" class="dot fill-us stroke-canvas" stroke-width="1.5" />
             ) : (
-              <circle cx={x(d.ms)} cy={y(d.acc)} r="4.5" class="dot stroke-muted fill-canvas" stroke-width="2" />
+              <circle cx={x(d.ms)} cy={y(d.acc)} r="4.5" class="dot stroke-them fill-canvas" stroke-width="2" />
             )}
             {d.label ? (
-              <text x={x(d.ms) + 9} y={y(d.acc) + 4} font-size="12" class={d.server === 'ollaya' ? 'fill-fg' : 'fill-muted'}>
+              <text x={x(d.ms) + 9} y={y(d.acc) + 4} font-size="12" class={d.server === 'ollaya' ? 'fill-fg' : 'fill-them'}>
                 {d.name}
               </text>
             ) : null}
