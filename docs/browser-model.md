@@ -147,7 +147,7 @@ five questions, states up to 512 tokens):
 
 | Ternary | Graph | Resident memory | Per request, p50 |
 |---|---:|---:|---:|
-| 68m | 32 MB | – | 0.36 s |
+| 68m | 32 MB | 0.55 GB | 0.33 s |
 | 150m | 63 MB | 0.68 GB | 0.91 s |
 | 400m | 144 MB | 1.03 GB | 2.44 s |
 
