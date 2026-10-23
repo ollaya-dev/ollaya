@@ -1,7 +1,7 @@
 //! Compare the `qwen3guard-gen-v1` runtime against golden fixtures from
 //! `ollaya_convert.families.qwen3guard.parity` (transformers fp32, TF32 off).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_qwen3guard -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]
+//!     cargo run --release -p ollaya-runner --example parity_qwen3guard -- <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency] [--smoke]
 //!
 //! Every golden state is encoded with the model's preset first:
 //! * both rows' token ids (the chat template rendered upstream) and last positions must match;
@@ -82,11 +82,12 @@ fn main() -> Result<()> {
     let (args, smoke) = smoke::args();
     if args.len() < 3 {
         bail!(
-            "usage: parity_qwen3guard <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]"
+            "usage: parity_qwen3guard <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency] [--smoke]"
         );
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
+        Some("metal") => Device::Metal,
         _ => Device::Cpu,
     };
     let latency = args.iter().any(|a| a == "--latency");

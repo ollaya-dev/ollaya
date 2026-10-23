@@ -1,7 +1,7 @@
 //! Compare the `decider-slots-v1` runtime against golden fixtures from
 //! `ollaya_convert.families.decider.goldens` (upstream decider in fp32, TF32 off).
 //!
-//!     cargo run --release -p ollaya-runner --example parity_decider -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]
+//!     cargo run --release -p ollaya-runner --example parity_decider -- <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency] [--smoke]
 //!
 //! Every case is encoded first, before anything runs through the graph:
 //! * a request upstream rejects must be rejected, and each of its questions must be rejected on
@@ -96,10 +96,13 @@ struct Case {
 fn main() -> Result<()> {
     let (args, smoke) = smoke::args();
     if args.len() < 3 {
-        bail!("usage: parity_decider <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--smoke]");
+        bail!(
+            "usage: parity_decider <model-dir> <goldens.jsonl> [cpu|cuda|metal] [--latency] [--smoke]"
+        );
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
+        Some("metal") => Device::Metal,
         _ => Device::Cpu,
     };
     let latency = args.iter().any(|a| a == "--latency");

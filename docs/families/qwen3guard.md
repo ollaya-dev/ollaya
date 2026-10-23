@@ -124,6 +124,29 @@ The weightless graph on ONNX Runtime 1.30 CPU, against transformers fp32 (CPU). 
 Goldens: `convert/out/goldens-qwen3guard-gen-0.6b.jsonl` holds the rows, `last_pos`, the 13 candidate
 logits per row, option logits and probabilities.
 
+## Metal parity (MLX)
+
+The MLX engine ([decision record](../decisions/0001-mlx-engine.md), phase 4) runs the model on the
+Apple GPU from the upstream `model.safetensors`, with the `tied-rows` arch layer: the Qwen3 decoder
+in `crates/ollaya-runner/src/mlx/qwen3.rs`, read through its tied LM head at each row's last
+token, restricted to the 13 candidate first tokens. It is built with the `mlx` feature, which is
+not in releases yet.
+
+```sh
+cargo run --release -p ollaya-runner --features mlx --example parity_qwen3guard -- <model-dir> convert/out/goldens-qwen3guard-gen-0.6b.jsonl metal
+```
+
+Apple M4 Pro, macOS 27, the goldens above and the same gate as the CPU (candidate and option logits
+within 1e-3, same decisions):
+
+| | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| token rows and last positions identical | 148 rows, 73,716 tokens | same |
+| max \|Δ candidate logit\|, \|Δ option logit\| | 6.7e-5, 6.7e-5 | 7.4e-5, 7.4e-5 |
+| decisions agree | **100 %** (296 questions) | **100 %** |
+| max \|Δ probability\| | 1.3e-5 (p99 1.1e-5) | 9.9e-6 (p99 7.7e-6) |
+| all 74 states, in process (the parity example's forward time) | 19.6 s (264 ms per state) | 40.7 s (550 ms per state) |
+
 ## ONNX Runtime CUDA EP note (measured)
 
 - **The bug.** ORT 1.30 CUDA EP runs these raw dynamo exports only with

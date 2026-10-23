@@ -12,6 +12,8 @@ pub mod arch;
 mod deberta;
 mod heads;
 mod modernbert;
+mod qwen3;
+mod qwen35;
 mod weights;
 
 use std::path::{Path, PathBuf};
@@ -32,7 +34,13 @@ use crate::onnx::ModelFiles;
 /// Runtime: one golden row (`td/agent_trace_observability_000000` `urgency`) amplifies fp32
 /// rounding through the encoder, and on Metal its logits land 2e-3 from the float64 goldens,
 /// over von's 1e-3 gate (ONNX Runtime on this Mac's CPU: 1.1e-3). See the decision record.
-pub const LAYOUTS: &[&str] = &["laya-markers-v1", "nli-pairs-v1", "gliclass-uni-v1"];
+pub const LAYOUTS: &[&str] = &[
+    "laya-markers-v1",
+    "nli-pairs-v1",
+    "gliclass-uni-v1",
+    "qwen3guard-gen-v1",
+    "decider-slots-v1",
+];
 
 /// Where `mlx.metallib` is, first match wins:
 /// 1. `$OLLAYA_LIBRARY_PATH/mlx_metal/`;
@@ -208,6 +216,11 @@ impl Model {
         let backbone = match &arch.backbone {
             Backbone::Modernbert(c) => Encoder::ModernBert(modernbert::ModernBert::load(c, &t)?),
             Backbone::DebertaV2(c) => Encoder::DebertaV2(deberta::DebertaV2::load(c, &t)?),
+            Backbone::Qwen3(_) | Backbone::Qwen35(_) => {
+                return Err(Error::Model(
+                    "a decoder backbone needs a decoder head".into(),
+                ));
+            }
         };
         let d = arch.backbone.hidden_size();
         let head = match &arch.head {
@@ -232,6 +245,11 @@ impl Model {
             }
             Head::OptionMarker(h) => HeadModel::OptionMarker(heads::OptionMarker::load(h, d, &t)?),
             Head::GliclassUni(h) => HeadModel::Gliclass(heads::Gliclass::load(h, d, &t)?),
+            Head::TiedRows => {
+                return Err(Error::Model(
+                    "the tied-rows head needs a decoder backbone".into(),
+                ));
+            }
         };
         Ok(Model { backbone, head })
     }
@@ -334,6 +352,135 @@ impl Model {
                 Ok((read(&head.forward(&h, &att, &pos, &mask)?)?, None))
             }
         }
+    }
+}
+
+// --- decoders --------------------------------------------------------------------------------------
+
+/// A causal decoder, on the MLX thread.
+enum DecoderModel {
+    Qwen3(qwen3::Qwen3),
+    Qwen35(qwen35::Qwen35),
+}
+
+impl DecoderModel {
+    /// The token embedding, the tied LM head.
+    fn embed(&self) -> &Array {
+        match self {
+            DecoderModel::Qwen3(m) => &m.embed,
+            DecoderModel::Qwen35(m) => &m.embed,
+        }
+    }
+
+    /// Rows are padded to a multiple of this many tokens.
+    fn seq_multiple(&self) -> i32 {
+        match self {
+            DecoderModel::Qwen3(_) => 1,
+            DecoderModel::Qwen35(_) => qwen35::CHUNK,
+        }
+    }
+
+    fn forward(&self, ids: &Array) -> Result<Array, Error> {
+        match self {
+            DecoderModel::Qwen3(m) => m.forward(ids),
+            DecoderModel::Qwen35(m) => m.forward(ids),
+        }
+    }
+}
+
+/// A decoder network (qwen3guard) on the MLX thread: rows of token ids in, the tied LM head at one
+/// position per row out.
+pub struct MlxDecoder {
+    worker: Worker<DecoderModel>,
+}
+
+impl MlxDecoder {
+    pub fn load(files: &ModelFiles, expect: HeadKind) -> Result<MlxDecoder, Error> {
+        let arch_path = files
+            .arch
+            .as_ref()
+            .ok_or_else(|| Error::Model("the model has no arch layer; MLX cannot run it".into()))?;
+        let arch = Arch::read(arch_path)?;
+        if arch.head.name() != expect.name() {
+            return Err(Error::Model(format!(
+                "{}: head {} does not match this layout's {}",
+                arch_path.display(),
+                arch.head.name(),
+                expect.name()
+            )));
+        }
+        let weights = match &files.weights {
+            Some(w) => w.clone(),
+            None => arch_path
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(&arch.weights.file),
+        };
+        let metallib = metallib().map_err(Error::Model)?;
+        let worker = Worker::start("ollaya-mlx", &metallib, move || {
+            let t = Tensors::open(&weights, &arch.weights)
+                .map_err(|e| ollaya_mlx::Error(e.to_string()))?;
+            match &arch.backbone {
+                Backbone::Qwen3(c) => qwen3::Qwen3::load(c, &t).map(DecoderModel::Qwen3),
+                Backbone::Qwen35(c) => qwen35::Qwen35::load(c, &t).map(DecoderModel::Qwen35),
+                _ => Err(Error::Model(
+                    "the tied-rows head needs a decoder backbone".into(),
+                )),
+            }
+            .map_err(|e| ollaya_mlx::Error(e.to_string()))
+        })
+        .map_err(mlx)?;
+        Ok(MlxDecoder { worker })
+    }
+
+    pub fn info(&self) -> &MetalInfo {
+        self.worker.info()
+    }
+
+    /// The tied LM head at `pos[r]` of each row of `ids` [rows, seq] (right-padded), restricted to
+    /// `tokens`: [rows, tokens.len()]. Rows are padded further to the backbone's multiple.
+    pub fn tied_rows(
+        &self,
+        ids: &Array2<i64>,
+        pos: &[i64],
+        tokens: &[u32],
+    ) -> Result<Array2<f32>, Error> {
+        let (rows, seq) = ids.dim();
+        let ids: Vec<i32> = ids.iter().map(|&v| v as i32).collect();
+        let pos: Vec<i32> = pos.iter().map(|&v| v as i32).collect();
+        let tokens: Vec<i32> = tokens.iter().map(|&v| v as i32).collect();
+        let width = tokens.len();
+        let data = self
+            .worker
+            .run(move |m| {
+                let r = || -> Result<Vec<f32>, Error> {
+                    // Pad to the backbone's multiple with the last column's id: causal, never read.
+                    let multiple = m.seq_multiple() as usize;
+                    let padded = seq.div_ceil(multiple) * multiple;
+                    let ids: Vec<i32> = if padded == seq {
+                        ids
+                    } else {
+                        let mut out = Vec::with_capacity(rows * padded);
+                        for r in 0..rows {
+                            let row = &ids[r * seq..(r + 1) * seq];
+                            out.extend_from_slice(row);
+                            out.extend(std::iter::repeat_n(row[seq - 1], padded - seq));
+                        }
+                        out
+                    };
+                    let ids =
+                        Array::from_slice(&ids, &[rows as i32, padded as i32]).map_err(mlx)?;
+                    let pos = Array::from_slice(&pos, &[rows as i32]).map_err(mlx)?;
+                    let tokens = Array::from_slice(&tokens, &[width as i32]).map_err(mlx)?;
+                    let h = m.forward(&ids)?;
+                    qwen3::tied_rows(&h, m.embed(), &pos, &tokens)?
+                        .to_f32_vec()
+                        .map_err(mlx)
+                };
+                r().map_err(|e| ollaya_mlx::Error(e.to_string()))
+            })
+            .map_err(mlx)?;
+        Array2::from_shape_vec((rows, width), data).map_err(|e| Error::Model(e.to_string()))
     }
 }
 

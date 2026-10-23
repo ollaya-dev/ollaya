@@ -4,7 +4,8 @@
   off by default and in no release. Shipping it waits on the owner's decision to raise the minimum
   macOS to 14.0 ([To ship it](#to-ship-it)).
 - **Date:** 2026-09-26.
-- **Scope so far:** phases 1 (foundation), 2 (ModernBERT) and 3 (DeBERTa-v3) of the plan below.
+- **Scope so far:** phases 1 (foundation), 2 (ModernBERT), 3 (DeBERTa-v3) and 4 (Qwen3 and Qwen3.5: qwen3guard
+  and decider; the kev, decision and pplx heads are still to come) of the plan below.
 
 ## Context
 
@@ -79,9 +80,15 @@ Only fp32 with our own model code passes; fp16, bf16 and the stock MLX model lib
     sent before.
   - `mlx/arch.rs` reads the arch layer, `mlx/weights.rs` the author's weights file (safetensors, or
     a PyTorch zip at the byte offsets the arch layer lists; nothing is unpickled at run time),
-    `mlx/modernbert.rs` and `mlx/deberta.rs` are the backbones and `mlx/heads.rs` the heads: laya's
-    `DecisionModel`, `ModernBertForSequenceClassification`, DeBERTa's `ContextPooler` classifier,
-    von's `OptionMarkerScorer` and GLiClass's uni-encoder. Weights are upcast to fp32.
+    `mlx/modernbert.rs` and `mlx/deberta.rs` are the encoder backbones and `mlx/heads.rs` their
+    heads: laya's `DecisionModel`, `ModernBertForSequenceClassification`, DeBERTa's `ContextPooler`
+    classifier, von's `OptionMarkerScorer` and GLiClass's uni-encoder. `mlx/qwen3.rs` and
+    `mlx/qwen35.rs` are the decoder backbones, read through the `tied-rows` head (the tied LM head
+    at one position per row, restricted to the tokens the engine names: qwen3guard's 13 candidate
+    first tokens, decider's 255 labels). Weights are upcast to fp32.
+  - `net.rs`: the encoder engines hold a `Net` (an ONNX Runtime session or an `MlxNet`); the
+    decoder engines (qwen3guard, decider) hold a `Decoder` (their own session, or an `MlxDecoder`),
+    and keep their ONNX inputs and session options as they were.
   - `mlx::LAYOUTS` lists the layouts `auto` runs on MLX: the ones whose models passed their gate
     (below).
 
@@ -94,7 +101,8 @@ against the weights file. It holds no weights: MLX reads the same upstream weigh
 graph references. A model without an arch layer, or with more than one weights file, runs on ONNX
 Runtime only. `package.py` adds the layer to the tags whose catalog entry has `arch`, which are the
 tags that passed on Metal: `laya:en`, `laya:multilingual`, `nli:modernbert-large`,
-`nli:deberta-v3-large` and `gliclass:large`. The published registry does not have them yet.
+`nli:deberta-v3-large`, `gliclass:large`, `qwen3guard:0.6b` and `decider:0.8b`. The published registry
+does not have them yet.
 
 ### Devices and the runner protocol
 
@@ -138,6 +146,21 @@ Each of these was measured against the goldens:
   them once at load. The scores and the two bias gathers are [rows, heads, seq, seq], so a batch
   runs in passes of as many rows as keep each of them around a quarter of a GiB
   (`rows_per_pass`); ModernBERT runs a batch in one pass as before.
+- **Qwen3** (`mlx/qwen3.rs`, phase 4): grouped-query attention through the fused SDPA with the
+  boolean causal mask, k and v repeated per group as the reference's `repeat_interleave`; a RMSNorm
+  (`mlx.fast.rms_norm`) per head on q and k; our RoPE tables over the whole head. Rows are
+  right-padded; every layer is causal, so no key mask.
+- **Qwen3.5** (`mlx/qwen35.rs`, phase 4): the export trunk's chunked gated delta rule in plain MLX
+  ops, no custom kernel. Per 64-token chunk: the pair decays `exp(cum_i - cum_j)` taken only where
+  the mask keeps the pair (a masked pair's exponent can overflow, and `inf * 0` is NaN), the UT
+  transform's unit lower-triangular inverse by recursive block doubling (six masked matmul levels,
+  exact in real arithmetic), then the inter-chunk recurrence as a host loop with the state
+  materialised per chunk. The depthwise causal conv is `conv1d` padded on both sides and cut to the
+  row; softplus is the stable `max(x, 0) + log1p(exp(-|x|))`; the attention layers apply RoPE to
+  the first `rotary_dim` channels and the sigmoid output gate; the RMSNorms are zero-centred
+  (`1 + w`). A custom Metal kernel would be compiled at run time and use fast math on macOS 15 and
+  later, which is why the delta rule stays in MLX ops; the research pass's 5.1e-6 was with such a
+  kernel, and the ops reach the same decisions (table below).
 
 ## Parity on Metal
 
@@ -162,6 +185,8 @@ weights file under its upstream name.
 | `gliclass-instruct-edge` (not in the library) | 97 cases, 482 questions | label logits within 1e-3, same decisions | 100%, logits 7.7e-5, prob diff 1.4e-5 | 100%, 9.1e-5, 6.9e-6 | yes (head verified) |
 | `nli:deberta-v3-large` (phase 3) | 97 cases, 483 questions, 1,513 rows | row scores and option logits within 1e-3, same decisions | 100%, logits 1.9e-4, prob diff 1.9e-5 (p99 7.3e-6) | 100%, 3.0e-5, 1.2e-5 | yes |
 | `gliclass:large` (phase 3) | 97 cases, 482 questions | label logits within 1e-3, same decisions | 100%, logits 8.8e-5, prob diff 1.1e-5 (p99 9.4e-6) | 100%, 6.1e-5, 7.1e-6 | yes |
+| `qwen3guard:0.6b` (phase 4) | 74 states, 148 rows, 296 questions | candidate and option logits within 1e-3, same decisions | 100%, logits 6.7e-5, prob diff 1.3e-5 (p99 1.1e-5) | 100%, 7.4e-5, 9.9e-6 | yes |
+| `decider:0.8b` (phase 4) | 114 cases (14 rejected upstream), 479 questions, 902 rows | label and option logits within 1e-3, same decisions | 100%, logits 3.8e-5, prob diff 9.9e-6 (p99 5.8e-6) | 100%, 3.8e-5, 8.2e-6 | yes |
 | `von:1.1` | 98 cases, 485 questions, 653 rows (float64 network) | row and option logits within 1e-3, same decisions | 100% decisions, prob diff 3.1e-5, **logits 2.0e-3 on one row** | **1.1e-3 on the same row** | **no** |
 
 - **`laya:en` on goldens-all.** The maximum is one question, `preset/guard/email_dict` `jailbreak`
@@ -256,8 +281,9 @@ When the owner accepts macOS 14.0 as the minimum on Apple silicon:
 
 - **MLX is 0.x.** Minor releases break APIs. Upgrade the pins only through the parity runs above.
 - **Fast math.** Anything compiled at run time (`MLX_METAL_JIT`, `mx.compile`, custom Metal kernels)
-  uses approximate math on macOS 15 and later. Qwen3.5's gated-delta kernel (phase 4) is a custom
-  kernel and needs its own parity check.
+  uses approximate math on macOS 15 and later. Qwen3.5's gated delta rule (phase 4) is therefore
+  plain MLX ops, not a custom kernel; a kernel would need its own parity check and a fast-math
+  audit.
 - **TF32.** Handled by `MLX_ENABLE_TF32=0` and the 14.0 deployment target (no NAX kernels); a
   future build that targets 26.2 for the M5 kernels must keep TF32 off.
 - **CI has no Metal.** A change can pass CI and break Metal parity. Run the parity examples on a

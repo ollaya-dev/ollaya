@@ -251,7 +251,12 @@ unary! {
     erf => mlx_erf,
     exp => mlx_exp,
     log => mlx_log,
+    log1p => mlx_log1p,
     abs => mlx_abs,
+    negative => mlx_negative,
+    rsqrt => mlx_rsqrt,
+    sigmoid => mlx_sigmoid,
+    square => mlx_square,
     logical_not => mlx_logical_not,
 }
 
@@ -268,6 +273,7 @@ binary! {
     equal => mlx_equal,
     greater_equal => mlx_greater_equal,
     less_equal => mlx_less_equal,
+    logaddexp => mlx_logaddexp,
 }
 
 impl Array {
@@ -446,6 +452,114 @@ impl Array {
                 sys::mlx_arange(res, f64::from(start), f64::from(stop), 1.0, dtype.raw(), s)
             },
             "arange",
+        )
+    }
+
+    /// Inclusive cumulative sum along `axis`.
+    pub fn cumsum(&self, axis: i32) -> Result<Array> {
+        let dtype = sys::mlx_optional_dtype {
+            value: sys::mlx_dtype_::MLX_FLOAT32,
+            has_value: false,
+        };
+        // SAFETY: valid handle.
+        op(
+            |res, s| unsafe { sys::mlx_cumsum_axis(res, self.raw, axis, false, true, dtype, s) },
+            "cumsum",
+        )
+    }
+
+    /// Mean along `axis`.
+    pub fn mean(&self, axis: i32, keepdims: bool) -> Result<Array> {
+        // SAFETY: valid handle.
+        op(
+            |res, s| unsafe { sys::mlx_mean_axis(res, self.raw, axis, keepdims, s) },
+            "mean",
+        )
+    }
+
+    /// Each element repeated `repeats` times along `axis` (`torch.repeat_interleave`).
+    pub fn repeat(&self, repeats: i32, axis: i32) -> Result<Array> {
+        // SAFETY: valid handle.
+        op(
+            |res, s| unsafe { sys::mlx_repeat_axis(res, self.raw, repeats, axis, s) },
+            "repeat",
+        )
+    }
+
+    /// Zero above the `k`th diagonal of the last two axes.
+    pub fn tril(&self, k: i32) -> Result<Array> {
+        // SAFETY: valid handle.
+        op(
+            |res, s| unsafe { sys::mlx_tril(res, self.raw, k, s) },
+            "tril",
+        )
+    }
+
+    /// Zero below the `k`th diagonal of the last two axes.
+    pub fn triu(&self, k: i32) -> Result<Array> {
+        // SAFETY: valid handle.
+        op(
+            |res, s| unsafe { sys::mlx_triu(res, self.raw, k, s) },
+            "triu",
+        )
+    }
+
+    /// An array of `shape` filled with `value`.
+    pub fn full(shape: &[i32], value: f32) -> Result<Array> {
+        let v = Array::scalar(value);
+        // SAFETY: valid handle; `shape` outlives the call.
+        op(
+            |res, s| unsafe {
+                sys::mlx_full(
+                    res,
+                    shape.as_ptr(),
+                    shape.len(),
+                    v.raw,
+                    Dtype::Float32.raw(),
+                    s,
+                )
+            },
+            "full",
+        )
+    }
+
+    /// The identity matrix, float32.
+    pub fn eye(n: i32) -> Result<Array> {
+        // SAFETY: plain values.
+        op(
+            |res, s| unsafe { sys::mlx_eye(res, n, n, 0, Dtype::Float32.raw(), s) },
+            "eye",
+        )
+    }
+
+    /// Clamp to `[lo, hi]`.
+    pub fn clip(&self, lo: f32, hi: f32) -> Result<Array> {
+        let (lo, hi) = (Array::scalar(lo), Array::scalar(hi));
+        // SAFETY: valid handles.
+        op(
+            |res, s| unsafe { sys::mlx_clip(res, self.raw, lo.raw, hi.raw, s) },
+            "clip",
+        )
+    }
+
+    /// 1-d convolution of `self` [batch, length, channels] with `weight` [out, kernel, in / groups],
+    /// as `mlx.core.conv1d`.
+    pub fn conv1d(&self, weight: &Array, padding: i32, groups: i32) -> Result<Array> {
+        // SAFETY: valid handles.
+        op(
+            |res, s| unsafe {
+                sys::mlx_conv1d(res, self.raw, weight.raw, 1, padding, 1, groups, s)
+            },
+            "conv1d",
+        )
+    }
+
+    /// RMS normalisation over the last axis: `x / sqrt(mean(x^2) + eps) * weight`, in float32.
+    pub fn rms_norm(&self, weight: &Array, eps: f32) -> Result<Array> {
+        // SAFETY: valid handles.
+        op(
+            |res, s| unsafe { sys::mlx_fast_rms_norm(res, self.raw, weight.raw, eps, s) },
+            "rms_norm",
         )
     }
 

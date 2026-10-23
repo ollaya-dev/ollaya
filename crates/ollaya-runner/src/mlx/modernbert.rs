@@ -111,9 +111,14 @@ pub fn relu(x: &Array) -> Result<Array> {
     x.maximum(&Array::scalar(0.0)).map_err(mlx)
 }
 
+/// `x * sigmoid(x)`, as `F.silu`.
+pub fn silu(x: &Array) -> Result<Array> {
+    x.sigmoid().and_then(|s| x.multiply(&s)).map_err(mlx)
+}
+
 /// `x * cos + rotate_half(x) * sin` over the last axis, `rotate_half(x) = [-x2, x1]`; `cos` and
 /// `sin` are [seq, head_dim] and `x` is [.., seq, head_dim].
-fn rotate(x: &Array, cos: &Array, sin: &Array) -> Result<Array> {
+pub fn rotate(x: &Array, cos: &Array, sin: &Array) -> Result<Array> {
     let halves = x.split(2, -1).map_err(mlx)?;
     let neg = halves[1].multiply(&Array::scalar(-1.0)).map_err(mlx)?;
     let rotated = Array::concatenate(&[&neg, &halves[0]], -1).map_err(mlx)?;
@@ -134,11 +139,11 @@ struct Layer {
 }
 
 /// cos and sin of the rotary angles of positions `0..len`, [len, head_dim] each, for one base.
-struct Rotary {
-    theta: f32,
-    len: i32,
-    cos: Array,
-    sin: Array,
+pub struct Rotary {
+    pub theta: f32,
+    pub len: i32,
+    pub cos: Array,
+    pub sin: Array,
 }
 
 impl Rotary {
@@ -147,7 +152,7 @@ impl Rotary {
     /// it (bit for bit at head_dim 64, checked against torch); the angles `p * inv_freq` and
     /// their cos and sin are f64, rounded once to f32. That is what von's float64 goldens
     /// compute, and within one f32 rounding of an fp32 reference.
-    fn new(theta: f32, head_dim: usize, len: i32) -> Result<Rotary> {
+    pub fn new(theta: f32, head_dim: usize, len: i32) -> Result<Rotary> {
         let half = head_dim / 2;
         let inv: Vec<f64> = (0..half)
             .map(|j| f64::from(1.0 / theta.powf((2 * j) as f32 / head_dim as f32)))

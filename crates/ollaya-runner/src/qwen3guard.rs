@@ -12,11 +12,11 @@ use std::sync::Mutex;
 use ndarray::{Array1, Array2, Ix2};
 use ollaya_decision::qwen3guard::{GuardConfig, GuardLayout, GuardRows};
 use ollaya_decision::{Calibration, CalibrationFile, Questions, TokenEncoder};
-use ort::session::Session;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::engine::Engine;
+use crate::net::{Decoder, Head};
 use crate::onnx::{Device, ModelFiles, load_tokenizer, session_with};
 use crate::{Error, Output, QuestionOutput};
 
@@ -35,7 +35,7 @@ struct DecisionConfig {
 }
 
 pub struct GuardModel {
-    session: Mutex<Session>,
+    net: Decoder,
     tokenizer: Tokenizer,
     /// Tokens the prompt adds around the state (reported state tokens exclude them).
     overhead: usize,
@@ -98,21 +98,30 @@ impl GuardModel {
         let tokenizer = Tokenizer(load_tokenizer(&files.tokenizer)?);
         let overhead = layout.overhead(&tokenizer)?;
 
-        let session = session_with(&files.graph, device, intra_threads, |b| {
-            crate::decider::configure(b, device)
-        })?;
-        let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
-        if inputs.len() != INPUTS.len()
-            || !INPUTS.iter().all(|n| inputs.contains(n))
-            || !session.outputs().iter().any(|o| o.name() == OUTPUT)
-        {
-            return Err(Error::Model(format!(
-                "graph inputs {inputs:?} do not match the qwen3guard contract ({INPUTS:?} -> {OUTPUT:?})"
-            )));
+        let net = match device {
+            Device::Metal => Decoder::metal(files, Head::TiedRows)?,
+            _ => Decoder::Ort(Mutex::new(session_with(
+                &files.graph,
+                device,
+                intra_threads,
+                |b| crate::decider::configure(b, device),
+            )?)),
+        };
+        if let Some(session) = net.session() {
+            let session = session.lock().expect("session mutex poisoned");
+            let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
+            if inputs.len() != INPUTS.len()
+                || !INPUTS.iter().all(|n| inputs.contains(n))
+                || !session.outputs().iter().any(|o| o.name() == OUTPUT)
+            {
+                return Err(Error::Model(format!(
+                    "graph inputs {inputs:?} do not match the qwen3guard contract ({INPUTS:?} -> {OUTPUT:?})"
+                )));
+            }
         }
 
         Ok(GuardModel {
-            session: Mutex::new(session),
+            net,
             tokenizer,
             overhead,
             layout,
@@ -135,11 +144,11 @@ impl GuardModel {
 
     /// Each row's candidate logits (`[safety..., categories...]`).
     pub fn cand_logits(&self, rows: &GuardRows) -> Result<Vec<Vec<f32>>, Error> {
-        let width = self.layout.candidate_ids().count();
+        let candidates: Vec<u32> = self.layout.candidate_ids().collect();
+        let width = candidates.len();
         let lens: Vec<usize> = rows.rows.iter().map(Vec::len).collect();
         let pad = i64::from(self.layout.config.special_tokens.pad);
         let mut cand = vec![Vec::new(); lens.len()];
-        let mut session = self.session.lock().expect("session mutex poisoned");
         for range in crate::engine::batches(&lens, TOKEN_BUDGET, usize::MAX) {
             let batch = &rows.rows[range.clone()];
             let seq = lens[range.clone()].iter().copied().max().unwrap_or(0);
@@ -151,14 +160,24 @@ impl GuardModel {
                 }
                 last_pos[r] = row.len() as i64 - 1;
             }
-            let outputs = session.run(ort::inputs![
-                "input_ids" => ort::value::Tensor::from_array(input_ids)?,
-                "last_pos" => ort::value::Tensor::from_array(last_pos)?,
-            ])?;
-            let out = outputs[OUTPUT]
-                .try_extract_array::<f32>()?
-                .into_dimensionality::<Ix2>()
-                .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?;
+            let out = match &self.net {
+                Decoder::Ort(session) => {
+                    let mut session = session.lock().expect("session mutex poisoned");
+                    let outputs = session.run(ort::inputs![
+                        "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+                        "last_pos" => ort::value::Tensor::from_array(last_pos)?,
+                    ])?;
+                    outputs[OUTPUT]
+                        .try_extract_array::<f32>()?
+                        .into_dimensionality::<Ix2>()
+                        .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?
+                        .to_owned()
+                }
+                #[cfg(feature = "mlx")]
+                Decoder::Mlx(net) => {
+                    net.tied_rows(&input_ids, last_pos.as_slice().unwrap(), &candidates)?
+                }
+            };
             if out.nrows() != batch.len() || out.ncols() != width {
                 return Err(Error::Model(format!(
                     "{OUTPUT} has shape {:?} for {} rows of {width} candidates",

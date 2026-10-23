@@ -36,6 +36,11 @@ pub enum Backbone {
     Modernbert(ModernBertConfig),
     #[serde(rename = "deberta-v2")]
     DebertaV2(DebertaV2Config),
+    /// The dense Qwen3 decoder (qwen3guard).
+    Qwen3(Qwen3Config),
+    /// The hybrid Qwen3.5 decoder (decider): Gated DeltaNet and gated attention layers.
+    #[serde(rename = "qwen3-5")]
+    Qwen35(Qwen35Config),
 }
 
 impl Backbone {
@@ -43,8 +48,71 @@ impl Backbone {
         match self {
             Backbone::Modernbert(c) => c.hidden_size,
             Backbone::DebertaV2(c) => c.hidden_size,
+            Backbone::Qwen3(c) => c.hidden_size,
+            Backbone::Qwen35(c) => c.hidden_size,
         }
     }
+
+    /// A causal decoder (one position per row is read), not an encoder.
+    pub fn is_decoder(&self) -> bool {
+        matches!(self, Backbone::Qwen3(_) | Backbone::Qwen35(_))
+    }
+}
+
+/// Hugging Face `Qwen3_5TextConfig` (transformers 5): a hybrid of `linear_attention` (Gated
+/// DeltaNet) and `full_attention` layers, with partial RoPE and an attention output gate.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Qwen35Config {
+    /// Name prefix of the decoder's tensors in the weights file, e.g. `model.language_model.`.
+    pub prefix: String,
+    pub vocab_size: usize,
+    pub hidden_size: usize,
+    pub intermediate_size: usize,
+    pub num_hidden_layers: usize,
+    /// `linear_attention` or `full_attention`, one per layer.
+    pub layer_types: Vec<String>,
+    pub num_attention_heads: usize,
+    pub num_key_value_heads: usize,
+    pub head_dim: usize,
+    /// RoPE covers the first `head_dim * partial_rotary_factor` channels.
+    pub partial_rotary_factor: f32,
+    pub rope_theta: f32,
+    pub attention_bias: bool,
+    /// Must be true (`attn_output_gate`).
+    pub attn_output_gate: bool,
+    pub linear_num_key_heads: usize,
+    pub linear_num_value_heads: usize,
+    pub linear_key_head_dim: usize,
+    pub linear_value_head_dim: usize,
+    pub linear_conv_kernel_dim: usize,
+    pub rms_norm_eps: f32,
+    /// Only `silu`.
+    pub hidden_act: String,
+    /// Must be true: the LM head is the embedding.
+    pub tie_word_embeddings: bool,
+}
+
+/// Hugging Face `Qwen3Config` (transformers 5), as the model's `config.json` gives it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Qwen3Config {
+    /// Name prefix of the decoder's tensors in the weights file, e.g. `model.`.
+    pub prefix: String,
+    pub vocab_size: usize,
+    pub hidden_size: usize,
+    pub intermediate_size: usize,
+    pub num_hidden_layers: usize,
+    pub num_attention_heads: usize,
+    pub num_key_value_heads: usize,
+    pub head_dim: usize,
+    pub rms_norm_eps: f32,
+    pub rope_theta: f32,
+    pub attention_bias: bool,
+    /// Only `silu`.
+    pub hidden_act: String,
+    /// Must be true: the LM head is the embedding (the heads below read its rows).
+    pub tie_word_embeddings: bool,
+    /// Must be false: every layer attends to the whole prefix.
+    pub use_sliding_window: bool,
 }
 
 /// Hugging Face `ModernBertConfig` (transformers 5), as the encoder's `config.json` gives it.
@@ -114,6 +182,9 @@ pub enum Head {
     OptionMarker(OptionMarkerHead),
     /// GLiClass `GLiClassUniEncoder` (`gliclass-uni-v1`).
     GliclassUni(GliclassHead),
+    /// A decoder's tied LM head at one position per row, restricted to the tokens the engine
+    /// names at run time: qwen3guard's candidate first tokens (`qwen3guard-gen-v1`).
+    TiedRows,
 }
 
 impl Head {
@@ -123,6 +194,7 @@ impl Head {
             Head::SequenceClassification(_) | Head::ContextPooler(_) => "sequence-classification",
             Head::OptionMarker(_) => "option-marker",
             Head::GliclassUni(_) => "gliclass-uni",
+            Head::TiedRows => "tied-rows",
         }
     }
 }
@@ -269,6 +341,49 @@ impl Arch {
                     return Err(format!("no rope_theta for {t}"));
                 }
             }
+            Backbone::Qwen3(c) => {
+                if c.hidden_act != "silu" {
+                    return Err(format!("unsupported hidden_act {:?}", c.hidden_act));
+                }
+                if !c.tie_word_embeddings || c.use_sliding_window {
+                    return Err(
+                        "unsupported Qwen3 options (an untied LM head or sliding windows)".into(),
+                    );
+                }
+                if c.num_key_value_heads == 0
+                    || c.num_attention_heads % c.num_key_value_heads != 0
+                    || c.head_dim % 2 != 0
+                {
+                    return Err("inconsistent backbone".into());
+                }
+            }
+            Backbone::Qwen35(c) => {
+                if c.hidden_act != "silu" {
+                    return Err(format!("unsupported hidden_act {:?}", c.hidden_act));
+                }
+                if !c.tie_word_embeddings || !c.attn_output_gate {
+                    return Err(
+                        "unsupported Qwen3.5 options (an untied LM head or no attention gate)"
+                            .into(),
+                    );
+                }
+                if c.layer_types.len() != c.num_hidden_layers
+                    || c.num_key_value_heads == 0
+                    || c.num_attention_heads % c.num_key_value_heads != 0
+                    || c.linear_num_key_heads == 0
+                    || c.linear_num_value_heads % c.linear_num_key_heads != 0
+                    || c.linear_conv_kernel_dim == 0
+                {
+                    return Err("inconsistent backbone".into());
+                }
+                let rotary = (c.head_dim as f32 * c.partial_rotary_factor) as usize;
+                if rotary == 0 || !rotary.is_multiple_of(2) || rotary > c.head_dim {
+                    return Err(format!(
+                        "unsupported partial_rotary_factor {}",
+                        c.partial_rotary_factor
+                    ));
+                }
+            }
             Backbone::DebertaV2(c) => {
                 if c.hidden_act != "gelu" {
                     return Err(format!("unsupported hidden_act {:?}", c.hidden_act));
@@ -354,6 +469,31 @@ mod tests {
         assert_eq!(a.backbone.hidden_size(), 8);
         let conv = text.replace("\"conv_kernel_size\":0", "\"conv_kernel_size\":3");
         assert!(Arch::parse(&conv).unwrap_err().contains("conv"));
+    }
+
+    #[test]
+    fn reads_a_qwen3_arch() {
+        let text = json!({
+            "schema": SCHEMA,
+            "backbone": {
+                "type": "qwen3", "prefix": "model.", "vocab_size": 10, "hidden_size": 8,
+                "intermediate_size": 12, "num_hidden_layers": 2, "num_attention_heads": 2,
+                "num_key_value_heads": 1, "head_dim": 4, "rms_norm_eps": 1e-6, "rope_theta": 1e6,
+                "attention_bias": false, "hidden_act": "silu", "tie_word_embeddings": true,
+                "use_sliding_window": false
+            },
+            "head": {"type": "tied-rows"},
+            "weights": {"format": "safetensors", "file": "model.safetensors"}
+        })
+        .to_string();
+        let a = Arch::parse(&text).unwrap();
+        assert_eq!(a.head.name(), "tied-rows");
+        assert!(a.backbone.is_decoder());
+        let untied = text.replace(
+            "\"tie_word_embeddings\":true",
+            "\"tie_word_embeddings\":false",
+        );
+        assert!(Arch::parse(&untied).unwrap_err().contains("untied"));
     }
 
     #[test]

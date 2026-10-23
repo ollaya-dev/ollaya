@@ -305,6 +305,30 @@ its shipped configuration (4b: `weights_in_memory: bf16`):
 decider-2b was re-run on CUDA after the decoder sessions switched to exact arena growth
 ([ADR-0002](../decisions/0002-decoder-weights-in-memory.md)): the numbers are unchanged.
 
+## Metal parity (MLX)
+
+The MLX engine ([decision record](../decisions/0001-mlx-engine.md), phase 4) runs the Qwen3.5
+backbone on the Apple GPU from the upstream `model.safetensors`, with the `tied-rows` arch layer:
+`crates/ollaya-runner/src/mlx/qwen35.rs` recomputes the hybrid (the chunked gated delta rule in
+plain MLX ops, no custom kernel; the gated attention layers with partial RoPE), read through the
+tied LM head at each row's answer slot, restricted to the 255 labels. It is built with the `mlx`
+feature, which is not in releases yet.
+
+```sh
+cargo run --release -p ollaya-runner --features mlx --example parity_decider -- convert/out/decider-0.8b convert/out/goldens-decider-0.8b.jsonl metal
+```
+
+Apple M4 Pro, macOS 27, goldens made on this Mac (`decider.goldens`, CPU fp32, `--td-limit 20`),
+the same gate as above (label and option logits within 1e-3, same decisions):
+
+| decider-0.8b | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| rejections, token rows and slots | 0 mismatches (114 cases, 479 questions, 902 rows) | 0 mismatches |
+| max \|Δ label logit\| | 3.8e-5 | 3.8e-5 |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| | 9.9e-6 (p99 5.8e-6) | 8.2e-6 (p99 6.7e-6) |
+| all 114 requests, in process | 78.1 s (781 ms per request) | 203.3 s (2,033 ms per request) |
+
 ## ONNX Runtime CUDA EP note (measured)
 
 - **The bug.** ORT 1.30 CUDA EP runs these raw dynamo exports only with

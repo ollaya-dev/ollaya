@@ -5,6 +5,7 @@
     python3 -m ollaya_convert.arch sequence-classification --config config.json --weights model.safetensors --out arch.json
     python3 -m ollaya_convert.arch von --config config.json --weights option_marker.pt --out arch.json
     python3 -m ollaya_convert.arch gliclass --config config.json --weights model.safetensors --out arch.json
+    python3 -m ollaya_convert.arch tied-rows --config config.json --weights model.safetensors --out arch.json
 
 The MLX engine (`crates/ollaya-runner/src/mlx/`) runs our own code per backbone and head on the
 author's unmodified weights file. This layer tells it which network that file holds: the encoder's
@@ -175,11 +176,110 @@ def deberta_v2(config, prefix):
     }
 
 
+def qwen3(config, prefix):
+    """Hugging Face Qwen3Config: a dense decoder with grouped-query attention, a RMSNorm per head on q and
+    k, RoPE over the whole head and a SwiGLU MLP (`crates/ollaya-runner/src/mlx/qwen3.rs`)."""
+    c = config
+    if c.get("model_type") != "qwen3":
+        raise SystemExit("not a Qwen3 config: %r" % c.get("model_type"))
+    rope = c.get("rope_parameters") or {}
+    return {
+        "type": "qwen3",
+        "prefix": prefix,
+        "vocab_size": c["vocab_size"],
+        "hidden_size": c["hidden_size"],
+        "intermediate_size": c["intermediate_size"],
+        "num_hidden_layers": c["num_hidden_layers"],
+        "num_attention_heads": c["num_attention_heads"],
+        "num_key_value_heads": c["num_key_value_heads"],
+        "head_dim": c.get("head_dim") or c["hidden_size"] // c["num_attention_heads"],
+        "rms_norm_eps": c.get("rms_norm_eps", 1e-6),
+        "rope_theta": float(rope.get("rope_theta", c.get("rope_theta", 10000.0))),
+        "attention_bias": bool(c.get("attention_bias", False)),
+        "hidden_act": c.get("hidden_act", "silu"),
+        "tie_word_embeddings": bool(c.get("tie_word_embeddings", False)),
+        "use_sliding_window": bool(c.get("use_sliding_window", False)),
+    }
+
+
+def qwen3_5(config, prefix):
+    """Hugging Face Qwen3_5TextConfig: Gated DeltaNet and gated full-attention layers with partial RoPE
+    (`crates/ollaya-runner/src/mlx/qwen35.rs`). A Qwen3_5Config (vision-language) gives its text_config."""
+    c = config.get("text_config") or config
+    if c.get("model_type") not in ("qwen3_5_text", "qwen3_5"):
+        raise SystemExit("not a Qwen3.5 config: %r" % c.get("model_type"))
+    rope = c.get("rope_parameters") or {}
+    return {
+        "type": "qwen3-5",
+        "prefix": prefix,
+        "vocab_size": c["vocab_size"],
+        "hidden_size": c["hidden_size"],
+        "intermediate_size": c["intermediate_size"],
+        "num_hidden_layers": c["num_hidden_layers"],
+        "layer_types": list(c["layer_types"]),
+        "num_attention_heads": c["num_attention_heads"],
+        "num_key_value_heads": c["num_key_value_heads"],
+        "head_dim": c.get("head_dim") or c["hidden_size"] // c["num_attention_heads"],
+        "partial_rotary_factor": float(rope.get("partial_rotary_factor", c.get("partial_rotary_factor", 1.0))),
+        "rope_theta": float(rope.get("rope_theta", c.get("rope_theta", 10000.0))),
+        "attention_bias": bool(c.get("attention_bias", False)),
+        "attn_output_gate": bool(c.get("attn_output_gate", False)),
+        "linear_num_key_heads": c["linear_num_key_heads"],
+        "linear_num_value_heads": c["linear_num_value_heads"],
+        "linear_key_head_dim": c["linear_key_head_dim"],
+        "linear_value_head_dim": c["linear_value_head_dim"],
+        "linear_conv_kernel_dim": c["linear_conv_kernel_dim"],
+        "rms_norm_eps": c.get("rms_norm_eps", 1e-6),
+        "hidden_act": c.get("hidden_act", "silu"),
+        "tie_word_embeddings": bool(config.get("tie_word_embeddings", c.get("tie_word_embeddings", False))),
+    }
+
+
 def backbone(config, prefix):
-    """The encoder the config describes: ModernBERT or DeBERTa-v2."""
-    if config.get("model_type") == "deberta-v2":
+    """The network the config describes: ModernBERT, DeBERTa-v2, Qwen3 or Qwen3.5."""
+    kind = config.get("model_type")
+    if kind == "deberta-v2":
         return deberta_v2(config, prefix)
+    if kind == "qwen3":
+        return qwen3(config, prefix)
+    if kind in ("qwen3_5_text", "qwen3_5"):
+        return qwen3_5(config, prefix)
     return modernbert(config, prefix)
+
+
+def qwen3_5_tensors(b):
+    """Every tensor `crates/ollaya-runner/src/mlx/qwen35.rs` reads."""
+    p = b["prefix"]
+    names = [p + "embed_tokens.weight", p + "norm.weight"]
+    for i, kind in enumerate(b["layer_types"]):
+        lp = "%slayers.%d." % (p, i)
+        names += [lp + n + ".weight" for n in ("input_layernorm", "post_attention_layernorm", "mlp.gate_proj",
+                                               "mlp.up_proj", "mlp.down_proj")]
+        if kind == "linear_attention":
+            names += [lp + "linear_attn." + n for n in ("in_proj_qkv.weight", "in_proj_z.weight", "in_proj_b.weight",
+                                                        "in_proj_a.weight", "conv1d.weight", "A_log", "dt_bias",
+                                                        "norm.weight", "out_proj.weight")]
+        else:
+            names += [lp + "self_attn." + n + ".weight" for n in ("q_proj", "k_proj", "v_proj", "o_proj", "q_norm",
+                                                                  "k_norm")]
+            if b["attention_bias"]:
+                names += [lp + "self_attn.%s_proj.bias" % n for n in "qkv"]
+    return names
+
+
+def qwen3_tensors(b):
+    """Every tensor `crates/ollaya-runner/src/mlx/qwen3.rs` reads."""
+    p = b["prefix"]
+    names = [p + "embed_tokens.weight", p + "norm.weight"]
+    for i in range(b["num_hidden_layers"]):
+        lp = "%slayers.%d." % (p, i)
+        names += [lp + n + ".weight" for n in ("input_layernorm", "post_attention_layernorm", "self_attn.q_proj",
+                                               "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj",
+                                               "self_attn.q_norm", "self_attn.k_norm", "mlp.gate_proj", "mlp.up_proj",
+                                               "mlp.down_proj")]
+        if b["attention_bias"]:
+            names += [lp + "self_attn.%s_proj.bias" % n for n in "qkv"]
+    return names
 
 
 def deberta_v2_tensors(b):
@@ -199,12 +299,24 @@ def deberta_v2_tensors(b):
 
 
 def backbone_tensors(b):
-    return deberta_v2_tensors(b) if b["type"] == "deberta-v2" else modernbert_tensors(b)
+    return {"deberta-v2": deberta_v2_tensors, "qwen3": qwen3_tensors,
+            "qwen3-5": qwen3_5_tensors}.get(b["type"], modernbert_tensors)(b)
 
 
 def embedding_tensor(b):
     """The word embedding's name, whose shape checks the config against the file."""
-    return b["prefix"] + ("embeddings.word_embeddings.weight" if b["type"] == "deberta-v2" else "embeddings.tok_embeddings.weight")
+    return b["prefix"] + {"deberta-v2": "embeddings.word_embeddings.weight", "qwen3": "embed_tokens.weight",
+                          "qwen3-5": "embed_tokens.weight"}.get(b["type"], "embeddings.tok_embeddings.weight")
+
+
+def tied_rows(config):
+    """A decoder read through its tied LM head at one position per row (qwen3guard's candidate first
+    tokens): the backbone and the embedding, nothing more."""
+    if not config.get("tie_word_embeddings"):
+        raise SystemExit("tied-rows needs tie_word_embeddings")
+    # A Qwen3.5 text checkpoint keeps the decoder under the vision-language layout's name.
+    prefix = "model.language_model." if config.get("model_type", "").startswith("qwen3_5") else "model."
+    return backbone(config, prefix), {"type": "tied-rows"}, []
 
 
 def modernbert_tensors(b):
@@ -333,6 +445,8 @@ def build(family, config, weights_path, agent_config=None):
         enc, head, names = von(config)
     elif family == "gliclass":
         enc, head, names = gliclass(config)
+    elif family == "tied-rows":
+        enc, head, names = tied_rows(config)
     else:
         raise SystemExit("unknown family %r" % family)
     names += backbone_tensors(enc)
@@ -365,7 +479,7 @@ def dumps(arch):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("family", choices=["laya", "sequence-classification", "von", "gliclass"])
+    ap.add_argument("family", choices=["laya", "sequence-classification", "von", "gliclass", "tied-rows"])
     ap.add_argument("--config", required=True, help="the author's config.json")
     ap.add_argument("--agent-config", help="laya: rl_agent_config.json")
     ap.add_argument("--weights", required=True, help="the author's weights file (safetensors or torch zip)")

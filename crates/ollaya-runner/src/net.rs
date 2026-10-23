@@ -31,6 +31,8 @@ pub enum Head {
     SequenceClassification,
     OptionMarker,
     Gliclass,
+    /// A decoder's tied LM head at one position per row (qwen3guard).
+    TiedRows,
 }
 
 impl Head {
@@ -41,6 +43,7 @@ impl Head {
             Head::SequenceClassification => "sequence-classification",
             Head::OptionMarker => "option-marker",
             Head::Gliclass => "gliclass-uni",
+            Head::TiedRows => "tied-rows",
         }
     }
 }
@@ -78,6 +81,38 @@ pub enum Net {
     Ort(Mutex<Session>),
     #[cfg(feature = "mlx")]
     Mlx(crate::mlx::MlxNet),
+}
+
+/// The network behind a decoder engine (qwen3guard): the engine builds its own ONNX Runtime
+/// session (each decoder graph has its own inputs and options), or MLX runs the decoder.
+pub enum Decoder {
+    Ort(Mutex<Session>),
+    #[cfg(feature = "mlx")]
+    Mlx(crate::mlx::MlxDecoder),
+}
+
+impl Decoder {
+    /// The MLX decoder for [`Device::Metal`].
+    #[cfg(feature = "mlx")]
+    pub fn metal(files: &ModelFiles, head: Head) -> Result<Decoder, Error> {
+        Ok(Decoder::Mlx(crate::mlx::MlxDecoder::load(files, head)?))
+    }
+
+    #[cfg(not(feature = "mlx"))]
+    pub fn metal(_files: &ModelFiles, _head: Head) -> Result<Decoder, Error> {
+        Err(Error::Model(
+            "this build of ollaya has no MLX support".into(),
+        ))
+    }
+
+    /// The ONNX Runtime session, if this network is one (for graph contract checks).
+    pub fn session(&self) -> Option<&Mutex<Session>> {
+        match self {
+            Decoder::Ort(s) => Some(s),
+            #[cfg(feature = "mlx")]
+            Decoder::Mlx(_) => None,
+        }
+    }
 }
 
 impl Net {
