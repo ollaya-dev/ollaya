@@ -48,6 +48,13 @@ other command, and starts it when it isn't running.
 claude mcp add ollaya -- ollaya mcp
 ```
 
+This adds it to the current project, for you only. Pass a scope to change that:
+
+- `--scope user`: every project.
+- `--scope project`: writes it to the project's `.mcp.json`, so everyone working on the project gets it. Claude Code asks each of them to approve it once.
+
+To check it, `claude mcp list` shows the server and whether it connects, and `/mcp` in a session lists its tools.
+
 ### Claude Desktop
 
 Add it to `claude_desktop_config.json` (Settings → Developer → Edit Config):
@@ -65,9 +72,27 @@ If Claude Desktop can't find `ollaya`, use its full path, for example
 
 ### Cursor, VS Code and other clients
 
-In Cursor, [add Ollaya with one click](https://cursor.com/install-mcp?name=ollaya&config=eyJjb21tYW5kIjoib2xsYXlhIiwiYXJncyI6WyJtY3AiXX0%3D), with Ollaya installed. Otherwise use the same
-command, `ollaya mcp`, in the client's MCP settings: `.cursor/mcp.json` for Cursor,
-`.vscode/mcp.json` for VS Code (with `"type": "stdio"`).
+In Cursor, [add Ollaya with one click](https://cursor.com/install-mcp?name=ollaya&config=eyJjb21tYW5kIjoib2xsYXlhIiwiYXJncyI6WyJtY3AiXX0%3D), with Ollaya installed. To add it by hand, use `~/.cursor/mcp.json` for every project or `.cursor/mcp.json` for one:
+
+```json
+{
+  "mcpServers": {
+    "ollaya": { "command": "ollaya", "args": ["mcp"] }
+  }
+}
+```
+
+VS Code reads `.vscode/mcp.json`, under `servers` and with a type:
+
+```json
+{
+  "servers": {
+    "ollaya": { "type": "stdio", "command": "ollaya", "args": ["mcp"] }
+  }
+}
+```
+
+Other clients take the same command, `ollaya mcp`. As with Claude Desktop, use the full path to `ollaya` if the client can't find it.
 
 ### From the Docker image
 
