@@ -40,8 +40,8 @@ export function page(fonts, body, css = '') {
     font-family: Geist, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   .card { position: relative; width: 1200px; height: 630px; padding: 64px 72px; display: flex; flex-direction: column; }
   .glow { position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(640px 360px at 100% 0%, rgba(121,192,255,.13), transparent 70%),
-                radial-gradient(520px 300px at 0% 100%, rgba(126,226,168,.08), transparent 70%); }
+    background: radial-gradient(640px 360px at 100% 0%, rgba(217,179,102,.12), transparent 70%),
+                radial-gradient(520px 300px at 0% 100%, rgba(143,211,174,.12), transparent 70%); }
   .grid { position: absolute; inset: 0; pointer-events: none; opacity: .5;
     background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
     background-size: 48px 48px; mask-image: radial-gradient(900px 500px at 80% 10%, #000 20%, transparent 75%); }
@@ -53,12 +53,15 @@ export function page(fonts, body, css = '') {
   .badge { display: inline-block; font-size: 18px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
     color: #79c0ff; border: 1px solid rgba(121,192,255,.35); background: rgba(121,192,255,.08); border-radius: 999px; padding: 6px 16px; }
   h1 { font-size: 84px; line-height: 1.02; font-weight: 500; letter-spacing: -.035em; }
-  h1.model { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 112px; letter-spacing: -.04em; margin-top: 22px; }
-  .text { margin-top: 22px; max-width: 980px; font-size: 32px; line-height: 1.35; color: #a3a3a3; letter-spacing: -.01em; }
+  h1.model { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 112px; letter-spacing: -.04em; }
+  .stats { display: flex; gap: 56px; margin-top: 28px; }
+  .stats b { display: block; font-size: 52px; font-weight: 600; letter-spacing: -.03em; color: #8fd3ae; font-variant-numeric: tabular-nums; }
+  .stats span { display: block; margin-top: 2px; font-size: 20px; color: #8a8a8a; }
+  .text { margin-top: 18px; max-width: 980px; font-size: 30px; line-height: 1.35; color: #a3a3a3; letter-spacing: -.01em; }
   .bottom { position: relative; margin-top: 44px; display: flex; align-items: center; justify-content: space-between; }
-  .cmd { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 26px; background: #141414; border: 1px solid #262626;
-    border-radius: 14px; padding: 16px 24px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
-  .p { color: #7ee2a8; } .c { color: #ffc36b; }
+  .cmd { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 34px; background: #141414; border: 1px solid #2a2a2a;
+    border-radius: 12px; padding: 18px 28px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+  .p { color: #8fd3ae; } .c { color: #d9b366; }
   .meta { font-size: 22px; color: #8a8a8a; text-align: right; line-height: 1.5; }
   .meta b { color: #d4d4d4; font-weight: 500; }
 ${css}

@@ -24,28 +24,24 @@ const out = join(root, 'public', 'static')
 const MODELS = [
   {
     name: 'laya',
-    badge: 'Fastest',
     text: 'Typed, calibrated answers in 8–10 ms on a GPU, in English and 100+ languages.',
     by: 'Convai Innovations',
     license: 'Apache-2.0',
   },
   {
     name: 'decider',
-    badge: 'Most accurate',
-    text: 'The most accurate open decision model on typed decisions. Qwen3.5 decoders, 2B and 0.8B.',
+    text: 'Decoder decision models on Qwen3.5, 2B and 0.8B: the answer is read from option-letter logits in one forward pass.',
     by: 'Mapika',
     license: 'Apache-2.0',
   },
   {
     name: 'nli',
-    badge: 'Zero-shot',
     text: 'Zero-shot NLI classifiers on DeBERTa-v3-large and ModernBERT-large. The most accurate encoder.',
     by: 'Moritz Laurer',
     license: 'MIT · Apache-2.0',
   },
   {
     name: 'gliclass',
-    badge: 'Zero-shot',
     text: 'An instruction-following zero-shot classifier that scores every option in one pass.',
     by: 'Knowledgator',
     license: 'Apache-2.0',
@@ -55,24 +51,36 @@ const MODELS = [
 const fonts = await inlineFonts()
 const page = (body) => pageWith(fonts, body)
 
+/** Two numbers from the bench, lit in the site's green; nothing when the model was not measured. */
+const stats = (r) =>
+  r
+    ? `<div class="stats"><div><b>${r.macro_accuracy.toFixed(3)}</b><span>accuracy, ${bench.run.results.length ? '3,880' : ''} questions</span></div><div><b>${ms(r)}</b><span>per question, RTX 5090</span></div><div><b>${r.pooled_ece.toFixed(3)}</b><span>calibration error</span></div></div>`
+    : ''
+
 const command = (model) => `<div class="cmd"><span class="p">❯</span> <span class="c">ollaya</span> run ${esc(model)}</div>`
 
-/** The results card's numbers, from the newest public-benchmark run in ../results (as on /results). */
-function resultsCard() {
+/** Bespoke Labs' public benchmark from ../results, as on /results: Ollama's newest run and, for Ollaya, the newest row of each model across its runs on the same machine. */
+const bench = (() => {
   const dir = join(root, '..', 'results', 'runs')
-  // The newest run with Ollama on the same GPU (bench editions measure Ollaya alone).
   const runs = readdirSync(dir).filter((f) => f.includes('public-benchmark')).sort().map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')))
   const run = runs.filter((r) => r.servers?.ollama).at(-1)
-  // Ollama's run holds Ollama's rows alone; Ollaya's are the newest row of each model across its runs on the same machine.
   const ours = new Map()
   for (const r of runs) if (!r.servers?.ollama && r.machine === run.machine) for (const x of r.results) ours.set(x.model, { server: 'ollaya', ...x })
-  const results = [...run.results, ...ours.values()]
+  return { run, results: [...run.results, ...ours.values()] }
+})()
+const ms = (r) => `${Math.round(r.median_ms)} ms`
+/** A model's most accurate tag on Ollaya in the public benchmark, if it was measured. */
+const bestOf = (name) =>
+  bench.results.filter((r) => r.server === 'ollaya' && (r.model === name || r.model.startsWith(`${name}:`))).sort((a, b) => b.macro_accuracy - a.macro_accuracy)[0]
+
+/** The results card's numbers. */
+function resultsCard() {
+  const { results } = bench
   const by = (server) => results.filter((r) => r.server === server).sort((a, b) => b.macro_accuracy - a.macro_accuracy)[0]
   const best = by('ollaya')
   const ollama = by('ollama')
   const nimble = results.find((r) => r.server === 'ollaya' && r.model.startsWith('nimble'))
   const nimbleOllama = results.find((r) => r.server === 'ollama' && r.model === 'nimble')
-  const ms = (r) => `${Math.round(r.median_ms)} ms`
   return page(`${top('ollaya.dev/results')}
       <div class="main"><span class="badge">Results · RTX 5090 · 3,880 questions</span><h1 style="margin-top:22px">Measured, not claimed.</h1>
       <p class="text"><b style="color:#fafafa;font-weight:500">${esc(best.model)}</b>: ${best.macro_accuracy.toFixed(3)} accuracy at ${ms(best)}.
@@ -101,8 +109,8 @@ const cards = [
   ...MODELS.map((m) => ({
     file: `og/${m.name}.png`,
     html: page(`${top(`ollaya.dev/library/${m.name}`)}
-      <div class="main"><span class="badge">${esc(m.badge)}</span><h1 class="model">${esc(m.name)}</h1>
-      <p class="text">${esc(m.text)}</p></div>
+      <div class="main"><h1 class="model">${esc(m.name)}</h1>
+      <p class="text">${esc(m.text)}</p>${stats(bestOf(m.name))}</div>
       <div class="bottom">${command(m.name)}<div class="meta">by <b>${esc(m.by)}</b><br>${esc(m.license)}</div></div>`),
   })),
 ]
