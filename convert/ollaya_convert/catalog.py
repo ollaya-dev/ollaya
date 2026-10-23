@@ -6,7 +6,7 @@ refuses to run if its sha256 differs from the upstream file.
 """
 import os
 
-from .model_paths import DEFAULT_ROOT, LARGHA_ROOT
+from .model_paths import COBA_ROOT, DEFAULT_ROOT, LARGHA_ROOT
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "out")
 LICENSE_APACHE = open(os.path.join(os.path.dirname(__file__), "..", "..", "LICENSE"), encoding="utf-8").read()
@@ -15,6 +15,14 @@ LAYA_REPO = "convaiinnovations/laya"
 LAYA_COMMIT = "aa8c91ca088ec597df95a0d1c76b3063cb2ae5e8"
 LARGHA_REPO = "Phocinae/Phocinae-Largha-150M-v1"
 LARGHA_COMMIT = "5300e85a7d991f4f0cdb68dc25813f76902752d4"  # tag v1.1
+# Ollaya's own models: tag -> commit of ollaya-dev/coba-<tag>.
+COBA_COMMITS = {
+    "1b": "TODO",
+    "400m": "TODO",
+    "400m-ternary": "TODO",
+    "150m-ternary": "TODO",
+    "68m-ternary": "TODO",
+}
 
 
 def _laya(sub, description, params, ctx, languages, mlx=False, repo=LAYA_REPO, commit=LAYA_COMMIT,
@@ -213,6 +221,32 @@ CATALOG = {
                   "Largha was trained with) on the v1.1 checkpoint in fp32: 2,383 questions, identical token ids and "
                   "markers, the same decision on every question, probabilities within 3.5e-6 on the CPU, CUDA and "
                   "the Apple GPU (MLX). The fp16 graph agrees on 99.87% of decisions (3 near-ties).",
+    },
+    "coba": {
+        "namespace": "library",
+        "model": "coba",
+        "family": "laya",
+        "author": "Ollaya",
+        "license": "Apache-2.0",
+        "license_text": "Coba by Ollaya (https://huggingface.co/ollaya-dev)\n"
+                        "Licensed under the Apache License, Version 2.0. Its base encoders, Ettin "
+                        "(https://huggingface.co/jhu-clsp/ettin-encoder-150m and its sizes), are MIT-licensed by JHU CLSP.\n\n"
+                        + LICENSE_APACHE,
+        "tags": {
+            t: _laya("", d, params, 512, ["en"], repo="ollaya-dev/coba-" + t, commit=COBA_COMMITS[t],
+                     root=os.path.join(COBA_ROOT, t), slug="coba-" + t)
+            for t, d, params in (
+                ("1b", "Ollaya's English decision model on Ettin 1B, zero-shot: the most accurate size.", "1.1B"),
+                ("400m", "Ollaya's English decision model on Ettin 400M, zero-shot.", "421M"),
+                ("400m-ternary", "Ternary weights on Ettin 400M, trained in-domain; its 2-bit graph runs in a browser.",
+                 "421M"),
+                ("150m-ternary", "Ternary weights on Ettin 150M, trained in-domain; a 66 MB download in a browser.",
+                 "164M"),
+                ("68m-ternary", "Ternary weights on Ettin 68M, trained in-domain; a 35 MB download in a browser.", "75M"),
+            )
+        },
+        "aliases": {"latest": "400m"},
+        "parity": "TODO",
     },
     "nli": {
         "namespace": "library",
