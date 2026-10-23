@@ -163,7 +163,6 @@ function Hero({ origin }: { origin: string }) {
         <i class="b"></i>
         <i class="c"></i>
       </div>
-      <div class="ascii" data-ascii aria-hidden="true"></div>
       <div class="frame relative px-5 pt-32 pb-16 text-center md:pt-40">
         <h1 id="rd-hero" class="mx-auto max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
           The decision layer <br class="hidden md:block" />
@@ -617,7 +616,7 @@ function Api() {
 export function ModelCard({ m }: { m: (typeof catalog)[number] }) {
   const summary = (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).replace(/\.$/, '')
   return (
-    <a href={`/library/${m.name}`} class="group flex h-full flex-col bg-canvas p-6 transition-colors hover:bg-subtle">
+    <a href={`/library/${m.name}`} class="group flex h-full w-full flex-col bg-canvas p-6 transition-colors hover:bg-subtle">
       <div class="flex items-baseline justify-between gap-3">
         <span class="font-mono text-[17px] text-fg group-hover:underline underline-offset-4">{m.name}</span>
         <span class="truncate text-xs text-muted">{m.publisher?.name ?? ''}</span>

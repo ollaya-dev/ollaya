@@ -85,7 +85,7 @@ function ModelHeader({ model, tag, crumb }: { model: Model; tag?: Tag; crumb?: s
   return (
     <header>
       <Breadcrumb model={model} current={crumb} />
-      <h1 class="mt-4 text-[28px] leading-tight font-medium tracking-tight break-words text-fg">
+      <h1 class="mt-4 font-mono text-4xl leading-tight font-semibold tracking-tight break-words text-fg md:text-5xl">
         {tag ? fullName(model, tag) : model.name}
       </h1>
       <MetaLine
@@ -159,7 +159,7 @@ function ModelsTable({ model }: { model: Model }) {
           View all <Icon name="arrowRight" class="size-3.5" />
         </a>
       </div>
-      <div class="mt-3 overflow-hidden rounded-lg border border-line">
+      <div class="mt-3 overflow-hidden rounded-md border border-line">
         <table class="w-full text-left text-sm">
           <thead class="bg-subtle text-[13px] text-muted">
             <tr>
@@ -207,7 +207,7 @@ export function ModelPage({ model, origin }: { model: Model; origin: string }) {
   const readme = readmes[model.name]
   const badge = `[![Run on Ollaya](${origin}/badge/run-on-ollaya.svg)](${origin}/library/${model.name})`
   return (
-    <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
+    <div class="max-w-[64rem] px-6 pt-10 pb-16 md:px-10 md:pt-14">
       <ModelHeader model={model} />
       <Usage refName={model.name} model={model} tag={getTag(model, 'latest') ?? model.tags[0]} />
       <ModelsTable model={model} />
@@ -235,13 +235,13 @@ export function ModelPage({ model, origin }: { model: Model; origin: string }) {
 
 export function TagsPage({ model }: { model: Model }) {
   return (
-    <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
+    <div class="max-w-[64rem] px-6 pt-10 pb-16 md:px-10 md:pt-14">
       <ModelHeader model={model} crumb="tags" />
       <section class="mt-10" aria-labelledby="tags-title">
         <h2 id="tags-title" class="text-base font-semibold text-fg">
           Tags
         </h2>
-        <div class="mt-3 overflow-hidden rounded-lg border border-line">
+        <div class="mt-3 overflow-hidden rounded-md border border-line">
           <table class="w-full text-left text-sm">
             <thead class="bg-subtle text-[13px] text-muted">
               <tr>
@@ -300,7 +300,7 @@ export function TagPage({ model, tag }: { model: Model; tag: Tag }) {
   const variants = model.tags.filter((t) => t.variantOf === tag.name)
   const base = tag.variantOf ? getTag(model, tag.variantOf) : undefined
   return (
-    <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
+    <div class="max-w-[64rem] px-6 pt-10 pb-16 md:px-10 md:pt-14">
       <ModelHeader model={model} tag={tag} crumb={tag.name} />
       <Usage refName={tag.name === 'latest' ? model.name : ref} model={model} tag={tag} />
 
@@ -308,7 +308,7 @@ export function TagPage({ model, tag }: { model: Model; tag: Tag }) {
         <h2 id="details-title" class="text-base font-semibold text-fg">
           Details
         </h2>
-        <ul class="mt-3 divide-y divide-line rounded-lg border border-line" role="list">
+        <ul class="mt-3 divide-y divide-line rounded-md border border-line" role="list">
           {layers.map((l) => (
             <li class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[7rem_minmax(0,1fr)_auto]">
               <span class="text-sm font-medium text-fg">{l.kind}</span>
@@ -367,7 +367,7 @@ export function TagPage({ model, tag }: { model: Model; tag: Tag }) {
               <li>
                 <a
                   href={`/library/${fullName(model, t)}`}
-                  class="inline-flex items-center gap-2 rounded-3xl border border-line px-3 py-1 text-[13px] text-body hover:border-line-strong hover:text-fg"
+                  class="inline-flex items-center gap-2 rounded-md border border-line px-3 py-1 text-[13px] text-body hover:border-line-strong hover:text-fg"
                 >
                   <span class="font-medium">{fullName(model, t)}</span>
                   <span class="text-muted">{sizeLabel(t)}</span>

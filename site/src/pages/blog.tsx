@@ -8,8 +8,8 @@ const longDate = (date: string) =>
 
 export function BlogIndex() {
   return (
-    <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
-      <h1 class="text-[30px] leading-tight font-medium tracking-tight text-fg">Blog</h1>
+    <div class="max-w-[64rem] px-6 pt-10 pb-16 md:px-10 md:pt-14">
+      <h1 class="text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl">Blog</h1>
       <p class="mt-3 text-lg text-body">
         Releases, models and measurements from Ollaya.{' '}
         <a href="/blog/rss.xml" class={textLink}>
@@ -35,11 +35,11 @@ export function BlogIndex() {
 
 export function BlogPostView({ post, html }: { post: BlogPost; html: string }) {
   return (
-    <div class="mx-auto max-w-[44rem] px-4 pt-8 md:px-6 md:pt-12">
+    <div class="max-w-[44rem] px-6 pt-10 pb-16 md:px-10 md:pt-14">
       <a href="/blog" class="text-[13px] text-muted underline-offset-4 hover:text-fg hover:underline">
         Blog
       </a>
-      <h1 class="mt-3 text-[30px] leading-tight font-medium tracking-tight text-fg">{post.title}</h1>
+      <h1 class="mt-3 text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl">{post.title}</h1>
       <time datetime={post.date} class="mt-2 block text-[13px] text-muted">
         {longDate(post.date)}
       </time>
