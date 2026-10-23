@@ -168,10 +168,9 @@ The model loads straight from its Hugging Face repository: `load(fromHub('<org>/
 
 ### Steps once the name is chosen
 
-1. **Hugging Face** (on spark, whose token can write to `ollaya-dev`): for each tag,
-   `python train/hub.py <checkpoint> <dir> --card train/card.md --var web=@train/card-web.md --var name=… …`
-   (`--web <dir>` for a ternary tag), then `huggingface-cli upload ollaya-dev/<name>-<tag> <dir>`. Note each
-   repository's commit.
+1. **Hugging Face** (on spark, whose token can write to `ollaya-dev`): `train/stage.py <name> <models-dir>
+   <out-dir>` stages every tag of the lineup (`train/hub.py` with the card filled in), then
+   `huggingface-cli upload ollaya-dev/<name>-<tag> <out-dir>/<tag>` for each. Note each repository's commit.
 2. **Registry**: a `<name>` entry in `convert/ollaya_convert/catalog.py` with `_laya(…, repo=…, commit=…)` per tag
    (as `largha`), `license_text` with Ettin's MIT notice; then stages 2 to 4 of `docs/model-lifecycle.md`
    (export, goldens, parity_run on the CPU, CUDA and Metal, package, bench_plan and bench_run on the RTX 5090).
