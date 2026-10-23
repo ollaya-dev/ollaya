@@ -97,19 +97,33 @@ impl RunnerLaunch {
     }
 }
 
+/// The library directories of the install around `exe`, in the order lookups try them: each
+/// directory of `$OLLAYA_LIBRARY_PATH` (a list, like `PATH`), then `<exe dir>/../lib/ollaya` (the
+/// archive and Docker layouts). Every lookup takes the first that has what it looks for, so the
+/// desktop app can bring its own llama.cpp and GPU runner and use a command-line install's pack.
+fn library_roots(exe_dir: &Path) -> Vec<PathBuf> {
+    roots_in(std::env::var_os("OLLAYA_LIBRARY_PATH"), exe_dir)
+}
+
+fn roots_in(library_path: Option<std::ffi::OsString>, exe_dir: &Path) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = library_path
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    roots.retain(|d| !d.as_os_str().is_empty());
+    roots.push(exe_dir.join("../lib/ollaya"));
+    roots
+}
+
 /// Directory holding the CUDA runtime pack, if this install has one.
 ///
-/// First match wins: `$OLLAYA_LIBRARY_PATH/<pack>`, `<exe dir>/../lib/ollaya/<pack>` (the
-/// archive and Docker layouts), each pack of [`CUDA_PACKS`] in turn, then the executable's own
-/// directory for development builds, where `copy-dylibs` places the providers next to the binary.
+/// First match wins: `<root>/<pack>` for each of the [`library_roots`], each pack of
+/// [`CUDA_PACKS`] in turn, then the executable's own directory for development builds, where
+/// `copy-dylibs` places the providers next to the binary.
 pub fn cuda_dir(exe: &Path) -> Option<PathBuf> {
     let has_providers = |d: &Path| CUDA_PROVIDERS.iter().all(|p| d.join(p).is_file());
     let exe_dir = exe.parent()?;
-    let library_path = std::env::var_os("OLLAYA_LIBRARY_PATH").map(PathBuf::from);
-    let roots = [library_path, Some(exe_dir.join("../lib/ollaya"))];
-    roots
+    library_roots(exe_dir)
         .iter()
-        .flatten()
         .flat_map(|root| CUDA_PACKS.map(|pack| root.join(pack)))
         .chain(std::iter::once(exe_dir.to_path_buf()))
         .find(|d| has_providers(d))
@@ -118,15 +132,21 @@ pub fn cuda_dir(exe: &Path) -> Option<PathBuf> {
 
 /// For a pack that holds its own ONNX Runtime: the runner executable and the library it loads.
 /// `None` for a pack of provider libraries only, which the statically linked executable loads.
-fn dynamic_runner(dir: &Path) -> std::io::Result<Option<(PathBuf, String)>> {
+///
+/// The runner is the first [`CUDA_RUNNER`] of the [`library_roots`], else the one next to the
+/// pack: a desktop app using a command-line install's pack starts its own runner, of its own
+/// version, not the command line's.
+fn dynamic_runner(roots: &[PathBuf], dir: &Path) -> std::io::Result<Option<(PathBuf, String)>> {
     let library = dir.join(ORT_LIBRARY);
     if !library.is_file() {
         return Ok(None);
     }
-    let runner = dir
-        .parent()
+    let runner = roots
+        .iter()
+        .map(PathBuf::as_path)
+        .chain(dir.parent())
         .map(|p| p.join(CUDA_RUNNER))
-        .filter(|r| r.is_file())
+        .find(|r| r.is_file())
         .ok_or_else(|| {
             std::io::Error::other(format!(
                 "the GPU pack needs {CUDA_RUNNER} next to it; reinstall ollaya"
@@ -156,19 +176,14 @@ pub const LIBLLAMA: &str = if cfg!(windows) {
 
 /// Directory holding llama.cpp's libraries (`lib/ollaya/llama`), if this install has them.
 ///
-/// First match wins: `$OLLAYA_LIBRARY_PATH/llama` (development, and the desktop app, which
-/// bundles them as resources), then `<exe dir>/../lib/ollaya/llama` (the tarball, zip and
-/// Docker layouts). The CUDA backend is not here: it is in the CUDA pack, next to the CUDA
+/// First match wins: `<root>/llama` for each of the [`library_roots`] (`$OLLAYA_LIBRARY_PATH`
+/// for development and the desktop app, which bundles them as resources, then the tarball, zip
+/// and Docker layouts). The CUDA backend is not here: it is in the CUDA pack, next to the CUDA
 /// libraries it needs, where a GPU runner's `argv[0]` points.
 pub fn llama_dir(exe: &Path) -> Option<PathBuf> {
-    let exe_dir = exe.parent()?;
-    let candidates = [
-        std::env::var_os("OLLAYA_LIBRARY_PATH").map(|p| PathBuf::from(p).join("llama")),
-        Some(exe_dir.join("../lib/ollaya/llama")),
-    ];
-    candidates
+    library_roots(exe.parent()?)
         .into_iter()
-        .flatten()
+        .map(|root| root.join("llama"))
         .find(|d| d.join(LIBLLAMA).is_file())
         .map(|d| resolve(&d))
 }
@@ -180,11 +195,8 @@ pub const ROCM_PACK: &str = "rocm";
 pub fn rocm_dir(exe: &Path) -> Option<PathBuf> {
     let has_backend = |d: &Path| d.join(ROCM_BACKEND).is_file();
     let exe_dir = exe.parent()?;
-    let library_path = std::env::var_os("OLLAYA_LIBRARY_PATH").map(PathBuf::from);
-    let roots = [library_path, Some(exe_dir.join("../lib/ollaya"))];
-    roots
+    library_roots(exe_dir)
         .iter()
-        .flatten()
         .map(|root| root.join(ROCM_PACK))
         .chain(std::iter::once(exe_dir.to_path_buf()))
         .find(|d| has_backend(d))
@@ -237,7 +249,8 @@ fn gpu_launch(exe: &Path, dir: &Path) -> std::io::Result<RunnerLaunch> {
         ld.push_str(&old);
     }
     let mut env = vec![("LD_LIBRARY_PATH".into(), ld)];
-    let (runner, cpu_exe) = match dynamic_runner(dir)? {
+    let roots = exe.parent().map(library_roots).unwrap_or_default();
+    let (runner, cpu_exe) = match dynamic_runner(&roots, dir)? {
         Some((runner, library)) => {
             env.push(("ORT_DYLIB_PATH".into(), library));
             (runner, Some(exe.to_path_buf()))
@@ -260,7 +273,8 @@ fn gpu_launch(exe: &Path, dir: &Path) -> std::io::Result<RunnerLaunch> {
     if exe.parent().is_some_and(|p| resolve(p) == dir) {
         return Ok(RunnerLaunch::plain(exe));
     }
-    let (source, env, cpu_exe) = match dynamic_runner(dir)? {
+    let roots = exe.parent().map(library_roots).unwrap_or_default();
+    let (source, env, cpu_exe) = match dynamic_runner(&roots, dir)? {
         Some((runner, library)) => (
             runner,
             vec![("ORT_DYLIB_PATH".into(), library)],
@@ -437,6 +451,39 @@ mod tests {
         let lib = root.path().join("lib/ollaya/cuda_v12");
         pack(&lib);
         assert_eq!(cuda_dir(&exe), Some(resolve(&lib)));
+    }
+
+    #[test]
+    fn the_library_path_lists_roots_before_the_install() {
+        let exe_dir = Path::new("/opt/ollaya/bin");
+        assert_eq!(roots_in(None, exe_dir), [exe_dir.join("../lib/ollaya")]);
+        let list = std::env::join_paths(["/app/lib/ollaya", "/cli/lib/ollaya"]).unwrap();
+        assert_eq!(
+            roots_in(Some(list), exe_dir),
+            [
+                PathBuf::from("/app/lib/ollaya"),
+                PathBuf::from("/cli/lib/ollaya"),
+                exe_dir.join("../lib/ollaya"),
+            ]
+        );
+        assert_eq!(roots_in(Some("".into()), exe_dir).len(), 1);
+    }
+
+    #[test]
+    fn a_shared_pack_starts_the_first_roots_runner() {
+        let root = tempfile::tempdir().unwrap();
+        let (app, cli) = (root.path().join("app"), root.path().join("cli"));
+        let pack_dir = cli.join("cuda_v13");
+        pack(&pack_dir);
+        std::fs::write(pack_dir.join(ORT_LIBRARY), b"ort").unwrap();
+        std::fs::write(cli.join(CUDA_RUNNER), b"command line's runner").unwrap();
+        let roots = [app.clone(), cli.clone()];
+        let runner = |roots: &[PathBuf]| dynamic_runner(roots, &pack_dir).unwrap().unwrap().0;
+        // The app brings no runner: the pack's own.
+        assert_eq!(runner(&roots), resolve(&cli.join(CUDA_RUNNER)));
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::write(app.join(CUDA_RUNNER), b"app's runner").unwrap();
+        assert_eq!(runner(&roots), resolve(&app.join(CUDA_RUNNER)));
     }
 
     #[test]

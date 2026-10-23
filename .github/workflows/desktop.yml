@@ -135,6 +135,14 @@ jobs:
           cp "$RUNNER_TEMP"/engine/bin/* target/release/
           ls -l target/release
           target/release/ollaya.exe --version
+          # The GPU runner and the FILES.sha256 of this release's GPU packs: the app's server uses
+          # a command-line install's pack when it is one of these (desktop/src-tauri/src/lib.rs).
+          lib=desktop/src-tauri/lib/ollaya
+          mkdir -p "$lib"
+          cp "$RUNNER_TEMP/engine/lib/ollaya/ollaya-cuda-runner.exe" "$lib/"
+          cp "$RUNNER_TEMP/engine/ollaya-windows-amd64-cuda.sha256" "$lib/cuda_v13.FILES.sha256"
+          cp "$RUNNER_TEMP/engine/ollaya-windows-amd64-cuda12.sha256" "$lib/cuda_v12.FILES.sha256"
+          ls -l "$lib"
       - name: Bundle the engine (externalBin)
         shell: bash
         run: |
@@ -166,6 +174,23 @@ jobs:
           fi
           echo "TAURI_EXTRA={\"bundle\":{\"resources\":{$resources}}}" >>"$GITHUB_ENV"
           echo "Resources: {$resources}"
+      - name: Smoke test a shared GPU pack
+        if: env.RELEASE_ENGINE == 'true' && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          OLLAYA_HOST: 127.0.0.1:11498
+        # A command-line install's pack (stand-in files; this runner has no GPU), and the bundled
+        # server started as the app starts it: GPU runners come from a copy of the app's runner.
+        run: |
+          cli=$RUNNER_TEMP/cli/lib/ollaya app=desktop/src-tauri/lib/ollaya
+          mkdir -p "$cli/cuda_v13"
+          for f in onnxruntime_providers_shared.dll onnxruntime_providers_cuda.dll onnxruntime.dll; do
+            echo stand-in >"$cli/cuda_v13/$f"
+          done
+          OLLAYA_LIBRARY_PATH="$(cygpath -w "$PWD/$app");$(cygpath -w "$cli")" target/release/ollaya.exe ps
+          target/release/ollaya.exe stop
+          ls -l "$cli/cuda_v13"
+          cmp "$cli"/cuda_v13/ollaya-runner-*.exe "$app/ollaya-cuda-runner.exe"
       - name: Sign llama.cpp for notarization
         # Notarization needs every Mach-O in the app signed with the Developer ID, the hardened
         # runtime and a timestamp. Tauri signs the app and the engine; the llama.cpp files are

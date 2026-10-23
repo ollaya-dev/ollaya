@@ -192,13 +192,17 @@ jobs:
           esac
           # shellcheck disable=SC2086 # PACKAGE_ARGS is a list of flags
           scripts/package.sh --platform "$PLATFORM" $PACKAGE_ARGS target/release "$VERSION"
-      # The desktop app's Windows build (desktop.yml) takes its engine from this archive instead of
-      # building its own, without waiting for the GPU packs' upload below.
+      # The desktop app's Windows build (desktop.yml) takes its engine and GPU runner from this
+      # archive instead of building its own, without waiting for the GPU packs' upload below, and
+      # the packs' FILES.sha256 to tell which installed pack it can use.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: matrix.platform == 'windows-amd64'
         with:
           name: engine-windows-amd64
-          path: dist/ollaya-windows-amd64.zip
+          path: |
+            dist/ollaya-windows-amd64.zip
+            dist/ollaya-windows-amd64-cuda.sha256
+            dist/ollaya-windows-amd64-cuda12.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 1

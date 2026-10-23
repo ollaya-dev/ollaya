@@ -315,7 +315,9 @@ dependencies through `LD_LIBRARY_PATH`. The provider has no RUNPATH:
 ### What the daemon must do
 
 1. **Find the library directory**, first match wins:
-   1. `$OLLAYA_LIBRARY_PATH`, if set. This override is only a proposal, for development.
+   1. `$OLLAYA_LIBRARY_PATH`, if set: a directory, or a list of them like `PATH`, each lookup
+      taking the first that has what it looks for (the desktop app, below). This override is
+      only a proposal, for development.
    2. `dirname(current_exe())/../lib/ollaya`. That gives `/usr/local/lib/ollaya` for the tarball,
       `~/.local/lib/ollaya` for a user install and `/usr/lib/ollaya` in the Docker image.
       `std::env::current_exe()` already resolves symlinks.
@@ -374,7 +376,9 @@ so `GetRuntimePath()` is the pack itself (see above). `argv[0]` and `LD_LIBRARY_
 before. On Windows the runner copy inside the pack is made from `ollaya-cuda-runner.exe`, with
 `ORT_DYLIB_PATH=<pack>\onnxruntime.dll`. A pack that holds ONNX Runtime but has no runner next to
 it is not used. The runner is in the base archive, not the pack, so the pack's `FILES.sha256`
-still changes only when a library changes.
+still changes only when a library changes. A runner in a directory of `$OLLAYA_LIBRARY_PATH`
+comes before the one next to the pack: the desktop app starts its own with a command-line
+install's pack.
 
 ONNX models on the CPU still start from `bin/ollaya`, plainly (no `argv[0]` or environment
 changes), so CPU numbers do not depend on the pack: `OLLAYA_DEVICE=cpu` starts them there, and
@@ -602,15 +606,24 @@ separate Cargo workspace, so the engine's builds and CI never pull in the webvie
   started when it quits. In a release, the Windows build takes the engine from the windows-amd64
   archive `release.yml` has just packaged instead (its `bin\`), and compiles the app while it waits
   for it.
-- **CPU only.** The installers carry no GPU pack. The engine inside is built without the `cuda`
-  feature (on Windows with pyke's `directml` set, whose `DirectML.dll` the app bundles), except the
-  released Windows one, which is the command line's: built with `ollaya-runner/cuda`, it runs on the
-  CPU while no pack is installed next to it. Using an installed pack would take three things:
-  building the engine with `ollaya-runner/cuda` while leaving the provider DLLs out of the bundle's
-  resources, a pack
-  location the app's engine looks in (its `..\lib\ollaya\cuda_v13` is not the command line's), and
-  a way to get the pack (the command line's `install.ps1`, or a download from the app with the same
-  `FILES.sha256` check). The runner copy is already safe for a pack shared with the command line.
+- **GPU.** The installers carry no GPU pack (1.4 GB and more). The engine inside is built without
+  the `cuda` feature (on Windows with pyke's `directml` set, whose `DirectML.dll` the app bundles),
+  except the released Windows one, which is the command line's. On Windows and Linux the app uses
+  the pack `install.ps1` or `install.sh` put next to a command-line `ollaya`, in this order:
+  - **The bundled server, with the pack.** The released Windows app carries the release's GPU
+    runner (`lib\ollaya\ollaya-cuda-runner.exe`) and its packs' `FILES.sha256`
+    (`cuda_v13.FILES.sha256`, `cuda_v12.FILES.sha256`). When the installed pack's `FILES.sha256` is
+    the same, as `install.ps1` decides to keep a pack, the app starts its own `ollaya serve` with
+    `OLLAYA_LIBRARY_PATH=<app>\lib\ollaya;<install>\lib\ollaya`: llama.cpp and the GPU runner
+    come from the app, the pack from the install. GPU runners start from a copy of the app's
+    runner in the pack, named by its hash, so it never replaces the command line's. A pack of
+    another release is not used: its ONNX Runtime and llama.cpp may not be the ones the app's
+    runner was built for.
+  - **The command line's server**, when that `ollaya` is at least as new as the app (#44).
+  - **Otherwise the CPU**, with a line in `server.log` that says why.
+
+  The Linux app carries no runner yet, so it has only the second. Downloading the pack from the
+  app (with the same `FILES.sha256` check) is not done either.
 - **Installers:** `Ollaya-macos-arm64.dmg`, `Ollaya-windows-x64-setup.exe` (NSIS, per-user),
   `Ollaya-windows-x64.msi`, `Ollaya-linux-x86_64.AppImage` and `Ollaya-linux-amd64.deb`. The names are
   stable, so the website links `releases/latest/download/<name>`. For a `v*` tag `release.yml` runs

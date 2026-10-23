@@ -830,11 +830,15 @@ function option(value: string, text: string, selected: boolean): HTMLElement {
 
 /** One row per answer, as the CLI prints them: the answer, a bar and its probability. */
 function results(r: DecideResponse): HTMLElement {
+  // qwen3guard's `category` is the harm it would name if it judged the text unsafe, whatever the
+  // text (docs/families/qwen3guard.md), so it means little while `unsafe` is low.
+  const guard = r.answers.unsafe?.type === 'noul' && !!state.builtin.get(state.runModel)?.includes('category') && 'category' in r.answers
+  const quiet = guard && (r.answers.unsafe?.noul ?? 0) < 0.5
   const rows = Object.entries(r.answers).map(([q, a]) => {
     const [text, note, p] = describe(a)
     return h(
       'div',
-      { class: 'grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_7rem_2.75rem] items-center gap-x-4 py-2 border-t border-line first:border-t-0' },
+      { class: `grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_7rem_2.75rem] items-center gap-x-4 py-2 border-t border-line first:border-t-0${quiet && q === 'category' ? ' opacity-50' : ''}` },
       h('span', { class: 'truncate font-mono text-xs text-muted' }, q),
       h('span', { class: 'truncate text-sm font-medium text-fg' }, text, note ? h('span', { class: 'ml-2 font-normal text-muted' }, note) : null),
       h('span', { class: 'h-1.5 overflow-hidden rounded-full bg-fill-strong' }, h('span', { class: 'bar block h-full rounded-full', style: `width:${Math.round(p * 100)}%` })),
@@ -845,6 +849,7 @@ function results(r: DecideResponse): HTMLElement {
     'div',
     { id: 'answers', class: 'mt-6 pb-2' },
     h('div', { class: `${card} px-4 py-1` }, ...rows),
+    guard ? h('p', { class: 'mt-3 text-xs text-muted' }, 'category is the kind of harm the model would name if it judged the text unsafe. It only means something when unsafe is high.') : null,
     h('p', { class: 'mt-3 text-xs text-muted' }, `Answered by ${r.routing?.model ?? r.model} in ${ms(r.total_duration / 1e6)} ms`),
   )
 }
