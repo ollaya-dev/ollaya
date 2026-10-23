@@ -60,7 +60,7 @@ export function Header({ active, hideSearch }: { active?: PageNav; hideSearch?: 
       <nav aria-label="Main" class="mx-auto flex h-14 max-w-6xl items-center gap-6 px-5">
         <a href="/" class="flex shrink-0 items-center gap-2 text-fg" aria-label="Ollaya home">
           <LogoMark class="size-7" />
-          <span class="text-[15px] font-semibold tracking-tight">ollaya</span>
+          <span class="text-[17px] font-semibold tracking-[-0.035em]">ollaya</span>
         </a>
         <ul class="hidden items-center gap-5 text-sm md:flex">
           {navLinks().map((l) => (

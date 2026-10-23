@@ -1,34 +1,21 @@
 /**
- * Ollaya's mark: a minimal line-art owl (original artwork). Monochrome: inherits currentColor,
- * so it works on light and dark backgrounds, from 16px favicons to the large closer section.
- * Keep in sync with public/favicon.svg and public/static/logo.svg.
+ * Ollaya's mark: the gaze, two rings with one pupil (an owl reduced to its eyes; the pupil is the
+ * option that got chosen). Monochrome: inherits currentColor. Keep in sync with public/favicon.svg,
+ * public/static/logo*.svg and scripts/og-lib.mjs.
  */
-export const OWL_PATHS = {
-  head: 'M6 5.5 10.5 9.5Q16 7.5 21.5 9.5L26 5.5V19Q26 27.5 16 27.5T6 19Z',
-  beak: 'M14.75 21 16 23l1.25-2',
+export const GAZE = {
+  left: { cx: 9.5, cy: 16, r: 6.5 },
+  right: { cx: 22.5, cy: 16, r: 6.5 },
+  pupil: 2.6,
+  stroke: 3.2,
 }
 
 export function LogoMark({ class: cls = 'size-8', label }: { class?: string; label?: string }) {
   return (
-    <svg
-      class={cls}
-      viewBox="0 0 32 32"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      role={label ? 'img' : undefined}
-      aria-label={label}
-      aria-hidden={label ? undefined : 'true'}
-      focusable="false"
-    >
-      <path d={OWL_PATHS.head} />
-      <circle cx="11.5" cy="15.5" r="3.25" />
-      <circle cx="20.5" cy="15.5" r="3.25" />
-      <circle cx="11.5" cy="15.5" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="20.5" cy="15.5" r="1.1" fill="currentColor" stroke="none" />
-      <path d={OWL_PATHS.beak} />
+    <svg class={cls} viewBox="0 0 32 32" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : 'true'} focusable="false">
+      <circle cx={GAZE.left.cx} cy={GAZE.left.cy} r={GAZE.left.r} fill="none" stroke="currentColor" stroke-width={GAZE.stroke} />
+      <circle cx={GAZE.right.cx} cy={GAZE.right.cy} r={GAZE.right.r} fill="none" stroke="currentColor" stroke-width={GAZE.stroke} />
+      <circle cx={GAZE.right.cx} cy={GAZE.right.cy} r={GAZE.pupil} fill="currentColor" />
     </svg>
   )
 }
@@ -40,9 +27,8 @@ export function LogoMark({ class: cls = 'size-8', label }: { class?: string; lab
 export function Logo() {
   return (
     <span class="flex shrink-0 items-baseline gap-2 whitespace-nowrap text-fg">
-      {/* The owl sits 5px inside its 28px box; pull it out so its edge lines up with the page. */}
-      <LogoMark class="-ml-[5px] size-7 self-center" />
-      <span class="text-lg leading-7 font-medium tracking-tight">
+      <LogoMark class="size-7 self-center" />
+      <span class="text-lg leading-7 font-semibold tracking-[-0.035em]">
         ollaya
         {/* vertical-align: middle centres the badge on the wordmark's x-height, whatever the font. */}
         <span

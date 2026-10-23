@@ -63,11 +63,15 @@ function resultsCard() {
   // The newest run with Ollama on the same GPU (bench editions measure Ollaya alone).
   const runs = readdirSync(dir).filter((f) => f.includes('public-benchmark')).sort().map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')))
   const run = runs.filter((r) => r.servers?.ollama).at(-1)
-  const by = (server) => run.results.filter((r) => r.server === server).sort((a, b) => b.macro_accuracy - a.macro_accuracy)[0]
+  // Ollama's run holds Ollama's rows alone; Ollaya's are the newest row of each model across its runs on the same machine.
+  const ours = new Map()
+  for (const r of runs) if (!r.servers?.ollama && r.machine === run.machine) for (const x of r.results) ours.set(x.model, { server: 'ollaya', ...x })
+  const results = [...run.results, ...ours.values()]
+  const by = (server) => results.filter((r) => r.server === server).sort((a, b) => b.macro_accuracy - a.macro_accuracy)[0]
   const best = by('ollaya')
   const ollama = by('ollama')
-  const nimble = run.results.find((r) => r.server === 'ollaya' && r.model.startsWith('nimble'))
-  const nimbleOllama = run.results.find((r) => r.server === 'ollama' && r.model === 'nimble')
+  const nimble = results.find((r) => r.server === 'ollaya' && r.model.startsWith('nimble'))
+  const nimbleOllama = results.find((r) => r.server === 'ollama' && r.model === 'nimble')
   const ms = (r) => `${Math.round(r.median_ms)} ms`
   return page(`${top('ollaya.dev/results')}
       <div class="main"><span class="badge">Results · RTX 5090 · 3,880 questions</span><h1 style="margin-top:22px">Measured, not claimed.</h1>

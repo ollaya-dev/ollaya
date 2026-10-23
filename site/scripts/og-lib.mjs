@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-export const OWL = `<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5.5 10.5 9.5Q16 7.5 21.5 9.5L26 5.5V19Q26 27.5 16 27.5T6 19Z"/><circle cx="11.5" cy="15.5" r="3.25"/><circle cx="20.5" cy="15.5" r="3.25"/><circle cx="11.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="20.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/><path d="M14.75 21 16 23l1.25-2"/></svg>`
+export const OWL = `<svg viewBox="0 0 32 32"><circle cx="9.5" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="3.2"/><circle cx="22.5" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="3.2"/><circle cx="22.5" cy="16" r="2.6" fill="currentColor"/></svg>`
 
 export const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
 

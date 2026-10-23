@@ -52,7 +52,7 @@ export function Footer() {
         <div class="max-w-sm">
           <a href="/" class="inline-flex items-center gap-2 text-fg" aria-label="Ollaya home">
             <LogoMark class="size-8" />
-            <span class="text-lg font-semibold tracking-tight">ollaya</span>
+            <span class="text-xl font-semibold tracking-[-0.035em]">ollaya</span>
           </a>
           <p class="mt-4 text-[15px] text-body">Run open decision models locally. Typed questions in, calibrated answers out, in milliseconds, on your own hardware.</p>
         </div>
