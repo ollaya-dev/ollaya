@@ -390,11 +390,14 @@
 .panel { background: rgb(255 255 255 / 0.03); border: 1px solid var(--color-line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .panel-strong { background: rgb(12 12 12 / 0.78); }
 /* The grain: an SVG noise tile over everything, blended so it only breaks up the flat colour. */
-.grain { position: fixed; top: -20vh; right: 0; bottom: -20vh; left: 0; z-index: 50; pointer-events: none; opacity: 0.16; mix-blend-mode: screen;
-  /* A 128px noise tile drawn once at 128px, so the grain is the same size on every screen and
-     density; it overshoots the viewport so a phone's address bar can slide without uncovering it. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 128px 128px; image-rendering: pixelated; }
+.grain { position: fixed; top: -20vh; right: 0; bottom: -20vh; left: 0; z-index: 50; pointer-events: none; opacity: 0.14;
+  /* A noise tile rendered at 256px and shown at 128px: on a 3x phone the grain is still fine
+     (no pixelated upscale, which read as mud), on a 1x screen it is a touch softer. Plain
+     overlay, no blend mode: over a near-black canvas it looks the same and costs the compositor
+     nothing per frame. It overshoots the viewport so a phone's address bar can slide without
+     uncovering it. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px 128px; }
 @supports (height: 100dvh) { .grain { top: 0; bottom: 0; height: 120dvh; } }
 /* Blurred colour fields behind the hero and the closer: what the panels blur. */
 .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
@@ -402,11 +405,14 @@
 .field .a { width: 60vw; height: 60vw; left: -10vw; top: -20vw; background: #2d5a4a; }
 .field .b { width: 50vw; height: 50vw; right: -12vw; top: -8vw; background: #5a4a2d; }
 .field .c { width: 45vw; height: 45vw; left: 30vw; top: 20vw; background: #2d3f5a; opacity: 0.4; }
-@media (prefers-reduced-motion: no-preference) {
+/* The fields drift only where a pointer is (a laptop); a phone's GPU pays for an animated 110px
+   blur every frame and the page feels slow to open, so there they stand still and blur less. */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
   .field i { animation: drift 22s ease-in-out infinite alternate; }
   .field .b { animation-duration: 28s; animation-delay: -9s; }
   .field .c { animation-duration: 34s; animation-delay: -17s; }
 }
+@media (hover: none) { .field i { filter: blur(70px); } }
 @keyframes drift { to { transform: translate3d(6vw, 4vw, 0) scale(1.08); } }
 .term-glow { box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.06) inset, 0 40px 120px -40px rgb(0 0 0 / 0.9); }
 @media (prefers-reduced-motion: no-preference) {

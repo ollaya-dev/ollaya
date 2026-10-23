@@ -41,7 +41,7 @@ function Mark({ p }: { p: (typeof PUBLISHERS)[number] }) {
         <path d={p.path} />
       </svg>
     )
-  return <img src={asset(`logos/${p.png}.png`)} class="size-9 shrink-0 rounded-[4px] brightness-150 grayscale" alt="" width="36" height="36" />
+  return <img src={asset(`logos/${p.png}.png`)} class="size-9 shrink-0 rounded-[4px] brightness-150 grayscale" alt="" width="36" height="36" loading="lazy" decoding="async" />
 }
 
 export const JEV = { acc: 0.738, text: '236–276 ms' }

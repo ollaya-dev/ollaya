@@ -69,8 +69,12 @@ export function Layout({ origin, path, meta, children }: LayoutProps) {
         <link rel="stylesheet" href={asset('app.css')} />
         <link rel="alternate" type="application/rss+xml" href="/blog/rss.xml" />
         <script src={asset('app.js')} defer></script>
-        <script src={asset('chart.js')} defer></script>
-        <script src={asset('demo.js')} defer></script>
+        {meta.fullBleed ? (
+          <>
+            <script src={asset('chart.js')} defer></script>
+            <script src={asset('demo.js')} defer></script>
+          </>
+        ) : null}
       </head>
       <body class="flex min-h-screen flex-col bg-canvas font-sans text-body antialiased">
         <div class="grain" aria-hidden="true"></div>
