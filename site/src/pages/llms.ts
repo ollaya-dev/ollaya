@@ -9,7 +9,7 @@ import { GITHUB_URL, SITE_DESCRIPTION, SITE_NAME } from '../site'
 import { withOrigin } from './docs'
 
 const intro = (origin: string) =>
-  `A decision model reads a state (a message, an email, a ticket, any JSON) plus typed questions (choice, score, yes/no) and returns calibrated probabilities in a single forward pass, in milliseconds. It never generates text. Ollaya pulls these models by name from their authors' Hugging Face repositories, serves them from a local daemon on port 11435, and speaks TypeSafe's \`/v1/systemone\` wire format, so the TypeSafe SDK and other Jev clients work by changing one environment variable. Install: \`curl -fsSL ${origin}/install.sh | sh\`.`
+  `A decision model reads a state (a message, an email, a ticket, any JSON) plus typed questions (choice, score, yes/no) and returns calibrated probabilities in a single forward pass, in milliseconds. It never generates text. Ollaya pulls these models by name from their authors' Hugging Face repositories and serves them from a local daemon on port 11435 behind a self-hosted, Jev-compatible API (TypeSafe's \`/v1/systemone\` wire format), so the TypeSafe SDK and other Jev clients work unchanged once they point at Ollaya and name an open model. Install: \`curl -fsSL ${origin}/install.sh | sh\`.`
 
 export function llmsTxt(origin: string, bench: string, docs: DocPage[], models: Model[]): string {
   const link = (title: string, url: string, about: string) => `- [${title}](${url}): ${about}`

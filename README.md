@@ -24,9 +24,10 @@
 
 A decision model reads a *state* (a message, an email, a ticket, any JSON) plus typed questions
 (`choice`, `score`, `noul`) and returns calibrated probabilities in a single forward pass, in
-milliseconds. It never generates text. Ollaya pulls these models by name, serves them from a
-local daemon, and speaks TypeSafe's `/v1/systemone` wire format, so existing Jev clients work by
-changing one environment variable.
+milliseconds. It never generates text. Ollaya pulls these models by name and serves them from a
+local daemon behind a self-hosted, Jev-compatible API (TypeSafe's `/v1/systemone` wire format),
+so the TypeSafe SDK and existing Jev clients work unchanged once they point at Ollaya and name an
+open model.
 
 ```sh
 curl -fsSL https://ollaya.dev/install.sh | sh
