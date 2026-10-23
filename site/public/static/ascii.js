@@ -83,27 +83,32 @@
     ctx.drawImage(atlas, i * aw, p * ah, aw, ah, c * cw, r * ch, cw, ch)
   }
 
-  function drawAll(t) {
-    ctx.clearRect(0, 0, W, H)
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cell(c, r, t)
-  }
-
-  // Only the cells the cursor reaches: cleared and redrawn, so the ripple moves between full frames.
-  let lastBox = null
-  function drawNear(t) {
-    if (lastBox) {
-      ctx.clearRect(lastBox.x, lastBox.y, lastBox.w, lastBox.h)
-      for (let r = lastBox.r0; r < lastBox.r1; r++) for (let c = lastBox.c0; c < lastBox.c1; c++) cell(c, r, t)
-      lastBox = null
-    }
-    if (mx < -1e8) return
+  /** The cells the cursor reaches, as a box to clear and redraw. */
+  function boxAt() {
+    if (mx < -1e8) return null
     const c0 = Math.max(0, Math.floor(mx - R - 1))
     const c1 = Math.min(cols, Math.ceil(mx + R + 1))
     const r0 = Math.max(0, Math.floor(my - R / 1.9 - 1))
     const r1 = Math.min(rows, Math.ceil(my + R / 1.9 + 1))
-    lastBox = { x: c0 * cw, y: r0 * ch, w: (c1 - c0) * cw, h: (r1 - r0) * ch, c0, c1, r0, r1 }
-    ctx.clearRect(lastBox.x, lastBox.y, lastBox.w, lastBox.h)
-    for (let r = r0; r < r1; r++) for (let c = c0; c < c1; c++) cell(c, r, t)
+    return { x: c0 * cw, y: r0 * ch, w: (c1 - c0) * cw, h: (r1 - r0) * ch, c0, c1, r0, r1 }
+  }
+  function drawBox(b, t) {
+    ctx.clearRect(b.x, b.y, b.w, b.h)
+    for (let r = b.r0; r < b.r1; r++) for (let c = b.c0; c < b.c1; c++) cell(c, r, t)
+  }
+
+  // Wherever the cursor last lit the field is remembered, so the next frame puts it back.
+  let lit = null
+  function drawAll(t) {
+    ctx.clearRect(0, 0, W, H)
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cell(c, r, t)
+    lit = boxAt()
+  }
+  function drawNear(t) {
+    const b = boxAt()
+    if (lit) drawBox(lit, t)
+    if (b) drawBox(b, t)
+    lit = b
   }
 
   size()
@@ -121,7 +126,6 @@
       const t = now / 1000
       if (now - lastAll > 125) {
         lastAll = now
-        lastBox = null
         drawAll(t)
       } else if (now - lastNear > 33) {
         lastNear = now
