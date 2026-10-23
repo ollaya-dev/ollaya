@@ -28,7 +28,8 @@ function h(tag: string, attrs: Attrs = {}, ...children: Child[]): HTMLElement {
   return el
 }
 
-const OWL = `<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5.5 10.5 9.5Q16 7.5 21.5 9.5L26 5.5V19Q26 27.5 16 27.5T6 19Z"/><circle cx="11.5" cy="15.5" r="3.25"/><circle cx="20.5" cy="15.5" r="3.25"/><circle cx="11.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="20.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/><path d="M14.75 21 16 23l1.25-2"/></svg>`
+/** Ollaya's mark, the gaze: two rings and one pupil (site/src/components/Logo.tsx). */
+const GAZE = `<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="9.5" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="3.2"/><circle cx="22.5" cy="16" r="6.5" fill="none" stroke="currentColor" stroke-width="3.2"/><circle cx="22.5" cy="16" r="2.6" fill="currentColor"/></svg>`
 const svg = (body: string, width = 1.6) =>
   `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
 const ICON = {
@@ -224,8 +225,8 @@ async function run() {
   const pane = document.getElementById('main-pane')
   const answers = document.getElementById('answers')
   if (pane && answers) {
-    const bottom = answers.offsetTop + answers.offsetHeight + 24 - pane.clientHeight
-    if (bottom > pane.scrollTop) pane.scrollTop = bottom
+    const below = answers.getBoundingClientRect().bottom + 24 - pane.getBoundingClientRect().bottom
+    if (below > 0) pane.scrollTop += below
   }
 }
 
@@ -293,10 +294,15 @@ function speed(a: ActivityResponse) {
 // --- view: frame ----------------------------------------------------------------------------------
 
 const btnPrimary =
-  'inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-btn px-4 text-[13px] font-medium text-btn-fg hover:bg-btn-hover disabled:opacity-50'
+  'inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-btn px-3.5 text-[13px] font-medium text-btn-fg hover:bg-btn-hover disabled:opacity-50'
 const btnSecondary =
-  'inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-line-strong px-4 text-[13px] font-medium text-fg hover:bg-fill disabled:opacity-50'
-const card = 'rounded-xl border border-line'
+  'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-line px-3.5 text-[13px] font-medium text-fg hover:border-line-strong hover:bg-fill disabled:opacity-50'
+const btnSmall =
+  'inline-flex h-7 items-center gap-1 rounded-md border border-line px-2.5 text-xs font-medium text-fg hover:border-line-strong hover:bg-fill disabled:opacity-50'
+const field =
+  'rounded-md border border-line bg-canvas/60 text-fg placeholder:text-muted hover:border-line-strong focus:border-line-strong focus:ring-2 focus:ring-fill-strong focus:outline-none'
+const card = 'rounded-md border border-line'
+const h2 = 'text-sm font-semibold text-fg'
 
 /** What the server's device means, for the status line's tooltip (#44). */
 function deviceHint(device: string | null): string {
@@ -311,12 +317,12 @@ function header(): HTMLElement {
   const running = !!s?.running
   return h(
     'header',
-    { class: 'flex h-14 shrink-0 items-center justify-between border-b border-line px-5' },
+    { class: 'flex h-14 shrink-0 items-center justify-between border-b border-line bg-canvas/70 px-5 backdrop-blur-xl' },
     h(
       'div',
       { class: 'flex items-center gap-2 text-fg' },
-      icon(OWL, '-ml-[4px] size-6'),
-      h('span', { class: 'text-[17px] leading-6 font-medium tracking-tight' }, 'ollaya'),
+      icon(GAZE, 'size-7'),
+      h('span', { class: 'text-[17px] font-semibold tracking-[-0.035em]' }, 'ollaya'),
     ),
     h(
       'div',
@@ -325,7 +331,7 @@ function header(): HTMLElement {
       state.update
         ? h(
             'button',
-            { class: 'rounded-full border border-line-strong px-3 py-1 text-xs font-medium text-fg hover:bg-fill', title: 'Opens the download page', onClick: () => void backend.openDownload() },
+            { class: btnSmall, title: 'Opens the download page', onClick: () => void backend.openDownload() },
             `Ollaya ${state.update} is available`,
           )
         : null,
@@ -350,7 +356,7 @@ function sidebar(): HTMLElement {
     h(
       'button',
       {
-        class: `flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] ${on ? 'bg-fill-strong font-medium text-fg' : 'text-body hover:bg-fill'}`,
+        class: `flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] ${on ? 'bg-fill font-medium text-fg' : 'text-body hover:bg-fill hover:text-fg'}`,
         'aria-current': on ? 'page' : undefined,
         onClick: () => go(view),
       },
@@ -362,26 +368,43 @@ function sidebar(): HTMLElement {
   const have = state.library.filter((m) => installedTags(m).length).length
   return h(
     'nav',
-    { class: 'flex w-52 shrink-0 flex-col justify-between border-r border-line bg-subtle p-2.5', 'aria-label': 'Pages' },
+    { class: 'flex w-52 shrink-0 flex-col justify-between border-r border-line p-2.5', 'aria-label': 'Pages' },
     h(
       'div',
       { class: 'space-y-0.5' },
       item('Overview', ICON.overview, { page: 'overview' }, page === 'overview'),
       item('Models', ICON.models, { page: 'models' }, page !== 'overview', have ? String(have) : undefined),
     ),
-    h('p', { class: 'px-2.5 pb-1 text-[11px] text-faint' }, state.status?.version ? `Ollaya ${state.status.version}` : ''),
+    h('p', { class: 'px-2.5 pb-1 text-[11px] text-muted' }, state.status?.version ? `Ollaya ${state.status.version}` : ''),
   )
 }
 
+/** A page is the website's frame: two rails, and bands one under the other, a rule between them. */
 function main(): HTMLElement {
   const v = state.view
-  const body =
-    v.page === 'overview' ? overview() : v.page === 'models' ? models() : modelPage(modelNamed(v.name))
-  return h('main', { id: 'main-pane', class: 'relative min-w-0 flex-1 overflow-y-auto' }, h('div', { class: 'mx-auto w-full max-w-4xl px-8 py-8' }, body))
+  const bands = v.page === 'overview' ? overview() : v.page === 'models' ? models() : modelPage(modelNamed(v.name))
+  return h(
+    'main',
+    { id: 'main-pane', class: 'relative min-w-0 flex-1 overflow-y-auto px-6' },
+    h('div', { class: 'frame mx-auto flex min-h-full w-full max-w-4xl flex-col pb-10' }, ...bands),
+  )
 }
 
-function pageTitle(text: string, sub: string): HTMLElement {
-  return h('div', {}, h('h1', { class: 'text-xl font-semibold tracking-tight text-fg' }, text), h('p', { class: 'mt-1 text-sm text-muted' }, sub))
+/** A page's opening band: its title, a lead, and whatever goes under them. */
+function head(title: Child, lead: Child, ...rest: Child[]): HTMLElement {
+  return h(
+    'header',
+    { class: 'px-8 pt-10 pb-8' },
+    h('h1', { class: 'text-3xl font-semibold tracking-[-0.03em] text-fg' }, title),
+    lead ? h('p', { class: 'mt-2 max-w-2xl text-[15px] text-body' }, lead) : null,
+    ...rest,
+  )
+}
+
+/** A band under the head, with a rule above it; `title` names it for screen readers too. */
+function band(title: string | null, ...children: Child[]): HTMLElement {
+  const id = title ? `band-${title.toLowerCase().replace(/\W+/g, '-')}` : undefined
+  return h('section', { class: 'rule px-8 py-7', 'aria-labelledby': id }, title ? h('h2', { id, class: h2 }, title) : null, ...children)
 }
 
 function copyButton(text: string, label: string): HTMLElement {
@@ -395,40 +418,41 @@ function copyButton(text: string, label: string): HTMLElement {
 
 // --- view: overview -------------------------------------------------------------------------------
 
-function overview(): HTMLElement {
+function overview(): HTMLElement[] {
   const s = state.status
-  const running = !!s?.running
-  const page = h('div', {}, pageTitle('Overview', 'The server on this computer, and what it has answered.'))
-  if (!running) {
-    page.append(
-      h(
-        'div',
-        { class: `${card} mt-6 flex items-center justify-between gap-4 px-5 py-4` },
-        h('p', { class: 'text-sm text-muted' }, s === null ? 'Checking the server…' : 'The server is stopped. Start it to download and run models.'),
-        h('button', { class: btnPrimary, disabled: state.statusBusy || s === null, onClick: toggleServer }, 'Start'),
+  const top = head('Overview', 'The server on this computer, and what it has answered.')
+  if (!s?.running)
+    return [
+      top,
+      band(
+        null,
+        h(
+          'div',
+          { class: 'flex items-center justify-between gap-4' },
+          h('p', { class: 'text-sm text-muted' }, s === null ? 'Checking the server…' : 'The server is stopped. Start it to download and run models.'),
+          h('button', { class: btnPrimary, disabled: state.statusBusy || s === null, onClick: toggleServer }, 'Start'),
+        ),
       ),
-    )
-    return page
-  }
-  page.append(stats(), server(s!.url), endpoints(s!.url), recent())
-  return page
+    ]
+  return [top, stats(), server(s.url), endpoints(s.url), recent()]
 }
 
+/** The numbers as the website's proof strip: cells sharing their borders. */
 function stats(): HTMLElement {
   const a = state.activity
   const sp = a ? speed(a) : null
   const tile = (label: string, value: string, note: string) =>
     h(
       'div',
-      { class: `${card} px-4 py-3.5` },
-      h('p', { class: 'text-xs text-muted' }, label),
-      h('p', { class: 'mt-1 text-2xl font-semibold tracking-tight text-fg tabular-nums' }, value),
-      h('p', { class: 'mt-0.5 text-[11px] text-faint' }, note),
+      { class: 'bg-canvas px-6 py-6' },
+      h('p', { class: 'text-3xl font-semibold tracking-[-0.03em] text-fg tabular-nums' }, value),
+      h('p', { class: 'mt-1 text-[13px] text-body' }, label),
+      h('p', { class: 'mt-0.5 text-xs text-muted' }, note),
     )
   const median = sp?.median ?? null
   return h(
     'div',
-    { class: 'mt-6 grid grid-cols-4 gap-3' },
+    { class: 'rule grid grid-cols-4 gap-px bg-line' },
     tile('Requests', a ? a.total.toLocaleString() : '–', 'since the server started'),
     tile('Per second', sp ? sp.perSecond.toFixed(sp.perSecond < 10 ? 1 : 0) : '–', 'over the last minute'),
     tile('Response time', median === null ? '–' : `${ms(median)} ms`, sp?.samples ? `median of the last ${sp.samples}` : 'no requests yet'),
@@ -439,10 +463,8 @@ function stats(): HTMLElement {
 function server(url: string): HTMLElement {
   const row = (label: string, value: Node | string) =>
     h('div', { class: 'flex min-h-11 items-center justify-between gap-4 border-t border-line px-4 py-2 first:border-t-0' }, h('span', { class: 'text-[13px] text-muted' }, label), value)
-  return h(
-    'section',
-    { class: 'mt-8', 'aria-labelledby': 'server-title' },
-    h('h2', { id: 'server-title', class: 'text-[13px] font-semibold text-fg' }, 'Server'),
+  return band(
+    'Server',
     h(
       'div',
       { class: `${card} mt-3` },
@@ -451,7 +473,7 @@ function server(url: string): HTMLElement {
         'Loaded models',
         state.loaded.length
           ? h('span', { class: 'flex flex-wrap justify-end gap-1.5' }, ...state.loaded.map((m) => h('span', { class: 'rounded-md bg-fill px-2 py-0.5 font-mono text-xs text-body' }, m)))
-          : h('span', { class: 'text-[13px] text-faint' }, 'None. A model loads on its first request.'),
+          : h('span', { class: 'text-[13px] text-muted' }, 'None. A model loads on its first request.'),
       ),
     ),
   )
@@ -467,11 +489,11 @@ function endpoints(url: string): HTMLElement {
   const example = `curl ${url}/api/decide -d '${JSON.stringify({ model: model.replace(/:latest$/, ''), preset: 'triage', state: 'I was charged twice this month.' })}'`
   return h(
     'section',
-    { class: 'mt-8', 'aria-labelledby': 'api-title' },
+    { class: 'rule px-8 py-7', 'aria-labelledby': 'api-title' },
     h(
       'div',
       { class: 'flex items-baseline justify-between' },
-      h('h2', { id: 'api-title', class: 'text-[13px] font-semibold text-fg' }, 'API'),
+      h('h2', { id: 'api-title', class: h2 }, 'API'),
       h('button', { class: 'inline-flex items-center gap-1 text-xs text-muted hover:text-fg', onClick: () => void backend.openLink('https://ollaya.dev/docs/api') }, 'Reference', icon(ICON.external, 'size-3.5')),
     ),
     h(
@@ -489,7 +511,7 @@ function endpoints(url: string): HTMLElement {
       ),
       h(
         'div',
-        { class: 'flex items-start gap-2 border-t border-line bg-code px-4 py-3 rounded-b-xl' },
+        { class: 'flex items-start gap-2 rounded-b-md border-t border-line bg-code px-4 py-3' },
         h('code', { class: 'min-w-0 flex-1 font-mono text-xs leading-relaxed wrap-anywhere text-body' }, example),
         copyButton(example, 'Copy the example'),
       ),
@@ -499,7 +521,7 @@ function endpoints(url: string): HTMLElement {
 
 function recent(): HTMLElement {
   const a = state.activity
-  const section = h('section', { class: 'mt-8', 'aria-labelledby': 'recent-title' }, h('h2', { id: 'recent-title', class: 'text-[13px] font-semibold text-fg' }, 'Recent requests'))
+  const section = band('Recent requests')
   if (!a) {
     section.append(h('p', { class: 'mt-3 text-sm text-muted' }, state.activityError ? 'This server does not list its requests. Update Ollaya to 0.17.0 or newer.' : 'Loading…'))
     return section
@@ -552,10 +574,6 @@ function recent(): HTMLElement {
 
 // --- view: models ---------------------------------------------------------------------------------
 
-function avatar(m: LibraryModel, size: string): HTMLElement {
-  return h('span', { class: `${size} flex shrink-0 items-center justify-center rounded-lg border border-line bg-subtle font-semibold text-fg` }, title(m).charAt(0).toUpperCase())
-}
-
 /** The Download button, or how far a download is, or that it is on this computer. */
 function pullState(tag: string, compact: boolean): HTMLElement {
   const p = state.pulling.get(tag)
@@ -570,7 +588,7 @@ function pullState(tag: string, compact: boolean): HTMLElement {
   return h(
     'button',
     {
-      class: compact ? 'inline-flex h-7 items-center gap-1 rounded-full border border-line-strong px-2.5 text-xs font-medium text-fg hover:bg-fill disabled:opacity-50' : btnSecondary,
+      class: compact ? btnSmall : btnSecondary,
       disabled: !state.status?.running,
       title: state.status?.running ? undefined : 'Start the server first',
       onClick: (e: Event) => (e.stopPropagation(), void pull(tag)),
@@ -580,13 +598,13 @@ function pullState(tag: string, compact: boolean): HTMLElement {
   )
 }
 
-function models(): HTMLElement {
+function models(): HTMLElement[] {
   const q = state.query.trim().toLowerCase()
   const shown = state.library
     .filter((m) => !state.onlyInstalled || installedTags(m).length)
     .filter((m) => !q || [m.name, m.title, m.description, m.publisher ?? '', ...m.caps].join(' ').toLowerCase().includes(q))
   const search = h('input', {
-    class: 'h-8 w-full rounded-lg border border-line-strong bg-canvas pr-3 pl-8 text-[13px] text-fg placeholder:text-faint focus:border-fg focus:outline-none',
+    class: `h-8 w-full pr-3 pl-8 text-[13px] ${field}`,
     type: 'search',
     placeholder: 'Search models',
     'aria-label': 'Search models',
@@ -596,110 +614,151 @@ function models(): HTMLElement {
     },
   }) as HTMLInputElement
   search.value = state.query
+  // The website's filter chips: an outline, filled when on.
   const tab = (label: string, only: boolean) =>
-    h('button', { class: `rounded-md px-2.5 py-1 text-[13px] ${state.onlyInstalled === only ? 'bg-fill-strong font-medium text-fg' : 'text-muted hover:text-fg'}`, onClick: () => ((state.onlyInstalled = only), render()) }, label)
-  const page = h(
-    'div',
-    {},
-    pageTitle('Models', 'Open decision models that run on this computer. Pick one to download and try it.'),
+    h(
+      'button',
+      {
+        class: `rounded-md border px-3 py-1 text-[13px] ${state.onlyInstalled === only ? 'border-fg bg-fg text-canvas' : 'border-line text-body hover:border-line-strong'}`,
+        'aria-pressed': state.onlyInstalled === only ? 'true' : 'false',
+        onClick: () => ((state.onlyInstalled = only), render()),
+      },
+      label,
+    )
+  const top = head(
+    'Models',
+    'Open decision models that run on this computer. Pick one to download and try it.',
     h(
       'div',
       { class: 'mt-6 flex items-center gap-3' },
-      h('div', { class: 'relative w-64' }, icon(ICON.search, 'pointer-events-none absolute top-2 left-2.5 size-4 text-faint'), search),
-      h('div', { class: 'flex gap-1' }, tab('All', false), tab('On this computer', true)),
+      h('div', { class: 'relative w-64' }, icon(ICON.search, 'pointer-events-none absolute top-2 left-2.5 size-4 text-muted'), search),
+      h('div', { class: 'flex gap-2' }, tab('All', false), tab('On this computer', true)),
     ),
+    state.pullError ? h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError) : null,
   )
-  if (state.pullError) page.append(h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError))
+  const note = (text: string) => band(null, h('p', { class: 'py-6 text-center text-sm text-muted' }, text))
   if (state.libraryError)
-    page.append(
-      h(
-        'div',
-        { class: `mt-6 ${card} p-5` },
-        h('p', { class: 'text-sm font-medium' }, 'The model library could not be reached'),
+    return [
+      top,
+      band(
+        null,
+        h('p', { class: 'text-sm font-medium text-fg' }, 'The model library could not be reached'),
         h('p', { class: 'mt-1 text-sm text-muted' }, 'It comes from ollaya.dev. Check the internet connection and try again.'),
-        h('p', { class: 'mt-2 text-xs break-all text-faint' }, state.libraryError),
+        h('p', { class: 'mt-2 text-xs break-all text-muted' }, state.libraryError),
         h('button', { class: `mt-4 ${btnSecondary}`, onClick: () => void loadLibrary() }, 'Try again'),
       ),
-    )
-  else if (!state.library.length) page.append(h('p', { class: 'mt-10 text-center text-sm text-muted' }, 'Loading the model library…'))
-  else if (!shown.length) page.append(h('p', { class: 'mt-10 text-center text-sm text-muted' }, state.onlyInstalled && !q ? 'No models on this computer yet.' : 'No model matches.'))
-  else page.append(h('div', { class: 'mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3' }, ...shown.map(modelCard)))
-  return page
+    ]
+  if (!state.library.length) return [top, note('Loading the model library…')]
+  if (!shown.length) return [top, note(state.onlyInstalled && !q ? 'No models on this computer yet.' : 'No model matches.')]
+  // Empty cells close the last row, which would otherwise show the grid's line colour.
+  const blank = (n: number, cls: string) => Array.from({ length: n }, () => h('li', { class: `bg-canvas ${cls}`, 'aria-hidden': 'true' }))
+  return [
+    top,
+    h(
+      'ul',
+      { class: 'rule grid grid-cols-2 gap-px border-b border-line bg-line lg:grid-cols-3', role: 'list' },
+      ...shown.map(modelCard),
+      ...blank((2 - (shown.length % 2)) % 2, 'lg:hidden'),
+      ...blank((3 - (shown.length % 3)) % 3, 'hidden lg:block'),
+    ),
+  ]
 }
 
+/** A model as the website's card: who made it, what it is, its numbers from the bench. */
 function modelCard(m: LibraryModel): HTMLElement {
   const latest = `${m.name}:latest`
   const have = installedTags(m)
   const size = tagOf(m, latest)?.size
+  const summary = (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).replace(/\.$/, '')
+  const stat = (value: string, label: string) =>
+    h('div', {}, h('p', { class: 'text-lg font-semibold tracking-[-0.02em] text-fg tabular-nums' }, value), h('p', { class: 'text-[11px] text-muted' }, label))
+  const open = () => go({ page: 'model', name: m.name })
   return h(
-    'div',
-    {
-      class: `${card} flex cursor-default flex-col gap-3 p-4 hover:border-line-strong hover:bg-subtle`,
-      role: 'button',
-      tabindex: '0',
-      'aria-label': `${title(m)}: open`,
-      onClick: () => go({ page: 'model', name: m.name }),
-      onKeydown: (e: Event) => {
-        if ((e as KeyboardEvent).key === 'Enter') go({ page: 'model', name: m.name })
+    'li',
+    { class: 'flex' },
+    h(
+      'div',
+      {
+        class: 'group flex w-full cursor-default flex-col bg-canvas p-5 hover:bg-raised',
+        role: 'button',
+        tabindex: '0',
+        'aria-label': `${title(m)}: open`,
+        onClick: open,
+        onKeydown: (e: Event) => {
+          if ((e as KeyboardEvent).key === 'Enter') open()
+        },
       },
-    },
-    h(
-      'div',
-      { class: 'flex items-center gap-3' },
-      avatar(m, 'size-9 text-[15px]'),
-      h('div', { class: 'min-w-0' }, h('p', { class: 'truncate text-sm font-medium text-fg' }, title(m)), h('p', { class: 'truncate text-xs text-muted' }, m.publisher ? `by ${m.publisher}` : m.name)),
-    ),
-    h('p', { class: 'line-clamp-2 min-h-[2.5rem] text-[13px] leading-5 text-muted' }, m.description),
-    h(
-      'div',
-      { class: 'mt-auto flex h-7 items-center justify-between gap-2' },
-      h('span', { class: 'text-xs text-faint tabular-nums' }, size ? bytes(size) : ''),
-      have.length && !state.pulling.has(latest) ? pullState(have[0]!, true) : pullState(latest, true),
+      h(
+        'div',
+        { class: 'flex items-start justify-between gap-3' },
+        h(
+          'div',
+          { class: 'min-w-0' },
+          h('p', { class: 'truncate font-mono text-[15px] text-fg underline-offset-4 group-hover:underline' }, m.name),
+          h('p', { class: 'mt-0.5 truncate text-xs text-muted' }, m.publisher ?? ''),
+        ),
+        have.length && !state.pulling.has(latest) ? pullState(have[0]!, true) : pullState(latest, true),
+      ),
+      h('p', { class: 'mt-3 line-clamp-3 flex-1 text-[13px] leading-5 text-body' }, summary),
+      h(
+        'div',
+        { class: 'mt-5 flex items-end gap-5 border-t border-line pt-3.5' },
+        stat(m.stats?.accuracy ? m.stats.accuracy.toFixed(3) : '—', 'accuracy'),
+        stat(m.stats?.latencyMs ? `${Math.round(m.stats.latencyMs)} ms` : '—', 'five questions'),
+        h('div', { class: 'ml-auto text-right text-xs text-muted tabular-nums' }, size ? bytes(size) : ''),
+      ),
     ),
   )
 }
 
 // --- view: one model ------------------------------------------------------------------------------
 
-function modelPage(m: LibraryModel | undefined): HTMLElement {
-  if (!m) return h('p', { class: 'pt-24 text-center text-sm text-muted' }, 'Loading the model library…')
+function modelPage(m: LibraryModel | undefined): HTMLElement[] {
+  if (!m) return [h('p', { class: 'pt-24 text-center text-sm text-muted' }, 'Loading the model library…')]
   const running = !!state.status?.running
-  const page = h(
-    'div',
-    {},
-    h('button', { class: 'inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-fg', onClick: () => go({ page: 'models' }) }, icon(ICON.back, 'size-4'), 'Models'),
+  const bands = [
     h(
-      'div',
-      { class: 'mt-5 flex items-start gap-4' },
-      avatar(m, 'size-12 text-xl'),
+      'header',
+      { class: 'px-8 pt-8 pb-8' },
+      h(
+        'nav',
+        { class: 'flex items-center gap-1.5 text-[13px] text-muted', 'aria-label': 'Breadcrumb' },
+        h('button', { class: 'underline-offset-4 hover:text-fg hover:underline', onClick: () => go({ page: 'models' }) }, 'Models'),
+        h('span', { 'aria-hidden': 'true' }, '/'),
+        h('span', { class: 'text-body' }, m.name),
+      ),
       h(
         'div',
-        { class: 'min-w-0 flex-1' },
-        h('h1', { class: 'text-xl font-semibold tracking-tight text-fg' }, title(m)),
-        h('p', { class: 'mt-0.5 text-[13px] text-muted' }, [m.publisher && `by ${m.publisher}`, m.license].filter(Boolean).join(' · ')),
+        { class: 'mt-4 flex items-start justify-between gap-4' },
+        h(
+          'div',
+          { class: 'min-w-0' },
+          h('h1', { class: 'truncate font-mono text-3xl font-semibold tracking-tight text-fg' }, m.name),
+          h('p', { class: 'mt-1.5 text-[13px] text-muted' }, [m.publisher && `by ${m.publisher}`, m.license].filter(Boolean).join(' · ')),
+        ),
+        pullState(`${m.name}:latest`, false),
       ),
-      pullState(`${m.name}:latest`, false),
+      h('p', { class: 'mt-4 max-w-2xl text-[15px] text-body' }, m.description),
+      h('div', { class: 'mt-4 flex flex-wrap gap-2' }, ...m.caps.map((c) => h('span', { class: 'rounded-md bg-cap-bg px-2 py-[2px] text-[13px] font-medium text-cap-fg' }, c))),
+      state.pullError ? h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError) : null,
     ),
-    h('p', { class: 'mt-4 max-w-2xl text-sm leading-relaxed text-body' }, m.description),
-    h('div', { class: 'mt-3 flex flex-wrap gap-1.5' }, ...m.caps.map((c) => h('span', { class: 'rounded-md bg-fill px-2 py-0.5 text-xs text-body' }, c))),
-  )
-  if (state.pullError) page.append(h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError))
-  if (!running) page.append(h('p', { class: 'mt-8 text-sm text-muted' }, 'Start the server to download and try models.'))
-  else if (installedTags(m).length) page.append(tryPanel(m))
-  page.append(
-    h('h2', { class: 'mt-10 text-[13px] font-semibold text-fg' }, 'Versions'),
-    h('div', { class: `${card} mt-3 overflow-hidden` }, ...mainTags(m).map((t, i) => versionRow(m, t, i))),
-  )
-  if (m.readme) page.append(readme(m))
-  page.append(
-    h(
-      'button',
-      { class: 'mt-10 inline-flex items-center gap-1 text-xs text-muted hover:text-fg', onClick: () => void backend.openLink(`https://ollaya.dev/library/${m.name}`) },
-      `${m.name} on ollaya.dev`,
-      icon(ICON.external, 'size-3.5'),
+  ]
+  if (!running) bands.push(band(null, h('p', { class: 'text-sm text-muted' }, 'Start the server to download and try models.')))
+  else if (installedTags(m).length) bands.push(tryPanel(m))
+  bands.push(band('Versions', h('div', { class: `${card} mt-3 overflow-hidden` }, ...mainTags(m).map((t, i) => versionRow(m, t, i)))))
+  if (m.readme) bands.push(readme(m))
+  bands.push(
+    band(
+      null,
+      h(
+        'button',
+        { class: 'inline-flex items-center gap-1 text-xs text-muted hover:text-fg', onClick: () => void backend.openLink(`https://ollaya.dev/library/${m.name}`) },
+        `${m.name} on ollaya.dev`,
+        icon(ICON.external, 'size-3.5'),
+      ),
     ),
   )
-  return page
+  return bands
 }
 
 function versionRow(m: LibraryModel, tag: string, i: number): HTMLElement {
@@ -712,7 +771,7 @@ function versionRow(m: LibraryModel, tag: string, i: number): HTMLElement {
     h(
       'div',
       { class: 'min-w-0' },
-      h('p', { class: 'font-mono text-[13px] text-fg' }, tag, t?.size ? h('span', { class: 'ml-2 font-sans text-xs text-faint' }, bytes(t.size)) : null),
+      h('p', { class: 'font-mono text-[13px] text-fg' }, tag, t?.size ? h('span', { class: 'ml-2 font-sans text-xs text-muted' }, bytes(t.size)) : null),
       summary ? h('p', { class: 'mt-0.5 truncate text-xs text-muted', title: summary }, summary) : null,
     ),
     h(
@@ -720,7 +779,7 @@ function versionRow(m: LibraryModel, tag: string, i: number): HTMLElement {
       { class: 'flex shrink-0 items-center gap-1' },
       pullState(tag, false),
       have
-        ? h('button', { class: 'ml-1 inline-flex size-7 items-center justify-center rounded-full text-faint hover:bg-fill hover:text-fg', title: `Remove ${tag}`, 'aria-label': `Remove ${tag}`, onClick: () => void remove(tag) }, icon(ICON.x, 'size-4'))
+        ? h('button', { class: 'ml-1 inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-fill hover:text-fg', title: `Remove ${tag}`, 'aria-label': `Remove ${tag}`, onClick: () => void remove(tag) }, icon(ICON.x, 'size-4'))
         : null,
     ),
   )
@@ -738,7 +797,7 @@ function readme(m: LibraryModel): HTMLElement {
     if (href.startsWith('#')) body.querySelector(href)?.scrollIntoView({ behavior: 'smooth' })
     else void backend.openLink(new URL(href, `https://ollaya.dev/library/${m.name}`).href)
   })
-  return h('section', { class: 'mt-10 border-t border-line pt-8', 'aria-label': 'Model card' }, h('h2', { class: 'text-[13px] font-semibold text-fg' }, 'Model card'), body)
+  return band('Model card', body)
 }
 
 function tryPanel(m: LibraryModel): HTMLElement {
@@ -748,9 +807,9 @@ function tryPanel(m: LibraryModel): HTMLElement {
   // which kind this version is, neither the inputs nor the note show.
   const own = state.builtin.get(state.runModel)
   if (own === undefined && state.runModel) void builtinOf(state.runModel)
-  const selectCls = 'h-8 rounded-lg border border-line-strong bg-canvas px-2.5 text-[13px] text-fg'
+  const selectCls = `h-8 px-2.5 text-[13px] ${field}`
   const textarea = h('textarea', {
-    class: 'mt-3 block h-28 w-full resize-y rounded-xl border border-line-strong bg-canvas px-3.5 py-3 text-sm leading-relaxed text-fg placeholder:text-faint focus:border-fg focus:outline-none',
+    class: `mt-3 block h-28 w-full resize-y px-3.5 py-3 text-sm leading-relaxed ${field}`,
     placeholder: 'Paste a message, an email or a JSON object…',
     spellcheck: 'false',
     onInput: (e) => {
@@ -765,10 +824,8 @@ function tryPanel(m: LibraryModel): HTMLElement {
     },
   }) as HTMLTextAreaElement
   textarea.value = state.input
-  const panel = h(
-    'section',
-    { class: 'mt-8', 'aria-labelledby': 'run-title' },
-    h('h2', { id: 'run-title', class: 'text-[13px] font-semibold text-fg' }, 'Try it'),
+  const panel = band(
+    'Try it',
     h(
       'div',
       { class: 'mt-3 flex flex-wrap items-center gap-2' },
@@ -793,7 +850,7 @@ function tryPanel(m: LibraryModel): HTMLElement {
   )
   if (own === null && state.preset === 'custom') {
     const q = h('textarea', {
-      class: 'mt-2 block h-40 w-full resize-y rounded-xl border border-line-strong bg-code px-3.5 py-3 font-mono text-xs leading-relaxed text-fg focus:border-fg focus:outline-none',
+      class: `mt-2 block h-40 w-full resize-y px-3.5 py-3 font-mono text-xs leading-relaxed ${field}`,
       spellcheck: 'false',
       'aria-label': 'Questions as JSON',
       onInput: (e) => (state.customQuestions = (e.target as HTMLTextAreaElement).value),
@@ -810,7 +867,7 @@ function tryPanel(m: LibraryModel): HTMLElement {
       h(
         'span',
         { class: 'flex items-center gap-3' },
-        h('span', { class: 'text-xs text-faint' }, mac ? '⌘ Return' : 'Ctrl + Enter'),
+        h('span', { class: 'text-xs text-muted' }, mac ? '⌘ Return' : 'Ctrl + Enter'),
         h('button', { id: 'run-button', class: btnPrimary, disabled: state.running || !state.input.trim(), onClick: () => void run() }, state.running ? icon(ICON.spinner, 'size-3.5') : null, 'Run'),
       ),
     ),
@@ -828,24 +885,37 @@ function option(value: string, text: string, selected: boolean): HTMLElement {
   return h('option', { value, selected }, text)
 }
 
-/** One row per answer, as the CLI prints them: the answer, a bar and its probability. */
+/** One row per answer, as the website's hero shows them: the question, the answer, a meter of ten
+ * segments and its probability. */
 function results(r: DecideResponse): HTMLElement {
   const rows = Object.entries(r.answers).map(([q, a]) => {
     const [text, note, p] = describe(a)
+    const lit = Math.round(p * 10)
     return h(
-      'div',
-      { class: 'grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_7rem_2.75rem] items-center gap-x-4 py-2 border-t border-line first:border-t-0' },
-      h('span', { class: 'truncate font-mono text-xs text-muted' }, q),
-      h('span', { class: 'truncate text-sm font-medium text-fg' }, text, note ? h('span', { class: 'ml-2 font-normal text-muted' }, note) : null),
-      h('span', { class: 'h-1.5 overflow-hidden rounded-full bg-fill-strong' }, h('span', { class: 'bar block h-full rounded-full', style: `width:${Math.round(p * 100)}%` })),
-      h('span', { class: 'text-right font-mono text-xs text-body tabular-nums' }, p.toFixed(2)),
+      'li',
+      { class: 'border-t border-line px-5 py-3 first:border-t-0' },
+      h('p', { class: 'font-mono text-xs text-muted' }, q),
+      h(
+        'div',
+        { class: 'mt-1.5 flex items-center gap-4' },
+        h('span', { class: 'w-48 shrink-0 truncate text-[15px] font-medium text-fg', title: [text, note].filter(Boolean).join(': ') }, text, note ? h('span', { class: 'ml-2 text-[13px] font-normal text-muted' }, note) : null),
+        h('span', { class: 'meter min-w-0 flex-1', 'aria-hidden': 'true' }, ...Array.from({ length: 10 }, (_, i) => h('i', { class: i < lit ? 'on' : undefined }))),
+        h('span', { class: 'w-10 text-right text-[13px] text-fg tabular-nums' }, p.toFixed(2)),
+      ),
     )
   })
   return h(
     'div',
-    { id: 'answers', class: 'mt-6 pb-2' },
-    h('div', { class: `${card} px-4 py-1` }, ...rows),
-    h('p', { class: 'mt-3 text-xs text-muted' }, `Answered by ${r.routing?.model ?? r.model} in ${ms(r.total_duration / 1e6)} ms`),
+    { id: 'answers', class: `${card} mt-6 overflow-hidden bg-subtle` },
+    h('ul', { role: 'list' }, ...rows),
+    h(
+      'p',
+      { class: 'border-t border-line px-5 py-3 text-xs text-muted' },
+      'Answered by ',
+      h('span', { class: 'font-mono text-body' }, r.routing?.model ?? r.model),
+      ' in ',
+      h('span', { class: 'font-medium text-fg' }, `${ms(r.total_duration / 1e6)} ms`),
+    ),
   )
 }
 

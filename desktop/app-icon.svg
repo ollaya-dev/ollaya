@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- The app's icon (npx tauri icon app-icon.svg): the gaze mark of site/src/components/Logo.tsx on
+       ollaya.dev's dark tile, in the macOS icon grid (an 824px tile, 100px around it). -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#0a0a0a"/>
+  <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="4"/>
+  <g transform="translate(512 512) scale(19) translate(-16 -16)">
+    <circle cx="9.5" cy="16" r="6.5" fill="none" stroke="#fafafa" stroke-width="3.2"/>
+    <circle cx="22.5" cy="16" r="6.5" fill="none" stroke="#fafafa" stroke-width="3.2"/>
+    <circle cx="22.5" cy="16" r="2.6" fill="#fafafa"/>
+  </g>
+</svg>

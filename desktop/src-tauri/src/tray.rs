@@ -31,7 +31,8 @@ use crate::{
 };
 
 const TRAY: &str = "ollaya";
-/// Template images (alpha only): an owl awake while the server runs, asleep while it doesn't.
+/// Template images (alpha only) of the gaze mark, eyes open while the server runs and closed while it
+/// doesn't (scripts/tray-icons.swift).
 const ICON_AWAKE: &[u8] = include_bytes!("../icons/tray-awake.png");
 const ICON_ASLEEP: &[u8] = include_bytes!("../icons/tray-asleep.png");
 
