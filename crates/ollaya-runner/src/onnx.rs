@@ -197,8 +197,9 @@ pub struct ModelFiles {
     pub calibration: Option<PathBuf>,
     /// The `arch` layer: what the MLX engine builds its network from.
     pub arch: Option<PathBuf>,
-    /// The author's weights file, for MLX. Unset: the file the arch layer names, next to it.
-    pub weights: Option<PathBuf>,
+    /// The author's weights files, for MLX, in the arch layer's order. Empty: the files the arch
+    /// layer names, next to it.
+    pub weights: Vec<PathBuf>,
 }
 
 impl ModelFiles {
@@ -214,7 +215,7 @@ impl ModelFiles {
             decision: dir.join("decision.json"),
             calibration: Some(dir.join("calibration.json")),
             arch: arch.is_file().then_some(arch),
-            weights: None,
+            weights: Vec::new(),
         }
     }
 }

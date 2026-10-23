@@ -4,7 +4,8 @@
 use ollaya_mlx::{Array, Dtype};
 
 use super::arch::{
-    ContextPoolerHead, GliclassHead, LayaHead, OptionMarkerHead, SequenceClassificationHead,
+    ContextPoolerHead, EndpointHead, GliclassHead, LayaHead, OptionMarkerHead, PointerHead,
+    SequenceClassificationHead,
 };
 use super::modernbert::{Linear, Norm, gelu, relu};
 use super::weights::{Tensors, mlx};
@@ -487,5 +488,106 @@ impl Gliclass {
         let x = relu(&self.mlp[1].forward(&x)?)?;
         let logits = self.mlp[2].forward(&x)?.reshape(&[rows, k]).map_err(mlx)?;
         mask_logits(&logits, marker_mask)
+    }
+}
+
+/// Decision 1.0's `CandidateHead` (`decision/model.py` in the model repo), in float32.
+pub struct Endpoint {
+    candidate_norm: Norm,
+    query_norm: Norm,
+    key: Linear,
+    query: Linear,
+    candidate_mlp: Linear,
+    query_mlp: Linear,
+    scalar: Linear,
+    scale: f32,
+}
+
+impl Endpoint {
+    pub fn load(c: &EndpointHead, d: usize, t: &Tensors) -> Result<Self> {
+        let (p, hd) = (&c.prefix, c.head_dim);
+        Ok(Endpoint {
+            candidate_norm: Norm::load(t, &format!("{p}candidate_norm."), d, true, c.norm_eps)?,
+            query_norm: Norm::load(t, &format!("{p}query_norm."), d, true, c.norm_eps)?,
+            key: Linear::load(t, &format!("{p}key."), hd, d, false)?,
+            query: Linear::load(t, &format!("{p}query."), hd, d, false)?,
+            candidate_mlp: Linear::load(t, &format!("{p}candidate_mlp."), hd, d, true)?,
+            query_mlp: Linear::load(t, &format!("{p}query_mlp."), hd, d, false)?,
+            scalar: Linear::load(t, &format!("{p}scalar."), 1, hd, false)?,
+            scale: (hd as f32).sqrt().recip(),
+        })
+    }
+
+    /// Candidate logits [rows, k] from `h` [rows, seq, hidden], the query position [rows] and the
+    /// candidate positions [rows, k] (padded slots give values the engine never reads).
+    pub fn forward(&self, h: &Array, query_pos: &Array, cand_pos: &Array) -> Result<Array> {
+        let s = h.shape();
+        let (rows, hidden) = (s[0], s[2]);
+        let k = cand_pos.shape()[1];
+        let c = self.candidate_norm.forward(&gather_markers(h, cand_pos)?)?; // [rows, k, hidden]
+        let q = query_pos
+            .reshape(&[rows, 1, 1])
+            .and_then(|p| p.broadcast_to(&[rows, 1, hidden]))
+            .and_then(|p| h.take_along_axis(&p, 1))
+            .map_err(mlx)?; // [rows, 1, hidden]
+        let q = self.query_norm.forward(&q)?;
+        let bilinear = self
+            .key
+            .forward(&c)?
+            .multiply(&self.query.forward(&q)?)
+            .and_then(|a| a.sum(-1, false))
+            .and_then(|a| a.multiply(&Array::scalar(self.scale)))
+            .map_err(mlx)?;
+        let mlp = gelu(
+            &self
+                .candidate_mlp
+                .forward(&c)?
+                .add(&self.query_mlp.forward(&q)?)
+                .map_err(mlx)?,
+        )?;
+        let interaction = self
+            .scalar
+            .forward(&mlp)?
+            .reshape(&[rows, k])
+            .map_err(mlx)?;
+        bilinear.add(&interaction).map_err(mlx)
+    }
+}
+
+/// Kev's `PointerHead` (`kev/model.py`), in float32.
+pub struct Pointer {
+    q: Linear,
+    k: Linear,
+    scale: f32,
+}
+
+impl Pointer {
+    pub fn load(c: &PointerHead, d: usize, t: &Tensors) -> Result<Self> {
+        Ok(Pointer {
+            q: Linear::load(t, &format!("{}q.", c.prefix), c.dim, d, true)?,
+            k: Linear::load(t, &format!("{}k.", c.prefix), c.dim, d, true)?,
+            scale: (c.dim as f32).sqrt().recip(),
+        })
+    }
+
+    /// Raw scores [rows, k] from `h` [rows, seq, hidden], the decide position [rows] and the
+    /// option positions [rows, k] (padded slots give values the engine never reads).
+    pub fn forward(&self, h: &Array, decide_pos: &Array, opt_pos: &Array) -> Result<Array> {
+        let s = h.shape();
+        let (rows, hidden) = (s[0], s[2]);
+        let k = opt_pos.shape()[1];
+        let ho = gather_markers(h, opt_pos)?; // [rows, k, hidden]
+        let hd = decide_pos
+            .reshape(&[rows, 1, 1])
+            .and_then(|p| p.broadcast_to(&[rows, 1, hidden]))
+            .and_then(|p| h.take_along_axis(&p, 1))
+            .map_err(mlx)?; // [rows, 1, hidden]
+        self.k
+            .forward(&ho)?
+            .multiply(&self.q.forward(&hd)?)
+            .and_then(|a| a.sum(-1, false))
+            .and_then(|a| a.multiply(&Array::scalar(self.scale)))
+            .and_then(|a| a.reshape(&[rows, k]))
+            .map_err(mlx)
     }
 }

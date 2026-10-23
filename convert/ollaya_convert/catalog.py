@@ -422,7 +422,11 @@ CATALOG = {
                         "span, all in one forward pass per question.",
                         "0.76B", 8192, ["en"], wl_dir=os.path.join(OUT, "kev-0.8b-r15"),
                         license_text=_kev_license("kev-0.8b", "Qwen3.5-0.8B-Base"),
-                        weights=_kev_weights("Qwen/Qwen3.5-0.8B-Base", "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68", 1)),
+                        weights=_kev_weights("Qwen/Qwen3.5-0.8B-Base", "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68", 1),
+                        # The base's config, the adapter's: the engine merges the LoRA when it loads.
+                        arch={"family": "pointer",
+                              "config": ("Qwen/Qwen3.5-0.8B-Base", "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68", "config.json"),
+                              "lora_config": "adapter_config.json"}),
             # Round 10 (2026-09-24): skills delta on round 8.
             "4b": _wl("kev-4b", "jaredpalmer/kev-4b", "139fdd94f1b6a6ad80cc15e08fcb99cac885a101",
                       "Kev on Qwen3.5-4B base (LoRA and pointer head): more accurate than 0.8b out of domain. "
@@ -548,7 +552,8 @@ CATALOG = {
                        "scored at its own last token against the question, in one forward pass per question.",
                        "0.75B", 16384, ["en", "zh"], wl_dir=os.path.join(OUT, "decision-eos-0.8b"),
                        weights={"model.safetensors": "backbone/model.safetensors",
-                                "decision_head.safetensors": "decision_head.safetensors"}),
+                                "decision_head.safetensors": "decision_head.safetensors"},
+                       arch={"family": "endpoint", "config": "backbone/config.json"}),
         },
         "aliases": {"latest": "eos"},
         "parity": "Ollaya's Rust runtime matches the author's code (PyTorch fp32) exactly on 466 questions from 117 "

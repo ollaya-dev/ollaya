@@ -281,6 +281,34 @@ from upstream (max 1.0e-4, its 4-decimal rounding).
 - **Larger checkpoints.** The 4b and 9b graphs have the same head, with 2,560 and 4,096 inputs; the
   workaround applies to every kev session.
 
+## Metal parity (MLX)
+
+The MLX engine ([decision record](../decisions/0001-mlx-engine.md), phase 4) runs kev-0.8b on the
+Apple GPU from the three upstream files, the base shard, `adapter_model.safetensors` and `head.pt`,
+with the `pointer` arch layer: the Qwen3.5 backbone of `crates/ollaya-runner/src/mlx/qwen35.rs`
+with the LoRA merged into its linear layers when the model loads (`W + 2.0 · B A` in float32, peft's
+merge; the ONNX graph keeps the adapter unmerged, which lands within rounding), and the `PointerHead`
+recomputed in `mlx/heads.rs`. It is built with the `mlx` feature, which is not in releases yet.
+
+```sh
+cargo run --release -p ollaya-runner --features mlx --example parity_kev -- convert/out/kev-0.8b convert/out/goldens-kev-0.8b.jsonl metal
+```
+
+Apple M4 Pro, macOS 27, goldens made on this Mac (`kev.goldens`, CPU fp32, `--td-limit 20`), the
+same gate as above (option logits within 1e-3, same decisions):
+
+| kev-0.8b r15 | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| rejections, token rows, decide and option positions | 0 mismatches (117 cases, 16 rejected as upstream, 480 questions, 68,729 tokens) | same |
+| max \|Δ option logit\| | 3.1e-5 | 4.5e-5 |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| | 2.7e-6 (p99 2.2e-6) | 3.8e-6 (p99 2.7e-6) |
+| TypeSafe answers vs upstream | 0 differ, max 1.0e-4 (rounding) | 0 differ, max 1.0e-4 |
+| all requests, in process | 39.3 s (389 ms per request) | 103.4 s (1,024 ms per request) |
+
+kev-4b and kev-9b are the same architecture; their parity on Metal is not run here (4B in fp32 is
+about 17 GB on this Mac's unified memory), so they stay on ONNX Runtime until it is.
+
 ## Typed-decisions quality (measured, for the catalog comparison)
 
 The typed-decisions test split (400 rows, 2,000 questions, teacher gold), at each checkpoint's shipped temperature.

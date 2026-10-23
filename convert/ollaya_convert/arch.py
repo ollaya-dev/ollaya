@@ -6,6 +6,10 @@
     python3 -m ollaya_convert.arch von --config config.json --weights option_marker.pt --out arch.json
     python3 -m ollaya_convert.arch gliclass --config config.json --weights model.safetensors --out arch.json
     python3 -m ollaya_convert.arch tied-rows --config config.json --weights model.safetensors --out arch.json
+    python3 -m ollaya_convert.arch endpoint --config backbone/config.json --weights backbone/model.safetensors \\
+        --weights decision_head.safetensors --out arch.json
+    python3 -m ollaya_convert.arch pointer --config <base>/config.json --weights <base shard> \\
+        --weights adapter_model.safetensors --lora-config adapter_config.json --weights head.pt --out arch.json
 
 The MLX engine (`crates/ollaya-runner/src/mlx/`) runs our own code per backbone and head on the
 author's unmodified weights file. This layer tells it which network that file holds: the encoder's
@@ -88,10 +92,19 @@ def torch_zip_index(path):
             hdr = f.read(30)
             n_name, n_extra = struct.unpack("<HH", hdr[26:30])
             starts[info.filename[len(root) + 5:]] = info.header_offset + 30 + n_name + n_extra
+    # Tensors keyed by their dotted path in the saved (nested) dict, as weightless_sharded names them.
+    flat = {}
+
+    def walk(prefix, o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                walk(prefix + str(k) + ".", v)
+        elif isinstance(o, _Tensor):
+            flat[prefix[:-1]] = o
+
+    walk("", obj)
     index = {}
-    for name, t in obj.items():
-        if not isinstance(t, _Tensor):
-            continue
+    for name, t in flat.items():
         expect, acc = [], 1
         for d in reversed(t.size):
             expect.append(acc)
@@ -309,14 +322,37 @@ def embedding_tensor(b):
                           "qwen3-5": "embed_tokens.weight"}.get(b["type"], "embeddings.tok_embeddings.weight")
 
 
-def tied_rows(config):
+DECODER_PREFIXES = ("model.language_model.", "model.", "")
+
+
+def decoder_prefix(config, index):
+    """Where the decoder's tensors sit in the weights file: a Qwen3.5 text checkpoint keeps them under
+    the vision-language layout's name, a plain one under `model.`, Decision 1.0's backbone file at the
+    top level."""
+    for p in DECODER_PREFIXES:
+        if p + "embed_tokens.weight" in index:
+            return p
+    raise SystemExit("no embed_tokens.weight under %s" % (DECODER_PREFIXES,))
+
+
+def tied_rows(config, index):
     """A decoder read through its tied LM head at one position per row (qwen3guard's candidate first
-    tokens): the backbone and the embedding, nothing more."""
+    tokens, decider's labels): the backbone and the embedding, nothing more."""
     if not config.get("tie_word_embeddings"):
         raise SystemExit("tied-rows needs tie_word_embeddings")
-    # A Qwen3.5 text checkpoint keeps the decoder under the vision-language layout's name.
-    prefix = "model.language_model." if config.get("model_type", "").startswith("qwen3_5") else "model."
-    return backbone(config, prefix), {"type": "tied-rows"}, []
+    return backbone(config, decoder_prefix(config, index)), {"type": "tied-rows"}, []
+
+
+def endpoint(config, index):
+    """Decision 1.0's `CandidateHead` (decision/model.py in the model repo, head_dim 256): LayerNorms on
+    the candidate and query states, `key(c) . query(q) / sqrt(head_dim)` plus
+    `scalar(gelu(candidate_mlp(c) + query_mlp(q)))`, read from `decision_head.safetensors`."""
+    prefix = "head." if "head.key.weight" in index else ""
+    head = {"type": "endpoint", "prefix": prefix, "head_dim": index[prefix + "key.weight"][1][0], "norm_eps": 1e-5}
+    names = [prefix + n for n in ("candidate_norm.weight", "candidate_norm.bias", "query_norm.weight", "query_norm.bias",
+                                  "key.weight", "query.weight", "candidate_mlp.weight", "candidate_mlp.bias",
+                                  "query_mlp.weight", "scalar.weight")]
+    return backbone(config, decoder_prefix(config, index)), head, names
 
 
 def modernbert_tensors(b):
@@ -436,7 +472,44 @@ def gliclass(config):
 # ----------------------------------------------------------------------------------------- build
 
 
-def build(family, config, weights_path, agent_config=None):
+def pointer(config, index):
+    """Kev's `PointerHead` (kev/model.py): `q` and `k` Linears with biases at `head.` in head.pt (a torch
+    zip whose nested dict gives dotted names), `(k(h_opt) . q(h_decide)) / sqrt(dim)`."""
+    prefix = "head." if "head.q.weight" in index else ""
+    head = {"type": "pointer", "prefix": prefix, "dim": index[prefix + "q.weight"][1][0]}
+    names = [prefix + n for n in ("q.weight", "q.bias", "k.weight", "k.bias")]
+    return backbone(config, decoder_prefix(config, index)), head, names
+
+
+def lora_spec(adapter_config, index, enc):
+    """The adapter the engine merges at load: peft's `lora_alpha / r` scaling and the adapter's name
+    prefix, checked to hold A and B for at least one backbone weight."""
+    c = adapter_config
+    if c.get("use_rslora") or c.get("use_dora") or c.get("rank_pattern") or c.get("alpha_pattern"):
+        raise SystemExit("unsupported LoRA options (rslora, dora, rank or alpha patterns)")
+    prefix = "base_model.model."
+    probe = [n for n in index if n.startswith(prefix) and n.endswith(".lora_A.weight")]
+    if not probe:
+        raise SystemExit("no LoRA tensors under %s" % prefix)
+    # Every adapted module must be a Linear the backbone reads: the merge covers it, or the model is wrong.
+    rel = probe[0][len(prefix):-len(".lora_A.weight")]
+    if enc["prefix"] + rel + ".weight" not in index:
+        raise SystemExit("the adapter's %s has no backbone weight under %s" % (rel, enc["prefix"]))
+    return {"prefix": prefix, "scaling": c["lora_alpha"] / c["r"]}
+
+
+def build(family, config, weights_paths, agent_config=None, lora_config=None):
+    """The arch layer for `family`. `weights_paths`: the author's weights files, the backbone's first,
+    in the order the manifest's weights layers will have (one path is the common case)."""
+    if isinstance(weights_paths, str):
+        weights_paths = [weights_paths]
+    files, index = [], {}
+    for path in weights_paths:
+        torch_zip = zipfile.is_zipfile(path)
+        part = torch_zip_index(path) if torch_zip else safetensors_index(path)
+        for name, v in part.items():  # (dtype, shape[, offset]) -> (dtype, shape, offset or None, file)
+            index.setdefault(name, (v[0], v[1], v[2] if len(v) > 2 else None, len(files)))
+        files.append((path, torch_zip, part))
     if family == "laya":
         enc, head, names = laya(config, agent_config or {})
     elif family == "sequence-classification":
@@ -446,16 +519,21 @@ def build(family, config, weights_path, agent_config=None):
     elif family == "gliclass":
         enc, head, names = gliclass(config)
     elif family == "tied-rows":
-        enc, head, names = tied_rows(config)
+        enc, head, names = tied_rows(config, index)
+    elif family == "endpoint":
+        enc, head, names = endpoint(config, index)
+    elif family == "pointer":
+        enc, head, names = pointer(config, index)
     else:
         raise SystemExit("unknown family %r" % family)
     names += backbone_tensors(enc)
+    lora = lora_spec(lora_config, index, enc) if lora_config else None
+    if lora:
+        names += [n for n in index if n.startswith(lora["prefix"]) and ".lora_" in n]
 
-    torch_zip = zipfile.is_zipfile(weights_path)
-    index = torch_zip_index(weights_path) if torch_zip else safetensors_index(weights_path)
     missing = [n for n in names if n not in index]
     if missing:
-        raise SystemExit("%s lacks %d tensors, e.g. %s" % (weights_path, len(missing), missing[:3]))
+        raise SystemExit("%s lack %d tensors, e.g. %s" % ([p for p, _, _ in files], len(missing), missing[:3]))
     bad = [n for n in names if index[n][0] not in ("F32", "F16", "BF16")]
     if bad:
         raise SystemExit("unsupported dtypes: %s" % bad[:3])
@@ -464,12 +542,20 @@ def build(family, config, weights_path, agent_config=None):
     if tuple(emb) != (b["vocab_size"], b["hidden_size"]):
         raise SystemExit("embedding shape %s does not match the config" % (emb,))
 
-    weights = {"format": "torch-zip" if torch_zip else "safetensors",
-               "file": weights_path.replace("\\", "/").rsplit("/", 1)[-1]}
-    if torch_zip:
-        weights["tensors"] = {n: {"dtype": index[n][0], "shape": list(index[n][1]), "offset": index[n][2]}
-                              for n in sorted(names)}
-    return {"schema": SCHEMA, "backbone": enc, "head": head, "weights": weights}
+    def entry(i, path, torch_zip, part):
+        w = {"format": "torch-zip" if torch_zip else "safetensors", "file": path.replace("\\", "/").rsplit("/", 1)[-1]}
+        if torch_zip:
+            w["tensors"] = {n: {"dtype": part[n][0], "shape": list(part[n][1]), "offset": part[n][2]}
+                            for n in sorted(names) if n in part and index[n][3] == i}
+        return w
+
+    weights = entry(0, *files[0])
+    if len(files) > 1:
+        weights["more"] = [entry(i, *f) for i, f in enumerate(files) if i]
+    arch = {"schema": SCHEMA, "backbone": enc, "head": head, "weights": weights}
+    if lora:
+        arch["lora"] = lora
+    return arch
 
 
 def dumps(arch):
@@ -479,15 +565,19 @@ def dumps(arch):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("family", choices=["laya", "sequence-classification", "von", "gliclass", "tied-rows"])
+    ap.add_argument("family", choices=["laya", "sequence-classification", "von", "gliclass", "tied-rows", "endpoint",
+                                       "pointer"])
     ap.add_argument("--config", required=True, help="the author's config.json")
     ap.add_argument("--agent-config", help="laya: rl_agent_config.json")
-    ap.add_argument("--weights", required=True, help="the author's weights file (safetensors or torch zip)")
+    ap.add_argument("--lora-config", help="a peft adapter_config.json, when a weights file is its adapter")
+    ap.add_argument("--weights", required=True, action="append",
+                    help="the author's weights file (safetensors or torch zip); repeat for a head or adapter file")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     config = json.load(open(a.config, encoding="utf-8"))
     agent = json.load(open(a.agent_config, encoding="utf-8")) if a.agent_config else None
-    arch = build(a.family, config, a.weights, agent)
+    lora = json.load(open(a.lora_config, encoding="utf-8")) if a.lora_config else None
+    arch = build(a.family, config, a.weights, agent, lora)
     with open(a.out, "wb") as f:
         f.write(dumps(arch))
     print("wrote %s: %s + %s head, %s weights, %d tensor offsets" % (

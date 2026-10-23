@@ -91,8 +91,8 @@ pub struct RunnerConfig {
     pub decision: PathBuf,
     /// The `arch` layer, for MLX.
     pub arch: Option<PathBuf>,
-    /// The author's weights file, for MLX.
-    pub weights: Option<PathBuf>,
+    /// The author's weights files, for MLX, in the arch layer's order.
+    pub weights: Vec<PathBuf>,
     pub device: DeviceRequest,
     pub threads: Option<usize>,
 }

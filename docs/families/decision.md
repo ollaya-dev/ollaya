@@ -218,6 +218,30 @@ The graph has two `Gemm`s (the head's query-side projections `query` and `query_
 the query `LayerNormalization`, not by a `Transpose`, so the ORT 1.28 `GemmTransposeFusion` bug that kev works
 around ([kev.md](kev.md)) cannot apply; the engine uses the decider session options unchanged.
 
+## Metal parity (MLX)
+
+The MLX engine ([decision record](../decisions/0001-mlx-engine.md), phase 4) runs Eos on the Apple
+GPU from the author's two files, `backbone/model.safetensors` and `decision_head.safetensors`, with
+the `endpoint` arch layer: the Qwen3.5 backbone of `crates/ollaya-runner/src/mlx/qwen35.rs` and the
+`CandidateHead` recomputed in `mlx/heads.rs` (LayerNorms, the bilinear term, the gelu MLP and the
+scalar). It is built with the `mlx` feature, which is not in releases yet.
+
+```sh
+cargo run --release -p ollaya-runner --features mlx --example parity_decision -- convert/out/decision-eos-0.8b convert/out/goldens-decision-eos-0.8b.jsonl metal
+```
+
+Apple M4 Pro, macOS 27, goldens made on this Mac (`decision.goldens`, CPU fp32, `--td-limit 20`),
+the same gate as above (option logits within 1e-3, same decisions):
+
+| Eos | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| rejections, token rows, query and candidate positions | 0 mismatches (117 cases, 17 rejected as the author, 466 questions, 100,474 tokens) | same |
+| max \|Δ option logit\| | 2.6e-5 | 2.8e-5 |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| | 4.0e-6 (p99 2.6e-6) | 5.1e-6 (p99 2.8e-6) |
+| TypeSafe answers vs the author's | 0 differ, max 5.2e-5 (rounding) | 0 differ, max 5.2e-5 |
+| all requests, in process | 49.6 s (496 ms per request) | 115.1 s (1,151 ms per request) |
+
 ## Limits
 
 - **Options.** Choice 2..255 (as an object), score 2..10 levels, noul. TypeSafe also caps score at

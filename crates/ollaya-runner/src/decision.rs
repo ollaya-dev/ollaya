@@ -13,11 +13,11 @@ use std::sync::Mutex;
 use ndarray::{Array1, Array2, Ix2};
 use ollaya_decision::decision::{DecisionLayout, DecisionRow};
 use ollaya_decision::{Calibration, CalibrationFile, Questions, TokenEncoder};
-use ort::session::Session;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::engine::Engine;
+use crate::net::{Decoder, Head};
 use crate::onnx::{Device, ModelFiles, load_tokenizer, session_with};
 use crate::{Error, Output, QuestionOutput};
 
@@ -54,7 +54,7 @@ pub struct DecisionEncoding {
 }
 
 pub struct DecisionModel {
-    session: Mutex<Session>,
+    net: Decoder,
     tokenizer: Tokenizer,
     seq_multiple: usize,
     pub layout: DecisionLayout,
@@ -114,21 +114,30 @@ impl DecisionModel {
         };
         let tokenizer = load_tokenizer(&files.tokenizer)?;
 
-        let session = session_with(&files.graph, device, intra_threads, |b| {
-            crate::decider::configure(b, device)
-        })?;
-        let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
-        if inputs.len() != INPUTS.len()
-            || !INPUTS.iter().all(|n| inputs.contains(n))
-            || !session.outputs().iter().any(|o| o.name() == OUTPUT)
-        {
-            return Err(Error::Model(format!(
-                "graph inputs {inputs:?} do not match the decision contract ({INPUTS:?} -> {OUTPUT:?})"
-            )));
+        let net = match device {
+            Device::Metal => Decoder::metal(files, Head::Endpoint)?,
+            _ => Decoder::Ort(Mutex::new(session_with(
+                &files.graph,
+                device,
+                intra_threads,
+                |b| crate::decider::configure(b, device),
+            )?)),
+        };
+        if let Some(session) = net.session() {
+            let session = session.lock().expect("session mutex poisoned");
+            let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
+            if inputs.len() != INPUTS.len()
+                || !INPUTS.iter().all(|n| inputs.contains(n))
+                || !session.outputs().iter().any(|o| o.name() == OUTPUT)
+            {
+                return Err(Error::Model(format!(
+                    "graph inputs {inputs:?} do not match the decision contract ({INPUTS:?} -> {OUTPUT:?})"
+                )));
+            }
         }
 
         Ok(DecisionModel {
-            session: Mutex::new(session),
+            net,
             tokenizer: Tokenizer(tokenizer),
             seq_multiple: config.contract.seq_multiple,
             layout: config.decision,
@@ -170,7 +179,6 @@ impl DecisionModel {
         let pad = i64::from(self.layout.pad);
 
         let mut logits = vec![Vec::new(); rows.len()];
-        let mut session = self.session.lock().expect("session mutex poisoned");
         for range in crate::engine::batches(&padded, TOKEN_BUDGET, MAX_ROWS) {
             let batch = &order[range.clone()];
             let seq = padded[range].iter().copied().max().unwrap_or(0);
@@ -192,15 +200,25 @@ impl DecisionModel {
                     cand_pos[[r, c]] = p as i64;
                 }
             }
-            let outputs = session.run(ort::inputs![
-                "input_ids" => ort::value::Tensor::from_array(input_ids)?,
-                "query_pos" => ort::value::Tensor::from_array(query_pos)?,
-                "cand_pos" => ort::value::Tensor::from_array(cand_pos)?,
-            ])?;
-            let out = outputs[OUTPUT]
-                .try_extract_array::<f32>()?
-                .into_dimensionality::<Ix2>()
-                .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?;
+            let out = match &self.net {
+                Decoder::Ort(session) => {
+                    let mut session = session.lock().expect("session mutex poisoned");
+                    let outputs = session.run(ort::inputs![
+                        "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+                        "query_pos" => ort::value::Tensor::from_array(query_pos)?,
+                        "cand_pos" => ort::value::Tensor::from_array(cand_pos)?,
+                    ])?;
+                    outputs[OUTPUT]
+                        .try_extract_array::<f32>()?
+                        .into_dimensionality::<Ix2>()
+                        .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?
+                        .to_owned()
+                }
+                #[cfg(feature = "mlx")]
+                Decoder::Mlx(net) => {
+                    net.endpoint(&input_ids, query_pos.as_slice().unwrap(), &cand_pos)?
+                }
+            };
             if out.nrows() != batch.len() || out.ncols() != k {
                 return Err(Error::Model(format!(
                     "{OUTPUT} has shape {:?} for {} rows of up to {k} options",

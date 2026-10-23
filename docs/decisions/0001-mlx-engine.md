@@ -4,8 +4,9 @@
   off by default and in no release. Shipping it waits on the owner's decision to raise the minimum
   macOS to 14.0 ([To ship it](#to-ship-it)).
 - **Date:** 2026-09-26.
-- **Scope so far:** phases 1 (foundation), 2 (ModernBERT), 3 (DeBERTa-v3) and 4 (Qwen3 and Qwen3.5: qwen3guard
-  and decider; the kev, decision and pplx heads are still to come) of the plan below.
+- **Scope so far:** phases 1 (foundation), 2 (ModernBERT), 3 (DeBERTa-v3) and 4 (Qwen3 and Qwen3.5:
+  qwen3guard, decider, decision and kev; pplx-decider's 4B is not measured on this Mac) of the plan
+  below.
 
 ## Context
 
@@ -85,7 +86,14 @@ Only fp32 with our own model code passes; fp16, bf16 and the stock MLX model lib
     classifier, von's `OptionMarkerScorer` and GLiClass's uni-encoder. `mlx/qwen3.rs` and
     `mlx/qwen35.rs` are the decoder backbones, read through the `tied-rows` head (the tied LM head
     at one position per row, restricted to the tokens the engine names: qwen3guard's 13 candidate
-    first tokens, decider's 255 labels). Weights are upcast to fp32.
+    first tokens, decider's 255 labels), Decision 1.0's `endpoint` head or kev's `pointer` head
+    (each option's token against the query or decide token). Weights are upcast to fp32.
+  - `mlx/weights.rs` reads a model's tensors from several files when the arch layer lists them
+    (`weights.more`: a head file, an adapter), one index over all; the manifest's weights layers
+    reach the runner in the same order (`--weights`, once per file). With `lora` in the arch layer
+    (peft's prefix and `lora_alpha / r`), every backbone weight the adapter holds `lora_A` and
+    `lora_B` for is read merged, `W + scaling · B A` in float32: what peft's `merge_and_unload`
+    computes, where the ONNX graph keeps the adapter as a second matmul.
   - `net.rs`: the encoder engines hold a `Net` (an ONNX Runtime session or an `MlxNet`); the
     decoder engines (qwen3guard, decider) hold a `Decoder` (their own session, or an `MlxDecoder`),
     and keep their ONNX inputs and session options as they were.
@@ -97,12 +105,12 @@ Only fp32 with our own model code passes; fp16, bf16 and the stock MLX model lib
 `application/vnd.ollaya.arch` is a small JSON file: the backbone's hyperparameters, the head's, and
 the tensor names, derived at build time from the author's `config.json` (and, for laya,
 `rl_agent_config.json`) by `convert/ollaya_convert/arch.py`, which checks every name, shape and dtype
-against the weights file. It holds no weights: MLX reads the same upstream weights layer the ONNX
-graph references. A model without an arch layer, or with more than one weights file, runs on ONNX
-Runtime only. `package.py` adds the layer to the tags whose catalog entry has `arch`, which are the
+against the weights files. It holds no weights: MLX reads the same upstream weights layers the ONNX
+graph references, in the manifest's order (a head file or an adapter after the backbone). A model
+without an arch layer runs on ONNX Runtime only. `package.py` adds the layer to the tags whose catalog entry has `arch`, which are the
 tags that passed on Metal: `laya:en`, `laya:multilingual`, `nli:modernbert-large`,
-`nli:deberta-v3-large`, `gliclass:large`, `qwen3guard:0.6b`, `decider:0.8b` and `decider:2b`. The published registry
-does not have them yet.
+`nli:deberta-v3-large`, `gliclass:large`, `qwen3guard:0.6b`, `decider:0.8b`, `decider:2b`,
+`decision:eos` and `kev:0.8b`. The published registry does not have them yet.
 
 ### Devices and the runner protocol
 
@@ -188,6 +196,8 @@ weights file under its upstream name.
 | `qwen3guard:0.6b` (phase 4) | 74 states, 148 rows, 296 questions | candidate and option logits within 1e-3, same decisions | 100%, logits 6.7e-5, prob diff 1.3e-5 (p99 1.1e-5) | 100%, 7.4e-5, 9.9e-6 | yes |
 | `decider:0.8b` (phase 4) | 114 cases (14 rejected upstream), 479 questions, 902 rows | label and option logits within 1e-3, same decisions | 100%, logits 3.8e-5, prob diff 9.9e-6 (p99 5.8e-6) | 100%, 3.8e-5, 8.2e-6 | yes |
 | `decider:2b` (phase 4) | same goldens, made with decider-2b | same | 100%, logits 4.1e-5, prob diff 8.9e-6 (p99 5.8e-6) | 100%, 3.9e-5, 7.0e-6 | yes |
+| `decision:eos` (phase 4) | 117 cases (17 rejected by the author), 466 questions | option logits within 1e-3, same decisions | 100%, logits 2.6e-5, prob diff 4.0e-6 (p99 2.6e-6) | 100%, 2.8e-5, 5.1e-6 | yes |
+| `kev:0.8b` (phase 4, LoRA merged at load) | 117 cases (16 rejected upstream), 480 questions | option logits within 1e-3, same decisions | 100%, logits 3.1e-5, prob diff 2.7e-6 (p99 2.2e-6) | 100%, 4.5e-5, 3.8e-6 | yes |
 | `von:1.1` | 98 cases, 485 questions, 653 rows (float64 network) | row and option logits within 1e-3, same decisions | 100% decisions, prob diff 3.1e-5, **logits 2.0e-3 on one row** | **1.1e-3 on the same row** | **no** |
 
 - **`laya:en` on goldens-all.** The maximum is one question, `preset/guard/email_dict` `jailbreak`

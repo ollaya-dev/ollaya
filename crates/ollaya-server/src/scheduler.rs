@@ -486,8 +486,11 @@ impl Scheduler {
                 if let Some(g) = &f.vision_graph {
                     cmd.arg("--vision-graph").arg(g);
                 }
-                if let (Some(arch), Some(weights)) = (&f.arch, &f.weights) {
-                    cmd.arg("--arch").arg(arch).arg("--weights").arg(weights);
+                if let Some(arch) = &f.arch {
+                    cmd.arg("--arch").arg(arch);
+                    for w in &f.weights {
+                        cmd.arg("--weights").arg(w);
+                    }
                 }
             }
             EngineFiles::Llama(f) => {
