@@ -75,9 +75,9 @@ const tokens = `
 .rd .panel { background: rgb(255 255 255 / 0.03); border: 1px solid var(--color-line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .rd .panel-strong { background: rgb(12 12 12 / 0.78); }
 /* The grain: an SVG noise tile over everything, blended so it only breaks up the flat colour. */
-.rd .grain { position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0.085; mix-blend-mode: screen;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px; }
+.rd .grain { position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0.16; mix-blend-mode: screen;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px; }
 /* Blurred colour fields behind the hero and the closer: what the panels blur. */
 .rd .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .rd .ascii { position: absolute; inset: 0; pointer-events: none; mask-image: linear-gradient(180deg, #000 55%, transparent); -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent); }
