@@ -117,7 +117,7 @@ function pages(origin: string): Page[] {
       {
         url: `/library/${model.name}`,
         meta: { title: model.name, description: model.description, nav: 'models', ogImage },
-        render: () => <ModelPage model={model} />,
+        render: () => <ModelPage model={model} origin={origin} />,
       },
       {
         url: `/library/${model.name}/tags`,

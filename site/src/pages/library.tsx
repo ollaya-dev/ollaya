@@ -1,5 +1,5 @@
 import { Icon } from '../components/Icon'
-import { CapBadge, CodeTabs, OutlinePill, SizeBadge, textLink } from '../components/ui'
+import { CapBadge, CodeBlock, CodeTabs, OutlinePill, SizeBadge, textLink } from '../components/ui'
 import { Updated } from '../components/Updated'
 import {
   featuredTags,
@@ -203,8 +203,9 @@ function ModelsTable({ model }: { model: Model }) {
   )
 }
 
-export function ModelPage({ model }: { model: Model }) {
+export function ModelPage({ model, origin }: { model: Model; origin: string }) {
   const readme = readmes[model.name]
+  const badge = `[![Run on Ollaya](${origin}/badge/run-on-ollaya.svg)](${origin}/library/${model.name})`
   return (
     <div class="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-12">
       <ModelHeader model={model} />
@@ -218,6 +219,16 @@ export function ModelPage({ model }: { model: Model }) {
           <div class="prose mt-6" dangerouslySetInnerHTML={{ __html: withResults(readme) }}></div>
         </section>
       ) : null}
+      <section class="mt-12 border-t border-line pt-10" aria-labelledby="badge-title">
+        <h2 id="badge-title" class="text-base font-semibold text-fg">
+          Badge
+        </h2>
+        <img src="/badge/run-on-ollaya.svg" alt="Run on Ollaya" width="104" height="20" class="mt-4" />
+        <p class="mt-3 text-sm text-body">
+          For the model card or a README. <a href="/docs/model-authors" class={textLink}>Day-0 support for a new model</a>
+        </p>
+        <CodeBlock code={badge} lang="markdown" class="mt-3" />
+      </section>
     </div>
   )
 }

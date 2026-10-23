@@ -26,4 +26,8 @@
 /favicon.svg
   Cache-Control: public, max-age=86400
 
+# Linked from model cards and READMEs at a stable URL, so not under /static/.
+/badge/*
+  Cache-Control: public, max-age=86400
+
 # /v2/ is reserved for the static model registry (manifests copied in by the packaging step).
