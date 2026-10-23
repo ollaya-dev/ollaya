@@ -34,6 +34,9 @@ Libraries that reach Ollaya through this API. To add one, open a pull request wi
 - **[gut](https://gutpy.dev)** (Python). Judgment calls as one line of code: `gut.likely(text, "is spam")`, `gut.classify` and `gut.rate` answer YES, NO or UNSURE. `gut.JevBackend.ollaya("winnow:e4b")` asks Ollaya through the TypeSafe SDK and reads `OLLAYA_HOST` and `OLLAYA_API_KEY`. Install with `pip install "gutfeel[jev]"`; see its [Ollaya notes](https://gutpy.dev/docs/backends.html#on-your-own-machine-through-ollaya).
 - **[LiteLLM](https://docs.litellm.ai)** (Python, and its proxy). `litellm.systemone` and `litellm.decisions` with the `typesafe/` provider, and a guardrail that drops stale tool results before an LLM call. It reaches Ollaya through `api_base` or `TYPESAFE_API_BASE`; see [Integrations](/docs/integrations#litellm).
 - **[LangChain](https://docs.langchain.com/oss/python/integrations/providers/typesafe)** (Python and JS). `TypeSafeClassifier`, a runnable, plus experimental agent middleware that routes between models and blocks risky tool calls. It reaches Ollaya through `base_url`/`baseUrl` or `TYPESAFE_BASE_URL`; see [Integrations](/docs/integrations#langchain).
+- **[Vercel AI SDK](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai)** (TypeScript). `@ai-sdk/typesafe-ai`, decision models for `experimental_decide`. It reaches Ollaya through `baseURL` or `TYPESAFE_AI_BASE_URL`, ending in `/v1`; see [Integrations](/docs/integrations#vercel-ai-sdk).
+- **[DSPy](https://dspy.ai)** (Python). `Choice`, `Noul` and `Score` output fields for signatures, answered by `dspy.experimental.TypeSafe`. It reaches Ollaya through `base_url` or `TYPESAFE_BASE_URL`; see [Integrations](/docs/integrations#dspy).
+- **[llama-index-jev](https://github.com/WiktorB2004/llama-index-jev)** (Python, community). A LlamaIndex reranker and router selector. It reaches Ollaya through `TYPESAFE_BASE_URL`; see [Integrations](/docs/integrations#llamaindex).
 
 ## Endpoints
 
