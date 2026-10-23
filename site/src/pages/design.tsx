@@ -26,35 +26,35 @@ const mostAccurate = vs('pplx-decider:flash', 'ollaya')
 const PUBLISHERS = ['Perplexity AI', 'Cloudflare', 'PostHog', 'Bespoke Labs', 'Qwen', 'Strands Agents', 'Knowledgator', 'Convai Innovations']
 
 const tokens = `
-@font-face { font-family: 'Instrument Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url(${asset('fonts/instrument-serif.woff2')}) format('woff2'); }
-@font-face { font-family: 'Instrument Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url(${asset('fonts/instrument-serif-italic.woff2')}) format('woff2'); }
 .rd {
   color-scheme: dark;
-  --color-canvas: #0b0c0b; --color-fg: #f4f3ef; --color-body: #c9c8c2; --color-muted: #8f8e88; --color-faint: #6b6a65;
-  --color-line: rgb(255 255 255 / 0.08); --color-line-strong: rgb(255 255 255 / 0.16); --color-subtle: rgb(255 255 255 / 0.03);
+  --color-canvas: #0a0a0a; --color-fg: #fafafa; --color-body: #c4c4c4; --color-muted: #8a8a8a; --color-faint: #5c5c5c;
+  --color-line: rgb(255 255 255 / 0.1); --color-line-strong: rgb(255 255 255 / 0.2); --color-subtle: rgb(255 255 255 / 0.025);
   --color-code: rgb(255 255 255 / 0.04); --color-fill: rgb(255 255 255 / 0.06); --color-fill-strong: rgb(255 255 255 / 0.1);
-  --color-btn: #f4f3ef; --color-btn-hover: #ffffff; --color-btn-fg: #0b0c0b; --color-term: rgb(12 13 12 / 0.72);
+  --color-btn: #fafafa; --color-btn-hover: #ffffff; --color-btn-fg: #0a0a0a; --color-term: rgb(10 10 10 / 0.78);
   --color-tok-comment: #7d8590; --color-tok-string: #9fe3b4; --color-tok-number: #d2a8ff; --color-tok-keyword: #ff9a9a;
   --color-tok-key: #8cc8ff; --color-tok-fn: #ffd080; --color-tok-punct: #8b949e;
-  --color-us: #9fd7ff; --color-them: #f0a060; --color-pass: #3fb950; --color-fail: #f85149;
-  --serif: 'Instrument Serif', 'Iowan Old Style', 'Times New Roman', serif;
-  background: var(--color-canvas); color: var(--color-body);
+  --color-us: #8cc8ff; --color-them: #f0a060; --color-pass: #3fb950; --color-fail: #f85149;
+  background: var(--color-canvas); color: var(--color-body); overflow-x: clip;
 }
-.rd .serif { font-family: var(--serif); font-weight: 400; letter-spacing: -0.01em; }
-.rd .glass {
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.03));
-  border: 1px solid rgb(255 255 255 / 0.1);
-  box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.08) inset, 0 30px 80px -40px rgb(0 0 0 / 0.8);
-  backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
-}
-.rd .glass-strong { background: rgb(14 15 14 / 0.72); }
+/* The frame: two rails down the page, with a cross where a section's rule meets them. */
+.rd .frame { position: relative; max-width: 72rem; margin: 0 auto; border-left: 1px solid var(--color-line); border-right: 1px solid var(--color-line); }
+.rd .rule { position: relative; border-top: 1px solid var(--color-line); }
+.rd .rule::before, .rd .rule::after { content: ''; position: absolute; top: -0.5px; width: 13px; height: 13px; transform: translate(-50%, -50%);
+  background:
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) center / 1px 100% no-repeat,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) center / 100% 1px no-repeat; }
+.rd .rule::before { left: 0; } .rd .rule::after { left: 100%; }
+/* A panel: a surface with a hairline, blurred over whatever colour sits behind it. */
+.rd .panel { background: rgb(255 255 255 / 0.03); border: 1px solid var(--color-line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.rd .panel-strong { background: rgb(12 12 12 / 0.78); }
 /* The grain: an SVG noise tile over everything, blended so it only breaks up the flat colour. */
-.rd .grain { position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0.09; mix-blend-mode: soft-light;
+.rd .grain { position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0.1; mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 240px 240px; }
-/* Blurred colour fields behind the hero and the closer: the backdrop the glass sits on. */
+/* Blurred colour fields behind the hero and the closer: what the panels blur. */
 .rd .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.rd .field i { position: absolute; display: block; border-radius: 9999px; filter: blur(90px); opacity: 0.55; }
+.rd .field i { position: absolute; display: block; border-radius: 9999px; filter: blur(90px); opacity: 0.5; }
 .rd .field .a { width: 60vw; height: 60vw; left: -10vw; top: -20vw; background: #2d5a4a; }
 .rd .field .b { width: 50vw; height: 50vw; right: -12vw; top: -8vw; background: #5a4a2d; }
 .rd .field .c { width: 45vw; height: 45vw; left: 30vw; top: 20vw; background: #2d3f5a; opacity: 0.4; }
@@ -64,9 +64,8 @@ const tokens = `
   .rd .field .c { animation-duration: 34s; animation-delay: -17s; }
 }
 @keyframes drift { to { transform: translate3d(6vw, 4vw, 0) scale(1.08); } }
-.rd .term-glow { box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.08) inset, 0 40px 120px -40px rgb(0 0 0 / 0.9); }
-.rd .hairline { background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.18), transparent); height: 1px; }
-.rd ::selection { background: rgb(159 215 255 / 0.3); }
+.rd .term-glow { box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.06) inset, 0 40px 120px -40px rgb(0 0 0 / 0.9); }
+.rd ::selection { background: rgb(140 200 255 / 0.3); }
 `
 
 function Nav() {
@@ -78,11 +77,11 @@ function Nav() {
     ['/blog', 'Blog'],
   ]
   return (
-    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4 md:px-6">
-      <nav aria-label="Main" class="glass glass-strong mx-auto flex h-14 max-w-6xl items-center gap-6 rounded-full px-5 pr-2">
+    <header class="fixed inset-x-0 top-0 z-40 border-b border-line bg-canvas/70 backdrop-blur-xl">
+      <nav aria-label="Main" class="mx-auto flex h-14 max-w-6xl items-center gap-7 px-5">
         <a href="/" class="flex items-center gap-2 text-fg" aria-label="Ollaya home">
           <LogoMark class="size-7" />
-          <span class="text-[15px] font-medium tracking-tight">ollaya</span>
+          <span class="text-[15px] font-semibold tracking-tight">ollaya</span>
         </a>
         <ul class="hidden items-center gap-5 text-sm text-body md:flex">
           {links.map(([href, label]) => (
@@ -94,11 +93,11 @@ function Nav() {
           ))}
         </ul>
         <div class="ml-auto flex items-center gap-2">
-          <a href={GITHUB_URL} class="hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-body hover:text-fg sm:inline-flex">
+          <a href={GITHUB_URL} class="hidden h-9 items-center gap-1.5 rounded-md border border-line px-3 text-sm text-body hover:border-line-strong hover:text-fg sm:inline-flex">
             <Icon name="star" class="size-3.5" />
             {stars ?? 'GitHub'}
           </a>
-          <a href="/download" class="inline-flex h-10 items-center rounded-full bg-btn px-4 text-sm font-medium text-btn-fg hover:bg-btn-hover">
+          <a href="/download" class="inline-flex h-9 items-center rounded-md bg-btn px-4 text-sm font-medium text-btn-fg hover:bg-btn-hover">
             Download
           </a>
         </div>
@@ -109,30 +108,32 @@ function Nav() {
 
 function Install() {
   return (
-    <div class="glass glass-strong inline-flex max-w-full items-center gap-3 rounded-full py-2 pr-2 pl-5 font-mono text-[13px] text-fg" data-copy-scope>
+    <div class="panel panel-strong inline-flex h-11 max-w-full items-center gap-3 rounded-md pr-1 pl-4 font-mono text-[13px] text-fg" data-copy-scope>
       <span class="text-muted select-none" aria-hidden="true">
         $
       </span>
       <pre class="truncate">{INSTALL}</pre>
-      <CopyButton class="rounded-full bg-fill" />
+      <CopyButton class="rounded-md" />
     </div>
   )
 }
 
+const h2 = 'text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl'
+
 function Hero() {
   return (
-    <section class="relative overflow-hidden pt-40 pb-16 md:pt-48" aria-labelledby="rd-hero">
+    <section class="relative overflow-hidden" aria-labelledby="rd-hero">
       <div class="field" aria-hidden="true">
         <i class="a"></i>
         <i class="b"></i>
         <i class="c"></i>
       </div>
-      <div class="relative mx-auto max-w-6xl px-4 text-center md:px-6">
-        <p class="inline-flex items-center gap-2 rounded-full border border-line px-3 py-1 text-[13px] text-body">
+      <div class="frame relative px-5 pt-36 pb-16 text-center md:pt-44">
+        <p class="inline-flex items-center gap-2 rounded-md border border-line bg-canvas/40 px-3 py-1 text-[13px] text-body">
           <span class="size-1.5 rounded-full bg-pass"></span>
           Open source · Apache-2.0 · {catalog.length} open decision models
         </p>
-        <h1 id="rd-hero" class="serif mx-auto mt-6 max-w-4xl text-[3.25rem] leading-[0.98] text-fg md:text-[5.5rem]">
+        <h1 id="rd-hero" class="mx-auto mt-6 max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
           The decision layer <br class="hidden md:block" />
           for AI agents.
         </h1>
@@ -142,13 +143,13 @@ function Hero() {
         </p>
         <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Install />
-          <a href="/try" class="inline-flex h-11 items-center gap-1.5 rounded-full px-4 text-sm font-medium text-fg hover:underline underline-offset-4">
+          <a href="/try" class="inline-flex h-11 items-center gap-1.5 rounded-md border border-line bg-canvas/40 px-4 text-sm font-medium text-fg hover:border-line-strong">
             Try it in the browser <Icon name="arrowRight" class="size-4" />
           </a>
         </div>
-      </div>
-      <div class="relative mx-auto mt-16 max-w-3xl px-4 md:px-6">
-        <TerminalMock />
+        <div class="mx-auto mt-16 max-w-3xl text-left">
+          <TerminalMock />
+        </div>
       </div>
     </section>
   )
@@ -163,33 +164,33 @@ function Proof() {
     ['3,880', 'human-labeled questions in the bench'],
   ]
   return (
-    <section class="mx-auto max-w-6xl px-4 md:px-6" aria-label="In numbers">
-      <div class="hairline"></div>
-      <dl class="grid grid-cols-2 gap-y-8 py-10 md:grid-cols-4">
+    <section class="frame" aria-label="In numbers">
+      <dl class="rule grid grid-cols-2 gap-px bg-line md:grid-cols-4">
         {items.map(([v, l]) => (
-          <div class="text-center">
-            <dd class="serif text-4xl text-fg tabular-nums md:text-5xl">{v}</dd>
+          <div class="bg-canvas px-6 py-8">
+            <dd class="text-4xl font-semibold tracking-[-0.03em] text-fg tabular-nums">{v}</dd>
             <dt class="mt-1 text-sm text-muted">{l}</dt>
           </div>
         ))}
       </dl>
-      <div class="hairline"></div>
-      <p class="mt-8 text-center text-xs tracking-[0.18em] text-muted uppercase">Models by</p>
-      <ul class="mt-4 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[15px] font-medium text-body" role="list">
+      <div class="rule flex flex-wrap items-center gap-x-8 gap-y-3 px-6 py-5 text-[15px] font-medium text-body">
+        <span class="text-[13px] tracking-[0.14em] text-muted uppercase">Models by</span>
         {PUBLISHERS.map((p) => (
-          <li>{p}</li>
+          <span>{p}</span>
         ))}
-      </ul>
+      </div>
     </section>
   )
 }
 
 function Title({ kicker, children, lead }: { kicker: string; children: Child; lead?: Child }) {
   return (
-    <div class="mx-auto max-w-2xl text-center">
-      <p class="text-xs tracking-[0.18em] text-muted uppercase">{kicker}</p>
-      <h2 class="serif mt-3 text-4xl leading-[1.02] text-fg md:text-6xl">{children}</h2>
-      {lead ? <p class="mt-5 text-base text-body md:text-lg">{lead}</p> : null}
+    <div class="rule px-6 py-14 md:px-10 md:py-20">
+      <div class="max-w-3xl">
+        <p class="text-[13px] tracking-[0.14em] text-muted uppercase">{kicker}</p>
+        <h2 class={`mt-3 ${h2}`}>{children}</h2>
+        {lead ? <p class="mt-5 max-w-2xl text-base text-body md:text-lg">{lead}</p> : null}
+      </div>
     </div>
   )
 }
@@ -214,15 +215,15 @@ const why = [
 
 function Why() {
   return (
-    <section class="mx-auto mt-32 max-w-6xl px-4 md:px-6" aria-labelledby="rd-why">
+    <section class="frame" aria-labelledby="rd-why">
       <Title kicker="Why decision models" lead="A decision model answers typed questions about a text or a JSON: a choice, a score, a yes or no. It is the fast, reliable half of an agent.">
         <span id="rd-why">System 1 for your agents.</span>
       </Title>
-      <ul class="mt-14 grid gap-4 md:grid-cols-3" role="list">
+      <ul class="rule grid gap-px bg-line md:grid-cols-3" role="list">
         {why.map((w) => (
-          <li class="glass rounded-3xl p-7">
+          <li class="bg-canvas p-8">
             <Icon name={w.icon} class="size-6 text-fg" />
-            <h3 class="mt-5 text-lg font-medium text-fg">{w.title}</h3>
+            <h3 class="mt-5 text-lg font-semibold text-fg">{w.title}</h3>
             <p class="mt-2 text-[15px] text-body">{w.text}</p>
           </li>
         ))}
@@ -252,21 +253,21 @@ function CellView({ c, strong }: { c: Cell; strong?: boolean }) {
 function Compare() {
   const chart = accuracyScatter()
   return (
-    <section class="mx-auto mt-32 max-w-6xl px-4 md:px-6" aria-labelledby="rd-compare">
+    <section class="frame" aria-labelledby="rd-compare">
       <Title
         kicker="Measured"
         lead={`${OLLAMA}'s nine decision models and Ollaya's, on the same ${benchGpu} and Bespoke Labs' 3,880 human-labeled questions. Ollaya runs the most accurate model and more of them, with each author's temperature. On the same weights Ollama is ${speedup()} times faster: it runs Q8_0 GGUFs where Ollaya computes the authors' BF16 weights.`}
       >
         <span id="rd-compare">Against Ollama and hosted Jev.</span>
       </Title>
-      <div class="glass mt-14 overflow-hidden rounded-3xl">
+      <div class="rule overflow-x-auto">
         <table class="w-full border-collapse text-[15px]">
           <thead>
             <tr class="border-b border-line text-left text-[13px]">
               <th class="px-6 py-4 font-medium text-muted"></th>
               <th class="px-6 py-4 font-medium text-fg">Ollaya</th>
               <th class="px-6 py-4 font-medium text-muted">{OLLAMA}</th>
-              <th class="hidden px-6 py-4 font-medium text-muted md:table-cell">TypeSafe Jev, hosted</th>
+              <th class="px-6 py-4 font-medium text-muted">TypeSafe Jev, hosted</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-line">
@@ -275,13 +276,13 @@ function Compare() {
                 <th scope="row" class="px-6 py-3.5 text-left font-medium text-fg">
                   {r.label}
                 </th>
-                <td class="px-6 py-3.5 align-top">
+                <td class="bg-subtle px-6 py-3.5 align-top">
                   <CellView c={r.ollaya} strong />
                 </td>
                 <td class="px-6 py-3.5 align-top">
                   <CellView c={r.ollama} />
                 </td>
-                <td class="hidden px-6 py-3.5 align-top md:table-cell">
+                <td class="px-6 py-3.5 align-top">
                   <CellView c={r.jev} />
                 </td>
               </tr>
@@ -289,7 +290,7 @@ function Compare() {
           </tbody>
         </table>
       </div>
-      <figure class="glass mt-6 rounded-3xl p-6 md:p-8">
+      <figure class="rule p-6 md:p-10">
         <figcaption class="text-sm text-body">
           <span class="font-medium text-fg">Accuracy against latency</span>, the most accurate tag of each model on each server
         </figcaption>
@@ -299,37 +300,30 @@ function Compare() {
         <div class="mt-4 md:hidden">
           <Scatter {...chart} compact />
         </div>
+        <p class="mt-6 text-sm">
+          <a href={benchUrl()} class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
+            Every model on Ollaya Bench, with the raw data <Icon name="arrowRight" class="size-4" />
+          </a>
+        </p>
       </figure>
-      <p class="mt-6 text-center text-sm">
-        <a href={benchUrl()} class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
-          Every model on Ollaya Bench, with the raw data <Icon name="arrowRight" class="size-4" />
-        </a>
-      </p>
     </section>
   )
 }
 
 function Api() {
   return (
-    <section class="mx-auto mt-32 max-w-6xl px-4 md:px-6" aria-labelledby="rd-api">
+    <section class="frame" aria-labelledby="rd-api">
       <Title kicker="Drop-in" lead="Ollaya serves TypeSafe's request and response shapes. Point the official SDK at localhost and nothing else changes.">
         <span id="rd-api">Jev-compatible, self-hosted.</span>
       </Title>
-      <div class="mt-14 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+      <div class="rule grid gap-px bg-line xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         {[
           ['Request', compatRequest, 'shell'],
           ['Response', compatResponse, 'json'],
         ].map(([label, code, lang]) => (
-          <div class="glass glass-strong flex flex-col overflow-hidden rounded-3xl">
-            <div class="flex items-center gap-2 border-b border-line px-5 py-3" aria-hidden="true">
-              <span class="flex gap-1.5">
-                <span class="size-2.5 rounded-full bg-fill-strong"></span>
-                <span class="size-2.5 rounded-full bg-fill-strong"></span>
-                <span class="size-2.5 rounded-full bg-fill-strong"></span>
-              </span>
-              <span class="ml-2 text-xs text-muted">{label}</span>
-            </div>
-            <CodeBlock code={code!} lang={lang} class="flex-1 [&>pre]:rounded-none [&>pre]:bg-transparent" />
+          <div class="flex flex-col bg-canvas">
+            <div class="border-b border-line px-5 py-3 text-xs font-medium text-muted">{label}</div>
+            <CodeBlock code={code!} lang={lang} class="flex-1 [&>pre]:rounded-none [&>pre]:bg-transparent [&>pre]:p-5" />
           </div>
         ))}
       </div>
@@ -341,19 +335,19 @@ function Api() {
 export function ModelCard({ m }: { m: (typeof catalog)[number] }) {
   const summary = (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).replace(/\.$/, '')
   return (
-    <a href={`/library/${m.name}`} class="glass group flex flex-col rounded-3xl p-6 transition-colors hover:border-line-strong">
+    <a href={`/library/${m.name}`} class="group flex h-full flex-col bg-canvas p-6 transition-colors hover:bg-subtle">
       <div class="flex items-baseline justify-between gap-3">
         <span class="font-mono text-[17px] text-fg group-hover:underline underline-offset-4">{m.name}</span>
         <span class="truncate text-xs text-muted">{m.publisher?.name ?? ''}</span>
       </div>
       <p class="mt-3 line-clamp-3 flex-1 text-[14px] text-body">{summary}</p>
-      <dl class="mt-5 flex items-end justify-between gap-4 border-t border-line pt-4">
+      <dl class="mt-6 flex items-end justify-between gap-4 border-t border-line pt-4">
         <div>
-          <dd class="serif text-3xl text-fg tabular-nums">{m.stats?.accuracy ? m.stats.accuracy.toFixed(3) : '—'}</dd>
+          <dd class="text-2xl font-semibold tracking-[-0.02em] text-fg tabular-nums">{m.stats?.accuracy ? m.stats.accuracy.toFixed(3) : '—'}</dd>
           <dt class="text-xs text-muted">accuracy</dt>
         </div>
         <div>
-          <dd class="serif text-3xl text-fg tabular-nums">{m.stats?.latencyMs ? `${Math.round(m.stats.latencyMs)} ms` : '—'}</dd>
+          <dd class="text-2xl font-semibold tracking-[-0.02em] text-fg tabular-nums">{m.stats?.latencyMs ? `${Math.round(m.stats.latencyMs)} ms` : '—'}</dd>
           <dt class="text-xs text-muted">five questions</dt>
         </div>
         <div class="text-right text-xs text-muted">{m.sizes.join(' · ')}</div>
@@ -365,18 +359,18 @@ export function ModelCard({ m }: { m: (typeof catalog)[number] }) {
 function Models() {
   const top = [...catalog].sort((a, b) => a.rank - b.rank).slice(0, 6)
   return (
-    <section class="mx-auto mt-32 max-w-6xl px-4 md:px-6" aria-labelledby="rd-models">
+    <section class="frame" aria-labelledby="rd-models">
       <Title kicker="Open models" lead={`${catalog.length} families from their authors, pulled by name. Every number here is from Ollaya Bench on an ${benchGpu}.`}>
         <span id="rd-models">Open weights, ready to pull.</span>
       </Title>
-      <ul class="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" role="list">
+      <ul class="rule grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-3" role="list">
         {top.map((m) => (
           <li class="flex">
             <ModelCard m={m} />
           </li>
         ))}
       </ul>
-      <p class="mt-8 text-center text-sm">
+      <p class="rule px-6 py-5 text-sm">
         <a href="/search" class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
           Browse all {catalog.length} models <Icon name="arrowRight" class="size-4" />
         </a>
@@ -387,20 +381,20 @@ function Models() {
 
 function Closer() {
   return (
-    <section class="relative mt-32 overflow-hidden py-32 text-center" aria-labelledby="rd-closer">
+    <section class="relative overflow-hidden" aria-labelledby="rd-closer">
       <div class="field" aria-hidden="true">
         <i class="a" style="top:auto;bottom:-30vw"></i>
         <i class="b" style="top:auto;bottom:-20vw"></i>
       </div>
-      <div class="relative mx-auto max-w-6xl px-4 md:px-6">
+      <div class="frame rule relative px-5 py-28 text-center">
         <LogoMark class="mx-auto size-14 text-fg" />
-        <h2 id="rd-closer" class="serif mt-6 text-5xl leading-none text-fg md:text-7xl">
-          Up and running <em>in a minute.</em>
+        <h2 id="rd-closer" class={`mt-6 ${h2} md:text-6xl`}>
+          Up and running in a minute.
         </h2>
         <p class="mx-auto mt-5 max-w-md text-body">macOS, Windows, Linux and Docker. CPU, NVIDIA and Apple GPUs.</p>
         <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Install />
-          <a href="/download" class="inline-flex h-11 items-center gap-2 rounded-full bg-btn px-5 text-sm font-medium text-btn-fg hover:bg-btn-hover">
+          <a href="/download" class="inline-flex h-11 items-center gap-2 rounded-md bg-btn px-5 text-sm font-medium text-btn-fg hover:bg-btn-hover">
             <Icon name="download" class="size-4" />
             Download
           </a>
@@ -412,7 +406,7 @@ function Closer() {
 
 function Foot() {
   return (
-    <footer class="mx-auto flex max-w-6xl flex-col gap-3 px-4 pb-10 text-[13px] text-muted sm:flex-row sm:items-center sm:justify-between md:px-6">
+    <footer class="frame rule flex flex-col gap-3 px-6 py-8 text-[13px] text-muted sm:flex-row sm:items-center sm:justify-between">
       <p>© 2026 Ollaya · Apache-2.0 · An independent project, not affiliated with Ollama or TypeSafe.</p>
       <p class="flex gap-5">
         <a href={GITHUB_URL} class="hover:text-fg">
@@ -446,7 +440,7 @@ export function DesignPage({ origin }: { origin: string }) {
       <body class="rd min-h-screen font-sans antialiased" data-origin={origin}>
         <div class="grain" aria-hidden="true"></div>
         <Nav />
-        <main>
+        <main class="border-b border-line">
           <Hero />
           <Proof />
           <Why />
