@@ -59,6 +59,7 @@ function Hero() {
     <section class="mx-auto max-w-6xl px-4 pt-10 pb-8 md:px-6 md:pt-20" aria-labelledby="hero-title">
       <div class="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-16">
         <div>
+          <p class="mb-4 text-sm font-medium text-muted">System 1 for AI agents</p>
           <h1
             id="hero-title"
             class="text-4xl leading-[1.05] font-medium tracking-tight text-fg md:text-5xl lg:text-[3.5rem]"
@@ -66,8 +67,9 @@ function Hero() {
             Run decision models locally.
           </h1>
           <p class="mt-5 max-w-xl text-lg text-body">
-            Ask typed questions about any text or JSON and get calibrated answers in milliseconds. Private, open
-            source, on your own hardware.
+            The fast decision layer for agents and apps: routing, guardrails, triage and tool approval. Ask
+            typed questions about any text or JSON and get calibrated answers in milliseconds, on your own
+            hardware.
           </p>
           <div class="mt-8 flex flex-wrap items-center gap-x-3 gap-y-3">
             <a href="/download" class={btnPrimary}>
