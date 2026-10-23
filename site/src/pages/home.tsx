@@ -163,7 +163,6 @@ function Hero({ origin }: { origin: string }) {
         <i class="b"></i>
         <i class="c"></i>
       </div>
-      <div class="ascii" data-ascii aria-hidden="true"></div>
       <div class="frame relative px-5 pt-32 pb-16 text-center md:pt-40">
         <h1 id="rd-hero" class="mx-auto max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
           The decision layer <br class="hidden md:block" />

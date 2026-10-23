@@ -388,14 +388,7 @@
   background-size: 160px 160px; }
 /* Blurred colour fields behind the hero and the closer: what the panels blur. */
 .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.ascii { position: absolute; inset: 0; pointer-events: none;
-  /* The middle is the headline's: the field shows at the edges and fades out towards the bottom. */
-  mask-image: radial-gradient(ellipse 42% 55% at 50% 42%, transparent 30%, #000 100%), linear-gradient(180deg, #000 60%, transparent);
-  -webkit-mask-image: radial-gradient(ellipse 42% 55% at 50% 42%, transparent 30%, #000 100%), linear-gradient(180deg, #000 60%, transparent);
-  mask-composite: intersect; -webkit-mask-composite: source-in; }
-.ascii canvas { display: block; }
-@media (max-width: 640px) { .ascii { opacity: 0.6; } }
-.field i { position: absolute; display: block; border-radius: 9999px; filter: blur(90px); opacity: 0.5; }
+.field i { position: absolute; display: block; border-radius: 9999px; filter: blur(110px); opacity: 0.6; }
 .field .a { width: 60vw; height: 60vw; left: -10vw; top: -20vw; background: #2d5a4a; }
 .field .b { width: 50vw; height: 50vw; right: -12vw; top: -8vw; background: #5a4a2d; }
 .field .c { width: 45vw; height: 45vw; left: 30vw; top: 20vw; background: #2d3f5a; opacity: 0.4; }
