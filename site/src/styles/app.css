@@ -10,93 +10,48 @@
 @source "../../public/static/app.js";
 
 @theme {
-  --color-canvas: #ffffff;
-  --color-fg: #171717;
-  --color-body: #262626;
-  --color-muted: #737373;
-  --color-faint: #a3a3a3;
-  --color-line: #e5e5e5;
-  --color-line-strong: #d4d4d4;
-  --color-subtle: #fafafa;
-  --color-code: #f5f5f5;
-  --color-fill: rgb(0 0 0 / 0.05);
-  --color-fill-strong: rgb(0 0 0 / 0.08);
-  --color-btn: #262626;
-  --color-btn-hover: #000000;
-  --color-btn-fg: #ffffff;
-  --color-bar: #171717;
-  --color-bar-muted: #d4d4d4;
-  --color-cap-bg: #eef2ff;
-  --color-cap-fg: #4f46e5;
-  --color-size-bg: #ddf4ff;
-  --color-size-fg: #2563eb;
-  --color-term: #fafafa;
-  /* Syntax highlighting (src/lib/highlight.ts). */
-  --color-tok-comment: #6e7781;
-  --color-tok-string: #116329;
-  --color-tok-number: #8250df;
-  --color-tok-keyword: #cf222e;
-  --color-tok-key: #0550ae;
-  --color-tok-fn: #953800;
-  --color-tok-punct: #6e7781;
-  /*
-   * Data colours, taken from the terminal's syntax palette above so charts and code read as one
-   * system. Colour only ever carries data: Ollaya against another server (us, them), a GPU against
-   * a CPU, Vulkan, and a parity check passing or failing. The rest stays ink. Which machine a
-   * point belongs to is its mark (a dot or a ring), not another colour.
-   */
-  --color-us: #0969da;
-  --color-them: #bc4c00;
-  --color-gpu: #0969da;
-  --color-cpu: #bc4c00;
-  --color-vulkan: #8250df;
-  --color-pass: #1a7f37;
-  --color-fail: #cf222e;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-canvas: #0a0a0a;
-    --color-fg: #fafafa;
-    --color-body: #d4d4d4;
-    --color-muted: #a3a3a3;
-    --color-faint: #8a8a8a;
-    --color-line: #262626;
-    --color-line-strong: #404040;
-    --color-subtle: #121212;
-    --color-code: #171717;
-    --color-fill: rgb(255 255 255 / 0.06);
-    --color-fill-strong: rgb(255 255 255 / 0.1);
-    --color-btn: #f5f5f5;
-    --color-btn-hover: #ffffff;
-    --color-btn-fg: #0a0a0a;
-    --color-bar: #fafafa;
-    --color-bar-muted: #525252;
-    --color-cap-bg: rgb(99 102 241 / 0.16);
-    --color-cap-fg: #a5b4fc;
-    --color-size-bg: rgb(59 130 246 / 0.16);
-    --color-size-fg: #93c5fd;
-    --color-term: #111111;
-    --color-tok-comment: #7d8590;
-    --color-tok-string: #7ee2a8;
-    --color-tok-number: #d2a8ff;
-    --color-tok-keyword: #ff8b8b;
-    --color-tok-key: #79c0ff;
-    --color-tok-fn: #ffc36b;
-    --color-tok-punct: #8b949e;
-    --color-us: #4493f8;
-    --color-them: #f0883e;
-    --color-gpu: #4493f8;
-    --color-cpu: #f0883e;
-    --color-vulkan: #ab7df8;
-    --color-pass: #3fb950;
-    --color-fail: #f85149;
-  }
+  /* One theme, dark: the ground, inks, lines and surfaces. */
+  --color-canvas: #0a0a0a;
+  --color-fg: #fafafa;
+  --color-body: #c4c4c4;
+  --color-muted: #8a8a8a;
+  --color-faint: #5c5c5c;
+  --color-line: rgb(255 255 255 / 0.1);
+  --color-line-strong: rgb(255 255 255 / 0.2);
+  --color-subtle: rgb(255 255 255 / 0.025);
+  --color-code: rgb(255 255 255 / 0.04);
+  --color-fill: rgb(255 255 255 / 0.06);
+  --color-fill-strong: rgb(255 255 255 / 0.1);
+  --color-btn: #fafafa;
+  --color-btn-hover: #ffffff;
+  --color-btn-fg: #0a0a0a;
+  --color-term: rgb(10 10 10 / 0.78);
+  --color-tok-comment: #7a7a7a;
+  --color-tok-string: #e6c98a;
+  --color-tok-number: #b6ecc9;
+  --color-tok-keyword: #d9b366;
+  --color-tok-key: #8fd3ae;
+  --color-tok-fn: #fafafa;
+  --color-tok-punct: #8a8a8a;
+  --color-us: #8fd3ae;
+  --color-them: #d9b366;
+  --color-us-bright: #b6ecc9;
+  --color-pass: #3fb950;
+  --color-fail: #f85149;
+  --color-bar: #fafafa;
+  --color-bar-muted: #525252;
+  --color-cap-bg: rgb(143 211 174 / 0.14);
+  --color-cap-fg: #8fd3ae;
+  --color-size-bg: rgb(217 179 102 / 0.14);
+  --color-size-fg: #d9b366;
+  --color-gpu: #8fd3ae;
+  --color-cpu: #d9b366;
+  --color-vulkan: #d2a8ff;
 }
 
 @layer base {
   :root {
-    color-scheme: light dark;
+    color-scheme: dark;
     -webkit-text-size-adjust: 100%;
   }
   html {
@@ -105,6 +60,7 @@
   body {
     background-color: var(--color-canvas);
     color: var(--color-body);
+    overflow-x: clip;
   }
   :focus-visible {
     outline: 2px solid var(--color-fg);
@@ -345,13 +301,6 @@
   .term-bar {
     background: linear-gradient(90deg, var(--color-tok-key), var(--color-tok-string));
   }
-  @media (prefers-color-scheme: dark) {
-    .term-glow {
-      box-shadow:
-        0 1px 0 0 rgb(255 255 255 / 0.06) inset,
-        0 0 90px -30px rgb(121 192 255 / 0.16);
-    }
-  }
   @media (prefers-reduced-motion: no-preference) {
     .term-fig {
       --fold-at: 2.8s;
@@ -411,4 +360,93 @@
   50% {
     opacity: 0;
   }
+}
+
+/*
+ * The site's frame and surfaces: two rails down the page with a cross where a section's rule meets
+ * them, blurred panels, the grain over everything, the colour fields behind the hero, the marquee,
+ * the confidence meter, numbered code and the interactive scatter. Used by the pages and components.
+ */
+@layer components {
+/* The frame: two rails down the page, with a cross where a section's rule meets them. */
+.frame { position: relative; max-width: 72rem; margin: 0 auto; border-left: 1px solid var(--color-line); border-right: 1px solid var(--color-line); }
+.rule { position: relative; border-top: 1px solid var(--color-line); }
+.rule::before, .rule::after { content: ''; position: absolute; top: -7px; width: 13px; height: 13px; pointer-events: none;
+  background:
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) 6px 0 / 1px 100% no-repeat,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) 0 6px / 100% 1px no-repeat; }
+.rule::before { left: -7px; } .rule::after { left: calc(100% - 6px); }
+/* A panel: a surface with a hairline, blurred over whatever colour sits behind it. */
+.panel { background: rgb(255 255 255 / 0.03); border: 1px solid var(--color-line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.panel-strong { background: rgb(12 12 12 / 0.78); }
+/* The grain: an SVG noise tile over everything, blended so it only breaks up the flat colour. */
+.grain { position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0.16; mix-blend-mode: screen;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px; }
+/* Blurred colour fields behind the hero and the closer: what the panels blur. */
+.field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.ascii { position: absolute; inset: 0; pointer-events: none; mask-image: linear-gradient(180deg, #000 55%, transparent); -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent); }
+.ascii canvas { display: block; }
+@media (max-width: 640px) { .ascii { opacity: 0.45; } }
+.field i { position: absolute; display: block; border-radius: 9999px; filter: blur(90px); opacity: 0.5; }
+.field .a { width: 60vw; height: 60vw; left: -10vw; top: -20vw; background: #2d5a4a; }
+.field .b { width: 50vw; height: 50vw; right: -12vw; top: -8vw; background: #5a4a2d; }
+.field .c { width: 45vw; height: 45vw; left: 30vw; top: 20vw; background: #2d3f5a; opacity: 0.4; }
+@media (prefers-reduced-motion: no-preference) {
+  .field i { animation: drift 22s ease-in-out infinite alternate; }
+  .field .b { animation-duration: 28s; animation-delay: -9s; }
+  .field .c { animation-duration: 34s; animation-delay: -17s; }
+}
+@keyframes drift { to { transform: translate3d(6vw, 4vw, 0) scale(1.08); } }
+.term-glow { box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.06) inset, 0 40px 120px -40px rgb(0 0 0 / 0.9); }
+@media (prefers-reduced-motion: no-preference) {
+  .fill { transform-origin: left; animation: fill 0.7s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(0.6s + var(--row, 0) * 0.18s); }
+}
+@keyframes fill { from { transform: scaleX(0); } }
+/* The publishers' marks on an endless belt: the track is laid twice and slides by half its width. */
+.marquee { overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+.marquee-track { display: flex; width: max-content; gap: 4.5rem; padding-right: 4.5rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .marquee-track { animation: marquee 38s linear infinite; }
+  .marquee:hover .marquee-track { animation-play-state: paused; }
+}
+@keyframes marquee { to { transform: translateX(-50%); } }
+/* The hero's example with every option showing: nothing folds, the extra options appear. */
+.is-open .term-fold { animation: term-in 0.4s ease-out both; animation-delay: calc(0.35s + var(--row, 0) * 0.05s); height: auto; opacity: 1; }
+.was-open:not(.is-open) .term-fold { animation: none; height: 0; opacity: 0; }
+.more { display: none; }
+.is-open .more { display: flex; }
+/* Code with line numbers: one span per line, numbered by a counter in the gutter. */
+.code { counter-reset: l; font-size: 13px; line-height: 1.7; }
+.code .ln { display: grid; grid-template-columns: 2.5rem 1fr; }
+.code .ln::before { counter-increment: l; content: counter(l); color: var(--color-faint); text-align: right; padding-right: 1rem; user-select: none; }
+.code .tok-comment { font-style: normal; }
+.code .tok-fn, .code .tok-cmd { font-weight: 600; }
+/* The scatter: Ollaya's models are filled dots, Ollama's are rings; the one under the pointer lights up. */
+.pt { cursor: default; outline: none; }
+.pt circle { transition: none; }
+.pt.is-on circle { r: 8; }
+.pt.is-on .dot { fill: var(--color-us-bright); stroke: var(--color-us-bright); }
+.pt.is-off { opacity: 0.12; pointer-events: none; }
+.pt.is-kin .dot { stroke: var(--color-us-bright); stroke-width: 2.5; }
+.pt.is-kin circle { r: 6; }
+.links line { stroke: var(--color-us-bright); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
+.pt:focus-visible circle { stroke: var(--color-us-bright); stroke-width: 2; }
+.tip { position: absolute; z-index: 10; pointer-events: none; white-space: nowrap; }
+.tip table { border-collapse: collapse; }
+.tip th, .tip td { padding: 4px 10px; text-align: right; font-weight: 400; font-variant-numeric: tabular-nums; }
+.tip thead th { color: var(--color-muted); font-size: 12px; padding-bottom: 2px; }
+.tip tbody th { text-align: left; color: var(--color-fg); }
+.tip tbody th span { display: block; font-size: 12px; color: var(--color-muted); }
+.tip tr.on th, .tip tr.on td { color: var(--color-us-bright); }
+.tip tr.on th span { color: var(--color-us); }
+/* The confidence meter: ten segments, lit in turn. */
+.meter { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.meter i { display: block; height: 6px; border-radius: 1px; background: var(--color-fill-strong); }
+.meter i.on { background: var(--color-us); }
+@media (prefers-reduced-motion: no-preference) {
+  .meter i.on { animation: lit 0.25s ease-out both; animation-delay: calc(0.6s + var(--row, 0) * 0.18s + var(--i, 0) * 0.04s); }
+}
+@keyframes lit { from { background: var(--color-fill-strong); } }
+::selection { background: rgb(140 200 255 / 0.3); }
 }

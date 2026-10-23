@@ -1,423 +1,50 @@
+/** The home page: the hero with its recorded examples, the numbers, the case, the comparison, the API, the models, the platforms. */
 import type { Child } from 'hono/jsx'
 import { Icon, type IconName } from '../components/Icon'
-import { benchUrl } from '../lib/bench'
 import { LogoMark } from '../components/Logo'
-import { Legend } from '../components/charts'
-import { btnPrimary, Code, CodeBlock, textLink } from '../components/ui'
-import { catalog, comingNext, featuredTags, fullName } from '../data/catalog'
-import { benchEdition, benchGpu, measured, result, rowsOf, trainedOnTyped } from '../data/numbers'
-import { publicBench, shortName } from '../data/results'
-import { hero, type HeroOption, type HeroQuestion } from '../data/hero'
+import { CopyButton } from '../components/ui'
+import { highlight } from '../lib/highlight'
+import { catalog } from '../data/catalog'
+import { benchGpu, result } from '../data/numbers'
+import stats from '../data/stats.json'
+import { asset, hasAsset } from '../lib/assets'
+import { benchUrl } from '../lib/bench'
+import { githubStars } from '../lib/stars'
 import { GITHUB_URL, LOCAL_API } from '../site'
+import { hero, heroOf, type HeroQuestion } from '../data/hero'
+import heroExamples from '../data/hero-examples.json'
+import triage from '../../../crates/ollaya-api/src/presets/triage.json'
+import { publicBench, shortName } from '../data/results'
 
-const sections = [
-  { id: 'vs-ollama', label: 'Ollaya and Ollama' },
-  { id: 'fast', label: 'Fast and accurate' },
-  { id: 'compatible', label: 'Drop-in compatible' },
-  { id: 'models', label: 'Open models' },
-  { id: 'private', label: 'Your data stays yours' },
-  { id: 'platforms', label: 'Platforms' },
-]
-
-export function HomePage() {
-  return (
-    <>
-      <Hero />
-      <div class="mx-auto mt-24 max-w-6xl px-4 md:mt-36 md:px-6 lg:grid lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-16">
-        <nav aria-label="Sections" class="hidden lg:block">
-          <ul class="sticky top-28 -ml-3.5 space-y-2.5 text-sm" data-scrollspy>
-            {sections.map((s) => (
-              <li>
-                <a
-                  href={`#${s.id}`}
-                  class="block border-l-2 border-transparent pl-3 text-muted hover:text-fg aria-[current=true]:border-fg aria-[current=true]:font-medium aria-[current=true]:text-fg"
-                >
-                  {s.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div class="space-y-24 md:space-y-36">
-          <VersusOllama />
-          <Fast />
-          <Compatible />
-          <OpenModels />
-          <Private />
-          <Platforms />
-        </div>
-      </div>
-      <Closer />
-    </>
-  )
-}
-
-// ---------------------------------------------------------------------------------------------
-
-function Hero() {
-  return (
-    <section class="mx-auto max-w-6xl px-4 pt-10 pb-8 md:px-6 md:pt-20" aria-labelledby="hero-title">
-      <div class="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-16">
-        <div>
-          <p class="mb-4 text-sm font-medium text-muted">System 1 for AI agents</p>
-          <h1
-            id="hero-title"
-            class="text-4xl leading-[1.05] font-medium tracking-tight text-fg md:text-5xl lg:text-[3.5rem]"
-          >
-            Run decision models locally.
-          </h1>
-          <p class="mt-5 max-w-xl text-lg text-body">
-            The fast decision layer for agents and apps: routing, guardrails, triage and tool approval. Ask
-            typed questions about any text or JSON and get calibrated answers in milliseconds, on your own
-            hardware.
-          </p>
-          <div class="mt-8 flex flex-wrap items-center gap-x-3 gap-y-3">
-            <a href="/download" class={btnPrimary}>
-              <Icon name="download" class="size-4" />
-              Download
-            </a>
-            <a
-              href="/search"
-              class="inline-flex items-center gap-1.5 rounded-full px-3 py-2.5 text-sm font-medium text-fg underline-offset-4 hover:underline"
-            >
-              Browse models <Icon name="arrowRight" class="size-4" />
-            </a>
-          </div>
-          <p class="mt-6 text-xs text-muted">
-            An independent open-source project, not affiliated with Ollama or TypeSafe.
-          </p>
-        </div>
-        <TerminalMock />
-      </div>
-    </section>
-  )
-}
-
-// The terminal is drawn from the recorded output of the command it shows (src/data/hero.json, read
-// by src/data/hero.ts), in two steps: each question with its own options and the probability the
-// model gave each, then the options fold away and each question's top option stays as its answer.
-// With reduced motion the two steps stand one under the other.
-//
-// The command, then the state: a quoted message that continues on the next lines, wrapped shorter
-// on a phone so nothing wraps again. The first line holds the prompt; the others hang under it. The
-// default preset (triage) needs no flag.
-const MOCK_COMMAND = `ollaya run ${hero.model}${hero.preset === 'triage' ? '' : ` --preset ${hero.preset}`} \\`
-const MOCK_MESSAGE = { phone: wrapWords(`"${hero.message}"`, 28), wide: wrapWords(`"${hero.message}"`, 44) }
-
-/** Greedy word wrap at `width` characters. */
-function wrapWords(text: string, width: number): string[] {
-  const lines: string[] = []
-  let line = ''
-  for (const word of text.split(' ')) {
-    if (line && line.length + 1 + word.length > width) {
-      lines.push(line)
-      line = word
-    } else line = line ? `${line} ${word}` : word
-  }
-  return [...lines, line]
-}
-
-const sumP = (options: HeroOption[]) => options.reduce((s, o) => s + o.p, 0)
-
-/** Under its answer a question shows the runner-up, and folds any others into "+N more". */
-function alternativesOf(q: HeroQuestion): HeroOption[] {
-  if (q.others.length <= 2) return q.others
-  const [runnerUp, ...more] = q.others
-  return [...(runnerUp ? [runnerUp] : []), { label: `+${more.length} more`, p: sumP(more) }]
-}
-
-// The alternatives are h-5 (1.25rem) lines. While they show, the window hangs that much into the
-// space under the hero (term-fig in app.css; the hero's pb-8 keeps it clear of the next section)
-// and takes it back as they fold, so nothing under it moves and the window ends the size of the
-// answers alone.
-const FOLD_REM = hero.questions.reduce((n, q) => n + alternativesOf(q).length, 0) * 1.25
-
-const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
-
-/** One command line: the prompt in its own column, so continuation lines hang under the command. */
-function PromptLine({ children }: { children?: Child }) {
-  return (
-    <div class="flex gap-[1ch]">
-      <span class="text-muted select-none" aria-hidden="true">
-        $
-      </span>
-      <div class="min-w-0">{children}</div>
-    </div>
-  )
-}
-
-/** One option: its label, a bar and the probability. The answer is bright; the others are dim. */
-function OptionLine({
-  label,
-  full,
-  p,
-  answer,
-  class: cls = '',
-  style,
-}: HeroOption & { answer: boolean; class?: string; style?: string }) {
-  return (
-    <li class={`flex items-center gap-[1ch] ${answer ? 'h-6' : 'h-5 leading-5'} ${cls}`} style={style}>
-      <span class={`min-w-0 flex-1 truncate ${answer ? 'font-medium text-fg' : 'text-muted'}`} title={full}>
-        {label}
-        {full ? <span class="sr-only">{full.slice(label.length)}</span> : null}
-        {answer ? <span class="sr-only">, the answer</span> : null}
-      </span>
-      <span class="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-fill-strong sm:w-20" aria-hidden="true">
-        <span class={`block h-full rounded-full ${answer ? 'term-bar' : 'bg-faint'}`} style={`width:${(p * 100).toFixed(1)}%`}></span>
-      </span>
-      <span class={`w-[4ch] text-right tabular-nums ${answer ? 'text-fg' : 'text-muted'}`}>{p.toFixed(2)}</span>
-    </li>
-  )
-}
+const lastWeek = stats.weeks.at(-1)!
+const fmt = (n: number) => n.toLocaleString('en-US')
 
 /**
- * The questions, each beside its answer and alternatives (above them on a phone). `answersOnly`
- * leaves the answers alone, as the scores look once they have folded.
+ * Publishers worth a mark on the page. The SVG paths are simple-icons' (CC0) drawings of each brand's
+ * own mark; the PNGs are the organisation's own Hugging Face avatar. Trademarks stay their owners'.
  */
-function Scores({ answersOnly = false }: { answersOnly?: boolean }) {
-  let row = 0
-  return (
-    <dl>
-      {hero.questions.map((q, qi) => {
-        const alternatives = answersOnly ? [] : alternativesOf(q)
-        const start = row
-        row += 1 + alternatives.length
-        // Lines appear in turn; then the alternatives fold away.
-        const line = (i: number) => (answersOnly ? {} : { class: i ? 'term-fold' : 'term-row', style: `--row:${start + i}` })
-        return (
-          <div class={`sm:grid sm:grid-cols-[17ch_minmax(0,1fr)] ${qi ? 'mt-1' : ''}`}>
-            <dt class={`h-5 truncate leading-5 text-muted sm:h-6 sm:leading-6 ${answersOnly ? '' : 'term-row'}`} style={answersOnly ? undefined : `--row:${start}`}>
-              {q.name}
-            </dt>
-            <dd class="min-w-0 pl-[2ch] sm:pl-0">
-              <ol>
-                <OptionLine {...q.answer} answer {...line(0)} />
-                {alternatives.map((o, i) => (
-                  <OptionLine {...o} answer={false} {...line(i + 1)} />
-                ))}
-              </ol>
-            </dd>
-          </div>
-        )
-      })}
-    </dl>
-  )
+const PUBLISHERS: { name: string; path?: string; png?: string }[] = [
+  { name: 'Perplexity AI', path: 'M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z' },
+  { name: 'Cloudflare', path: 'M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727' },
+  { name: 'PostHog', path: 'M9.854 14.5 5 9.647.854 5.5A.5.5 0 0 0 0 5.854V8.44a.5.5 0 0 0 .146.353L5 13.647l.147.146L9.854 18.5l.146.147v-.049c.065.03.134.049.207.049h2.586a.5.5 0 0 0 .353-.854L9.854 14.5zm0-5-4-4a.487.487 0 0 0-.409-.144.515.515 0 0 0-.356.21.493.493 0 0 0-.089.288V8.44a.5.5 0 0 0 .147.353l9 9a.5.5 0 0 0 .853-.354v-2.585a.5.5 0 0 0-.146-.354l-5-5zm1-4a.5.5 0 0 0-.854.354V8.44a.5.5 0 0 0 .147.353l4 4a.5.5 0 0 0 .853-.354V9.854a.5.5 0 0 0-.146-.354l-4-4zm12.647 11.515a3.863 3.863 0 0 1-2.232-1.1l-4.708-4.707a.5.5 0 0 0-.854.354v6.585a.5.5 0 0 0 .5.5H23.5a.5.5 0 0 0 .5-.5v-.6c0-.276-.225-.497-.499-.532zm-5.394.032a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6zM.854 15.5a.5.5 0 0 0-.854.354v2.293a.5.5 0 0 0 .5.5h2.293c.222 0 .39-.135.462-.309a.493.493 0 0 0-.109-.545L.854 15.501zM5 14.647.854 10.5a.5.5 0 0 0-.854.353v2.586a.5.5 0 0 0 .146.353L4.854 18.5l.146.147h2.793a.5.5 0 0 0 .353-.854L5 14.647z' },
+  { name: 'Bespoke Labs', png: 'bespokelabs' },
+  { name: 'Qwen', path: 'M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z' },
+  { name: 'Strands Agents', png: 'strandsagents' },
+  { name: 'Knowledgator', png: 'knowledgator' },
+  { name: 'Convai Innovations', png: 'convai' },
+]
+
+function Mark({ p }: { p: (typeof PUBLISHERS)[number] }) {
+  if (p.path)
+    return (
+      <svg viewBox="0 0 24 24" class="size-9 shrink-0" fill="currentColor" aria-hidden="true">
+        <path d={p.path} />
+      </svg>
+    )
+  return <img src={asset(`logos/${p.png}.png`)} class="size-9 shrink-0 rounded-[4px] brightness-150 grayscale" alt="" width="36" height="36" />
 }
 
-export function TerminalMock() {
-  const n = hero.questions.length
-  return (
-    // On wide screens the captions are taken out of the flow, so the hero text centres on the window.
-    <figure class="term-fig relative z-10 min-w-0" style={`--fold-h:${FOLD_REM}rem`}>
-      <figcaption class="mb-3 text-center text-xs text-body lg:absolute lg:inset-x-0 lg:bottom-full">
-        Every question has its own options. The model scores each; the top one is the answer.
-      </figcaption>
-      <div class="term-glow overflow-hidden rounded-xl border border-line bg-term">
-        <div class="relative flex h-10 items-center border-b border-line px-4 sm:px-5" aria-hidden="true">
-          <span class="flex gap-2">
-            <span class="size-3 rounded-full bg-[#ff5f57]"></span>
-            <span class="size-3 rounded-full bg-[#febc2e]"></span>
-            <span class="size-3 rounded-full bg-[#28c840]"></span>
-          </span>
-          <span class="absolute inset-x-0 text-center text-xs text-muted">ollaya · zsh</span>
-        </div>
-        <div class="p-4 font-mono text-[12.5px] leading-6 text-fg sm:p-5 sm:text-[13px]">
-          <PromptLine>
-            <pre class="whitespace-pre-wrap">
-              <Code code={MOCK_COMMAND} lang="shell" />
-            </pre>
-            {(['phone', 'wide'] as const).map((size) =>
-              MOCK_MESSAGE[size].map((line, i) => (
-                <pre class={`whitespace-pre-wrap ${i ? 'pl-[3ch]' : 'pl-[2ch]'} ${size === 'phone' ? 'sm:hidden' : 'hidden sm:block'}`}>
-                  <span class="tok-string">{line}</span>
-                </pre>
-              )),
-            )}
-          </PromptLine>
-          <div class="mt-4">
-            <p class="term-static text-tok-comment"># 1. each question's options, scored</p>
-            <Scores />
-            <div class="term-static mt-4" aria-hidden="true">
-              <p class="text-tok-comment"># 2. the top option is the answer</p>
-              <Scores answersOnly />
-            </div>
-            <div class="term-after mt-4">
-              <PromptLine>
-                <span class="term-cursor inline-block h-[1.15em] w-[1ch] translate-y-[0.2em] bg-fg/80" aria-hidden="true"></span>
-              </PromptLine>
-            </div>
-          </div>
-        </div>
-      </div>
-      <p class="term-after mt-3 text-center text-xs text-muted lg:absolute lg:inset-x-0 lg:top-full">
-        Real output: <span class="font-mono">{hero.model}</span> answered {NUMBER_WORDS[n] ?? n} questions in {hero.latencyMs} ms on
-        an {hero.device}.
-      </p>
-    </figure>
-  )
-}
-
-// ---------------------------------------------------------------------------------------------
-
-function Section({
-  id,
-  title,
-  lead,
-  children,
-  body,
-}: {
-  id: string
-  title: string
-  lead: string
-  body: Child
-  children: Child
-}) {
-  return (
-    <section id={id} aria-labelledby={`${id}-title`} class="scroll-mt-24" data-section>
-      <h2 id={`${id}-title`} class="text-base font-semibold text-fg">
-        {title}
-      </h2>
-      <p class="mt-2 max-w-2xl text-2xl leading-tight font-medium tracking-tight text-fg md:text-3xl">{lead}</p>
-      <p class="mt-4 max-w-2xl text-base text-body md:text-lg">{body}</p>
-      <div class="mt-10">{children}</div>
-    </section>
-  )
-}
-
-// Accuracy: typed-decisions (400 states, 2,000 questions, argmax against the majority label); latency: the median
-// five-question request on the edition's GPU. Both from results/ (data/numbers.ts). One row per family, its most accurate
-// tag; -fp16 tags sit under their base tag, and models trained on the dataset's train split carry an asterisk.
-// Jev's accuracy is TypeSafe's report; its latency is the hosted API in third-party benchmarks, network included.
-export const scoreboard: { tag: string; acc: number; ms: number; pick?: boolean; note?: string; trained?: boolean }[] = (() => {
-  const best = new Map<string, { tag: string; acc: number; ms: number }>()
-  for (const [tag, row] of rowsOf('typed')) {
-    const acc = row.accuracy as number
-    const ms = measured(tag, 'gpu.p50_ms')
-    if (tag.endsWith('-fp16') || !acc || ms === undefined) continue
-    const family = tag.split(':')[0]!
-    if (!best.has(family) || best.get(family)!.acc < acc) best.set(family, { tag, acc, ms: Math.round(ms) })
-  }
-  return [...best.values()]
-    .sort((a, b) => b.acc - a.acc)
-    .map((r) => ({
-      ...r,
-      pick: r.tag === 'winnow:e4b',
-      note: r.tag === 'clm:8b' ? 'questions cached' : undefined,
-      trained: trainedOnTyped(r.tag),
-    }))
-})()
 export const JEV = { acc: 0.738, text: '236–276 ms' }
-const ACC_SCALE = 1
-const ACC_AXIS = [0, 0.25, 0.5, 0.75, 1]
-const accPct = (a: number) => `${((a / ACC_SCALE) * 100).toFixed(2)}%`
-const msText = (ms: number) => `${ms} ms`
-
-function Stat({ value, unit, label, detail, muted }: { value: string; unit: string; label: string; detail: string; muted?: boolean }) {
-  return (
-    <div class="px-6 py-7 sm:px-8">
-      <p
-        class={`text-5xl font-semibold tracking-tight whitespace-nowrap tabular-nums sm:text-[2.75rem] lg:text-6xl ${muted ? 'text-muted' : 'text-fg'}`}
-      >
-        {value}
-        <span class="ml-1.5 text-2xl font-medium tracking-normal lg:text-3xl">{unit}</span>
-      </p>
-      <p class="mt-3 text-sm font-medium text-fg">{label}</p>
-      <p class="mt-0.5 text-sm text-muted">{detail}</p>
-    </div>
-  )
-}
-
-/** One scoreboard row: the tag, an accuracy bar with its value, and the latency. */
-function ScoreRow(
-  { label, note, acc, latency, pick, muted, trained }: { label: string; note?: string; acc: number; latency: string; pick?: boolean; muted?: boolean; trained?: boolean },
-) {
-  return (
-    <li class="contents">
-      <span class="flex h-9 flex-col justify-center leading-tight">
-        <span class={`font-mono text-xs sm:text-[13px] ${muted ? 'font-sans text-body' : 'text-fg'} ${pick ? 'font-semibold' : ''}`}>
-          {label}
-          {trained ? <span title="Trained on this dataset's train split"> *</span> : null}
-        </span>
-        {note ? <span class="text-xs text-muted">{note}</span> : null}
-      </span>
-      <span class="relative flex h-9 items-center">
-        <span class="min-w-0 flex-1">
-          <span class={`block h-2.5 min-w-1 rounded-full ${muted ? 'bg-them' : 'bg-us'}`} style={`width:${accPct(acc)}`}></span>
-        </span>
-        <span class={`ml-2.5 w-11 text-[13px] whitespace-nowrap tabular-nums ${muted ? 'text-body' : 'font-medium text-fg'}`}>{acc.toFixed(3)}</span>
-      </span>
-      <span class={`flex h-9 items-center justify-end text-[13px] whitespace-nowrap tabular-nums ${muted ? 'text-body' : 'text-fg'} ${pick ? 'font-semibold' : ''}`}>
-        {latency}
-      </span>
-    </li>
-  )
-}
-
-function Fast() {
-  return (
-    <Section
-      id="fast"
-      title="Fast and accurate"
-      lead={`Close to Jev's accuracy, in ${result('winnow:e4b', 'gpu.p50_ms', 0)} ms.`}
-      body={`One forward pass per request, no token-by-token generation. Small models such as laya:en answer in ${result('laya:en', 'gpu.p50_ms', 0)} ms and run well on a CPU.`}
-    >
-      <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-2">
-        <Stat value={result('winnow:e4b', 'gpu.p50_ms', 0)} unit="ms" label="winnow:e4b on Ollaya" detail={`${benchGpu}, five questions · ${result('winnow:e4b', 'typed.accuracy', 3)} accuracy`} />
-        <div class="border-t border-line sm:border-t-0 sm:border-l">
-          <Stat value={JEV_TYPED} unit="" label="TypeSafe Jev" detail="Hosted API · typed-decisions accuracy as TypeSafe reports it" muted />
-        </div>
-      </div>
-
-      <figure class="mt-14">
-        <figcaption class="text-sm font-medium text-fg">
-          Accuracy and speed, best tag of each model{' '}
-          <span class="font-normal text-muted">· typed-decisions; five questions on an {benchGpu}</span>
-        </figcaption>
-        <div class="mt-4">
-          <Legend
-            items={[
-              { label: 'Ollaya', tone: 'us' },
-              { label: "TypeSafe's hosted Jev", tone: 'them' },
-            ]}
-          />
-        </div>
-        <div class="mt-6 grid grid-cols-[6.5rem_minmax(0,1fr)_5.25rem] gap-x-3 sm:grid-cols-[11.5rem_minmax(0,1fr)_5.5rem] sm:gap-x-4">
-          <span class="text-xs text-muted">Model</span>
-          <span class="text-xs text-muted">Accuracy</span>
-          <span class="text-right text-xs text-muted">Latency</span>
-          <ul class="contents" role="list">
-            <ScoreRow label="TypeSafe Jev" note="hosted API" acc={JEV.acc} latency={JEV.text} muted />
-            {scoreboard.map((r) => (
-              <ScoreRow label={r.tag} note={r.note} acc={r.acc} latency={msText(r.ms)} pick={r.pick} trained={r.trained} />
-            ))}
-          </ul>
-          <span></span>
-          {/* The axis spans the bars' track: the column less the value beside each bar (ml-2.5 + w-11). */}
-          <span class="relative mt-2 mr-[3.375rem] h-5 border-t border-line text-[11px] text-muted tabular-nums max-[359px]:invisible" aria-hidden="true">
-            {ACC_AXIS.map((t) => (
-              <span
-                class={`absolute top-1.5 whitespace-nowrap ${t === 0 ? '' : t === ACC_SCALE ? '-translate-x-full' : '-translate-x-1/2'} ${t === 0.25 || t === 0.75 ? 'max-sm:hidden' : ''}`}
-                style={`left:${accPct(t)}`}
-              >
-                {t === 0 ? '0' : t.toFixed(2)}
-              </span>
-            ))}
-          </span>
-          <span></span>
-        </div>
-        <p class="mt-8 max-w-2xl text-[13px] leading-relaxed text-muted">
-          2,000 questions from the dataset's test split. * Trained on its train split, so these models have seen questions
-          like these. Jev: TypeSafe's accuracy, hosted latency from{' '}
-          <a href="https://github.com/AbdelStark/jev-benchmarks" class={textLink}>
-            third-party benchmarks
-          </a>
-          , network included.
-        </p>
-      </figure>
-    </Section>
-  )
-}
-
 // Bespoke Labs' public decision benchmark (github.com/bespokelabsai/nimble, docs/PUBLIC_BENCHMARKS.md):
 // 13 subsets of 11 human-labeled datasets, 3,880 questions, rebuilt byte for byte from Bespoke's manifests
 // and scored with Bespoke's own runner (convert/ollaya_convert/bench_public.py). Both servers ran on the same
@@ -468,140 +95,7 @@ export const vsFeatures: { label: string; ollaya: string; ollama: string }[] = [
   { label: 'Weights', ollaya: "Author's files, sha256-pinned", ollama: 'Re-hosted GGUF' },
 ]
 
-/**
- * One comparison row. Each row is its own grid with the same columns, so the accuracy track can
- * drop to a line of its own on a phone (model and the three numbers on top, the full-width track
- * under them) and sit between the model and the numbers from sm up.
- */
-function VsBar({ run }: { run: VsRun }) {
-  const ollama = run.server === 'ollama'
-  const num = `flex min-h-9 items-center justify-end text-[13px] whitespace-nowrap tabular-nums sm:order-none ${ollama ? 'text-body' : 'text-fg'}`
-  return (
-    <li class={VS_GRID}>
-      <span class="order-1 flex min-h-9 flex-col justify-center leading-tight sm:order-none">
-        <span class="font-mono text-xs text-fg sm:text-[13px]">{run.tag}</span>
-        <span class="text-xs text-muted">{ollama ? `on ${OLLAMA}` : 'on Ollaya'}</span>
-      </span>
-      <span class="relative order-5 col-span-4 flex h-6 items-center sm:order-none sm:col-span-1 sm:h-9" aria-hidden="true">
-        <span class="relative h-px w-full bg-line">
-          <span
-            class={`absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full ${ollama ? 'border-[2.5px] border-them bg-canvas' : 'bg-us'}`}
-            style={`left:${vsPos(run.acc)}`}
-          ></span>
-        </span>
-      </span>
-      <span class={`order-2 ${num} ${ollama ? '' : 'font-medium'}`}>{run.acc.toFixed(3)}</span>
-      <span class={`order-3 ${num}`}>{run.ece.toFixed(3)}</span>
-      <span class={`order-4 ${num}`}>{run.ms} ms</span>
-    </li>
-  )
-}
-
-const VS_GRID =
-  'grid grid-cols-[minmax(0,1fr)_3.25rem_3.25rem_4.25rem] gap-x-3 sm:grid-cols-[9.5rem_minmax(0,1fr)_3.75rem_3.75rem_4.75rem] sm:gap-x-4'
-
-function VersusOllama() {
-  return (
-    <Section
-      id="vs-ollama"
-      title="Ollaya and Ollama"
-      lead="Inspired by Ollama, measured side by side."
-      body={`${OLLAMA}'s nine decision models and Ollaya's, on the same ${benchGpu} and 3,880 human-labeled questions. Ollaya runs the most accurate model and more of them, with each author's temperature. On the same weights Ollama is ${speedup()} times faster: it runs Q8_0 GGUFs, where Ollaya computes the authors' BF16 weights in fp32.`}
-    >
-      <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-3">
-        <Stat value={vs('pplx-decider:flash', 'ollaya').acc.toFixed(3)} unit="" label="Most accurate on Ollaya: pplx-decider:flash" detail={`Ollama's best: ${vs('pplx-decider', 'ollama').acc.toFixed(3)} (pplx-decider, 27B)`} />
-        <div class="border-t border-line sm:border-t-0 sm:border-l">
-          <Stat value={String(catalog.length)} unit="" label="Decision model families on Ollaya" detail={`${OLLAMA}: nine models`} />
-        </div>
-        <div class="border-t border-line sm:border-t-0 sm:border-l">
-          <Stat value={`${(vs('nimble', 'ollama').ece / vs('nimble:9b', 'ollaya').ece).toFixed(1)}×`} unit="" label="Lower calibration error, same Nimble" detail={`ECE ${vs('nimble:9b', 'ollaya').ece.toFixed(3)} on Ollaya, ${vs('nimble', 'ollama').ece.toFixed(3)} on Ollama`} />
-        </div>
-      </div>
-
-      <figure class="mt-14">
-        <figcaption class="text-sm font-medium text-fg">
-          Same GPU, same 3,880 human-labeled questions{' '}
-          <span class="font-normal text-muted">· accuracy, higher is better; calibration error and latency, lower is better</span>
-        </figcaption>
-        <div class="mt-4">
-          <Legend
-            items={[
-              { label: 'Ollaya', tone: 'us' },
-              { label: OLLAMA, tone: 'them', mark: 'ring' },
-            ]}
-          />
-        </div>
-        <div class="mt-6">
-          <div class={VS_GRID} aria-hidden="true">
-            <span class="text-xs text-muted">Model</span>
-            <span class="hidden text-xs text-muted sm:block">Accuracy</span>
-            <span class="text-right text-xs text-muted">
-              <span class="sm:hidden">Acc.</span>
-            </span>
-            <span class="text-right text-xs text-muted">ECE</span>
-            <span class="text-right text-xs text-muted">Latency</span>
-          </div>
-          <ul class="mt-1 space-y-2 sm:space-y-0" role="list">
-            {vsRuns.map((r) => (
-              <VsBar run={r} />
-            ))}
-          </ul>
-          <div class={VS_GRID} aria-hidden="true">
-            <span class="hidden sm:block"></span>
-            <span class="relative col-span-4 mt-2 h-5 border-t border-line text-[11px] text-muted tabular-nums sm:col-span-1">
-              {VS_TICKS.map((t, i) => (
-                <span
-                  class={`absolute top-1.5 ${i === 0 ? '' : i === VS_TICKS.length - 1 ? '-translate-x-full' : '-translate-x-1/2'}`}
-                  style={`left:${vsPos(t)}`}
-                >
-                  {t.toFixed(2)}
-                </span>
-              ))}
-            </span>
-          </div>
-        </div>
-      </figure>
-
-      <div class="mt-14 overflow-hidden rounded-2xl border border-line">
-        <table class="block w-full border-collapse md:table md:table-fixed">
-          <thead class="hidden border-b border-line bg-subtle md:table-header-group">
-            <tr>
-              <th scope="col" class="w-[30%] px-6 py-3 text-left text-[13px] font-medium text-muted"></th>
-              <th scope="col" class="px-6 py-3 text-left text-[13px] font-medium text-fg">Ollaya</th>
-              <th scope="col" class="px-6 py-3 text-left text-[13px] font-medium text-muted">{OLLAMA}</th>
-            </tr>
-          </thead>
-          <tbody class="block divide-y divide-line md:table-row-group">
-            {vsFeatures.map((f) => (
-              <tr class="block px-5 py-4 md:table-row md:p-0">
-                <th scope="row" class="block pb-1 text-left text-[15px] font-medium text-fg md:table-cell md:px-6 md:py-3 md:align-top">
-                  {f.label}
-                </th>
-                <td class="flex gap-3 pt-1.5 md:table-cell md:px-6 md:py-3 md:align-top">
-                  <span class="w-24 shrink-0 text-[13px] leading-6 text-muted md:hidden">Ollaya</span>
-                  <span class="text-[15px] leading-6 text-body">{f.ollaya}</span>
-                </td>
-                <td class="flex gap-3 pt-1.5 md:table-cell md:px-6 md:py-3 md:align-top">
-                  <span class="w-24 shrink-0 text-[13px] leading-6 text-muted md:hidden">{OLLAMA}</span>
-                  <span class="text-[15px] leading-6 text-muted">{f.ollama}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p class="mt-8 max-w-2xl text-[13px] leading-relaxed text-muted">
-        <a href="https://github.com/bespokelabsai/nimble/blob/main/docs/PUBLIC_BENCHMARKS.md" class={textLink}>Bespoke Labs' public benchmark</a>,
-        one request at a time: Ollaya Bench {benchEdition.id}, {OLLAMA}. ECE: calibration error of the top probability.
-      </p>
-      <p class="mt-4">
-        <a href={benchUrl()} class="inline-flex items-center gap-1.5 text-sm font-medium text-fg underline-offset-4 hover:underline">
-          Every model on Ollaya Bench, with the raw data <Icon name="arrowRight" class="size-4" />
-        </a>
-      </p>
-    </Section>
-  )
-}
+const mostAccurate = vs('pplx-decider:flash', 'ollaya')
 
 export const compatRequest = `# Point the TypeSafe SDK at Ollaya
 export TYPESAFE_BASE_URL=${LOCAL_API}
@@ -645,140 +139,550 @@ export const compatResponse = `{
   }
 }`
 
-function Compatible() {
+
+function Install({ origin }: { origin: string }) {
+  const INSTALL = `curl -fsSL ${origin}/install.sh | sh`
   return (
-    <Section
-      id="compatible"
-      title="Drop-in compatible"
-      lead="Speaks TypeSafe's API."
-      body={
-        <>
-          Ollaya serves <code class="font-mono text-[0.9em]">/v1/systemone</code> and{' '}
-          <code class="font-mono text-[0.9em]">/v1/models</code> with TypeSafe's request and response shapes. The
-          official TypeSafe Python SDK 0.7.1 works unchanged against a local server.
-        </>
-      }
-    >
-      <div class="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <div class="flex flex-col">
-          <p class="mb-2 text-[13px] font-medium text-muted">Request</p>
-          <CodeBlock code={compatRequest} class="flex-1" />
-        </div>
-        <div class="flex flex-col">
-          <p class="mb-2 text-[13px] font-medium text-muted">Response</p>
-          <CodeBlock code={compatResponse} lang="json" class="flex-1" />
-        </div>
-      </div>
-      <p class="mt-6 text-sm">
-        <a href="/docs/typesafe-compatibility" class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
-          TypeSafe compatibility guide <Icon name="arrowRight" class="size-4" />
-        </a>
-      </p>
-    </Section>
+    <div class="panel panel-strong inline-flex min-h-11 max-w-full items-center gap-3 rounded-md py-1 pr-1 pl-4 font-mono text-[13px] text-fg" data-copy-scope>
+      <span class="text-muted select-none" aria-hidden="true">
+        $
+      </span>
+      <pre class="whitespace-pre-wrap break-all">{INSTALL}</pre>
+      <CopyButton class="rounded-md" />
+    </div>
   )
 }
 
-/** One row per model, or one row per featured tag while the registry holds a single family. */
-function modelRows(): { href: string; name: string; summary: string; meta: string }[] {
-  if (catalog.length === 1) {
-    const m = catalog[0]!
-    return featuredTags(m).map((t) => ({
-      href: `/library/${fullName(m, t)}`,
-      name: fullName(m, t),
-      summary: t.summary,
-      meta: t.kind === 'router' ? 'router' : [t.params, t.context && `${t.context} ctx`].filter(Boolean).join(' · '),
-    }))
-  }
-  return catalog.slice(0, 8).map((m) => ({
-    href: `/library/${m.name}`,
-    name: m.name,
-    summary: (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).split(': ')[0]!.replace(/\.$/, ''), // who made it and on what; the model page has the rest
-    meta: m.sizes.join(' · '),
-  }))
+const h2 = 'text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl'
+
+function Hero({ origin }: { origin: string }) {
+  return (
+    <section class="relative overflow-hidden" aria-labelledby="rd-hero">
+      <div class="field" aria-hidden="true">
+        <i class="a"></i>
+        <i class="b"></i>
+        <i class="c"></i>
+      </div>
+      <div class="ascii" data-ascii aria-hidden="true"></div>
+      <div class="frame relative px-5 pt-32 pb-16 text-center md:pt-40">
+        <h1 id="rd-hero" class="mx-auto max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
+          The decision layer <br class="hidden md:block" />
+          for AI agents.
+        </h1>
+        <p class="mx-auto mt-6 max-w-[38rem] text-lg leading-relaxed text-body md:text-xl">
+          Ollaya runs open decision models on your own hardware. Typed questions in, calibrated answers out, in
+          milliseconds: routing, guardrails, triage and tool approval without an LLM call.
+        </p>
+        <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Install origin={origin} />
+          <a href={hasAsset('try.js') ? '/try' : '/download'} class="inline-flex h-11 items-center gap-1.5 rounded-md border border-line bg-canvas/40 px-4 text-sm font-medium text-fg hover:border-line-strong">
+            {hasAsset('try.js') ? 'Try it in the browser' : 'Download'} <Icon name="arrowRight" class="size-4" />
+          </a>
+        </div>
+        <div class="mx-auto mt-16 max-w-4xl text-left">
+          <DecisionDemo />
+        </div>
+      </div>
+    </section>
+  )
 }
 
-function OpenModels() {
-  const rows = modelRows()
-  const laya = catalog.some((m) => m.name === 'laya')
+// The hero's example: the real recording in hero.json (a message, the triage preset, the model's
+// answers) shown as the request reads to a person: the message, then each question in the preset's
+// own words with the answer the model gave and how sure it was.
+const QUESTION_TEXT: Record<string, string> = Object.fromEntries(
+  Object.entries(triage as Record<string, { instructions: string }>).map(([k, q]) => [k, q.instructions.replace(/`message`/g, 'the message')]),
+)
+const nice = (label: string) => label.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+
+function AnswerRow({ q, row }: { q: HeroQuestion; row: number }) {
+  const runnerUp = q.others[0]
   return (
-    <Section
-      id="models"
-      title="Open models"
-      lead="Open weights, ready to pull."
-      body={
-        laya
-          ? 'winnow:e4b balances accuracy and speed best; laya is the fastest and runs well on a CPU.'
-          : 'Open decision models from their authors, pulled by name.'
-      }
-    >
-      <ul class="divide-y divide-line border-y border-line" role="list">
-        {rows.map((r) => (
-          <li>
-            <a href={r.href} class="group flex flex-col gap-1 py-5 sm:flex-row sm:items-baseline sm:gap-6">
-              <span class="shrink-0 font-mono text-[15px] text-fg underline-offset-4 group-hover:underline sm:w-52">
-                {r.name}
+    <li class="term-row px-5 py-3.5" style={`--row:${row}`}>
+      <p class="text-[13px] text-muted">{QUESTION_TEXT[q.name] ?? q.name}</p>
+      <div class="mt-1.5 flex items-center gap-4">
+        <span class="w-36 shrink-0 truncate text-[15px] font-medium text-fg" title={q.answer.full}>
+          {nice(q.answer.label)}
+        </span>
+        <span class="meter min-w-0 flex-1" aria-hidden="true">
+          {Array.from({ length: 10 }, (_, i) => (
+            <i class={i < Math.round(q.answer.p * 10) ? 'on' : ''} style={`--row:${row};--i:${i}`}></i>
+          ))}
+        </span>
+        <span class="w-10 text-right text-[13px] text-fg tabular-nums">{q.answer.p.toFixed(2)}</span>
+      </div>
+      {runnerUp ? (
+        <ul class="term-fold mt-1 text-xs leading-5 text-muted" style={`--row:${row}`} role="list">
+          {q.others.map((o, i) => (
+            <li class={`flex items-center gap-4 ${i ? 'more' : ''}`} title={o.full}>
+              <span class="w-36 shrink-0 truncate">{nice(o.label)}</span>
+              <span class="meter min-w-0 flex-1 opacity-50" aria-hidden="true">
+                {Array.from({ length: 10 }, (_, j) => (
+                  <i class={j < Math.round(o.p * 10) ? 'on' : ''} style="animation:none"></i>
+                ))}
               </span>
-              <span class="flex-1 text-body">{r.summary}</span>
-              <span class="text-[13px] whitespace-nowrap text-muted">{r.meta}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-      <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <a href="/search" class="inline-flex items-center gap-1.5 text-sm font-medium text-fg underline-offset-4 hover:underline">
-          Browse all models <Icon name="arrowRight" class="size-4" />
-        </a>
-        {comingNext.length ? (
-          <p class="max-w-md text-[13px] text-muted sm:text-right">
-            More open decision models are planned: {comingNext.join(', ')}.
-          </p>
-        ) : null}
-      </div>
-    </Section>
+              <span class="w-10 text-right tabular-nums">{o.p.toFixed(2)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </li>
   )
 }
 
-const pillars: { icon: IconName; title: string; text: string }[] = [
+type Recording = typeof hero
+const examples: Recording[] = (heroExamples as unknown[]).filter((e) => (e as { output?: unknown }).output).map((e) => heroOf(e as Parameters<typeof heroOf>[0]))
+
+function ExamplePanel({ ex, hidden }: { ex: Recording; hidden: boolean }) {
+  const n = ex.questions.length
+  return (
+    <div data-example hidden={hidden}>
+      <div class="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+        <div class="border-b border-line p-5 md:border-r md:border-b-0">
+          <p class="text-[13px] text-muted">A support message comes in</p>
+          <blockquote class="term-row mt-3 text-[15px] leading-relaxed text-fg" style="--row:0">
+            “{ex.message}”
+          </blockquote>
+          <p class="mt-5 text-[13px] text-muted">
+            Ollaya asks <span class="font-mono text-[12px] text-body">{ex.model}</span> the {n} questions of the{' '}
+            <span class="font-mono text-[12px] text-body">{ex.preset}</span> preset, in one request.
+          </p>
+        </div>
+        <ol class="divide-y divide-line" role="list">
+          {ex.questions.map((q, i) => (
+            <AnswerRow q={q} row={i + 1} />
+          ))}
+        </ol>
+      </div>
+      <p class="border-t border-line px-5 py-3 text-[13px] text-muted">
+        Real output: {n} answers in <span class="text-fg">{ex.latencyMs} ms</span> on an {ex.device}, one forward pass. Every answer is a probability you can set a threshold on.
+      </p>
+    </div>
+  )
+}
+
+function DecisionDemo() {
+  return (
+    <figure class="panel panel-strong overflow-hidden rounded-lg" style="--fold-at:3.4s" data-ui data-demo>
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3 text-[13px] text-muted">
+        <span>{examples.length} recorded examples, the same model and preset.</span>
+        <span class="flex gap-2">
+          <button type="button" data-toggle aria-pressed="false" class="inline-flex h-8 items-center rounded-md border border-line px-3 text-[13px] text-body hover:border-line-strong hover:text-fg">
+            Show every option
+          </button>
+          <button type="button" data-next class="inline-flex h-8 items-center gap-1.5 rounded-md bg-btn px-3 text-[13px] font-medium text-btn-fg hover:bg-btn-hover">
+            Next example <Icon name="arrowRight" class="size-3.5" />
+          </button>
+        </span>
+      </div>
+      {examples.map((ex, i) => (
+        <ExamplePanel ex={ex} hidden={i > 0} />
+      ))}
+    </figure>
+  )
+}
+
+function Proof() {
+  const stars = githubStars()
+  const items = [
+    [stars ?? '—', 'GitHub stars'],
+    [fmt(lastWeek.pulls), 'model pulls last week'],
+    [String(catalog.length), 'open decision models'],
+    ['3,880', 'human-labeled questions in the bench'],
+  ]
+  return (
+    <section class="frame" aria-label="In numbers">
+      <dl class="rule grid grid-cols-2 gap-px bg-line md:grid-cols-4">
+        {items.map(([v, l]) => (
+          <div class="bg-canvas px-6 py-8">
+            <dd class="text-4xl font-semibold tracking-[-0.03em] text-fg tabular-nums">{v}</dd>
+            <dt class="mt-1 text-sm text-muted">{l}</dt>
+          </div>
+        ))}
+      </dl>
+      <div class="rule grid items-center md:grid-cols-[10rem_minmax(0,1fr)]">
+        <p class="px-6 pt-7 text-[15px] text-muted md:py-9">Models by</p>
+        <div class="marquee py-7 md:py-9" aria-label={PUBLISHERS.map((p) => p.name).join(', ')}>
+          <div class="marquee-track" aria-hidden="true">
+            {[...PUBLISHERS, ...PUBLISHERS].map((p) => (
+              <span class="inline-flex shrink-0 items-center gap-3.5 text-[22px] font-medium whitespace-nowrap text-body">
+                <Mark p={p} />
+                {p.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function Title({ kicker, children, lead }: { kicker: string; children: Child; lead?: Child }) {
+  return (
+    <div class="rule px-6 py-14 md:px-10 md:py-20">
+      <div class="max-w-3xl">
+        <p class="text-[13px] tracking-[0.14em] text-muted uppercase">{kicker}</p>
+        <h2 class={`mt-3 ${h2}`}>{children}</h2>
+        {lead ? <p class="mt-5 max-w-2xl text-base text-body md:text-lg">{lead}</p> : null}
+      </div>
+    </div>
+  )
+}
+
+const why = [
   {
-    icon: 'computer',
-    title: 'Local',
-    text: 'Runs on your machine with ONNX Runtime, on the CPU or an NVIDIA GPU. The server listens on 127.0.0.1 by default.',
+    icon: 'adjustments' as const,
+    title: 'Calibrated, not generated',
+    text: 'Every option of every question gets a probability you can put a threshold on. No parsing, no hallucinated labels.',
   },
   {
-    icon: 'code',
-    title: 'Open weights',
-    text: 'Weights come from their authors’ Hugging Face repositories, pinned to a commit and checked against sha256. Ollaya never re-hosts them, and the runtime is Apache-2.0.',
+    icon: 'computer' as const,
+    title: 'One forward pass',
+    text: `No token-by-token generation: ${result('laya:en', 'gpu.p50_ms', 0)} ms for five questions with laya:en on a GPU, and small models run well on a CPU.`,
   },
   {
-    icon: 'banknotes',
-    title: 'No per-token fees',
-    text: 'Run as many decisions as your hardware can handle. No metering and no API bill.',
-  },
-  {
-    icon: 'adjustments',
-    title: 'Calibrated',
-    text: 'Probabilities you can put thresholds on. Each model ships its own calibration, and a Modelfile refits it on your labelled data.',
+    icon: 'banknotes' as const,
+    title: 'Yours, for free',
+    text: 'Weights from their authors, pinned by sha256. Your tickets and messages never leave the machine, and there is no per-token bill.',
   },
 ]
 
-function Private() {
+function Why() {
   return (
-    <Section
-      id="private"
-      title="Your data stays yours"
-      lead="Private by default."
-      body="Tickets, emails and user messages are often the most sensitive data you have. With Ollaya they are scored where they already live."
-    >
-      <ul class="grid gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-2" role="list">
-        {pillars.map((p) => (
-          <li class="bg-canvas p-6 md:p-8">
-            <Icon name={p.icon} class="size-6 text-fg" />
-            <h3 class="mt-4 text-base font-semibold text-fg">{p.title}</h3>
-            <p class="mt-2 text-[15px] text-body">{p.text}</p>
+    <section class="frame" aria-labelledby="rd-why">
+      <Title kicker="Why decision models" lead="A decision model answers typed questions about a text or a JSON: a choice, a score, a yes or no. It is the fast, reliable half of an agent.">
+        <span id="rd-why">System 1 for your agents.</span>
+      </Title>
+      <ul class="rule grid gap-px bg-line md:grid-cols-3" role="list">
+        {why.map((w) => (
+          <li class="bg-canvas p-8">
+            <Icon name={w.icon} class="size-6 text-fg" />
+            <h3 class="mt-5 text-lg font-semibold text-fg">{w.title}</h3>
+            <p class="mt-2 text-[15px] text-body">{w.text}</p>
           </li>
         ))}
       </ul>
-    </Section>
+    </section>
+  )
+}
+
+type Cell = { text: string; ok?: boolean; dim?: boolean }
+const rows: { label: string; ollaya: Cell; ollama: Cell; jev: Cell }[] = [
+  { label: 'Best accuracy, 3,880 questions', ollaya: { text: mostAccurate.acc.toFixed(3) }, ollama: { text: vs('pplx-decider', 'ollama').acc.toFixed(3) }, jev: { text: `${JEV.acc} (typed-decisions)`, dim: true } },
+  { label: 'Latency, median request', ollaya: { text: `${mostAccurate.ms} ms` }, ollama: { text: `${vs('pplx-decider', 'ollama').ms} ms` }, jev: { text: `${JEV.text}, network included` } },
+  { label: 'Runs on your hardware', ollaya: { text: 'Yes', ok: true }, ollama: { text: 'Yes', ok: true }, jev: { text: 'Hosted only', ok: false } },
+  ...vsFeatures.map((f) => ({ label: f.label, ollaya: { text: f.ollaya }, ollama: { text: f.ollama }, jev: { text: '—', dim: true } })),
+  { label: 'Price', ollaya: { text: 'Free, Apache-2.0', ok: true }, ollama: { text: 'Free, MIT', ok: true }, jev: { text: 'Per token' } },
+]
+
+function CellView({ c, strong }: { c: Cell; strong?: boolean }) {
+  return (
+    <span class={`inline-flex items-start gap-2 ${strong ? 'text-fg' : c.dim ? 'text-muted' : 'text-body'}`}>
+      {c.ok === undefined ? null : <Icon name={c.ok ? 'check' : 'minus'} class={`mt-1 size-4 shrink-0 ${c.ok ? 'text-pass' : 'text-faint'}`} />}
+      {c.text}
+    </span>
+  )
+}
+
+type Dot = { name: string; server: 'ollaya' | 'ollama'; acc: number; ece: number; ms: number; label?: boolean }
+
+/** The most accurate tag of each model on each server, as on /results, with the ECE beside it. */
+function scatterDots(): Dot[] {
+  const best = new Map<string, Dot>()
+  for (const r of publicBench?.results ?? []) {
+    if (r.errors >= r.records * 0.05) continue
+    const key = `${r.server}/${shortName(r.model).split(':')[0]}`
+    const b = best.get(key)
+    if (!b || r.macro_accuracy > b.acc || (r.macro_accuracy === b.acc && r.median_ms < b.ms))
+      best.set(key, { name: r.server === 'ollama' ? r.model : shortName(r.model), server: r.server, acc: r.macro_accuracy, ece: r.pooled_ece, ms: r.median_ms })
+  }
+  const dots = [...best.values()].sort((a, b) => b.acc - a.acc)
+  // A label on the leaders only (Ollaya's four most accurate, Ollama's best); the rest on hover.
+  let ours = 0
+  let theirs = 0
+  for (const d of dots) {
+    if (d.server === 'ollaya' && ours < 4) d.label = ++ours > 0
+    if (d.server === 'ollama' && theirs < 1) d.label = ++theirs > 0
+  }
+  return dots
+}
+
+const LOG_TICKS = [10, 20, 50, 100, 200, 500, 1000]
+/** The model behind a tag, on either server: `kev:4b` and Ollama's `kev:4b-q8_0` are both `kev`; `clef:flash` and `clef-flash` are `clef`. */
+const familyOf = (name: string) => name.split(':')[0]!.replace(/-flash$/, '')
+/** Ollaya's Pareto front: the tags no other Ollaya tag beats on both accuracy and latency, fastest first. */
+function frontier(dots: Dot[]): Dot[] {
+  const out: Dot[] = []
+  let best = -1
+  for (const d of [...dots].filter((d) => d.server === 'ollaya').sort((a, b) => a.ms - b.ms)) if (d.acc > best) (best = d.acc), out.push(d)
+  return out
+}
+
+function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
+  const dots = scatterDots()
+  const m = { l: 58, r: 20, t: 16, b: 40 }
+  const xs = dots.map((d) => d.ms)
+  const xTicks = LOG_TICKS.filter((t, i) => (LOG_TICKS[i + 1] ?? Infinity) > Math.min(...xs) && (LOG_TICKS[i - 1] ?? 0) < Math.max(...xs))
+  const lo = Math.floor(Math.min(...dots.map((d) => d.acc)) * 10) / 10
+  const hi = Math.ceil(Math.max(...dots.map((d) => d.acc)) * 10) / 10
+  const yTicks = Array.from({ length: Math.round((hi - lo) * 10) + 1 }, (_, i) => lo + i / 10)
+  const la = Math.log(xTicks[0]!)
+  const lb = Math.log(xTicks.at(-1)!)
+  const x = (v: number) => m.l + ((Math.log(Math.max(xTicks[0]!, Math.min(xTicks.at(-1)!, v))) - la) / (lb - la)) * (W - m.l - m.r)
+  const y = (v: number) => H - m.b - ((v - lo) / (hi - lo)) * (H - m.t - m.b)
+  return (
+    <div class="relative" data-chart>
+      <div class="mb-4 flex flex-wrap items-center gap-2 text-[13px]">
+        <span class="mr-2 inline-flex items-center gap-2 text-muted">
+          <svg viewBox="0 0 24 12" class="h-3 w-6" aria-hidden="true">
+            <line x1="0" y1="6" x2="24" y2="6" class="stroke-us" stroke-width="1.5" stroke-dasharray="4 4" />
+          </svg>
+          Ollaya's frontier
+        </span>
+        {(['ollaya', 'ollama'] as const).map((srv) => (
+          <button type="button" data-series={srv} aria-pressed="true" class="inline-flex items-center gap-2 rounded-md border border-line px-2.5 py-1 text-body hover:border-line-strong aria-[pressed=false]:opacity-40">
+            <svg viewBox="0 0 12 12" class="size-3" aria-hidden="true">
+              {srv === 'ollaya' ? <circle cx="6" cy="6" r="5" class="fill-us" /> : <circle cx="6" cy="6" r="4" class="stroke-them" fill="none" stroke-width="2" />}
+            </svg>
+            {srv === 'ollaya' ? 'Ollaya' : OLLAMA}
+          </button>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} class="w-full font-sans" style={`font-size:${W < 500 ? 1.6 : 1}em`} role="img" aria-label="Accuracy against median latency on Bespoke Labs' public benchmark, the most accurate tag of each model on Ollaya and on Ollama">
+        {yTicks.map((t) => (
+          <g>
+            <line x1={m.l} x2={W - m.r} y1={y(t)} y2={y(t)} class="stroke-line" />
+            <text x={m.l - 8} y={y(t) + 4} text-anchor="end" font-size="11" class="fill-muted">
+              {t.toFixed(2)}
+            </text>
+          </g>
+        ))}
+        {xTicks.map((t) => (
+          <g>
+            <line x1={x(t)} x2={x(t)} y1={m.t} y2={H - m.b} class="stroke-line" />
+            <text x={x(t)} y={H - m.b + 16} text-anchor="middle" font-size="11" class="fill-muted">
+              {t}
+            </text>
+          </g>
+        ))}
+        <text x={(m.l + W - m.r) / 2} y={H - 4} text-anchor="middle" font-size="11" class="fill-muted">
+          median latency per question, ms (log scale)
+        </text>
+        <text transform={`translate(11 ${(m.t + H - m.b) / 2}) rotate(-90)`} text-anchor="middle" font-size="11" class="fill-muted">
+          accuracy
+        </text>
+        <polyline
+          points={frontier(dots).map((d) => `${x(d.ms).toFixed(1)},${y(d.acc).toFixed(1)}`).join(' ')}
+          fill="none"
+          class="stroke-us"
+          stroke-width="1.5"
+          stroke-dasharray="4 4"
+          opacity="0.55"
+          stroke-linejoin="round"
+        >
+          <title>Ollaya's frontier: the most accurate model at each latency</title>
+        </polyline>
+        {dots.map((d) => (
+          <g
+            class="pt"
+            tabindex={0}
+            data-name={d.name}
+            data-family={familyOf(d.name)}
+            data-x={x(d.ms).toFixed(1)}
+            data-y={y(d.acc).toFixed(1)}
+            data-server={d.server === 'ollaya' ? 'ollaya' : OLLAMA}
+            data-acc={d.acc.toFixed(3)}
+            data-ece={d.ece.toFixed(3)}
+            data-ms={Math.round(d.ms)}
+          >
+            <title>{`${d.name} on ${d.server === 'ollaya' ? 'Ollaya' : OLLAMA}: accuracy ${d.acc.toFixed(3)}, ECE ${d.ece.toFixed(3)}, ${Math.round(d.ms)} ms`}</title>
+            {d.server === 'ollaya' ? (
+              <circle cx={x(d.ms)} cy={y(d.acc)} r="5" class="dot fill-us stroke-canvas" stroke-width="1.5" />
+            ) : (
+              <circle cx={x(d.ms)} cy={y(d.acc)} r="4.5" class="dot stroke-them fill-canvas" stroke-width="2" />
+            )}
+            {d.label ? (
+              <text x={x(d.ms) + 9} y={y(d.acc) + 4} font-size="12" class={d.server === 'ollaya' ? 'fill-fg' : 'fill-them'}>
+                {d.name}
+              </text>
+            ) : null}
+          </g>
+        ))}
+      </svg>
+      <div class="tip panel panel-strong rounded-md px-1 py-1 text-[14px] text-body" data-tip hidden></div>
+    </div>
+  )
+}
+
+function Compare() {
+  return (
+    <section class="frame" aria-labelledby="rd-compare">
+      <Title
+        kicker="Measured"
+        lead={`${OLLAMA}'s nine decision models and Ollaya's, on the same ${benchGpu} and Bespoke Labs' 3,880 human-labeled questions. Ollaya runs the most accurate model and more of them, with each author's temperature. On the same weights Ollama is ${speedup()} times faster: it runs Q8_0 GGUFs where Ollaya computes the authors' BF16 weights.`}
+      >
+        <span id="rd-compare">Against Ollama and hosted Jev.</span>
+      </Title>
+      <div class="rule">
+        <table class="block w-full border-collapse text-[15px] md:table md:table-fixed">
+          <thead class="hidden md:table-header-group">
+            <tr class="border-b border-line text-left text-[13px]">
+              <th class="w-[26%] px-6 py-4 font-medium text-muted"></th>
+              <th class="w-[28%] px-6 py-4 font-medium text-fg">Ollaya</th>
+              <th class="px-6 py-4 font-medium text-muted">{OLLAMA}</th>
+              <th class="hidden px-6 py-4 font-medium text-muted md:table-cell">TypeSafe Jev, hosted</th>
+            </tr>
+          </thead>
+          <tbody class="block divide-y divide-line md:table-row-group">
+            {rows.map((r) => (
+              <tr class="block px-5 py-4 md:table-row md:p-0">
+                <th scope="row" class="block pb-2 text-left align-top font-medium text-fg md:table-cell md:px-6 md:py-3.5">
+                  {r.label}
+                </th>
+                {(
+                  [
+                    ['Ollaya', r.ollaya, true],
+                    [OLLAMA, r.ollama, false],
+                    ['TypeSafe Jev, hosted', r.jev, false],
+                  ] as const
+                ).map(([who, c, strong]) => (
+                  <td class={`flex gap-3 py-1 align-top md:table-cell md:px-6 md:py-3.5 ${strong ? 'md:bg-subtle' : ''}`}>
+                    <span class="w-28 shrink-0 text-[13px] leading-6 text-muted md:hidden">{who}</span>
+                    <CellView c={c} strong={strong} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <figure class="rule p-6 md:p-10">
+        <figcaption class="text-sm text-body">
+          <span class="font-medium text-fg">Accuracy against latency</span>, the most accurate tag of each model on each server
+        </figcaption>
+        <div class="mt-5 hidden md:block">
+          <DesignScatter />
+        </div>
+        <div class="mt-5 md:hidden">
+          <DesignScatter W={380} H={400} />
+        </div>
+        <p class="mt-6 text-sm">
+          <a href={benchUrl()} class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
+            Every model on Ollaya Bench, with the raw data <Icon name="arrowRight" class="size-4" />
+          </a>
+        </p>
+      </figure>
+    </section>
+  )
+}
+
+/** A code block with line numbers; each line is highlighted on its own (no token spans a line here). */
+function NumberedCode({ code, lang }: { code: string; lang: string }) {
+  return (
+    <pre class="code overflow-x-auto py-4 pr-12 font-mono text-fg">
+      <code class={`language-${lang}`}>
+        {code.split('\n').map((line) => (
+          <span class="ln">
+            <span dangerouslySetInnerHTML={{ __html: highlight(line, lang) || ' ' }}></span>
+          </span>
+        ))}
+      </code>
+    </pre>
+  )
+}
+
+function Api() {
+  return (
+    <section class="frame" aria-labelledby="rd-api">
+      <Title kicker="Drop-in" lead="Ollaya serves TypeSafe's request and response shapes. Point the official SDK at localhost and nothing else changes.">
+        <span id="rd-api">Jev-compatible, self-hosted.</span>
+      </Title>
+      <div class="rule grid gap-px bg-line xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+        {[
+          ['Request', compatRequest, 'shell'],
+          ['Response', compatResponse, 'json'],
+        ].map(([label, code, lang]) => (
+          <div class="relative flex flex-col bg-canvas" data-copy-scope>
+            <div class="border-b border-line px-5 py-3 text-xs font-medium text-muted">{label}</div>
+            <NumberedCode code={code!} lang={lang!} />
+            <CopyButton class="absolute top-1.5 right-2" />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** A model as a card: who made it, what it is, and its numbers from the bench. */
+export function ModelCard({ m }: { m: (typeof catalog)[number] }) {
+  const summary = (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).replace(/\.$/, '')
+  return (
+    <a href={`/library/${m.name}`} class="group flex h-full flex-col bg-canvas p-6 transition-colors hover:bg-subtle">
+      <div class="flex items-baseline justify-between gap-3">
+        <span class="font-mono text-[17px] text-fg group-hover:underline underline-offset-4">{m.name}</span>
+        <span class="truncate text-xs text-muted">{m.publisher?.name ?? ''}</span>
+      </div>
+      <p class="mt-3 line-clamp-3 flex-1 text-[14px] text-body">{summary}</p>
+      <dl class="mt-6 flex items-end justify-between gap-4 border-t border-line pt-4">
+        <div>
+          <dd class="text-2xl font-semibold tracking-[-0.02em] text-fg tabular-nums">{m.stats?.accuracy ? m.stats.accuracy.toFixed(3) : '—'}</dd>
+          <dt class="text-xs text-muted">accuracy</dt>
+        </div>
+        <div>
+          <dd class="text-2xl font-semibold tracking-[-0.02em] text-fg tabular-nums">{m.stats?.latencyMs ? `${Math.round(m.stats.latencyMs)} ms` : '—'}</dd>
+          <dt class="text-xs text-muted">five questions</dt>
+        </div>
+        <div class="text-right text-xs text-muted">{m.sizes.join(' · ')}</div>
+      </dl>
+    </a>
+  )
+}
+
+function Models() {
+  const top = [...catalog].sort((a, b) => a.rank - b.rank).slice(0, 6)
+  return (
+    <section class="frame" aria-labelledby="rd-models">
+      <Title kicker="Open models" lead={`${catalog.length} families from their authors, pulled by name. Every number here is from Ollaya Bench on an ${benchGpu}.`}>
+        <span id="rd-models">Open weights, ready to pull.</span>
+      </Title>
+      <ul class="rule grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-3" role="list">
+        {top.map((m) => (
+          <li class="flex">
+            <ModelCard m={m} />
+          </li>
+        ))}
+      </ul>
+      <p class="rule px-6 py-5 text-sm">
+        <a href="/search" class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
+          Browse all {catalog.length} models <Icon name="arrowRight" class="size-4" />
+        </a>
+      </p>
+    </section>
+  )
+}
+
+function Closer({ origin }: { origin: string }) {
+  return (
+    <section class="relative overflow-hidden" aria-labelledby="rd-closer">
+      <div class="field" aria-hidden="true">
+        <i class="a" style="top:auto;bottom:-30vw"></i>
+        <i class="b" style="top:auto;bottom:-20vw"></i>
+      </div>
+      <div class="frame rule relative px-5 py-28 text-center">
+        <LogoMark class="mx-auto size-14 text-fg" />
+        <h2 id="rd-closer" class={`mt-6 ${h2} md:text-6xl`}>
+          Up and running in a minute.
+        </h2>
+        <p class="mx-auto mt-5 max-w-md text-body">macOS, Windows, Linux and Docker. CPU, NVIDIA and Apple GPUs.</p>
+        <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Install origin={origin} />
+          <a href="/download" class="inline-flex h-11 items-center gap-2 rounded-md bg-btn px-5 text-sm font-medium text-btn-fg hover:bg-btn-hover">
+            <Icon name="download" class="size-4" />
+            Download
+          </a>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -849,15 +753,13 @@ function SupportCell({ label, s }: { label: string; s: Support }) {
   )
 }
 
-function Platforms() {
+function PlatformsSection() {
   return (
-    <Section
-      id="platforms"
-      title="Platforms"
-      lead="Runs where you work."
-      body="A desktop app and a command line for macOS, Windows and Linux, and a Docker image for servers. Every model runs on the CPU; an NVIDIA GPU on Linux, Windows, WSL 2 or Docker takes a request down to milliseconds."
-    >
-      <div class="overflow-hidden rounded-2xl border border-line">
+    <section class="frame" aria-labelledby="platforms">
+      <Title kicker="Platforms" lead="A desktop app and a command line for macOS, Windows and Linux, and a Docker image for servers. Every model runs on the CPU; an NVIDIA GPU on Linux, Windows, WSL 2 or Docker takes a request down to milliseconds.">
+        <span id="platforms">Runs where you work.</span>
+      </Title>
+      <div class="rule">
         <table class="block w-full border-collapse md:table md:table-fixed">
           <thead class="hidden border-b border-line bg-subtle md:table-header-group">
             <tr>
@@ -886,7 +788,7 @@ function Platforms() {
           </tbody>
         </table>
       </div>
-      <div class="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div class="rule flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
         <a href="/download" class="inline-flex items-center gap-1.5 text-sm font-medium text-fg underline-offset-4 hover:underline">
           Install for your platform <Icon name="arrowRight" class="size-4" />
         </a>
@@ -895,32 +797,21 @@ function Platforms() {
           On a Mac, laya and nli run on the Apple GPU through MLX; other models, AMD and Intel GPUs, and the Windows and Linux desktop apps without the command line installed use the CPU.
         </p>
       </div>
-    </Section>
+    </section>
   )
 }
 
-function Closer() {
+export function HomePage({ origin }: { origin: string }) {
   return (
-    <section class="mx-auto mt-24 max-w-6xl px-4 text-center md:mt-36 md:px-6" aria-labelledby="closer-title">
-      <LogoMark class="mx-auto size-20 text-fg" />
-      <h2 id="closer-title" class="mt-6 text-3xl font-medium tracking-tight text-fg md:text-4xl">
-        Get up and running in minutes.
-      </h2>
-      <p class="mx-auto mt-3 max-w-md text-body">
-        One binary, one command: <code class="font-mono text-[0.9em] text-fg">ollaya run winnow:e4b</code>.
-      </p>
-      <div class="mt-8 flex justify-center">
-        <a href="/download" class={btnPrimary}>
-          <Icon name="download" class="size-4" />
-          Download
-        </a>
-      </div>
-      <p class="mt-4 text-[13px] text-muted">
-        macOS, Windows, Linux and Docker · Apache-2.0 ·{' '}
-        <a href={GITHUB_URL} class={textLink}>
-          GitHub
-        </a>
-      </p>
-    </section>
+    <>
+      <Hero origin={origin} />
+      <Proof />
+      <Why />
+      <Compare />
+      <Api />
+      <Models />
+      <PlatformsSection />
+      <Closer origin={origin} />
+    </>
   )
 }

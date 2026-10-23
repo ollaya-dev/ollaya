@@ -55,7 +55,7 @@ const fileSet = new Set(files)
 
 // 2. CSS ---------------------------------------------------------------------------------------
 const css = await readFile(join(dist, 'static/app.css'), 'utf8').catch(() => '')
-for (const token of ['--color-canvas', '--color-fg', 'prefers-color-scheme:dark', '.prose']) {
+for (const token of ['--color-canvas', '--color-fg', '.frame', '.prose']) {
   if (!css.includes(token)) errors.push(`dist/static/app.css is missing ${token}`)
 }
 

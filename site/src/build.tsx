@@ -37,7 +37,6 @@ import { MODEL } from './data/try'
 import { llmsFullTxt, llmsTxt } from './pages/llms'
 import { ContributorsPage } from './pages/contributors'
 import { StatsPage } from './pages/stats'
-import { DesignPage } from './pages/design'
 
 export { withReadmeBlocks } from './data/readme'
 
@@ -94,7 +93,7 @@ interface Page {
 /** Every HTML page of the site. Also the sitemap, in this order. */
 function pages(origin: string): Page[] {
   const list: Page[] = [
-    { url: '/', meta: { jsonLd: softwareJsonLd(origin) }, render: () => <HomePage /> },
+    { url: '/', meta: { jsonLd: softwareJsonLd(origin), fullBleed: true }, render: () => <HomePage origin={origin} /> },
     {
       url: '/search',
       meta: {
@@ -254,8 +253,6 @@ export async function renderSite({ origin, bench, assetVersions, stars }: BuildO
     ),
   })
   out.push({ path: 'library.html', body: await toHtml(<LibraryRedirect origin={origin} />) })
-  // The next design, as a demo (noindex, not in the sitemap).
-  out.push({ path: 'design.html', body: await toHtml(<DesignPage origin={origin} />) })
   out.push({ path: 'robots.txt', body: robotsTxt(origin) })
   out.push({ path: 'sitemap.xml', body: sitemapXml(origin, all.map((p) => p.url)) })
   out.push({ path: 'search.json', body: `${JSON.stringify(searchIndex())}\n` })
