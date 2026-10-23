@@ -34,6 +34,9 @@ Results name machines by hardware (`results/machines.json`), never by host name.
 | Release builds | GitHub Actions (`release.yml`) | About 20 minutes: `release.yml` (four platforms, the GPU packs, the images) and `desktop.yml` run in parallel; 0.13.0 took 16 and 19 |
 | Registry and site deploy | The machine with `registry/blobs` and a `wrangler` login | The blobs are not in git; `node site/scripts/fetch-blobs.mjs` restores them from the live site |
 
+The hosts behind `rtx-4090` and `rtx-5090`, what else not to run on them, and `scripts/remote-job.sh`, which sends them
+a job in tmux and waits for it: [Remote jobs](remote-jobs.md).
+
 A contributor can run stages 2 and 4 on their own hardware. Their results go in as a `community-<gpu>` machine
 (see [Run it yourself](#run-it-yourself)).
 

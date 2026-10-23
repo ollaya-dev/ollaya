@@ -165,7 +165,7 @@ jobs:
       - name: GGUF packaging tests (no weights or ML dependencies)
         run: python3 -m unittest discover -s convert/tests -v
       - name: ShellCheck
-        run: shellcheck scripts/install.sh scripts/package.sh scripts/llama-cpp.sh scripts/cuda-pack-key.sh scripts/wait-artifact.sh packaging/docker-healthcheck.sh
+        run: shellcheck scripts/install.sh scripts/package.sh scripts/llama-cpp.sh scripts/cuda-pack-key.sh scripts/wait-artifact.sh scripts/remote-job.sh packaging/docker-healthcheck.sh
       - name: install.sh parses under dash
         run: dash -n scripts/install.sh
       - name: install.sh embeds packaging/ollaya.service unchanged
