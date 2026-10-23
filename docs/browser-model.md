@@ -99,7 +99,8 @@ Ollaya's runtime gives the same answers (parity below).
 | fp150-T | 150m | fp | gold + teacher | 0.765 | 0.541 | 0.594 zero-shot |
 | fp150-id-T | 150m | fp | + in-domain | 0.765 | 0.544 | 0.705 in-domain |
 | fp68-id-T | 68m | fp | + in-domain | 0.731 | 0.476 | 0.697 in-domain |
-| fp400-T | 400m | fp | gold + teacher | **0.824** | **0.606** | 0.605 zero-shot |
+| fp400-T | 400m | fp | gold + teacher | 0.824 | **0.606** | 0.605 zero-shot |
+| fp400-T-e2 | 400m | fp | gold + teacher, 2 epochs | **0.839** | 0.577 | 0.604 zero-shot |
 | fp400-id-T | 400m | fp | + in-domain | 0.811 | 0.573 | **0.749** in-domain |
 | t150-T3w | 150m | ternary | gold + teacher | 0.718 | 0.502 | 0.478 zero-shot |
 | t150-id-T3w | 150m | ternary | + in-domain | 0.736 | 0.531 | 0.688 in-domain |
@@ -113,6 +114,8 @@ For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed
 - The in-domain rows lift the public score by 0.11 (150m) and 0.14 (400m). They leave typed-decisions where it was
   at 150m (0.541 to 0.544) but cost 0.033 at 400m, nearly all of it on yes/no questions (0.702 to 0.582; at
   150m those went the other way, 0.638 to 0.687), so part of it may be noise on about 100 rows.
+- A second epoch (fp400-T-e2) lifts val by 0.015 but costs 0.029 typed and leaves public flat: it fits the
+  training distribution better, not the held-out suites. One epoch stays.
 - 150m to 400m gains 0.05–0.06 val, 0.03–0.065 typed and 0.01–0.044 public.
 - Ternary (recipe T3w: QAT from the fp model, logit + relation + every-layer hidden-state distillation from it,
   quantization warm-up over 30% of the steps, 4-bit embeddings) keeps 96% of the fp model's val and 98% of its
@@ -184,8 +187,8 @@ The model loads straight from its Hugging Face repository: `load(fromHub('<org>/
 
 1. Browser runtime with `largha:150m`, parity in Node and Chrome. Done.
 2. Data and teacher labels. Done.
-3. fp students (ettin-150m, then 400m, maybe 1b): benchmark, pick one. 150m, 68m and 400m done; 1b training.
-4. Ternary student: accuracy loss against the fp one, size. 150m and 68m done (2-bit browser graph); 400m training.
+3. fp students (ettin-150m, then 400m, maybe 1b): benchmark, pick one. 150m, 68m and 400m done (a second epoch did not help); 1b training.
+4. Ternary student: accuracy loss against the fp one, size. 150m, 68m and 400m done (2-bit browser graph); zero-shot 400m training.
 5. Name, Hugging Face repository, registry, demo page, install guide; release with the next batched version.
    Demo page, npm package, card template and staging done; the rest waits for the name.
 
