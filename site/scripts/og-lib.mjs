@@ -93,7 +93,8 @@ export async function renderCards(cards, out) {
       await mkdir(dirname(target), { recursive: true })
       const r = spawnSync(
         bin,
-        ['--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1', '--window-size=1200,630', '--virtual-time-budget=5000', `--screenshot=${target}`, `file://${html}`],
+        // Headless with its own profile, so a Chrome the user has open is not asked to take the shot (it would silently not).
+        ['--headless=new', `--user-data-dir=${join(tmp, 'profile')}`, '--no-sandbox', '--hide-scrollbars', '--force-device-scale-factor=1', '--window-size=1200,630', '--virtual-time-budget=5000', `--screenshot=${target}`, `file://${html}`],
         { encoding: 'utf8' },
       )
       if (r.status !== 0 || !existsSync(target)) throw new Error(`rendering ${card.file} failed:\n${r.stderr}`)
