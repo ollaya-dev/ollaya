@@ -2,14 +2,14 @@ import type { Child } from 'hono/jsx'
 import { asset } from '../lib/assets'
 import { ANALYTICS, SITE_DESCRIPTION, SITE_NAME, TAGLINE } from '../site'
 import { Footer } from './Footer'
-import { Header, type NavKey } from './Header'
+import { Header, type PageNav } from './Header'
 
 export interface PageMeta {
   /** Page title without the site suffix. Omit on the home page. */
   title?: string
   description?: string
   /** Highlighted top-nav item. */
-  nav?: NavKey
+  nav?: PageNav
   /** Hide the navbar search box (the /search page has its own). */
   hideNavSearch?: boolean
   noindex?: boolean
@@ -57,6 +57,7 @@ export function Layout({ origin, path, meta, children }: LayoutProps) {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content={ogImage} />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="alternate" type="application/rss+xml" title={`${SITE_NAME} blog`} href="/blog/rss.xml" />
         {meta.jsonLd ? (
           // `<` escaped so no string in the data can close the script element.
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(meta.jsonLd).replaceAll('<', '\\u003c') }}></script>

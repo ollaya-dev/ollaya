@@ -62,6 +62,19 @@ export function modelJsonLd(model: Model, origin: string): object {
   }
 }
 
+/** schema.org BlogPosting for a blog post. */
+export function blogPostingJsonLd(post: { slug: string; title: string; date: string; summary: string }, origin: string): object {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: post.summary,
+    datePublished: post.date,
+    url: `${origin}/blog/${post.slug}`,
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: origin },
+  }
+}
+
 const text = (html: string) =>
   html
     .replace(/<[^>]+>/g, '')

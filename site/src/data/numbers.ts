@@ -6,6 +6,7 @@
  *
  * Paths, per tag, from the current Ollaya Bench edition and the releases that updated it (a later row wins):
  *   score, score_ci.0, score_ci.1     the edition score
+ *   tasks.<task>                      one task's chance-corrected score in it (tasks.typed-decisions, …)
  *   typed.<field>                     typed-decisions (accuracy, ece, median_ms, …)
  *   public.<field>                    Bespoke Labs' public benchmark (macro_accuracy, pooled_ece, median_ms, …)
  *   gpu.<field>, cpu.<field>          latency-triage on the edition's machine (p50_ms, vram_mb, ram_peak_mb, load_ms, …)
@@ -54,7 +55,7 @@ export function value(tag: string, path: string): number {
   if (head === 'parity') {
     row = parity.get(`${tag}/${rest[0]}`)
     keys = rest.slice(1)
-  } else if (head === 'score') {
+  } else if (head === 'score' || head === 'score_ci' || head === 'tasks') {
     row = tables.score!.get(tag)
     keys = [head, ...rest]
   } else {

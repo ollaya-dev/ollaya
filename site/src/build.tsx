@@ -18,7 +18,7 @@ import type { Child } from 'hono/jsx'
 import { withResults } from './data/numbers'
 import { Layout, type PageMeta } from './components/Layout'
 import { catalog, featuredTags, fullName, getTag, searchIndex } from './data/catalog'
-import { docPages, readmes } from './generated/content'
+import { blogPosts, docPages, readmes } from './generated/content'
 import { hasAsset, setAssetVersions } from './lib/assets'
 import { setBenchOrigin } from './lib/bench'
 import { setGithubStars } from './lib/stars'
@@ -26,7 +26,7 @@ import { DocsIndex, DocView, withOrigin } from './pages/docs'
 import { DownloadPage } from './pages/download'
 import { HomePage } from './pages/home'
 import { LibraryRedirect, ModelPage, TagPage, TagsPage } from './pages/library'
-import { faqJsonLd, modelJsonLd, robotsTxt, sitemapXml, softwareJsonLd } from './pages/meta'
+import { blogPostingJsonLd, faqJsonLd, modelJsonLd, robotsTxt, sitemapXml, softwareJsonLd } from './pages/meta'
 import { NotFoundPage } from './pages/notFound'
 import { accuracyScatter, ResultsPage, speedDots } from './pages/results'
 import { DotPlot, Scatter } from './components/charts'
@@ -37,6 +37,7 @@ import { MODEL } from './data/try'
 import { llmsFullTxt, llmsTxt } from './pages/llms'
 import { ContributorsPage } from './pages/contributors'
 import { StatsPage } from './pages/stats'
+import { BlogIndex, BlogPostView, rssXml } from './pages/blog'
 
 export { withReadmeBlocks } from './data/readme'
 
@@ -163,6 +164,19 @@ function pages(origin: string): Page[] {
       },
       render: () => <ContributorsPage />,
     },
+    {
+      url: '/blog',
+      meta: { title: 'Blog', description: 'Releases, models and measurements from Ollaya.', nav: 'blog' },
+      render: () => <BlogIndex />,
+    },
+    ...blogPosts.map((post) => {
+      const html = withResults(withOrigin(post.html, origin))
+      return {
+        url: `/blog/${post.slug}`,
+        meta: { title: post.title, description: post.summary, nav: 'blog' as const, jsonLd: blogPostingJsonLd(post, origin) },
+        render: () => <BlogPostView post={post} html={html} />,
+      }
+    }),
     ...docPages.map((page) => {
       const html = withResults(withOrigin(page.html, origin))
       return {
@@ -259,6 +273,7 @@ export async function renderSite({ origin, bench, assetVersions, stars }: BuildO
   out.push({ path: 'data/library.json', body: `${JSON.stringify(appLibrary())}\n` })
   out.push({ path: 'llms.txt', body: llmsTxt(origin, bench, docPages, catalog) })
   out.push({ path: 'llms-full.txt', body: llmsFullTxt(origin, docPages) })
+  out.push({ path: 'blog/rss.xml', body: rssXml(origin) })
   // The measurements behind /results, as the tools wrote them (../results/runs), under /data so they do not shadow the /results page.
   for (const { file, ...run } of runs) out.push({ path: `data/results/${file}`, body: `${JSON.stringify(run, null, 1)}\n` })
   // Two charts as their own .svg files, for the README (light and dark through prefers-color-scheme).

@@ -127,13 +127,21 @@ function MobileMenu() {
               Download
             </a>
           </li>
+          <li>
+            <a href="/blog" class="block py-2 hover:underline underline-offset-4">
+              Blog
+            </a>
+          </li>
         </ul>
       </div>
     </details>
   )
 }
 
-export function Header({ active, hideSearch }: { active?: NavKey; hideSearch?: boolean }) {
+/** What a page highlights in the top nav: a main section, or the blog, which is linked after them. */
+export type PageNav = NavKey | 'blog'
+
+export function Header({ active, hideSearch }: { active?: PageNav; hideSearch?: boolean }) {
   return (
     <header class="sticky top-0 z-40 bg-canvas">
       <nav aria-label="Main" class="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-4 md:gap-6 md:px-6">
@@ -153,6 +161,15 @@ export function Header({ active, hideSearch }: { active?: NavKey; hideSearch?: b
                 </a>
               </li>
             ))}
+            <li>
+              <a
+                href="/blog"
+                class={`underline-offset-4 hover:text-fg hover:underline ${active === 'blog' ? 'font-medium text-fg' : 'text-body'}`}
+                aria-current={active === 'blog' ? 'page' : undefined}
+              >
+                Blog
+              </a>
+            </li>
           </ul>
         </div>
         <div class="hidden min-w-0 flex-1 justify-center md:flex lg:w-[22rem] lg:flex-none">
