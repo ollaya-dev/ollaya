@@ -1,6 +1,6 @@
 # coba: distilled decision encoders, in full precision and ternary
 
-Technical report, draft of 2026-10-23. Ollaya.
+Technical report, draft of 2026-10-24. Ollaya.
 
 ## Abstract
 
@@ -65,7 +65,15 @@ In `ettin-encoder-150m`, the token embeddings are 38.7M of the roughly 150M para
 head adds about 10M parameters at d = 768.[^16] The encoder's configuration marks which layers use global
 (full) attention; the training script takes the last of them for relation distillation (Section 6.3).[^17]
 
-<!-- TODO: layer count, hidden size and attention heads of each Ettin size; not in the sources. -->
+| Encoder | Layers | Hidden size | Attention heads | Intermediate size |
+|---|---:|---:|---:|---:|
+| `ettin-encoder-68m` | 19 | 512 | 8 | 768 |
+| `ettin-encoder-150m` | 22 | 768 | 12 | 1,152 |
+| `ettin-encoder-400m` | 28 | 1,024 | 16 | 2,624 |
+| `ettin-encoder-1b` | 28 | 1,792 | 28 | 3,840 |
+
+Every size uses global attention in every third layer and local attention over a 128-token window in the others,
+with a vocabulary of 50,368 tokens.[^105]
 
 ## 3. Data
 
@@ -109,21 +117,24 @@ tags).[^26]
 
 The main set is capped at 400,000 questions. Each of the four datasets sampled whole may fill at most 25% of the cap;
 the jev sub-sources share the rest with one equal per-source cap, found by water-filling.[^27] The result is
-399,962 questions.[^19] The model card and the library page describe the training data as "about 350,000"
-questions.[^28]
-
-<!-- TODO: reconcile 399,962 sampled questions (licenses.tsv) with "about 350,000" (card.md, library page): the
-validation split, teacher rejections and train.py's skipped questions are candidates, but the sources do not say. -->
+399,962 questions.[^19] They sit in 343,955 rows (states): 287,281 choice, 69,630 noul and 43,051 score
+questions.[^106] The model card and the library page describe the training data as "about 350,000" questions;[^28]
+that figure matches the row count, not the question count.
 
 ### 3.3 Teacher labels
 
 `train/data/label.py` sends each row's state and questions (at most 64 questions per request) to an Ollaya daemon's
 `/v1/systemone` and stores the teacher's full probability distribution for every question, in option order. A row the
 teacher rejects is stored with its error instead and gets no teacher label.[^29] The script's default model is
-`pplx-decider:flash-fp16`; the labels were computed through Ollaya on an RTX 5090.[^30]
+`pplx-decider:flash-fp16`.[^30]
 
-<!-- TODO: which teacher tag produced the shipped labels (pplx-decider:flash or its -fp16 graph), and how many rows
-the teacher rejected. -->
+The shipped labels come from `pplx-decider:flash-fp16`, the teacher's fp16 graph, served by Ollaya 0.16.0 on CUDA.
+Three daemons on `hope-wsl`'s RTX 5090 labeled `main.jsonl` from its first row. One daemon on `white`'s RTX 3090
+labeled the same rows in reverse order (`main.rev.jsonl`), so the two met in the middle. The in-domain rows were
+labeled the same way.[^107] The teacher rejected no row: the label files hold no `error` record, and every row of
+`main.jsonl` (343,955) and every in-domain id (178,116) has a teacher label.[^108] Some rows were labeled twice:
+1,239 main rows, where the two machines met, and 3,455 lines of the in-domain label files repeat an id. `train.py`
+keeps the first label it reads for an id, so `hope-wsl`'s files take precedence.[^108][^109]
 
 ### 3.4 What was held out
 
@@ -163,16 +174,28 @@ mostly BoolQ passages that recur across its splits.[^34]
 Only the ternary tags trained with these rows; the fp tags' data and teacher labels include none of the benchmark's
 datasets.[^36]
 
-<!-- TODO: whether the in-domain rows were also labeled by the teacher or carry gold only, and whether each ternary
-tag's fp starting checkpoint (--init / --kd-from) also trained on them. -->
+The in-domain rows carry teacher labels too: every ternary run reads `teacher-indomain.jsonl` and
+`teacher-indomain-white.jsonl` beside the main label files.[^110] Each ternary tag starts from an fp run of its own
+size and distills from it. That run trained on the same main and in-domain rows with the same labels: `fp400-id-T`,
+`fp150-id-T` or `fp68-id-T`. It is not the zero-shot `fp400-T` that ships as `coba:400m`.[^110][^111]
+
+`indomain.jsonl`'s 180,775 rows carry 178,116 distinct ids: 2,058 ids repeat, accounting for 2,659 extra rows. For
+21 of those ids the repeated rows differ. Teacher labels are matched by id (Section 3.3), so one row of each such
+pair may train on the other's teacher distribution.[^112]
 
 ### 3.6 Validation split
 
 Accuracy during training (`val`) is measured on a held-out slice of the training data, and the calibration
 temperatures are fitted on it (Section 4.4).[^37]
 
-<!-- TODO: size of the validation slice, how it was cut from main.jsonl, and how main.jsonl, teacher.jsonl and
-indomain.jsonl were combined into train.py's --data, --teacher and --val files. -->
+The validation file is `main-val.jsonl`: 3,475 of `main.jsonl`'s 343,955 rows (1.0%, 4,074 questions), spread over
+the whole file and kept in its order. `main-train.jsonl` holds the other 340,480 rows (395,888 questions).[^112] How
+the split was cut was not recorded. Every run, fp and ternary, validates on this same file, which has no in-domain
+rows.[^113]
+
+The in-domain training file `main-id-train.jsonl` is `main-train.jsonl` followed by `indomain.jsonl`, joined with
+`cat`: 521,255 rows, 576,663 questions.[^112][^114] Teacher labels stay in their own files. `train.py` reads them
+from `--teacher` and matches them to rows by id (Section 3.3).[^109]
 
 ## 4. Distillation from `pplx-decider:flash`
 
@@ -209,8 +232,15 @@ averaged over the batch, with w_rps = 1.0 by default, plus 0.1 times the act hea
 - The fp runs train for one epoch: a second epoch on the 400m raised `val` by 0.015 but lowered typed-decisions by
   0.029 and left the public score flat.[^44]
 
-<!-- TODO: the exact hyperparameters of fp1b-T and fp400-T (rl_agent_config.json "training"), the training time,
-and the GPU they trained on. -->
+The two shipped fp runs used these defaults, and their saved configurations record them:
+
+- one epoch at batch size 32, 12,372 steps;
+- learning rates 5e-5 (encoder) and 2e-4 (head);
+- weight decay 0.01 and alpha 0.5;
+- gradient checkpointing on.
+
+`fp1b-T` trained on `hope-wsl`'s RTX 5090 in 2.61 hours. `fp400-T` trained on `choso-wsl`'s RTX 4090 in 1.56
+hours.[^115][^116]
 
 ### 4.4 Calibration temperatures
 
@@ -219,7 +249,15 @@ searches 0.5 to 5.0 in steps of 0.01 for the value that minimizes the negative l
 argmax, or the target's argmax when there is no gold). laya clamps the temperatures to [0.5, 5]. They are saved in
 `rl_agent_config.json` as `temperature`.[^45]
 
-<!-- TODO: the fitted temperatures of each shipped tag. -->
+| Tag | choice | score | noul |
+|---|---:|---:|---:|
+| `coba:1b` | 0.89 | 0.80 | 0.69 |
+| `coba:400m` | 0.91 | 0.91 | 0.55 |
+| `coba:400m-ternary` | 1.03 | 0.81 | 0.76 |
+| `coba:150m-ternary` | 1.02 | 0.90 | 0.86 |
+| `coba:68m-ternary` | 0.96 | 0.83 | 0.79 |
+
+[^117]
 
 ### 4.5 Development measurements
 
@@ -280,8 +318,17 @@ relation and every-layer hidden-state distillation from it, a quantization warm-
 embeddings.[^53] `train/ternary.py` does not use the name. The model card states the quantizer as absmean per
 row.[^54] In the pilot matrix of `ternary-research.md`, T3 is the variant with a learned scale.[^55]
 
-<!-- TODO: confirm the quantizer of the shipped T3w runs (absmean or learned) from rl_agent_config.json
-"training.quant", and what the "w" in T3w stands for. -->
+The shipped runs used absmean, not the learned scale. Every ternary run passes `--quant absmean`, and the published
+configurations record `training.quant: absmean`.[^110] The run names follow the development pilots, not the research
+matrix:
+
+- `T0`: quantization-aware training alone;
+- `T1`: adds logit distillation;
+- `T2`: logit and relation distillation;
+- `T2w`: `T2` plus a quantization warm-up;
+- `T3w`: `T2w` plus every-layer hidden-state distillation.
+
+The `w` stands for the warm-up.[^118]
 
 ### 6.1 The absmean quantizer
 
@@ -305,7 +352,7 @@ instead, initialized where it equals absmean.[^58]
   and inside the decision head.[^59]
 - **4 bits:** the token embeddings, per row: s = max|row| / 7, codes clamp(round(w / s), -7, 7) (the general form is
   s = max|row| / (2^(b-1) - 1)).[^60] The recipe uses 4 bits, with 8 as the fallback.[^16]
-- **Full precision:** the norms, the question-type embedding and the scorer.[^10]
+- **Full precision:** the norms, the question-type embedding, the scorer and the act head.[^10][^119]
 
 ### 6.3 Distillation from the fp model
 
@@ -324,8 +371,15 @@ two teachers.[^62] The loss is Section 4.2's loss on the mixed targets plus thre
 
 The total is L + kd * L_kd + rel * L_rel + hid * L_hid. The script's usage example passes `--kd 1 --rel 1 --wd 0`.[^67]
 
-<!-- TODO: the kd, rel and hid weights, learning rates, weight decay and --emb-bits of the shipped T3w runs, and
-which fp checkpoint each one started from. -->
+The three shipped ternary runs use:
+
+- loss weights kd 1, rel 10 and hid 1, with `--kd-tau` at its default 2.0;
+- learning rates 5e-5 (encoder) and 1e-4 (head), weight decay 0;
+- 4-bit embeddings (`--emb-bits 4`);
+- batch size 32 and two epochs, 36,042 steps.
+
+`t400-id-T3w-e2` starts from and distills from `fp400-id-T`, `t150-id-T3w-e2` from `fp150-id-T`, and
+`t68-id-T3w-e2` from `fp68-id-T`.[^110]
 
 ### 6.4 Schedule
 
@@ -338,7 +392,9 @@ which fp checkpoint each one started from. -->
   ParetoQ.[^70]
 - The share of zero weights is logged at every evaluation, since a runaway value signals a collapsing scale.[^71]
 
-<!-- TODO: the zero ratio of each shipped ternary checkpoint. -->
+In the finished checkpoints, 31.38% of `coba:400m-ternary`'s ternary weights are zero, 31.39% of
+`coba:150m-ternary`'s and 32.94% of `coba:68m-ternary`'s. Per tensor, the share runs from 27% to 28% (the decision
+head's second feed-forward layer) up to 35% to 39% (the last encoder layer's QKV projection).[^119]
 
 During development (Section 4.5's reference measurements), T3w kept 96% of the fp model's `val` and 98% of its typed
 and in-domain public scores at 150m, and 96% to 98% at 400m.[^72]
@@ -388,8 +444,10 @@ questions with states up to 512 tokens.[^4] For the 150m, the 2-bit graph agains
 weights: 63 MB (one file, plus a 3.6 MB tokenizer) against 57 MB packed, 0.5 GB resident against 2.5 GB, 0.3 s load
 against 1.2 s, and 1.9 s against 1.6 s for five requests.[^79]
 
-<!-- TODO: confirm the browser size and speed rows were measured on the shipped runs (the 400m row may be
-t400-id-T3w rather than t400-id-T3w-e2). -->
+The graph sizes are those of the shipped files. In the three Hugging Face repositories, `onnx/model.onnx` is
+31.6 MB, 63.0 MB and 143.8 MB, and the tokenizer is 3.6 MB.[^120] Which 400m run the memory and speed were measured
+on was not recorded. At 400m, `browser-model.md`'s browser parity list names only the one-epoch `t400-id-T3w`. The two
+runs have the same graph shapes.[^84]
 
 ### 7.3 The /try runtime
 
@@ -405,8 +463,8 @@ Browser parity was checked with `web/parity.mjs` against Ollaya's native runtime
 the API accepts: every decision the same and probabilities within 2e-6, for the 2-bit graphs of `t150-id-T3w-e2`,
 `t68-id-T3w-e2` and `t400-id-T3w`, among others.[^84]
 
-<!-- TODO: browser parity for t400-id-T3w-e2, the run that ships as coba:400m-ternary; the sources list only the
-one-epoch t400-id-T3w. -->
+Browser parity for `t400-id-T3w-e2`, the run that ships as `coba:400m-ternary`, was not recorded. The release parity
+in Section 8.6 covers only its native runtime.
 
 ## 8. Results
 
@@ -510,8 +568,10 @@ Every tag has the same 453 errors out of 3,880 requests, and a rejected request 
 `pubmedqa` (11) and `aegis2` (8).[^91] `/v1/systemone`, which the benchmark runner calls, rejects a state
 it would have to truncate to fit the model's context with `422 STATE_TRUNCATED`.[^92]
 
-<!-- TODO: confirm that the 453 public-benchmark errors and the 7 typed-decisions errors are all STATE_TRUNCATED; the
-run files record only the counts. -->
+Every tag's 7 typed-decisions errors are `STATE_TRUNCATED`: the raw rows record each error's response
+body.[^121] For the public benchmark's 453, the runner records only `TypeSafe HTTP 422`, so their error code was not
+recorded. They fall in the same subsets with the same counts for all five tags. `laya:en` also fails 453 public
+requests and 7 typed ones, and all 7 typed failures are `STATE_TRUNCATED`.[^91][^121][^122]
 
 ### 8.5 Latency
 
@@ -605,9 +665,32 @@ uv run train.py ... --init runs/fp150 --quant absmean --kd-from runs/fp150 --kd 
 
 [^100][^101]
 
-<!-- TODO: the full command lines of the shipped runs (fp1b-T, fp400-T, t400-id-T3w-e2, t150-id-T3w-e2,
-t68-id-T3w-e2), including --emb-bits 4, --hid, --quant-warmup 0.3 and --epochs 2, and the step that builds
-train.jsonl and val.jsonl from main.jsonl and indomain.jsonl. -->
+The shipped runs' command lines come from the scripts that started them. None was rebuilt from a configuration, and
+their flags agree with each run's saved `training` block.[^123]
+
+```sh
+# The in-domain training file; main-val.jsonl was cut from main.jsonl beforehand (how was not recorded)
+cat data/main-train.jsonl data/indomain.jsonl > data/main-id-train.jsonl
+M=data/teacher-main.jsonl,data/teacher-main-white.jsonl
+I=$M,data/teacher-indomain.jsonl,data/teacher-indomain-white.jsonl
+
+# coba:1b and coba:400m (zero-shot); <s> is 1b or 400m
+train.py --backbone jhu-clsp/ettin-encoder-<s> --data data/main-train.jsonl --teacher $M --val data/main-val.jsonl \
+    --out runs/fp<s>-T --bs 32 --epochs 1 --eval-every 2000 --workers 8 --grad-ckpt --name fp<s>-T
+
+# The ternary tags' fp starting points; <s> is 400m, 150m or 68m (--grad-ckpt on the 400m only)
+train.py --backbone jhu-clsp/ettin-encoder-<s> --data data/main-id-train.jsonl --teacher $I --val data/main-val.jsonl \
+    --out runs/fp<s>-id-T --bs 32 --epochs 1 --eval-every 2000 --workers 8 [--grad-ckpt] --name fp<s>-id-T
+
+# coba:<s>-ternary
+train.py --backbone jhu-clsp/ettin-encoder-<s> --data data/main-id-train.jsonl --teacher $I --val data/main-val.jsonl \
+    --init runs/fp<s>-id-T --quant absmean --emb-bits 4 --wd 0 --bs 32 --epochs 2 --lr-enc 5e-5 --lr-head 1e-4 \
+    --eval-every 4000 --workers 8 --kd-from runs/fp<s>-id-T --kd 1 --rel 10 --quant-warmup 0.3 --hid 1 \
+    --grad-ckpt --out runs/t<s>-id-T3w-e2 --name t<s>-id-T3w-e2
+```
+
+The machines ran the same `train.py` and `ternary.py` as this repository. The only differences are one docstring
+line and `ternary.py`'s packing commands, which have since been removed and are not used in training.[^124]
 
 ```sh
 # 5. Self-tests of the quantizer and the browser graph
@@ -632,7 +715,11 @@ package, then `bench_plan` and `bench_run` on the RTX 5090.[^103]
 
 ## Notes
 
-[^1]: [`results/editions/2026.10.json`](../results/editions/2026.10.json) `models` (lines 69-73) and `updates[2].models`; run names and zero-shot or in-domain kind from [`train/stage.py`](../train/stage.py) lines 17-23 (`LINEUP`); `-e2` is the two-epoch suffix, [`browser-model.md`](browser-model.md) lines 109, 112.
+Notes that cite a *training record* point to files on the three training machines (`~/ollaya-train/` and
+`~/ollaya-own-work/` on `hope-wsl`, `choso-wsl` and `white`), which are not in this repository. Each shipped
+checkpoint's `rl_agent_config.json` is also published in its Hugging Face repository.
+
+[^1]: [`results/editions/2026.10.json`](../results/editions/2026.10.json) `models` (lines 69-73) and `updates[2].models`; run names and zero-shot or in-domain kind from [`train/stage.py`](../train/stage.py) lines 20-26 (`LINEUP`); `-e2` is the two-epoch suffix, [`browser-model.md`](browser-model.md) lines 109, 112.
 [^2]: [`results/editions/2026.10.json`](../results/editions/2026.10.json) `score.results[i].model`, `.score`, `.score_ci`, `.trained_on`; rank is i + 1 (the list is in descending score order, checked). Teacher `score.results[?model=="pplx-decider:flash"]` (line 80), `coba:1b` (line 763), `coba:400m` (line 788), `coba:150m-ternary` (line 1165), `coba:400m-ternary` (line 1202), `coba:68m-ternary` (line 1239). Scores as published, two decimals.
 [^3]: [`results/runs/2026-10-23-typed-decisions-rtx5090-cuda.json`](../results/runs/2026-10-23-typed-decisions-rtx5090-cuda.json) `results[?model=="<tag>"]`: `accuracy`, `accuracy_ci`, `by_type.choice`, `by_type.noul`, `by_type.score`, `ece`, `brier`, `errors`.
 [^4]: [`browser-model.md`](browser-model.md) lines 158-165 (graph, resident memory, per-request p50).
@@ -666,10 +753,10 @@ package, then `bench_plan` and `bench_run` on the RTX 5090.[^103]
 [^32]: [`results/runs/2026-10-23-typed-decisions-rtx5090-cuda.json`](../results/runs/2026-10-23-typed-decisions-rtx5090-cuda.json) `results[*].trained_on_split` and `protocol.benchmark`; [`results/editions/2026.10.json`](../results/editions/2026.10.json) `score.results[?model=="coba:*"].trained_on`.
 [^33]: [`train/data/indomain.py`](../train/data/indomain.py) lines 1-8, 22, 26-39, 50-55, 110-113.
 [^34]: [`train/data/indomain.py`](../train/data/indomain.py) lines 58-66, 96-102, 131-134; [`browser-model.md`](browser-model.md) line 64.
-[^35]: [`train/hub.py`](../train/hub.py) lines 83-94 (`INDOMAIN`); the multinli license there reads "Mixed per genre: OANC public domain; fiction and other sources CC BY-SA 3.0 or similar". The total is computed; [`train/stage.py`](../train/stage.py) line 82 rounds it to 180,000.
-[^36]: [`train/stage.py`](../train/stage.py) lines 17-23 (public kind), 31-41; [`train/card.md`](../train/card.md) lines 63-68.
+[^35]: [`train/hub.py`](../train/hub.py) lines 83-94 (`INDOMAIN`); the multinli license there reads "Mixed per genre: OANC public domain; fiction and other sources CC BY-SA 3.0 or similar". The total is computed; [`train/stage.py`](../train/stage.py) line 86 rounds it to 180,000.
+[^36]: [`train/stage.py`](../train/stage.py) lines 20-26 (public kind), 35-45; [`train/card.md`](../train/card.md) lines 63-68.
 [^37]: [`browser-model.md`](browser-model.md) lines 89-94 (protocol) and 96-112 (table rows fp150-gold, fp150-T, fp150-id-T, t150-T3w, t150-id-T3w, t150-id-T3w-e2).
-[^38]: [`train/stage.py`](../train/stage.py) line 26 (4B decoder); [`train/card.md`](../train/card.md) line 81 (Apache-2.0); [`results/editions/2026.10.json`](../results/editions/2026.10.json) `score.results[0].model`.
+[^38]: [`train/stage.py`](../train/stage.py) line 30 (4B decoder); [`train/card.md`](../train/card.md) line 81 (Apache-2.0); [`results/editions/2026.10.json`](../results/editions/2026.10.json) `score.results[0].model`.
 [^39]: [`train/train.py`](../train/train.py) lines 10-11, 46-82 (mix at line 78, normalization at lines 79-80), 281.
 [^40]: [`train/train.py`](../train/train.py) lines 121-133, 287.
 [^41]: [`train/train.py`](../train/train.py) lines 96-99.
@@ -684,8 +771,8 @@ package, then `bench_plan` and `bench_run` on the RTX 5090.[^103]
 [^50]: [`results/editions/2026.10.json`](../results/editions/2026.10.json) `score.results[?model=="<tag>"].trained_on` (lines 785, 810, 1187-1199, 1224-1236, 1261-1273).
 [^51]: Computed for this report from [`results/editions/2026.10.json`](../results/editions/2026.10.json) `score.results[?model=="<tag>"].tasks`, averaging the tasks not in `trained_on`; for `coba:1b` and `coba:400m` the 14-task means are 36.328 and 35.828.
 [^52]: [`results/editions/2026.10.json`](../results/editions/2026.10.json) top-level `trained_on` (lines 1277-1290).
-[^53]: [`browser-model.md`](browser-model.md) lines 126-128; [`train/stage.py`](../train/stage.py) lines 20-22.
-[^54]: [`train/stage.py`](../train/stage.py) lines 42-46 (`TERNARY_RECIPE`).
+[^53]: [`browser-model.md`](browser-model.md) lines 126-128; [`train/stage.py`](../train/stage.py) lines 23-25.
+[^54]: [`train/stage.py`](../train/stage.py) lines 46-49 (`TERNARY_RECIPE`).
 [^55]: [`ternary-research.md`](ternary-research.md) lines 148-157.
 [^56]: [`train/ternary.py`](../train/ternary.py) lines 9, 29-31.
 [^57]: [`train/ternary.py`](../train/ternary.py) lines 5-7, 38-61 (absmean forward at lines 56-58).
@@ -699,7 +786,7 @@ package, then `bench_plan` and `bench_run` on the RTX 5090.[^103]
 [^65]: [`train/train.py`](../train/train.py) lines 143-158, 276, 318-321, 369-372; [`ternary-research.md`](ternary-research.md) lines 124-126.
 [^66]: [`train/train.py`](../train/train.py) lines 161-169, 277, 322-323, 373-375.
 [^67]: [`train/train.py`](../train/train.py) line 5.
-[^68]: [`train/ternary.py`](../train/ternary.py) lines 99-103; [`train/train.py`](../train/train.py) lines 279-280, 357-358; [`train/stage.py`](../train/stage.py) lines 45-46; [`browser-model.md`](browser-model.md) line 127.
+[^68]: [`train/ternary.py`](../train/ternary.py) lines 99-103; [`train/train.py`](../train/train.py) lines 279-280, 357-358; [`train/stage.py`](../train/stage.py) lines 48-49; [`browser-model.md`](browser-model.md) line 127.
 [^69]: [`browser-model.md`](browser-model.md) lines 129-132.
 [^70]: [`ternary-research.md`](ternary-research.md) lines 128-130.
 [^71]: [`train/train.py`](../train/train.py) lines 394-395; [`train/ternary.py`](../train/ternary.py) lines 120-128; [`ternary-research.md`](ternary-research.md) line 138.
@@ -711,7 +798,7 @@ package, then `bench_plan` and `bench_run` on the RTX 5090.[^103]
 [^77]: [`train/webgraph.py`](../train/webgraph.py) lines 54-62, 78-83; [`train/ternary.py`](../train/ternary.py) lines 138-150.
 [^78]: [`train/webgraph.py`](../train/webgraph.py) lines 7-10, 102-131 (tolerance at line 129).
 [^79]: [`browser-model.md`](browser-model.md) lines 140-150.
-[^80]: [`train/stage.py`](../train/stage.py) lines 20-22 (web graph MB) and 31-35 ("`onnx/model.onnx` and the tokenizer"); [`site/src/data/try.ts`](../site/src/data/try.ts) line 15 (66 MB).
+[^80]: [`train/stage.py`](../train/stage.py) lines 23-25 (web graph MB) and 35-39 ("`onnx/model.onnx` and the tokenizer"); [`site/src/data/try.ts`](../site/src/data/try.ts) line 15 (66 MB).
 [^81]: [`browser-model.md`](browser-model.md) lines 136-138.
 [^82]: [`browser-model.md`](browser-model.md) line 167; [`train/card-web.md`](../train/card-web.md) lines 1-6.
 [^83]: [`site/src/data/try.ts`](../site/src/data/try.ts) lines 8-16.
@@ -736,3 +823,23 @@ package, then `bench_plan` and `bench_run` on the RTX 5090.[^103]
 [^102]: [`train/ternary.py`](../train/ternary.py) line 3; [`train/webgraph.py`](../train/webgraph.py) lines 3-4; [`train/eval.sh`](../train/eval.sh) lines 2-5; [`train/stage.py`](../train/stage.py) lines 3-7.
 [^103]: [`browser-model.md`](browser-model.md) lines 188-190.
 [^104]: Computed from [`results/editions/2026.10.json`](../results/editions/2026.10.json) `score.results[*].score_ci` with the leaderboard's rule, [`site/src/bench/data.ts`](../site/src/bench/data.ts) line 185.
+[^105]: `config.json` of [`jhu-clsp/ettin-encoder-68m`](https://huggingface.co/jhu-clsp/ettin-encoder-68m/blob/main/config.json), [`-150m`](https://huggingface.co/jhu-clsp/ettin-encoder-150m/blob/main/config.json), [`-400m`](https://huggingface.co/jhu-clsp/ettin-encoder-400m/blob/main/config.json) and [`-1b`](https://huggingface.co/jhu-clsp/ettin-encoder-1b/blob/main/config.json): `num_hidden_layers`, `hidden_size`, `num_attention_heads`, `intermediate_size`, `global_attn_every_n_layers`, `local_attention`, `vocab_size`. Each coba repository's `encoder/config.json` has the same values.
+[^106]: Training record `hope-wsl:~/ollaya-train/data/build-stats.json` (`build.py`'s summary): `main_rows`, `main_questions`, `types`.
+[^107]: Training records: `hope-wsl:~/ollaya-train/serve.log`, `serve11501.log` and `serve11502.log`, and `white:~/ollaya-train/serve.log`, each `loaded model model=pplx-decider:flash-fp16 device=cuda:0 precision=fp16`, Ollaya 0.16.0. `main.rev.jsonl` is `main.jsonl` in reverse order; `hope-wsl`'s main labels cover rows 0 to 207,320 of `main.jsonl` and `white`'s rows 206,080 to the last; `white` also holds `indomain.rev.jsonl` (checked for this report).
+[^108]: Computed for this report from the training records `hope-wsl:~/ollaya-train/data/teacher-main.jsonl`, `teacher-main-white.jsonl`, `teacher-indomain.jsonl`, `teacher-indomain-white.jsonl`, `main.jsonl` and `indomain.jsonl`; every progress line of `label.log` and `label-indomain.log` on both machines reports 0 rejected.
+[^109]: [`train/train.py`](../train/train.py) lines 46-58 (`teacher.setdefault`, over the `--teacher` files in order).
+[^110]: Training records `choso-wsl:~/ollaya-train/run-t400ide2.sh`, `white:~/ollaya-train/run-t150e2.sh` and `white:~/ollaya-train/run-t68e2.sh` (`--teacher`, `--init`, `--kd-from`, `--quant`, `--emb-bits`, `--kd`, `--rel`, `--hid`, `--lr-enc`, `--lr-head`, `--wd`, `--epochs`); the published configurations, `training.teacher`, `.kd_from`, `.quant`, `.emb_bits`, `.kd`, `.kd_tau`, `.rel`, `.hid`, `.lr_encoder`, `.lr_head`, `.wd`, `.batch`, `.epochs`, `.steps`, in [`coba-400m-ternary`](https://huggingface.co/ollaya-dev/coba-400m-ternary/blob/main/rl_agent_config.json), [`coba-150m-ternary`](https://huggingface.co/ollaya-dev/coba-150m-ternary/blob/main/rl_agent_config.json), [`coba-68m-ternary`](https://huggingface.co/ollaya-dev/coba-68m-ternary/blob/main/rl_agent_config.json).
+[^111]: Training records `hope-wsl:~/ollaya-train/queue-hope.sh` (`fp400-id-T`), `choso-wsl:~/ollaya-train/queue4.sh` (`fp150-id-T`) and `white:~/ollaya-train/queue-white.sh` (`fp68-id-T`): `--data ../data/main-id-train.jsonl` with the four teacher files.
+[^112]: Computed for this report from the training records `hope-wsl:~/ollaya-train/data/main.jsonl`, `main-train.jsonl`, `main-val.jsonl`, `main-id-train.jsonl` and `indomain.jsonl`: row and question counts, ids and their order.
+[^113]: Every command line of Section 10 passes `--val ../data/main-val.jsonl`, and so do the development runs' scripts in the training records.
+[^114]: Training records `choso-wsl:~/ollaya-train/run-id-gold.sh`, `queue2.sh` and `queue3.sh`: `cat ../data/main-train.jsonl ../data/indomain.jsonl > ../data/main-id-train.jsonl`.
+[^115]: `training` in the published configurations of [`coba-1b`](https://huggingface.co/ollaya-dev/coba-1b/blob/main/rl_agent_config.json) and [`coba-400m`](https://huggingface.co/ollaya-dev/coba-400m/blob/main/rl_agent_config.json): `epochs`, `batch`, `steps`, `lr_encoder`, `lr_head`, `wd`, `alpha`, `hours`; `--grad-ckpt` from the training records `hope-wsl:~/ollaya-train/queue-1b2.sh` and `choso-wsl:~/ollaya-train/run-fp400z.sh`.
+[^116]: Training records: the run directories `hope-wsl:~/ollaya-train/runs/fp1b-T` and `choso-wsl:~/ollaya-train/runs/fp400-T`, and `nvidia-smi` on each machine (`hope-wsl` an NVIDIA GeForce RTX 5090, `choso-wsl` an RTX 4090, `white` an RTX 3090).
+[^117]: `temperature` in each `ollaya-dev/coba-*` repository's `rl_agent_config.json` on Hugging Face, in laya's type order (choice, score, noul: `laya.common.QTYPES`, which [`train/train.py`](../train/train.py) line 223 follows); the ternary repositories' `calibration.json` holds the same values.
+[^118]: Training records `choso-wsl:~/ollaya-train/run-pilots.sh` (`t150-T0`, `t150-T1` with `--kd 1`, `t150-T2` with `--kd 1 --rel 10`), `queue2.sh` (`t150-T2w`, "run T2 with quantization warm-up") and `queue3.sh` (`t150-T3w`, "T2 + warm-up + every-layer hidden distillation").
+[^119]: Computed for this report from the `model.safetensors` of `ollaya-dev/coba-400m-ternary`, `coba-150m-ternary` and `coba-68m-ternary` on Hugging Face: the share of exact zeros over every two-dimensional tensor whose rows take only the values {-g, 0, +g} (120, 96 and 84 tensors); the token embeddings are int4 rows; the act head, the scorer and the type embedding are neither. The last `zeros` entry of each run's `train.log.jsonl` in the training records gives the same shares (0.3138, 0.3139, 0.3294).
+[^120]: The Hugging Face file listings of `ollaya-dev/coba-68m-ternary`, `coba-150m-ternary` and `coba-400m-ternary`, read 2026-10-24: `onnx/model.onnx` 31,595,842, 63,030,220 and 143,785,773 bytes; `tokenizer.json` 3,583,228 bytes.
+[^121]: Training records `hope-wsl:~/ollaya-own-work/bench/raw/typed/coba-*/rows.jsonl` and `raw/public/coba-*/<subset>/rows.jsonl`, the `error` field (counted for this report).
+[^122]: Training records `hope-wsl:~/ollaya-bench/e2610/out/typed/laya-en/rows.jsonl` and `out/public/laya-en/*/rows.jsonl`, the `error` field (counted for this report); [`results/runs/2026-10-14-public-benchmark-rtx5090-cuda.json`](../results/runs/2026-10-14-public-benchmark-rtx5090-cuda.json) and [`results/runs/2026-10-14-typed-decisions-rtx5090-cuda.json`](../results/runs/2026-10-14-typed-decisions-rtx5090-cuda.json), `results[?model=="laya:en"].errors`.
+[^123]: Training records: `hope-wsl:~/ollaya-train/queue-1b2.sh` (`fp1b-T`, its `run` function at `--bs 32`; `--eval-every $((64000 / bs))`), `hope-wsl:~/ollaya-train/queue-hope.sh` (`fp400-id-T`), `choso-wsl:~/ollaya-train/run-fp400z.sh` (`fp400-T`), `choso-wsl:~/ollaya-train/queue4.sh` (`fp150-id-T`), `choso-wsl:~/ollaya-train/run-t400ide2.sh` (`t400-id-T3w-e2`), `choso-wsl:~/ollaya-train/run-id-gold.sh` (the `cat`), `white:~/ollaya-train/queue-white.sh` (`fp68-id-T`), `white:~/ollaya-train/run-t150e2.sh` and `white:~/ollaya-train/run-t68e2.sh`. Each runs `.venv/bin/python train.py` in `~/ollaya-train/code` with `../data` and `../runs` paths, shortened here, and then `./eval.sh`. The saved `training` blocks: notes 110 and 115.
+[^124]: Training records `~/ollaya-train/code/train.py` and `ternary.py`, the same file on all three machines, compared for this report with [`train/train.py`](../train/train.py) and [`train/ternary.py`](../train/ternary.py).
