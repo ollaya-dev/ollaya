@@ -52,7 +52,7 @@ agent.system_one("I was charged twice for order A-104.", {
 ```
 
 Ollaya and `laya` give the same answers{{web_parity}}: Ollaya checks its runtime against this checkpoint's PyTorch
-outputs on 483 questions (every decision the same, probabilities within {{parity}}).
+outputs on 2,383 questions (every decision the same, probabilities within {{parity}}).
 
 ## Results
 
