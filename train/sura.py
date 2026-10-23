@@ -4,6 +4,9 @@
         --data data/main-train.jsonl --teacher data/teacher-main.jsonl,data/teacher-main-white.jsonl \
         --val data/main-val.jsonl --out runs/sura-0.8b
 
+The 2B student: `--base Qwen/Qwen3.5-2B-Base --optim adamw8bit --grad-ckpt` (fp32 weights and gradients, 8-bit
+optimizer state: about 20 GB before activations).
+
 Rows and teacher rows are train.py's. The student is the teacher's layout on a smaller base: a `Qwen3_5Model` whose
 full-attention layers see the whole sequence, and a `Linear(hidden -> 255)` readout at the marker after each
 question, one sequence per state with all its questions (protocol `joint-question-inline-readout-v1`). The prompt,
@@ -257,6 +260,8 @@ def main():
     ap.add_argument("--eval-every", type=int, default=1000)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--grad-ckpt", action="store_true")
+    ap.add_argument("--optim", choices=["adamw", "adamw8bit"], default="adamw",
+                    help="adamw8bit: bitsandbytes' paged 8-bit AdamW, so a 2B student fits a 24-32 GB GPU")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
@@ -296,10 +301,15 @@ def main():
 
     params = [p for p in backbone.parameters() if p.requires_grad]
     decay = [p for p in params if p.ndim >= 2]
-    opt = torch.optim.AdamW([{"params": decay, "lr": a.lr, "weight_decay": a.wd},
-                             {"params": [p for p in params if p.ndim < 2], "lr": a.lr, "weight_decay": 0.0},
-                             {"params": readout.parameters(), "lr": a.lr_head, "weight_decay": 0.0}],
-                            fused=dev.type == "cuda")
+    groups = [{"params": decay, "lr": a.lr, "weight_decay": a.wd},
+              {"params": [p for p in params if p.ndim < 2], "lr": a.lr, "weight_decay": 0.0},
+              {"params": readout.parameters(), "lr": a.lr_head, "weight_decay": 0.0}]
+    if a.optim == "adamw8bit":
+        import bitsandbytes as bnb
+
+        opt = bnb.optim.PagedAdamW8bit(groups)
+    else:
+        opt = torch.optim.AdamW(groups, fused=dev.type == "cuda")
     per_epoch = len(length_batches(rows, a.tokens, 0))
     total = max(1, int(per_epoch * a.epochs))
     warm = max(1, int(total * a.warmup))
