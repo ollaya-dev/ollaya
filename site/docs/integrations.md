@@ -1,7 +1,7 @@
 ---
-title: Integrations: LiteLLM, LangChain, AI SDK, DSPy and LlamaIndex
+title: Integrations: LiteLLM, LangChain, AI SDK, DSPy, LlamaIndex, n8n and Dify
 nav: Integrations
-description: Use Ollaya from LiteLLM, LangChain, the Vercel AI SDK, DSPy and LlamaIndex through their TypeSafe integrations, with a base URL and nothing else to install, including LangChain's model router and LiteLLM's tool-result guardrail.
+description: Use Ollaya from LiteLLM, LangChain, the Vercel AI SDK, DSPy and LlamaIndex through their TypeSafe integrations, with a base URL and nothing else to install, and from n8n and Dify workflows over HTTP.
 order: 12
 ---
 
@@ -17,6 +17,8 @@ LiteLLM, LangChain, the Vercel AI SDK and DSPy ship TypeSafe integrations, and L
 | [DSPy](#dspy) | `Choice`, `Noul` and `Score` output fields in signatures | `base_url`, or `TYPESAFE_BASE_URL` |
 | [LlamaIndex](#llamaindex) (community) | A reranker and a query-engine selector | `TYPESAFE_BASE_URL` |
 | [The TypeSafe SDKs](/docs/typesafe-compatibility) | The official client | `TYPESAFE_BASE_URL` |
+| [n8n](#n8n) | Decisions in a workflow, through the HTTP Request node | The node's URL |
+| [Dify](#dify) | A custom tool for agents, chatflows and workflows | The tool's OpenAPI schema |
 
 What they all need:
 
@@ -27,7 +29,9 @@ What they all need:
 
 - **A timeout that allows for loading.** The first request to a model waits while it loads. Some integrations time out sooner than that by default; the sections below say which.
 
-These examples were checked against Ollaya 0.16.0 with LiteLLM 1.106, `langchain-typesafe` 0.0.1a3, `@langchain/typesafe` 0.0.2, AI SDK 7.0 with `@ai-sdk/typesafe-ai` 3.0, DSPy 3.4.1, and `llama-index-postprocessor-jev` and `llama-index-selectors-jev` 0.1.1. The integrations are young, so check their changelogs when you upgrade.
+n8n and Dify have no TypeSafe integration. They call [`/api/decide`](/docs/api#decide) over HTTP, with nothing to install.
+
+These examples were checked against Ollaya 0.16.0 with LiteLLM 1.106, `langchain-typesafe` 0.0.1a3, `@langchain/typesafe` 0.0.2, AI SDK 7.0 with `@ai-sdk/typesafe-ai` 3.0, DSPy 3.4.1, `llama-index-postprocessor-jev` and `llama-index-selectors-jev` 0.1.1, n8n 2.44 and Dify 1.18.0. n8n's workflows ran from its command line and Dify's tool through its own code and SSRF proxy, not through their web editors. The integrations are young, so check their changelogs when you upgrade.
 
 ## LiteLLM
 
@@ -301,8 +305,110 @@ router = RouterQueryEngine(
 
 The project is independent of LlamaIndex and of TypeSafe.
 
+## n8n
+
+n8n calls Ollaya with its **HTTP Request** node, so there is no node to install. Set the node up like this:
+
+- **Method:** `POST`.
+- **URL:** `http://localhost:11435/api/decide`, or an address n8n can reach (see [From a container](#from-a-container)).
+- **Send Body:** on.
+- **Body Content Type:** `JSON`.
+- **Specify Body:** `Using JSON`.
+- **JSON:** switched to an expression, with this body:
+
+```text
+{
+  "model": "coba",
+  "state": {{ JSON.stringify($json.text) }},
+  "questions": {
+    "refund": {"type": "noul", "instructions": "The customer asks for money back."},
+    "team": {
+      "type": "choice",
+      "instructions": "Which team should handle this ticket?",
+      "criteria": {
+        "billing": "Payments, invoices and refunds",
+        "technical": "Bugs, errors and outages",
+        "account": "Login, profile and settings"
+      }
+    }
+  }
+}
+```
+
+`{{ JSON.stringify($json.text) }}` puts the incoming item's `text` field in as a JSON string, so quotes and line breaks in it can't break the body.
+
+The answers are in the node's output. Later nodes, such as an If or a Switch, read them with expressions:
+
+- `{{ $json.answers.team.choice }}`: the most likely team.
+- `{{ $json.answers.refund.noul > 0.5 }}`: `true` when the refund question is more likely true than not.
+
+With `OLLAYA_API_KEY` set, give the node a credential:
+
+- **Authentication:** `Generic Credential Type`.
+- **Generic Auth Type:** `Header Auth`.
+- **Header Auth credential:** the name `Authorization` and the value `Bearer <your key>`.
+
+## Dify
+
+Dify calls Ollaya through a custom tool built from an OpenAPI schema. Agents, chatflows and workflows can all use it. Create one from this schema, with a server URL Dify can reach:
+
+```yaml
+openapi: 3.1.0
+info:
+  title: Ollaya
+  description: Typed decisions from a local decision model.
+  version: 1.0.0
+servers:
+  - url: http://host.docker.internal:11435
+paths:
+  /api/decide:
+    post:
+      operationId: decide
+      summary: Answer typed questions about a text with a local decision model. Returns a probability for every answer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state:
+                  type: string
+                  description: The text to decide about, such as a support ticket or a user message.
+                model:
+                  type: string
+                  description: The Ollaya model to use.
+                  default: coba
+                questions:
+                  type: object
+                  description: Leave empty to ask the default questions.
+                  default:
+                    refund:
+                      type: noul
+                      instructions: The customer asks for money back.
+                    team:
+                      type: choice
+                      instructions: Which team should handle this ticket?
+                      criteria:
+                        billing: Payments, invoices and refunds
+                        technical: Bugs, errors and outages
+                        account: Login, profile and settings
+```
+
+- **Parameters.** Each field of the request body becomes a parameter of the tool, and the agent writes `state`.
+- **Questions.** Left empty, `questions` gets its default from the schema, so put your own questions there. An agent can also pass its own as JSON text, and Dify parses it.
+- **Response.** The tool returns Ollaya's response as JSON.
+- **Private addresses.** Dify sends tool requests through its SSRF proxy, which refuses private, loopback and link-local addresses by default. `host.docker.internal` resolves to one of them. Add the range Ollaya is on to `SSRF_PROXY_ALLOW_PRIVATE_IPS` in Dify's `docker/.env`, such as `SSRF_PROXY_ALLOW_PRIVATE_IPS=172.21.0.0/16`, and restart Dify with `docker compose up -d`. Until then the tool fails with "blocked by SSRF protection", and the error names the address it blocked.
+- **API key.** With `OLLAYA_API_KEY` set, give the tool API key authorization, sent as a Bearer token in the `Authorization` header.
+
+## From a container
+
+If the tool runs in a container, `localhost` is the container itself, not your machine.
+
+- **Ollaya on your machine:** bind Ollaya to an address the container can reach, such as `OLLAYA_HOST=0.0.0.0`, and call `http://host.docker.internal:11435` from the container. Read [Security](/docs/api#security) first and set `OLLAYA_API_KEY`.
+- **Ollaya in a container on the same Docker network,** such as the same Compose file: call it by its name, such as `http://ollaya:11435`.
+
 ## Anything else
 
-Any tool that can send an HTTP request can use Ollaya: POST a state and questions, or a [preset](/docs/api#presets), to [`/api/decide`](/docs/api#decide). That includes workflow builders such as n8n and Dify through their HTTP Request nodes.
-
-If the tool runs in a container, `localhost` is the container itself, not your machine. Bind Ollaya to an address the container can reach, such as `OLLAYA_HOST=0.0.0.0` with the container calling `host.docker.internal:11435`. Read [Security](/docs/api#security) first and set `OLLAYA_API_KEY`.
+Any tool that can send an HTTP request can use Ollaya: POST a state and questions, or a [preset](/docs/api#presets), to [`/api/decide`](/docs/api#decide).
