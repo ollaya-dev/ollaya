@@ -103,6 +103,7 @@ Ollaya's runtime gives the same answers (parity below).
 | fp400-id-T | 400m | fp | + in-domain | 0.811 | 0.573 | **0.749** in-domain |
 | t150-T3w | 150m | ternary | gold + teacher | 0.718 | 0.502 | 0.478 zero-shot |
 | t150-id-T3w | 150m | ternary | + in-domain | 0.736 | 0.531 | 0.688 in-domain |
+| t400-id-T3w | 400m | ternary | + in-domain | 0.791 | 0.548 | 0.716 in-domain |
 | t68-id-T3w | 68m | ternary | + in-domain | 0.705 | 0.448 | 0.664 in-domain |
 
 For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed and 0.824 public;
@@ -115,7 +116,7 @@ For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed
 - 150m to 400m gains 0.05–0.06 val, 0.03–0.065 typed and 0.01–0.044 public.
 - Ternary (recipe T3w: QAT from the fp model, logit + relation + every-layer hidden-state distillation from it,
   quantization warm-up over 30% of the steps, 4-bit embeddings) keeps 96% of the fp model's val and 98% of its
-  typed and in-domain public scores at 150m.
+  typed and in-domain public scores at 150m, and 96–98% at 400m. The ternary 400m beats the fp 150m on all three.
 
 ## Browser runtime
 
