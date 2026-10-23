@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ollaya-dev/ollaya",
+  "title": "Ollaya",
+  "description": "Local decision models for agents: typed, calibrated routing, guardrail and tool-approval answers",
+  "websiteUrl": "https://ollaya.dev/docs/agents",
+  "repository": {
+    "url": "https://github.com/ollaya-dev/ollaya",
+    "source": "github"
+  },
+  "version": "0.17.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/ollaya-dev/ollaya:0.17.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "docker",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--volume",
+          "value": "ollaya:/home/ollaya/.ollaya",
+          "description": "Keeps downloaded models between runs"
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}

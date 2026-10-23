@@ -42,8 +42,25 @@ If Claude Desktop can't find `ollaya`, use its full path, for example
 
 ### Cursor, VS Code and other clients
 
-Use the same command, `ollaya mcp`, in the client's MCP settings: `.cursor/mcp.json` for Cursor,
+In Cursor, [add Ollaya with one click](https://cursor.com/install-mcp?name=ollaya&config=eyJjb21tYW5kIjoib2xsYXlhIiwiYXJncyI6WyJtY3AiXX0%3D), with Ollaya installed. Otherwise use the same
+command, `ollaya mcp`, in the client's MCP settings: `.cursor/mcp.json` for Cursor,
 `.vscode/mcp.json` for VS Code (with `"type": "stdio"`).
+
+### From the Docker image
+
+Without installing Ollaya, a client can start the server from the CPU [container image](/download).
+The named volume keeps downloaded models between runs:
+
+```json
+{
+  "mcpServers": {
+    "ollaya": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--volume", "ollaya:/home/ollaya/.ollaya", "ghcr.io/ollaya-dev/ollaya", "mcp"]
+    }
+  }
+}
+```
 
 ### Over HTTP
 

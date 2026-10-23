@@ -61,7 +61,7 @@ Or ask your own questions: `ollaya run kev --ask "Is a refund requested?" --ask 
   Hugging Face repository, pinned to a commit and verified by sha256. Models whose authors publish
   GGUF files (`winnow`, `jevk5`, `jeb`) run that file itself on llama.cpp. Ollaya never re-hosts weights.
 - **For agents.** `ollaya mcp` serves the models to Claude Code, Claude Desktop, Cursor and other
-  MCP clients (`claude mcp add ollaya -- ollaya mcp`), and the
+  MCP clients (`claude mcp add ollaya -- ollaya mcp`, or [one click in Cursor](https://cursor.com/install-mcp?name=ollaya&config=eyJjb21tYW5kIjoib2xsYXlhIiwiYXJncyI6WyJtY3AiXX0%3D)), and the
   [`ollaya-decisions` skill](skills/ollaya-decisions/SKILL.md) teaches agents when and how to use
   them (`npx skills add ollaya-dev/ollaya --skill ollaya-decisions`).
 - **Routers.** `laya` detects the script and language of each request, then answers with
