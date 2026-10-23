@@ -1,0 +1,278 @@
+[
+  {
+    "model": "winnow:e4b",
+    "preset": "triage",
+    "message": "Third time this year you've double-charged me. Refund it today or I'm cancelling and moving to a competitor.",
+    "device": "Apple M4 Pro",
+    "recorded": {
+      "date": "2026-10-23",
+      "ollaya": "0.16.0"
+    },
+    "latency_ms": 760,
+    "output": {
+      "model": "winnow:e4b",
+      "answers": {
+        "intent": {
+          "type": "choice",
+          "choice": "refund",
+          "confidence": 0.8959,
+          "probabilities": {
+            "refund": 0.9132,
+            "technical_help": 0.0056,
+            "billing_question": 0.0087,
+            "information": 0.0001,
+            "cancellation": 0.0594,
+            "other": 0.013
+          }
+        },
+        "is_urgent": {
+          "type": "noul",
+          "noul": 0.9261
+        },
+        "frustration": {
+          "type": "score",
+          "score": 2.8914,
+          "confidence": 0.8666,
+          "legend": {
+            "0": "calm and neutral",
+            "1": "concerned but civil",
+            "2": "clearly annoyed",
+            "3": "very angry or using strong language"
+          },
+          "probabilities": {
+            "0": 0.0009,
+            "1": 0.0068,
+            "2": 0.0924,
+            "3": 0.9
+          }
+        },
+        "refund_requested": {
+          "type": "noul",
+          "noul": 0.9895
+        },
+        "churn_risk": {
+          "type": "noul",
+          "noul": 0.9918
+        }
+      },
+      "usage": {
+        "input_tokens": 716,
+        "output_tokens": 0
+      },
+      "routing": null,
+      "state_truncated": false,
+      "done_reason": "decide",
+      "created_at": "2026-10-23T17:27:56.747362Z",
+      "total_duration": 772164000,
+      "load_duration": 0,
+      "eval_duration": 771980959
+    }
+  },
+  {
+    "model": "winnow:e4b",
+    "preset": "triage",
+    "message": "Hi! Quick question: does the Pro plan include SSO, and can we pay yearly by invoice? No rush, just planning next quarter.",
+    "device": "Apple M4 Pro",
+    "recorded": {
+      "date": "2026-10-23",
+      "ollaya": "0.16.0"
+    },
+    "latency_ms": 759,
+    "output": {
+      "model": "winnow:e4b",
+      "answers": {
+        "intent": {
+          "type": "choice",
+          "choice": "billing_question",
+          "confidence": 0.808,
+          "probabilities": {
+            "refund": 0.0003,
+            "technical_help": 0.0012,
+            "billing_question": 0.84,
+            "information": 0.1325,
+            "cancellation": 0.003,
+            "other": 0.023
+          }
+        },
+        "is_urgent": {
+          "type": "noul",
+          "noul": 0.0617
+        },
+        "frustration": {
+          "type": "score",
+          "score": 0.0754,
+          "confidence": 0.9114,
+          "legend": {
+            "0": "calm and neutral",
+            "1": "concerned but civil",
+            "2": "clearly annoyed",
+            "3": "very angry or using strong language"
+          },
+          "probabilities": {
+            "0": 0.9336,
+            "1": 0.0587,
+            "2": 0.0065,
+            "3": 0.0012
+          }
+        },
+        "refund_requested": {
+          "type": "noul",
+          "noul": 0.012
+        },
+        "churn_risk": {
+          "type": "noul",
+          "noul": 0.0244
+        }
+      },
+      "usage": {
+        "input_tokens": 726,
+        "output_tokens": 0
+      },
+      "routing": null,
+      "state_truncated": false,
+      "done_reason": "decide",
+      "created_at": "2026-10-23T17:28:05.680423Z",
+      "total_duration": 747381000,
+      "load_duration": 0,
+      "eval_duration": 747320875
+    }
+  },
+  {
+    "model": "winnow:e4b",
+    "preset": "triage",
+    "message": "The export endpoint has been returning 500s since this morning and our nightly job is blocked. Can someone look at it today?",
+    "device": "Apple M4 Pro",
+    "recorded": {
+      "date": "2026-10-23",
+      "ollaya": "0.16.0"
+    },
+    "latency_ms": 808,
+    "output": {
+      "model": "winnow:e4b",
+      "answers": {
+        "intent": {
+          "type": "choice",
+          "choice": "technical_help",
+          "confidence": 0.9922,
+          "probabilities": {
+            "refund": 0.0003,
+            "technical_help": 0.9935,
+            "billing_question": 0.0002,
+            "information": 0.0011,
+            "cancellation": 0.0003,
+            "other": 0.0047
+          }
+        },
+        "is_urgent": {
+          "type": "noul",
+          "noul": 0.8249
+        },
+        "frustration": {
+          "type": "score",
+          "score": 1.2237,
+          "confidence": 0.6785,
+          "legend": {
+            "0": "calm and neutral",
+            "1": "concerned but civil",
+            "2": "clearly annoyed",
+            "3": "very angry or using strong language"
+          },
+          "probabilities": {
+            "0": 0.0119,
+            "1": 0.7589,
+            "2": 0.2228,
+            "3": 0.0064
+          }
+        },
+        "refund_requested": {
+          "type": "noul",
+          "noul": 0.0085
+        },
+        "churn_risk": {
+          "type": "noul",
+          "noul": 0.0247
+        }
+      },
+      "usage": {
+        "input_tokens": 726,
+        "output_tokens": 0
+      },
+      "routing": null,
+      "state_truncated": false,
+      "done_reason": "decide",
+      "created_at": "2026-10-23T17:28:14.529665Z",
+      "total_duration": 810034042,
+      "load_duration": 0,
+      "eval_duration": 809698042
+    }
+  },
+  {
+    "model": "winnow:e4b",
+    "preset": "triage",
+    "message": "We're consolidating vendors and will move to another provider at the end of the month. Please cancel our subscription and confirm the last billing date.",
+    "device": "Apple M4 Pro",
+    "recorded": {
+      "date": "2026-10-23",
+      "ollaya": "0.16.0"
+    },
+    "latency_ms": 807,
+    "output": {
+      "model": "winnow:e4b",
+      "answers": {
+        "intent": {
+          "type": "choice",
+          "choice": "cancellation",
+          "confidence": 0.8949,
+          "probabilities": {
+            "refund": 0.0038,
+            "technical_help": 0.0016,
+            "billing_question": 0.0452,
+            "information": 0.001,
+            "cancellation": 0.9125,
+            "other": 0.0359
+          }
+        },
+        "is_urgent": {
+          "type": "noul",
+          "noul": 0.9592
+        },
+        "frustration": {
+          "type": "score",
+          "score": 0.2266,
+          "confidence": 0.7696,
+          "legend": {
+            "0": "calm and neutral",
+            "1": "concerned but civil",
+            "2": "clearly annoyed",
+            "3": "very angry or using strong language"
+          },
+          "probabilities": {
+            "0": 0.8272,
+            "1": 0.1215,
+            "2": 0.0489,
+            "3": 0.0024
+          }
+        },
+        "refund_requested": {
+          "type": "noul",
+          "noul": 0.0416
+        },
+        "churn_risk": {
+          "type": "noul",
+          "noul": 0.9331
+        }
+      },
+      "usage": {
+        "input_tokens": 731,
+        "output_tokens": 0
+      },
+      "routing": null,
+      "state_truncated": false,
+      "done_reason": "decide",
+      "created_at": "2026-10-23T17:28:23.758880Z",
+      "total_duration": 753545167,
+      "load_duration": 0,
+      "eval_duration": 753487167
+    }
+  }
+]

@@ -6,15 +6,20 @@
 // To change the example, edit `model`, `preset` or `message` in hero.json and run this; set `device`
 // to the GPU it ran on. Needs `ollaya` on PATH (or OLLAYA_BIN) and the model pulled.
 //
-//   node scripts/record-hero.mjs
+//   node scripts/record-hero.mjs [file.json]
+//
+// The file holds one recording, or a list of them (src/data/hero-examples.json, the examples the
+// hero cycles through); every entry is recorded the same way.
 
 import { spawnSync } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const file = fileURLToPath(new URL('../src/data/hero.json', import.meta.url))
+const file = process.argv[2] ? resolve(process.argv[2]) : fileURLToPath(new URL('../src/data/hero.json', import.meta.url))
 const bin = process.env.OLLAYA_BIN || 'ollaya'
-const hero = JSON.parse(await readFile(file, 'utf8'))
+const parsed = JSON.parse(await readFile(file, 'utf8'))
+const entries = Array.isArray(parsed) ? parsed : [parsed]
 
 function ollaya(...args) {
   const r = spawnSync(bin, args, { encoding: 'utf8' })
@@ -22,19 +27,21 @@ function ollaya(...args) {
   return r.stdout
 }
 
-const decide = () => JSON.parse(ollaya('run', hero.model, '--preset', hero.preset, '--format', 'json', '--verbose', hero.message))
+for (const hero of entries) {
+  const decide = () => JSON.parse(ollaya('run', hero.model, '--preset', hero.preset, '--format', 'json', '--verbose', hero.message))
 
-decide() // warm-up: loads the model
-const runs = Array.from({ length: 10 }, decide)
-const answers = JSON.stringify(runs[0].answers)
-if (runs.some((r) => JSON.stringify(r.answers) !== answers)) throw new Error('the answers differ between runs')
-const ms = runs.map((r) => r.total_duration / 1e6).sort((a, b) => a - b)
+  decide() // warm-up: loads the model
+  const runs = Array.from({ length: 10 }, decide)
+  const answers = JSON.stringify(runs[0].answers)
+  if (runs.some((r) => JSON.stringify(r.answers) !== answers)) throw new Error('the answers differ between runs')
+  const ms = runs.map((r) => r.total_duration / 1e6).sort((a, b) => a - b)
 
-hero.recorded = {
-  date: new Date().toLocaleDateString('sv'),
-  ollaya: ollaya('--version').trim().split(/\s+/).at(-1),
+  hero.recorded = {
+    date: new Date().toLocaleDateString('sv'),
+    ollaya: ollaya('--version').trim().split(/\s+/).at(-1),
+  }
+  hero.latency_ms = Math.round((ms[4] + ms[5]) / 2)
+  hero.output = runs[0]
+  console.log(`hero: ${hero.model}, ${Object.keys(runs[0].answers).length} questions, ${hero.latency_ms} ms (median of ${ms.length})`)
 }
-hero.latency_ms = Math.round((ms[4] + ms[5]) / 2)
-hero.output = runs[0]
-await writeFile(file, `${JSON.stringify(hero, null, 2)}\n`)
-console.log(`hero: ${hero.model}, ${Object.keys(runs[0].answers).length} questions, ${hero.latency_ms} ms (median of ${ms.length})`)
+await writeFile(file, `${JSON.stringify(parsed, null, 2)}\n`)

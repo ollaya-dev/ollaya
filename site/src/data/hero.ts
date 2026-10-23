@@ -66,11 +66,16 @@ function questionOf(question: string, a: Record<string, unknown>): HeroQuestion 
   return { name: question, answer, others }
 }
 
-export const hero = {
-  model: fixture.model,
-  preset: fixture.preset,
-  message: fixture.message,
-  device: fixture.device,
-  latencyMs: fixture.latency_ms,
-  questions: Object.entries(fixture.output.answers).map(([name, a]) => questionOf(name, a as Record<string, unknown>)),
+/** A recording in hero.json's shape (scripts/record-hero.mjs writes them), as the pages draw it. */
+export function heroOf(f: typeof fixture) {
+  return {
+    model: f.model,
+    preset: f.preset,
+    message: f.message,
+    device: f.device,
+    latencyMs: f.latency_ms,
+    questions: Object.entries(f.output.answers).map(([name, a]) => questionOf(name, a as Record<string, unknown>)),
+  }
 }
+
+export const hero = heroOf(fixture)

@@ -1,6 +1,10 @@
 // A procedural ASCII field behind the hero (src/pages/design.tsx): a slow value field mapped onto a
 // character ramp, drawn on a canvas in the page's data colours at low opacity. The cursor sends a
 // ripple through the characters and lights the field around it. Reduced motion draws one still frame.
+//
+// Cheap on purpose: every glyph is drawn once into an atlas and stamped with drawImage; the whole
+// field is redrawn eight times a second (it drifts slowly) and only the cells around the cursor are
+// redrawn between those frames.
 ;(() => {
   const host = document.querySelector('[data-ascii]')
   if (!host) return
@@ -14,12 +18,14 @@
   const cw = fs * 0.62
   const ch = fs * 1.2
   const base = 0.13
-  let W, H, cols, rows
+  const SPARSE = 9 // the sparse end of the ramp stays empty, so the field has clearings
+  const R = 11 // the cursor's reach, in cells
+  let dpr, W, H, cols, rows, atlas
   let mx = -1e9
   let my = -1e9
 
   function size() {
-    const dpr = Math.min(devicePixelRatio || 1, 2)
+    dpr = Math.min(devicePixelRatio || 1, 2)
     W = host.clientWidth
     H = host.clientHeight
     canvas.width = W * dpr
@@ -27,10 +33,20 @@
     canvas.style.width = `${W}px`
     canvas.style.height = `${H}px`
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.font = `${fs}px ui-monospace, SFMono-Regular, Menlo, monospace`
-    ctx.textBaseline = 'top'
     cols = Math.ceil(W / cw)
     rows = Math.ceil(H / ch)
+    // The atlas: one row per colour, one cell per ramp character, at the device's resolution.
+    atlas = document.createElement('canvas')
+    atlas.width = Math.ceil(cw * dpr) * ramp.length
+    atlas.height = Math.ceil(ch * dpr) * palette.length
+    const a = atlas.getContext('2d')
+    a.setTransform(dpr, 0, 0, dpr, 0, 0)
+    a.font = `${fs}px ui-monospace, SFMono-Regular, Menlo, monospace`
+    a.textBaseline = 'top'
+    palette.forEach((colour, p) => {
+      a.fillStyle = colour
+      for (let i = 0; i < ramp.length; i++) a.fillText(ramp[i], i * Math.ceil(cw * dpr) / dpr, p * Math.ceil(ch * dpr) / dpr)
+    })
   }
 
   const area = host.parentElement
@@ -53,33 +69,64 @@
     )
   }
 
-  function draw(t) {
+  const n = ramp.length - 1
+  const aw = Math.ceil(cw * dpr)
+  const ah = Math.ceil(ch * dpr)
+  function cell(c, r, t) {
+    const d = Math.hypot(c - mx, (r - my) * 1.9)
+    const ripple = d < R ? Math.cos(d * 0.7 - t * 3) * (1 - d / R) * 0.9 : 0
+    const v = Math.max(-1, Math.min(1, field(c, r, t) + ripple))
+    const i = Math.round(((v + 1) / 2) * n)
+    if (i < SPARSE) return
+    ctx.globalAlpha = base + (d < R ? (0.85 - base) * (1 - d / R) : 0)
+    const p = Math.floor((c / cols + (v + 1) / 2) * 2) % palette.length
+    ctx.drawImage(atlas, i * aw, p * ah, aw, ah, c * cw, r * ch, cw, ch)
+  }
+
+  function drawAll(t) {
     ctx.clearRect(0, 0, W, H)
-    const n = ramp.length - 1
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const d = Math.hypot(c - mx, (r - my) * 1.9)
-        const ripple = d < 9 ? Math.cos(d * 0.7 - t * 3) * (1 - d / 9) * 0.9 : 0
-        const v = Math.max(-1, Math.min(1, field(c, r, t) + ripple))
-        const i = Math.round(((v + 1) / 2) * n)
-        if (i < 9) continue // the sparse end of the ramp stays empty, so the field has clearings
-        ctx.globalAlpha = base + (d < 11 ? (0.85 - base) * (1 - d / 11) : 0)
-        ctx.fillStyle = palette[Math.floor((c / cols + (v + 1) / 2) * 2) % palette.length]
-        ctx.fillText(ramp[i], c * cw, r * ch)
-      }
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cell(c, r, t)
+  }
+
+  // Only the cells the cursor reaches: cleared and redrawn, so the ripple moves between full frames.
+  let lastBox = null
+  function drawNear(t) {
+    if (lastBox) {
+      ctx.clearRect(lastBox.x, lastBox.y, lastBox.w, lastBox.h)
+      for (let r = lastBox.r0; r < lastBox.r1; r++) for (let c = lastBox.c0; c < lastBox.c1; c++) cell(c, r, t)
+      lastBox = null
     }
+    if (mx < -1e8) return
+    const c0 = Math.max(0, Math.floor(mx - R - 1))
+    const c1 = Math.min(cols, Math.ceil(mx + R + 1))
+    const r0 = Math.max(0, Math.floor(my - R / 1.9 - 1))
+    const r1 = Math.min(rows, Math.ceil(my + R / 1.9 + 1))
+    lastBox = { x: c0 * cw, y: r0 * ch, w: (c1 - c0) * cw, h: (r1 - r0) * ch, c0, c1, r0, r1 }
+    ctx.clearRect(lastBox.x, lastBox.y, lastBox.w, lastBox.h)
+    for (let r = r0; r < r1; r++) for (let c = c0; c < c1; c++) cell(c, r, t)
   }
 
   size()
-  addEventListener('resize', size)
-  if (still) return draw(0)
+  addEventListener('resize', () => {
+    size()
+    drawAll(performance.now() / 1000)
+  })
+  if (still) return drawAll(0)
   let visible = true
   new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(host)
-  let last = 0
+  let lastAll = 0
+  let lastNear = 0
   function frame(now) {
-    if (visible && now - last > 60) {
-      last = now
-      draw(now / 1000)
+    if (visible) {
+      const t = now / 1000
+      if (now - lastAll > 125) {
+        lastAll = now
+        lastBox = null
+        drawAll(t)
+      } else if (now - lastNear > 33) {
+        lastNear = now
+        drawNear(t)
+      }
     }
     requestAnimationFrame(frame)
   }

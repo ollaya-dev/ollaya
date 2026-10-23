@@ -3,21 +3,23 @@
  * the sitemap, noindex. Dark only for now; the tokens are scoped to .rd so app.css is untouched.
  */
 import type { Child } from 'hono/jsx'
-import { Scatter } from '../components/charts'
 import { Icon } from '../components/Icon'
 import { LogoMark } from '../components/Logo'
-import { CodeBlock, CopyButton } from '../components/ui'
+import { CopyButton } from '../components/ui'
+import { highlight } from '../lib/highlight'
 import { catalog } from '../data/catalog'
+import { docPages } from '../generated/content'
 import { benchGpu, result } from '../data/numbers'
 import stats from '../data/stats.json'
 import { asset } from '../lib/assets'
 import { benchUrl } from '../lib/bench'
 import { githubStars } from '../lib/stars'
-import { GITHUB_URL } from '../site'
-import { hero, type HeroQuestion } from '../data/hero'
+import { AUTHOR, GITHUB_URL, HF_URL, ISSUES_URL } from '../site'
+import { hero, heroOf, type HeroQuestion } from '../data/hero'
+import heroExamples from '../data/hero-examples.json'
 import triage from '../../../crates/ollaya-api/src/presets/triage.json'
 import { compatRequest, compatResponse, JEV, OLLAMA, speedup, vs, vsFeatures } from './home'
-import { accuracyScatter } from './results'
+import { publicBench, shortName } from '../data/results'
 
 const INSTALL = 'curl -fsSL https://ollaya.dev/install.sh | sh'
 const lastWeek = stats.weeks.at(-1)!
@@ -56,19 +58,19 @@ const tokens = `
   --color-line: rgb(255 255 255 / 0.1); --color-line-strong: rgb(255 255 255 / 0.2); --color-subtle: rgb(255 255 255 / 0.025);
   --color-code: rgb(255 255 255 / 0.04); --color-fill: rgb(255 255 255 / 0.06); --color-fill-strong: rgb(255 255 255 / 0.1);
   --color-btn: #fafafa; --color-btn-hover: #ffffff; --color-btn-fg: #0a0a0a; --color-term: rgb(10 10 10 / 0.78);
-  --color-tok-comment: #7d8590; --color-tok-string: #9fe3b4; --color-tok-number: #d2a8ff; --color-tok-keyword: #ff9a9a;
-  --color-tok-key: #8cc8ff; --color-tok-fn: #ffd080; --color-tok-punct: #8b949e;
+  --color-tok-comment: #6b6b6b; --color-tok-string: #a9c7a0; --color-tok-number: #e3d7b4; --color-tok-keyword: #c4c4c4;
+  --color-tok-key: #fafafa; --color-tok-fn: #8cc8ff; --color-tok-punct: #6b6b6b;
   --color-us: #8cc8ff; --color-them: #f0a060; --color-pass: #3fb950; --color-fail: #f85149;
   background: var(--color-canvas); color: var(--color-body); overflow-x: clip;
 }
 /* The frame: two rails down the page, with a cross where a section's rule meets them. */
 .rd .frame { position: relative; max-width: 72rem; margin: 0 auto; border-left: 1px solid var(--color-line); border-right: 1px solid var(--color-line); }
 .rd .rule { position: relative; border-top: 1px solid var(--color-line); }
-.rd .rule::before, .rd .rule::after { content: ''; position: absolute; top: -0.5px; width: 13px; height: 13px; transform: translate(-50%, -50%);
+.rd .rule::before, .rd .rule::after { content: ''; position: absolute; top: -7px; width: 13px; height: 13px; pointer-events: none;
   background:
-    linear-gradient(var(--color-line-strong), var(--color-line-strong)) center / 1px 100% no-repeat,
-    linear-gradient(var(--color-line-strong), var(--color-line-strong)) center / 100% 1px no-repeat; }
-.rd .rule::before { left: 0; } .rd .rule::after { left: 100%; }
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) 6px 0 / 1px 100% no-repeat,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) 0 6px / 100% 1px no-repeat; }
+.rd .rule::before { left: -7px; } .rd .rule::after { left: calc(100% - 6px); }
 /* A panel: a surface with a hairline, blurred over whatever colour sits behind it. */
 .rd .panel { background: rgb(255 255 255 / 0.03); border: 1px solid var(--color-line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .rd .panel-strong { background: rgb(12 12 12 / 0.78); }
@@ -80,6 +82,7 @@ const tokens = `
 .rd .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .rd .ascii { position: absolute; inset: 0; pointer-events: none; mask-image: linear-gradient(180deg, #000 55%, transparent); -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent); }
 .rd .ascii canvas { display: block; }
+@media (max-width: 640px) { .rd .ascii { opacity: 0.45; } }
 .rd .field i { position: absolute; display: block; border-radius: 9999px; filter: blur(90px); opacity: 0.5; }
 .rd .field .a { width: 60vw; height: 60vw; left: -10vw; top: -20vw; background: #2d5a4a; }
 .rd .field .b { width: 50vw; height: 50vw; right: -12vw; top: -8vw; background: #5a4a2d; }
@@ -103,6 +106,24 @@ const tokens = `
   .rd .marquee:hover .marquee-track { animation-play-state: paused; }
 }
 @keyframes marquee { to { transform: translateX(-50%); } }
+/* The hero's example with every option showing: nothing folds, the extra options appear. */
+.rd .is-open .term-fold { animation: term-in 0.4s ease-out both; animation-delay: calc(0.35s + var(--row, 0) * 0.05s); height: auto; opacity: 1; }
+.rd .was-open:not(.is-open) .term-fold { animation: none; height: 0; opacity: 0; }
+.rd .more { display: none; }
+.rd .is-open .more { display: flex; }
+/* Code with line numbers: one span per line, numbered by a counter in the gutter. */
+.rd .code { counter-reset: l; font-size: 13px; line-height: 1.7; }
+.rd .code .ln { display: grid; grid-template-columns: 2.5rem 1fr; }
+.rd .code .ln::before { counter-increment: l; content: counter(l); color: var(--color-faint); text-align: right; padding-right: 1rem; user-select: none; }
+.rd .code .tok-comment { font-style: normal; }
+/* The scatter: Ollaya's models are filled dots, Ollama's are rings; the one under the pointer lights up. */
+.rd .pt { cursor: default; outline: none; }
+.rd .pt circle { transition: r 0.15s, opacity 0.15s; }
+.rd .pt.is-on circle { r: 7; }
+.rd .pt.is-on .dot { fill: var(--color-us); stroke: var(--color-us); }
+.rd .pt.is-off { opacity: 0.12; pointer-events: none; }
+.rd .pt:focus-visible circle { stroke: var(--color-us); stroke-width: 2; }
+.rd .tip { position: absolute; z-index: 10; pointer-events: none; white-space: nowrap; }
 /* The confidence meter: ten segments, lit in turn. */
 .rd .meter { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
 .rd .meter i { display: block; height: 6px; border-radius: 1px; background: var(--color-fill-strong); }
@@ -146,6 +167,21 @@ function Nav() {
           <a href="/download" class="inline-flex h-9 items-center rounded-md bg-btn px-4 text-sm font-medium text-btn-fg hover:bg-btn-hover">
             Download
           </a>
+          <details class="group relative md:hidden">
+            <summary class="inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-line text-fg" aria-label="Menu">
+              <Icon name="menu" class="size-5 group-open:hidden" />
+              <Icon name="close" class="hidden size-5 group-open:block" />
+            </summary>
+            <ul class="panel panel-strong absolute right-0 mt-2 w-48 rounded-md py-1 text-[15px]">
+              {[...links, [GITHUB_URL, 'GitHub']].map(([href, label]) => (
+                <li>
+                  <a href={href} class="block px-4 py-2 text-body hover:text-fg">
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       </nav>
     </header>
@@ -154,11 +190,11 @@ function Nav() {
 
 function Install() {
   return (
-    <div class="panel panel-strong inline-flex h-11 max-w-full items-center gap-3 rounded-md pr-1 pl-4 font-mono text-[13px] text-fg" data-copy-scope>
+    <div class="panel panel-strong inline-flex min-h-11 max-w-full items-center gap-3 rounded-md py-1 pr-1 pl-4 font-mono text-[13px] text-fg" data-copy-scope>
       <span class="text-muted select-none" aria-hidden="true">
         $
       </span>
-      <pre class="truncate">{INSTALL}</pre>
+      <pre class="whitespace-pre-wrap break-all">{INSTALL}</pre>
       <CopyButton class="rounded-md" />
     </div>
   )
@@ -175,20 +211,16 @@ function Hero() {
         <i class="c"></i>
       </div>
       <div class="ascii" data-ascii aria-hidden="true"></div>
-      <div class="frame relative px-5 pt-36 pb-16 text-center md:pt-44">
-        <p class="inline-flex items-center gap-2 rounded-md border border-line bg-canvas/40 px-3 py-1 text-[13px] text-body">
-          <span class="size-1.5 rounded-full bg-pass"></span>
-          Open source · Apache-2.0 · {catalog.length} open decision models
-        </p>
-        <h1 id="rd-hero" class="mx-auto mt-6 max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
+      <div class="frame relative px-5 pt-32 pb-16 text-center md:pt-40">
+        <h1 id="rd-hero" class="mx-auto max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
           The decision layer <br class="hidden md:block" />
           for AI agents.
         </h1>
-        <p class="mx-auto mt-6 max-w-2xl text-lg text-body md:text-xl">
+        <p class="mx-auto mt-6 max-w-[38rem] text-lg leading-relaxed text-body md:text-xl">
           Ollaya runs open decision models on your own hardware. Typed questions in, calibrated answers out, in
           milliseconds: routing, guardrails, triage and tool approval without an LLM call.
         </p>
-        <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Install />
           <a href="/try" class="inline-flex h-11 items-center gap-1.5 rounded-md border border-line bg-canvas/40 px-4 text-sm font-medium text-fg hover:border-line-strong">
             Try it in the browser <Icon name="arrowRight" class="size-4" />
@@ -227,42 +259,72 @@ function AnswerRow({ q, row }: { q: HeroQuestion; row: number }) {
         <span class="w-10 text-right text-[13px] text-fg tabular-nums">{q.answer.p.toFixed(2)}</span>
       </div>
       {runnerUp ? (
-        <p class="term-fold mt-1 h-5 text-xs leading-5 text-muted" style={`--row:${row}`}>
-          next: {nice(runnerUp.label)} {runnerUp.p.toFixed(2)}
-          {q.others.length > 1 ? `, +${q.others.length - 1} more` : ''}
-        </p>
+        <ul class="term-fold mt-1 text-xs leading-5 text-muted" style={`--row:${row}`} role="list">
+          {q.others.map((o, i) => (
+            <li class={`flex items-center gap-4 ${i ? 'more' : ''}`} title={o.full}>
+              <span class="w-36 shrink-0 truncate">{nice(o.label)}</span>
+              <span class="meter min-w-0 flex-1 opacity-50" aria-hidden="true">
+                {Array.from({ length: 10 }, (_, j) => (
+                  <i class={j < Math.round(o.p * 10) ? 'on' : ''} style="animation:none"></i>
+                ))}
+              </span>
+              <span class="w-10 text-right tabular-nums">{o.p.toFixed(2)}</span>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </li>
   )
 }
 
-function DecisionDemo() {
-  const n = hero.questions.length
+type Recording = typeof hero
+const examples: Recording[] = (heroExamples as unknown[]).filter((e) => (e as { output?: unknown }).output).map((e) => heroOf(e as Parameters<typeof heroOf>[0]))
+
+function ExamplePanel({ ex, hidden }: { ex: Recording; hidden: boolean }) {
+  const n = ex.questions.length
   return (
-    <figure class="panel panel-strong overflow-hidden rounded-lg" style="--fold-at:3.4s" data-ui>
+    <div data-example hidden={hidden}>
       <div class="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
         <div class="border-b border-line p-5 md:border-r md:border-b-0">
           <p class="text-[13px] text-muted">A support message comes in</p>
           <blockquote class="term-row mt-3 text-[15px] leading-relaxed text-fg" style="--row:0">
-            “{hero.message}”
+            “{ex.message}”
           </blockquote>
           <p class="mt-5 text-[13px] text-muted">
-            Ollaya asks <span class="font-mono text-[12px] text-body">{hero.model}</span> the {n} questions of the{' '}
-            <span class="font-mono text-[12px] text-body">{hero.preset}</span> preset, in one request.
+            Ollaya asks <span class="font-mono text-[12px] text-body">{ex.model}</span> the {n} questions of the{' '}
+            <span class="font-mono text-[12px] text-body">{ex.preset}</span> preset, in one request.
           </p>
         </div>
         <ol class="divide-y divide-line" role="list">
-          {hero.questions.map((q, i) => (
+          {ex.questions.map((q, i) => (
             <AnswerRow q={q} row={i + 1} />
           ))}
         </ol>
       </div>
-      <figcaption class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-line px-5 py-3 text-[13px] text-muted">
-        <span>
-          Real output: {n} answers in <span class="text-fg">{hero.latencyMs} ms</span> on an {hero.device}, one forward pass.
+      <p class="border-t border-line px-5 py-3 text-[13px] text-muted">
+        Real output: {n} answers in <span class="text-fg">{ex.latencyMs} ms</span> on an {ex.device}, one forward pass. Every answer is a probability you can set a threshold on.
+      </p>
+    </div>
+  )
+}
+
+function DecisionDemo() {
+  return (
+    <figure class="panel panel-strong overflow-hidden rounded-lg" style="--fold-at:3.4s" data-ui data-demo>
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3 text-[13px] text-muted">
+        <span>{examples.length} recorded examples, the same model and preset.</span>
+        <span class="flex gap-2">
+          <button type="button" data-toggle aria-pressed="false" class="inline-flex h-8 items-center rounded-md border border-line px-3 text-[13px] text-body hover:border-line-strong hover:text-fg">
+            Show every option
+          </button>
+          <button type="button" data-next class="inline-flex h-8 items-center gap-1.5 rounded-md bg-btn px-3 text-[13px] font-medium text-btn-fg hover:bg-btn-hover">
+            Next example <Icon name="arrowRight" class="size-3.5" />
+          </button>
         </span>
-        <span>Every answer is a probability you can set a threshold on.</span>
-      </figcaption>
+      </div>
+      {examples.map((ex, i) => (
+        <ExamplePanel ex={ex} hidden={i > 0} />
+      ))}
     </figure>
   )
 }
@@ -369,8 +431,109 @@ function CellView({ c, strong }: { c: Cell; strong?: boolean }) {
   )
 }
 
+type Dot = { name: string; server: 'ollaya' | 'ollama'; acc: number; ece: number; ms: number; label?: boolean }
+
+/** The most accurate tag of each model on each server, as on /results, with the ECE beside it. */
+function scatterDots(): Dot[] {
+  const best = new Map<string, Dot>()
+  for (const r of publicBench?.results ?? []) {
+    if (r.errors >= r.records * 0.05) continue
+    const key = `${r.server}/${shortName(r.model).split(':')[0]}`
+    const b = best.get(key)
+    if (!b || r.macro_accuracy > b.acc || (r.macro_accuracy === b.acc && r.median_ms < b.ms))
+      best.set(key, { name: r.server === 'ollama' ? r.model : shortName(r.model), server: r.server, acc: r.macro_accuracy, ece: r.pooled_ece, ms: r.median_ms })
+  }
+  const dots = [...best.values()].sort((a, b) => b.acc - a.acc)
+  // A label on the leaders only (Ollaya's four most accurate, Ollama's best); the rest on hover.
+  let ours = 0
+  let theirs = 0
+  for (const d of dots) {
+    if (d.server === 'ollaya' && ours < 4) d.label = ++ours > 0
+    if (d.server === 'ollama' && theirs < 1) d.label = ++theirs > 0
+  }
+  return dots
+}
+
+const LOG_TICKS = [10, 20, 50, 100, 200, 500, 1000]
+
+function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
+  const dots = scatterDots()
+  const m = { l: 44, r: 20, t: 16, b: 40 }
+  const xs = dots.map((d) => d.ms)
+  const xTicks = LOG_TICKS.filter((t, i) => (LOG_TICKS[i + 1] ?? Infinity) > Math.min(...xs) && (LOG_TICKS[i - 1] ?? 0) < Math.max(...xs))
+  const lo = Math.floor(Math.min(...dots.map((d) => d.acc)) * 10) / 10
+  const hi = Math.ceil(Math.max(...dots.map((d) => d.acc)) * 10) / 10
+  const yTicks = Array.from({ length: Math.round((hi - lo) * 10) + 1 }, (_, i) => lo + i / 10)
+  const la = Math.log(xTicks[0]!)
+  const lb = Math.log(xTicks.at(-1)!)
+  const x = (v: number) => m.l + ((Math.log(Math.max(xTicks[0]!, Math.min(xTicks.at(-1)!, v))) - la) / (lb - la)) * (W - m.l - m.r)
+  const y = (v: number) => H - m.b - ((v - lo) / (hi - lo)) * (H - m.t - m.b)
+  return (
+    <div class="relative" data-chart>
+      <div class="mb-4 flex flex-wrap items-center gap-2 text-[13px]">
+        {(['ollaya', 'ollama'] as const).map((srv) => (
+          <button type="button" data-series={srv} aria-pressed="true" class="inline-flex items-center gap-2 rounded-md border border-line px-2.5 py-1 text-body hover:border-line-strong aria-[pressed=false]:opacity-40">
+            <svg viewBox="0 0 12 12" class="size-3" aria-hidden="true">
+              {srv === 'ollaya' ? <circle cx="6" cy="6" r="5" class="fill-fg" /> : <circle cx="6" cy="6" r="4" class="stroke-muted" fill="none" stroke-width="2" />}
+            </svg>
+            {srv === 'ollaya' ? 'Ollaya' : OLLAMA}
+          </button>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} class="w-full font-sans" style={`font-size:${W < 500 ? 1.6 : 1}em`} role="img" aria-label="Accuracy against median latency on Bespoke Labs' public benchmark, the most accurate tag of each model on Ollaya and on Ollama">
+        {yTicks.map((t) => (
+          <g>
+            <line x1={m.l} x2={W - m.r} y1={y(t)} y2={y(t)} class="stroke-line" />
+            <text x={m.l - 8} y={y(t) + 4} text-anchor="end" font-size="11" class="fill-muted">
+              {t.toFixed(2)}
+            </text>
+          </g>
+        ))}
+        {xTicks.map((t) => (
+          <g>
+            <line x1={x(t)} x2={x(t)} y1={m.t} y2={H - m.b} class="stroke-line" />
+            <text x={x(t)} y={H - m.b + 16} text-anchor="middle" font-size="11" class="fill-muted">
+              {t}
+            </text>
+          </g>
+        ))}
+        <text x={(m.l + W - m.r) / 2} y={H - 4} text-anchor="middle" font-size="11" class="fill-muted">
+          median latency per question, ms (log scale)
+        </text>
+        <text transform={`translate(12 ${(m.t + H - m.b) / 2}) rotate(-90)`} text-anchor="middle" font-size="11" class="fill-muted">
+          accuracy
+        </text>
+        {dots.map((d) => (
+          <g
+            class="pt"
+            tabindex={0}
+            data-name={d.name}
+            data-server={d.server === 'ollaya' ? 'ollaya' : OLLAMA}
+            data-acc={d.acc.toFixed(3)}
+            data-ece={d.ece.toFixed(3)}
+            data-ms={Math.round(d.ms)}
+          >
+            <title>{`${d.name} on ${d.server === 'ollaya' ? 'Ollaya' : OLLAMA}: accuracy ${d.acc.toFixed(3)}, ECE ${d.ece.toFixed(3)}, ${Math.round(d.ms)} ms`}</title>
+            <circle cx={x(d.ms)} cy={y(d.acc)} r="12" fill="transparent" />
+            {d.server === 'ollaya' ? (
+              <circle cx={x(d.ms)} cy={y(d.acc)} r="5" class="dot fill-fg stroke-canvas" stroke-width="1.5" />
+            ) : (
+              <circle cx={x(d.ms)} cy={y(d.acc)} r="4.5" class="dot stroke-muted fill-canvas" stroke-width="2" />
+            )}
+            {d.label ? (
+              <text x={x(d.ms) + 9} y={y(d.acc) + 4} font-size="12" class={d.server === 'ollaya' ? 'fill-fg' : 'fill-muted'}>
+                {d.name}
+              </text>
+            ) : null}
+          </g>
+        ))}
+      </svg>
+      <div class="tip panel panel-strong rounded-md px-3 py-2 text-[13px] text-body [&_b]:font-medium [&_b]:text-fg [&_span]:text-muted" data-tip hidden></div>
+    </div>
+  )
+}
+
 function Compare() {
-  const chart = accuracyScatter()
   return (
     <section class="frame" aria-labelledby="rd-compare">
       <Title
@@ -379,31 +542,34 @@ function Compare() {
       >
         <span id="rd-compare">Against Ollama and hosted Jev.</span>
       </Title>
-      <div class="rule overflow-x-auto">
-        <table class="w-full border-collapse text-[15px]">
-          <thead>
+      <div class="rule">
+        <table class="block w-full border-collapse text-[15px] md:table md:table-fixed">
+          <thead class="hidden md:table-header-group">
             <tr class="border-b border-line text-left text-[13px]">
-              <th class="px-6 py-4 font-medium text-muted"></th>
-              <th class="px-6 py-4 font-medium text-fg">Ollaya</th>
+              <th class="w-[26%] px-6 py-4 font-medium text-muted"></th>
+              <th class="w-[28%] px-6 py-4 font-medium text-fg">Ollaya</th>
               <th class="px-6 py-4 font-medium text-muted">{OLLAMA}</th>
-              <th class="px-6 py-4 font-medium text-muted">TypeSafe Jev, hosted</th>
+              <th class="hidden px-6 py-4 font-medium text-muted md:table-cell">TypeSafe Jev, hosted</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-line">
+          <tbody class="block divide-y divide-line md:table-row-group">
             {rows.map((r) => (
-              <tr>
-                <th scope="row" class="px-6 py-3.5 text-left font-medium text-fg">
+              <tr class="block px-5 py-4 md:table-row md:p-0">
+                <th scope="row" class="block pb-2 text-left align-top font-medium text-fg md:table-cell md:px-6 md:py-3.5">
                   {r.label}
                 </th>
-                <td class="bg-subtle px-6 py-3.5 align-top">
-                  <CellView c={r.ollaya} strong />
-                </td>
-                <td class="px-6 py-3.5 align-top">
-                  <CellView c={r.ollama} />
-                </td>
-                <td class="px-6 py-3.5 align-top">
-                  <CellView c={r.jev} />
-                </td>
+                {(
+                  [
+                    ['Ollaya', r.ollaya, true],
+                    [OLLAMA, r.ollama, false],
+                    ['TypeSafe Jev, hosted', r.jev, false],
+                  ] as const
+                ).map(([who, c, strong]) => (
+                  <td class={`flex gap-3 py-1 align-top md:table-cell md:px-6 md:py-3.5 ${strong ? 'md:bg-subtle' : ''}`}>
+                    <span class="w-28 shrink-0 text-[13px] leading-6 text-muted md:hidden">{who}</span>
+                    <CellView c={c} strong={strong} />
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -413,11 +579,11 @@ function Compare() {
         <figcaption class="text-sm text-body">
           <span class="font-medium text-fg">Accuracy against latency</span>, the most accurate tag of each model on each server
         </figcaption>
-        <div class="mt-4 hidden md:block">
-          <Scatter {...chart} />
+        <div class="mt-5 hidden md:block">
+          <DesignScatter />
         </div>
-        <div class="mt-4 md:hidden">
-          <Scatter {...chart} compact />
+        <div class="mt-5 md:hidden">
+          <DesignScatter W={380} H={400} />
         </div>
         <p class="mt-6 text-sm">
           <a href={benchUrl()} class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
@@ -426,6 +592,21 @@ function Compare() {
         </p>
       </figure>
     </section>
+  )
+}
+
+/** A code block with line numbers; each line is highlighted on its own (no token spans a line here). */
+function NumberedCode({ code, lang }: { code: string; lang: string }) {
+  return (
+    <pre class="code overflow-x-auto py-4 pr-12 font-mono text-fg">
+      <code class={`language-${lang}`}>
+        {code.split('\n').map((line) => (
+          <span class="ln">
+            <span dangerouslySetInnerHTML={{ __html: highlight(line, lang) || ' ' }}></span>
+          </span>
+        ))}
+      </code>
+    </pre>
   )
 }
 
@@ -440,9 +621,10 @@ function Api() {
           ['Request', compatRequest, 'shell'],
           ['Response', compatResponse, 'json'],
         ].map(([label, code, lang]) => (
-          <div class="flex flex-col bg-canvas">
+          <div class="relative flex flex-col bg-canvas" data-copy-scope>
             <div class="border-b border-line px-5 py-3 text-xs font-medium text-muted">{label}</div>
-            <CodeBlock code={code!} lang={lang} class="flex-1 [&>pre]:rounded-none [&>pre]:bg-transparent [&>pre]:p-5" />
+            <NumberedCode code={code!} lang={lang!} />
+            <CopyButton class="absolute top-1.5 right-2" />
           </div>
         ))}
       </div>
@@ -523,21 +705,96 @@ function Closer() {
   )
 }
 
+/** The footer's link groups: every page the site has, by what the visitor is after. */
+const docNav = (slug: string) => {
+  const d = docPages.find((p) => p.slug === slug)
+  if (!d) throw new Error(`design footer: no doc page ${slug}`)
+  return { href: `/docs/${slug}`, label: d.nav }
+}
+const footerGroups: { title: string; links: { href: string; label: string }[] }[] = [
+  {
+    title: 'Product',
+    links: [
+      { href: '/download', label: 'Download' },
+      { href: '/search', label: 'Models' },
+      { href: '/try', label: 'Try in the browser' },
+      { href: benchUrl(), label: 'Ollaya Bench' },
+      { href: '/stats', label: 'Stats' },
+      { href: '/blog', label: 'Blog' },
+    ],
+  },
+  { title: 'Docs', links: ['quickstart', 'cli', 'api', 'modelfile', 'typesafe-compatibility', 'faq'].map(docNav) },
+  { title: 'Use cases', links: ['agents', 'guardrails', 'routing', 'replace-llm-classifiers', 'cpu-classification', 'integrations'].map(docNav) },
+  {
+    title: 'Models',
+    links: [...catalog]
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, 6)
+      .map((m) => ({ href: `/library/${m.name}`, label: m.name })),
+  },
+  {
+    title: 'Community',
+    links: [
+      { href: GITHUB_URL, label: 'GitHub' },
+      { href: ISSUES_URL, label: 'Issues' },
+      { href: HF_URL, label: 'Hugging Face' },
+      { href: '/contributors', label: 'Contributors' },
+      docNav('model-authors'),
+      { href: '/llms.txt', label: 'llms.txt' },
+    ],
+  },
+]
+
 function Foot() {
   return (
-    <footer class="frame rule flex flex-col gap-3 px-6 py-8 text-[13px] text-muted sm:flex-row sm:items-center sm:justify-between">
-      <p>© 2026 Ollaya · Apache-2.0 · An independent project, not affiliated with Ollama or TypeSafe.</p>
-      <p class="flex gap-5">
-        <a href={GITHUB_URL} class="hover:text-fg">
-          GitHub
-        </a>
-        <a href="/docs" class="hover:text-fg">
-          Docs
-        </a>
-        <a href="/contributors" class="hover:text-fg">
-          Contributors
-        </a>
-      </p>
+    <footer class="frame">
+      <div class="rule flex flex-col gap-6 px-6 py-10 md:flex-row md:items-start md:justify-between">
+        <div class="max-w-sm">
+          <a href="/" class="inline-flex items-center gap-2 text-fg" aria-label="Ollaya home">
+            <LogoMark class="size-8" />
+            <span class="text-lg font-semibold tracking-tight">ollaya</span>
+          </a>
+          <p class="mt-4 text-[15px] text-body">Run open decision models locally. Typed questions in, calibrated answers out, in milliseconds, on your own hardware.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href={GITHUB_URL} class="inline-flex size-10 items-center justify-center rounded-md border border-line text-body hover:border-line-strong hover:text-fg" aria-label="GitHub">
+            <svg viewBox="0 0 24 24" class="size-5" fill="currentColor" aria-hidden="true">
+              <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+            </svg>
+          </a>
+          <a href={HF_URL} class="inline-flex h-10 items-center gap-2 rounded-md border border-line px-3 text-sm text-body hover:border-line-strong hover:text-fg">
+            Hugging Face
+          </a>
+          <a href="/download" class="inline-flex h-10 items-center rounded-md bg-btn px-4 text-sm font-medium text-btn-fg hover:bg-btn-hover">
+            Download
+          </a>
+        </div>
+      </div>
+      <nav aria-label="Footer" class="rule grid grid-cols-2 gap-px bg-line md:grid-cols-5">
+        {footerGroups.map((g, i) => (
+          <div class={`bg-canvas px-6 py-8 ${i === footerGroups.length - 1 ? 'col-span-2 md:col-span-1' : ''}`}>
+            <h3 class="text-sm font-semibold text-fg">{g.title}</h3>
+            <ul class="mt-4 space-y-2.5 text-[15px]" role="list">
+              {g.links.map((l) => (
+                <li>
+                  <a href={l.href} class={`text-body hover:text-fg ${g.title === 'Models' ? 'font-mono text-[14px]' : ''}`}>
+                    {l.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
+      <div class="rule flex flex-col gap-3 px-6 py-6 text-[13px] text-muted sm:flex-row sm:items-center sm:justify-between">
+        <p>
+          © 2026 Ollaya · Apache-2.0 · Built by{' '}
+          <a href={AUTHOR.url} class="text-body hover:text-fg">
+            {AUTHOR.name}
+          </a>
+        </p>
+        <p>An independent open-source project, not affiliated with Ollama or TypeSafe.</p>
+      </div>
     </footer>
   )
 }
@@ -556,6 +813,8 @@ export function DesignPage({ origin }: { origin: string }) {
         <style dangerouslySetInnerHTML={{ __html: tokens }}></style>
         <script src={asset('app.js')} defer></script>
         <script src={asset('ascii.js')} defer></script>
+        <script src={asset('chart.js')} defer></script>
+        <script src={asset('demo.js')} defer></script>
       </head>
       <body class="rd min-h-screen font-sans antialiased" data-origin={origin}>
         <div class="grain" aria-hidden="true"></div>
