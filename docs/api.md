@@ -43,6 +43,7 @@ through the matching type in `ollaya-api`, and request examples pass boundary va
 | `GET` | `/api/tags` | Models on this machine | no |
 | `POST` | `/api/show` | One model's details | no |
 | `GET` | `/api/ps` | Models loaded in memory | no |
+| `GET` | `/api/activity` | The latest decision requests | no |
 | `POST` | `/api/pull` | Download a model from a registry | yes (default) |
 | `DELETE` | `/api/delete` | Remove a local model | no |
 | `POST` | `/api/copy` | Copy a local model to a new name | no |
@@ -1277,6 +1278,53 @@ Create is idempotent (the same request leaves the same file); delete behaves lik
 `501 NOT_IMPLEMENTED`. The registry is static (manifests are files published with the site), so
 there is nothing to push to yet. The paths are reserved with Ollama's semantics, so adding them
 later changes nothing else.
+
+### 7.13 `GET /api/activity`
+
+*Since 0.17.0.* The latest 100 decision requests that reached a model (`/api/decide` with a state,
+`/v1/systemone`, `/v1/decisions`), newest first, kept in memory and lost when the server stops. A
+request rejected before it reached a model (invalid body, queue full) is not listed. Only what the
+request was is kept, never its state or its answers. No request body. The desktop app shows it.
+
+| Response field | Type | Meaning |
+|---|---|---|
+| `total` | integer | Decision requests since the server started, listed or not |
+| `requests[].at` | string | When the answer or the error was sent |
+| `requests[].endpoint` | string | The path that was called |
+| `requests[].model` | string | The model that answered (a router's target), or the one asked for when the request failed |
+| `requests[].questions` | integer | Questions answered; `0` when the request failed |
+| `requests[].total_duration` | integer | Nanoseconds from the start of the request to its answer |
+| `requests[].error` | string | The [error code](#42-error-codes), only when the request failed |
+
+```shell
+curl http://localhost:11435/api/activity
+```
+
+<!-- json: ActivityResponse -->
+```json
+{
+  "total": 2,
+  "requests": [
+    {
+      "at": "2026-10-23T14:02:11.305Z",
+      "endpoint": "/v1/decisions",
+      "model": "nope:latest",
+      "questions": 0,
+      "total_duration": 412000,
+      "error": "MODEL_NOT_FOUND"
+    },
+    {
+      "at": "2026-10-23T14:02:10.871Z",
+      "endpoint": "/api/decide",
+      "model": "laya:en",
+      "questions": 5,
+      "total_duration": 18342000
+    }
+  ]
+}
+```
+
+Safe to retry.
 
 ---
 

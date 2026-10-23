@@ -17,8 +17,8 @@ use crate::decide::{DecideRequest, DecideResponse, SystemOneRequest, SystemOneRe
 use crate::error::{ErrorBody, ErrorCode};
 use crate::host::{Host, InvalidHost};
 use crate::models::{
-    CopyRequest, CreateRequest, DeleteRequest, ModelList, ProgressResponse, PsResponse,
-    PullRequest, ShowRequest, ShowResponse, TagsResponse, VersionResponse,
+    ActivityResponse, CopyRequest, CreateRequest, DeleteRequest, ModelList, ProgressResponse,
+    PsResponse, PullRequest, ShowRequest, ShowResponse, TagsResponse, VersionResponse,
 };
 use crate::presets::{CreatePresetRequest, PresetRequest, PresetResponse, PresetsResponse};
 
@@ -143,6 +143,11 @@ impl Client {
     /// `GET /api/ps`.
     pub async fn ps(&self) -> Result<PsResponse> {
         self.get_json("/api/ps").await
+    }
+
+    /// `GET /api/activity`.
+    pub async fn activity(&self) -> Result<ActivityResponse> {
+        self.get_json("/api/activity").await
     }
 
     /// `POST /api/show`.

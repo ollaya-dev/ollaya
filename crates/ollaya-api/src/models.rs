@@ -114,6 +114,32 @@ pub struct PsResponse {
     pub models: Vec<RunningModel>,
 }
 
+/// One decision request in `GET /api/activity`. Only what the request was, never its state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Activity {
+    /// When the answer (or the error) was sent.
+    pub at: DateTime<Utc>,
+    /// The path that was called: `/api/decide`, `/v1/systemone` or `/v1/decisions`.
+    pub endpoint: String,
+    /// The model that answered (a router's target), or the one asked for when the request failed.
+    pub model: String,
+    /// Questions answered; `0` when the request failed.
+    pub questions: u64,
+    /// Nanoseconds from the start of the request to its answer.
+    pub total_duration: u64,
+    /// Set when the request failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<crate::ErrorCode>,
+}
+
+/// `GET /api/activity`: the latest decision requests, newest first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActivityResponse {
+    /// Decision requests since the server started.
+    pub total: u64,
+    pub requests: Vec<Activity>,
+}
+
 fn is_false(b: &bool) -> bool {
     !*b
 }
