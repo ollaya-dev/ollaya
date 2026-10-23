@@ -675,6 +675,23 @@ async fn systemone_is_typesafe_shaped() {
         ["type", "choice", "confidence", "probabilities"]
     );
     assert_eq!(body["usage"]["output_tokens"], 0);
+
+    // The request shows in the activity log, newest first, and so does a failed one.
+    let _ = d
+        .client
+        .decide(&DecideRequest::new("nope", json!("hi"), None))
+        .await;
+    let log = d.client.activity().await.unwrap();
+    assert_eq!(log.total, 2);
+    let [failed, answered] = &log.requests[..] else {
+        panic!("{log:?}")
+    };
+    assert_eq!(failed.error, Some(ErrorCode::ModelNotFound));
+    assert_eq!(
+        (answered.endpoint.as_str(), answered.model.as_str()),
+        ("/v1/decisions", "laya:en")
+    );
+    assert_eq!((answered.questions, answered.error.clone()), (1, None));
     d.stop().await;
 }
 

@@ -17,8 +17,8 @@
 import type { Child } from 'hono/jsx'
 import { withResults } from './data/numbers'
 import { Layout, type PageMeta } from './components/Layout'
-import { catalog, fullName, searchIndex } from './data/catalog'
-import { docPages } from './generated/content'
+import { catalog, featuredTags, fullName, getTag, searchIndex } from './data/catalog'
+import { docPages, readmes } from './generated/content'
 import { hasAsset, setAssetVersions } from './lib/assets'
 import { setBenchOrigin } from './lib/bench'
 import { setGithubStars } from './lib/stars'
@@ -39,6 +39,31 @@ import { ContributorsPage } from './pages/contributors'
 import { StatsPage } from './pages/stats'
 
 export { withReadmeBlocks } from './data/readme'
+
+/** The desktop app's model library (desktop/ui): its model cards and model pages, readme included. */
+function appLibrary() {
+  return {
+    models: catalog.map((m) => ({
+      name: m.name,
+      title: m.title,
+      description: m.description,
+      publisher: m.publisher?.name ?? null,
+      license: m.license,
+      caps: m.capabilities,
+      rank: m.rank,
+      stats: m.stats,
+      tags: featuredTags(m).map((t) => ({
+        name: fullName(m, t),
+        summary: t.summary,
+        // Pulling a router pulls the models it routes to.
+        size: t.kind === 'router' ? (t.routesTo ?? []).reduce((n, r) => n + (getTag(m, r)?.sizeBytes ?? 0), 0) : t.sizeBytes,
+        params: t.params ?? null,
+        languages: t.languages,
+      })),
+      readme: readmes[m.name] ? withResults(readmes[m.name]!) : null,
+    })),
+  }
+}
 
 export interface BuildOptions {
   /** Public origin without trailing slash, e.g. from the SITE_ORIGIN env var. */
@@ -231,6 +256,7 @@ export async function renderSite({ origin, bench, assetVersions, stars }: BuildO
   out.push({ path: 'robots.txt', body: robotsTxt(origin) })
   out.push({ path: 'sitemap.xml', body: sitemapXml(origin, all.map((p) => p.url)) })
   out.push({ path: 'search.json', body: `${JSON.stringify(searchIndex())}\n` })
+  out.push({ path: 'data/library.json', body: `${JSON.stringify(appLibrary())}\n` })
   out.push({ path: 'llms.txt', body: llmsTxt(origin, bench, docPages, catalog) })
   out.push({ path: 'llms-full.txt', body: llmsFullTxt(origin, docPages) })
   // The measurements behind /results, as the tools wrote them (../results/runs), under /data so they do not shadow the /results page.

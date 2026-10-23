@@ -32,9 +32,10 @@ pub use decide::{
 pub use error::{ErrorBody, ErrorCode, Loc, ValidationIssue};
 pub use keep_alive::{KeepAlive, KeepAliveError};
 pub use models::{
-    CalibrationSpec, CopyRequest, CreateParameters, CreateRequest, DeleteRequest, License,
-    LocalModel, ModelDetails, ModelList, ModelMetadata, ProgressResponse, PsResponse, PullRequest,
-    RouterInfo, RunningModel, ShowRequest, ShowResponse, TagsResponse, VersionResponse,
+    Activity, ActivityResponse, CalibrationSpec, CopyRequest, CreateParameters, CreateRequest,
+    DeleteRequest, License, LocalModel, ModelDetails, ModelList, ModelMetadata, ProgressResponse,
+    PsResponse, PullRequest, RouterInfo, RunningModel, ShowRequest, ShowResponse, TagsResponse,
+    VersionResponse,
 };
 pub use presets::{
     CreatePresetRequest, PresetInfo, PresetRequest, PresetResponse, PresetsResponse,

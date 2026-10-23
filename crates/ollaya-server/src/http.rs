@@ -26,9 +26,9 @@ use indexmap::IndexMap;
 use ollaya_api::error::{Loc, ValidationIssue, body_loc};
 use ollaya_api::host::Host;
 use ollaya_api::{
-    DecideResponse, DoneReason, ErrorBody, ErrorCode, Extra, KeepAlive, ModelList, PresetResponse,
-    PresetsResponse, ProgressResponse, PsResponse, Question, Questions, TagsResponse, Usage,
-    VersionResponse, validate,
+    Activity, ActivityResponse, DecideResponse, DoneReason, ErrorBody, ErrorCode, Extra, KeepAlive,
+    ModelList, PresetResponse, PresetsResponse, ProgressResponse, PsResponse, Question, Questions,
+    TagsResponse, Usage, VersionResponse, validate,
 };
 use ollaya_registry::{ModelName, Store};
 use tokio::net::{TcpListener, TcpStream};
@@ -50,6 +50,10 @@ pub struct AppState {
     hostname: Option<String>,
     /// Decision requests in flight, bounded by `max_queue`.
     in_flight: AtomicUsize,
+    /// The latest decision requests for `GET /api/activity`, oldest first.
+    activity: Mutex<VecDeque<Activity>>,
+    /// Decision requests since the server started.
+    decisions: AtomicU64,
 }
 
 impl AppState {
@@ -63,6 +67,8 @@ impl AppState {
             origins,
             hostname: machine_hostname(),
             in_flight: AtomicUsize::new(0),
+            activity: Mutex::new(VecDeque::with_capacity(ACTIVITY_LEN)),
+            decisions: AtomicU64::new(0),
         })
     }
 
@@ -95,6 +101,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/version", get(version))
         .route("/api/tags", get(tags))
         .route("/api/ps", get(ps))
+        .route("/api/activity", get(activity))
         .route("/api/show", post(show))
         .route("/api/pull", post(pull))
         .route("/api/delete", delete(delete_model))
@@ -324,6 +331,17 @@ async fn ps(State(s): State<Arc<AppState>>) -> Json<PsResponse> {
         .collect();
     models.sort_by(|a, b| a.name.cmp(&b.name));
     Json(PsResponse { models })
+}
+
+/// How many decision requests `GET /api/activity` remembers.
+const ACTIVITY_LEN: usize = 100;
+
+async fn activity(State(s): State<Arc<AppState>>) -> Json<ActivityResponse> {
+    let log = s.activity.lock().expect("activity lock");
+    Json(ActivityResponse {
+        total: s.decisions.load(Ordering::Relaxed),
+        requests: log.iter().rev().cloned().collect(),
+    })
 }
 
 async fn v1_models(State(s): State<Arc<AppState>>) -> ApiResult<Json<ModelList>> {
@@ -574,15 +592,34 @@ impl Drop for CancelOnDrop {
 /// load (the next request finds the model warm), and the decision itself is skipped.
 async fn run_decision(
     s: &Arc<AppState>,
+    endpoint: &str,
     mut input: DecideInput,
 ) -> Result<crate::service::DecideOutput, Error> {
+    let started = Instant::now();
     let flag = Arc::new(AtomicBool::new(false));
     let _cancel = CancelOnDrop(flag.clone());
     input.cancel = Some(flag);
+    let asked = input.model.clone();
     let ollaya = s.ollaya.clone();
-    tokio::spawn(async move { ollaya.decide(input).await })
+    let out = tokio::spawn(async move { ollaya.decide(input).await })
         .await
-        .map_err(|e| Error::Runner(format!("decision task failed: {e}")))?
+        .map_err(|e| Error::Runner(format!("decision task failed: {e}")))
+        .and_then(|r| r);
+    let entry = Activity {
+        at: chrono::Utc::now(),
+        endpoint: endpoint.to_owned(),
+        model: out.as_ref().map_or(asked, |o| o.model.clone()),
+        questions: out.as_ref().map_or(0, |o| o.questions.len() as u64),
+        total_duration: started.elapsed().as_nanos() as u64,
+        error: out.as_ref().err().map(|e| error_body(e, false).code),
+    };
+    s.decisions.fetch_add(1, Ordering::Relaxed);
+    let mut log = s.activity.lock().expect("activity lock");
+    if log.len() == ACTIVITY_LEN {
+        log.pop_front();
+    }
+    log.push_back(entry);
+    out
 }
 
 /// The `type` of question `id` in a request, for `TOO_MANY_OPTIONS` locations.
@@ -604,7 +641,11 @@ fn decision_error(e: &Error, questions: Option<&Questions>) -> ApiError {
     }
 }
 
-async fn decide(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Json<DecideResponse>> {
+async fn decide(
+    State(s): State<Arc<AppState>>,
+    uri: Uri,
+    body: Body,
+) -> ApiResult<Json<DecideResponse>> {
     let req = parse(body, validate::decide_request).await?;
     let [name] = names([("model", &req.model)])?;
     let _slot = slot(&s)?;
@@ -653,7 +694,7 @@ async fn decide(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Json<De
         keep_alive: req.keep_alive,
         cancel: None,
     };
-    let out = run_decision(&s, input)
+    let out = run_decision(&s, uri.path(), input)
         .await
         .map_err(|e| decision_error(&e, questions.as_ref()))?;
     let resp = views::decide_response(out, req.wants(Extra::Laya)).map_err(|e| api_error(&e))?;
@@ -663,6 +704,7 @@ async fn decide(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Json<De
 /// `POST /v1/systemone` and `/v1/decisions`: TypeSafe's shape, nothing else.
 async fn systemone(
     State(s): State<Arc<AppState>>,
+    uri: Uri,
     body: Body,
 ) -> ApiResult<Json<ollaya_api::SystemOneResponse>> {
     let req = parse(body, validate::system_one_request).await?;
@@ -679,7 +721,7 @@ async fn systemone(
         keep_alive: None,
         cancel: None,
     };
-    let out = run_decision(&s, input)
+    let out = run_decision(&s, uri.path(), input)
         .await
         .map_err(|e| decision_error(&e, req.questions.as_ref()))?;
     if out.state_truncated {

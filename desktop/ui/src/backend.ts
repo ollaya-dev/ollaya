@@ -11,16 +11,48 @@ export interface Status {
   device: string | null
 }
 
+/** A version of a library model, as ollaya.dev/data/library.json lists it. */
 export interface LibraryTag {
   name: string
   summary: string
+  /** Download size in bytes (a router's: the models it routes to). */
+  size: number
+  params: string | null
+  languages: string
 }
 
 export interface LibraryModel {
   name: string
+  title: string
   description: string
+  publisher: string | null
+  license: string
   caps: string[]
+  /** Editorial order, lower first. */
+  rank: number
+  /** Measured on the benchmark GPU, for `tag`. */
+  stats: { tag: string; accuracy?: number; latencyMs?: number } | null
   tags: LibraryTag[]
+  /** The model card as HTML, from ollaya.dev. */
+  readme: string | null
+}
+
+/** One decision request the server answered (`GET /api/activity`). */
+export interface Activity {
+  at: string
+  endpoint: string
+  model: string
+  questions: number
+  /** Nanoseconds. */
+  total_duration: number
+  /** The error code, when it failed. */
+  error?: string
+}
+
+export interface ActivityResponse {
+  total: number
+  /** Newest first. */
+  requests: Activity[]
 }
 
 export interface LocalModel {
@@ -80,6 +112,9 @@ export interface Backend {
   stopServer(): Promise<Status>
   library(): Promise<LibraryModel[]>
   installed(): Promise<LocalModel[]>
+  /** The names of the models loaded in memory. */
+  loaded(): Promise<string[]>
+  activity(): Promise<ActivityResponse>
   pull(model: string): Promise<void>
   remove(model: string): Promise<void>
   presets(): Promise<Preset[]>
@@ -92,6 +127,8 @@ export interface Backend {
   updateAvailable(): Promise<string | null>
   /** Open the download page in the browser. */
   openDownload(): Promise<void>
+  /** Open a web link in the browser. */
+  openLink(url: string): Promise<void>
 }
 
 function tauri(): Backend {
@@ -104,6 +141,8 @@ function tauri(): Backend {
     stopServer: () => invoke('stop_server'),
     library: () => invoke('library'),
     installed: async () => (await invoke<{ models: LocalModel[] }>('installed')).models,
+    loaded: async () => (await invoke<{ models: { name: string }[] }>('loaded')).models.map((m) => m.name),
+    activity: () => invoke('activity'),
     pull: (model) => invoke('pull', { model }),
     remove: (model) => invoke('remove', { model }),
     presets: () => invoke('preset_list'),
@@ -114,6 +153,7 @@ function tauri(): Backend {
     },
     updateAvailable: () => invoke('update_available'),
     openDownload: () => invoke('open_download'),
+    openLink: (url) => invoke('open_link', { url }),
   }
 }
 

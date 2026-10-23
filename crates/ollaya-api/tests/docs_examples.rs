@@ -11,10 +11,10 @@
 use ollaya_api::decide::{Answer, LayaExtra};
 use ollaya_api::validate::{self, Body, Issues};
 use ollaya_api::{
-    CopyRequest, CreatePresetRequest, CreateRequest, DecideRequest, DecideResponse, DeleteRequest,
-    ErrorBody, ErrorCode, ModelList, PresetRequest, PresetResponse, PresetsResponse,
-    ProgressResponse, PsResponse, PullRequest, RouterInfo, ShowResponse, SystemOneRequest,
-    SystemOneResponse, TagsResponse, VersionResponse,
+    ActivityResponse, CopyRequest, CreatePresetRequest, CreateRequest, DecideRequest,
+    DecideResponse, DeleteRequest, ErrorBody, ErrorCode, ModelList, PresetRequest, PresetResponse,
+    PresetsResponse, ProgressResponse, PsResponse, PullRequest, RouterInfo, ShowResponse,
+    SystemOneRequest, SystemOneResponse, TagsResponse, VersionResponse,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -235,6 +235,7 @@ fn every_example_matches_the_contract() {
             ("json", "ShowResponse") => drop(exact::<ShowResponse>(&ex.text, &ctx)),
             ("json", "RouterInfo") => drop(exact::<RouterInfo>(&ex.text, &ctx)),
             ("json", "PsResponse") => drop(exact::<PsResponse>(&ex.text, &ctx)),
+            ("json", "ActivityResponse") => drop(exact::<ActivityResponse>(&ex.text, &ctx)),
             ("json", "ModelList") => drop(exact::<ModelList>(&ex.text, &ctx)),
             ("json", "PresetsResponse") => drop(exact::<PresetsResponse>(&ex.text, &ctx)),
             ("json", "PresetResponse") => drop(exact::<PresetResponse>(&ex.text, &ctx)),
