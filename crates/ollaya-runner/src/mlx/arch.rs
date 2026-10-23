@@ -28,6 +28,20 @@ pub struct Arch {
     pub backbone: Backbone,
     pub head: Head,
     pub weights: Weights,
+    /// A LoRA adapter on the backbone's linear layers, merged into them when the model loads.
+    #[serde(default)]
+    pub lora: Option<Lora>,
+}
+
+/// A peft LoRA adapter: for a backbone weight `<backbone prefix><name>.weight` whose adapter holds
+/// `<prefix><name>.lora_A.weight` [r, in] and `<prefix><name>.lora_B.weight` [out, r], the engine
+/// runs `W + scaling * B A` (peft's merge, in float32).
+#[derive(Debug, Clone, Deserialize)]
+pub struct Lora {
+    /// Name prefix of the adapter's tensors, e.g. `base_model.model.`.
+    pub prefix: String,
+    /// `lora_alpha / r`.
+    pub scaling: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,6 +64,16 @@ impl Backbone {
             Backbone::DebertaV2(c) => c.hidden_size,
             Backbone::Qwen3(c) => c.hidden_size,
             Backbone::Qwen35(c) => c.hidden_size,
+        }
+    }
+
+    /// Name prefix of the backbone's tensors in the weights file.
+    pub fn prefix(&self) -> &str {
+        match self {
+            Backbone::Modernbert(c) => &c.prefix,
+            Backbone::DebertaV2(c) => &c.prefix,
+            Backbone::Qwen3(c) => &c.prefix,
+            Backbone::Qwen35(c) => &c.prefix,
         }
     }
 
@@ -183,8 +207,15 @@ pub enum Head {
     /// GLiClass `GLiClassUniEncoder` (`gliclass-uni-v1`).
     GliclassUni(GliclassHead),
     /// A decoder's tied LM head at one position per row, restricted to the tokens the engine
-    /// names at run time: qwen3guard's candidate first tokens (`qwen3guard-gen-v1`).
+    /// names at run time: qwen3guard's candidate first tokens (`qwen3guard-gen-v1`), decider's
+    /// labels (`decider-slots-v1`).
     TiedRows,
+    /// Decision 1.0's `CandidateHead`: each option's last token against the query token
+    /// (`decision-endpoint-v1`).
+    Endpoint(EndpointHead),
+    /// Kev's `PointerHead`: each option's closing token against the decide token
+    /// (`kev-pointer-v1`).
+    Pointer(PointerHead),
 }
 
 impl Head {
@@ -195,6 +226,8 @@ impl Head {
             Head::OptionMarker(_) => "option-marker",
             Head::GliclassUni(_) => "gliclass-uni",
             Head::TiedRows => "tied-rows",
+            Head::Endpoint(_) => "endpoint",
+            Head::Pointer(_) => "pointer",
         }
     }
 }
@@ -248,6 +281,28 @@ pub struct ContextPoolerHead {
     pub num_labels: usize,
 }
 
+/// Decision 1.0's `CandidateHead` (`decision/model.py` in the model repo): LayerNorms on the
+/// candidate and query states, a bilinear term `key(c) · query(q) / sqrt(head_dim)` and
+/// `scalar(gelu(candidate_mlp(c) + query_mlp(q)))`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct EndpointHead {
+    /// Name prefix of the head's tensors (`candidate_norm`, `query_norm`, `key`, `query`,
+    /// `candidate_mlp`, `query_mlp`, `scalar`), usually empty.
+    pub prefix: String,
+    pub head_dim: usize,
+    /// `nn.LayerNorm`'s default.
+    pub norm_eps: f32,
+}
+
+/// Kev's `PointerHead` (`kev/model.py`): `(k(h_opt) · q(h_decide)) / sqrt(dim)`, two Linears with
+/// biases. The fitted temperature is the calibration layer's, not the head's.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PointerHead {
+    /// Name prefix of `q` and `k` in the head file.
+    pub prefix: String,
+    pub dim: usize,
+}
+
 /// Von's `OptionMarkerScorer`: LayerNorm, Linear, GELU, LayerNorm, Linear, at every marker.
 #[derive(Debug, Clone, Deserialize)]
 pub struct OptionMarkerHead {
@@ -285,6 +340,32 @@ pub struct Weights {
     /// For `torch-zip`: where each tensor's bytes are (the pickle is never read at run time).
     #[serde(default)]
     pub tensors: BTreeMap<String, TensorAt>,
+    /// Further weights files (a head file, an adapter), in the order of the manifest's weights
+    /// layers after the first.
+    #[serde(default)]
+    pub more: Vec<WeightsFile>,
+}
+
+/// One more weights file of a model whose tensors are spread over several.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WeightsFile {
+    pub format: WeightsFormat,
+    pub file: String,
+    #[serde(default)]
+    pub tensors: BTreeMap<String, TensorAt>,
+}
+
+impl Weights {
+    /// Every file, first to last: `(format, file name, torch-zip offsets)`.
+    pub fn files(&self) -> Vec<(WeightsFormat, &str, &BTreeMap<String, TensorAt>)> {
+        let mut out = vec![(self.format, self.file.as_str(), &self.tensors)];
+        out.extend(
+            self.more
+                .iter()
+                .map(|w| (w.format, w.file.as_str(), &w.tensors)),
+        );
+        out
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -494,6 +575,39 @@ mod tests {
             "\"tie_word_embeddings\":false",
         );
         assert!(Arch::parse(&untied).unwrap_err().contains("untied"));
+    }
+
+    #[test]
+    fn reads_several_weights_files_and_a_lora() {
+        let text = json!({
+            "schema": SCHEMA,
+            "backbone": {
+                "type": "qwen3-5", "prefix": "model.language_model.", "vocab_size": 10, "hidden_size": 8,
+                "intermediate_size": 12, "num_hidden_layers": 2, "layer_types": ["linear_attention", "full_attention"],
+                "num_attention_heads": 2, "num_key_value_heads": 1, "head_dim": 4, "partial_rotary_factor": 0.5,
+                "rope_theta": 1e7, "attention_bias": false, "attn_output_gate": true, "linear_num_key_heads": 2,
+                "linear_num_value_heads": 2, "linear_key_head_dim": 4, "linear_value_head_dim": 4,
+                "linear_conv_kernel_dim": 4, "rms_norm_eps": 1e-6, "hidden_act": "silu", "tie_word_embeddings": true
+            },
+            "head": {"type": "pointer", "prefix": "head.", "dim": 256},
+            "weights": {"format": "safetensors", "file": "model.safetensors",
+                        "more": [{"format": "safetensors", "file": "adapter_model.safetensors"},
+                                 {"format": "torch-zip", "file": "head.pt",
+                                  "tensors": {"head.q.weight": {"dtype": "F32", "shape": [256, 8], "offset": 64}}}]},
+            "lora": {"prefix": "base_model.model.", "scaling": 2.0}
+        })
+        .to_string();
+        let a = Arch::parse(&text).unwrap();
+        assert_eq!(a.head.name(), "pointer");
+        assert_eq!(a.backbone.prefix(), "model.language_model.");
+        let files = a.weights.files();
+        assert_eq!(files.len(), 3);
+        assert_eq!(
+            (files[2].0, files[2].1),
+            (WeightsFormat::TorchZip, "head.pt")
+        );
+        assert_eq!(files[2].2["head.q.weight"].offset, 64);
+        assert_eq!(a.lora.as_ref().map(|l| l.scaling), Some(2.0));
     }
 
     #[test]

@@ -10,13 +10,13 @@ use std::sync::Mutex;
 
 use ollaya_decision::strands::{Encoded, OffsetEncoder, StrandsEncoding, StrandsLayout};
 use ollaya_decision::{Calibration, CalibrationFile, Questions};
-use ort::session::Session;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::decider::WeightsInMemory;
 use crate::engine::Engine;
 use crate::kev::{configure, pointer_scores};
+use crate::net::Decoder;
 use crate::onnx::{CudaArena, Device, ModelFiles, load_tokenizer, session_for};
 use crate::{Error, Output, QuestionOutput};
 
@@ -42,7 +42,7 @@ struct DecisionConfig {
 }
 
 pub struct StrandsModel {
-    session: Mutex<Session>,
+    net: Decoder,
     tokenizer: Tokenizer,
     seq_multiple: usize,
     pub layout: StrandsLayout,
@@ -119,7 +119,7 @@ impl StrandsModel {
             )));
         }
         Ok(StrandsModel {
-            session: Mutex::new(session),
+            net: Decoder::Ort(Mutex::new(session)),
             tokenizer: Tokenizer(tokenizer),
             seq_multiple: config.contract.seq_multiple,
             layout: config.strands,
@@ -136,7 +136,7 @@ impl StrandsModel {
     /// Each row's option scores.
     pub fn scores(&self, encoding: &StrandsEncoding) -> Result<Vec<Vec<f32>>, Error> {
         pointer_scores(
-            &self.session,
+            &self.net,
             &encoding.rows,
             self.seq_multiple,
             self.layout.special_tokens.pad,

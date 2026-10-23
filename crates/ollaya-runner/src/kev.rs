@@ -12,13 +12,13 @@ use std::sync::Mutex;
 use ndarray::{Array1, Array2, Ix2};
 use ollaya_decision::kev::{KevLayout, KevRow, KevState};
 use ollaya_decision::{Calibration, CalibrationFile, Questions, TokenEncoder};
-use ort::session::Session;
 use ort::session::builder::SessionBuilder;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::decider::WeightsInMemory;
 use crate::engine::Engine;
+use crate::net::{Decoder, Head};
 use crate::onnx::{CudaArena, Device, ModelFiles, load_tokenizer, session_for};
 use crate::{Error, Output, QuestionOutput};
 
@@ -55,7 +55,7 @@ pub struct KevEncoding {
 }
 
 pub struct KevModel {
-    session: Mutex<Session>,
+    net: Decoder,
     tokenizer: Tokenizer,
     seq_multiple: usize,
     pub layout: KevLayout,
@@ -116,25 +116,31 @@ impl KevModel {
         let tokenizer = load_tokenizer(&files.tokenizer)?;
 
         let weights = config.weights_in_memory;
-        let session = session_for(
-            &files.graph,
-            device,
-            intra_threads,
-            CudaArena::SameAsRequested,
-            |b| weights.configure(configure(b, device)?),
-        )?;
-        let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
-        if inputs.len() != INPUTS.len()
-            || !INPUTS.iter().all(|n| inputs.contains(n))
-            || !session.outputs().iter().any(|o| o.name() == OUTPUT)
-        {
-            return Err(Error::Model(format!(
-                "graph inputs {inputs:?} do not match the kev contract ({INPUTS:?} -> {OUTPUT:?})"
-            )));
+        let net = match device {
+            Device::Metal => Decoder::metal(files, Head::Pointer)?,
+            _ => Decoder::Ort(Mutex::new(session_for(
+                &files.graph,
+                device,
+                intra_threads,
+                CudaArena::SameAsRequested,
+                |b| weights.configure(configure(b, device)?),
+            )?)),
+        };
+        if let Some(session) = net.session() {
+            let session = session.lock().expect("session mutex poisoned");
+            let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
+            if inputs.len() != INPUTS.len()
+                || !INPUTS.iter().all(|n| inputs.contains(n))
+                || !session.outputs().iter().any(|o| o.name() == OUTPUT)
+            {
+                return Err(Error::Model(format!(
+                    "graph inputs {inputs:?} do not match the kev contract ({INPUTS:?} -> {OUTPUT:?})"
+                )));
+            }
         }
 
         Ok(KevModel {
-            session: Mutex::new(session),
+            net,
             tokenizer: Tokenizer(tokenizer),
             seq_multiple: config.contract.seq_multiple,
             layout: config.kev,
@@ -163,7 +169,7 @@ impl KevModel {
     /// Each row's option scores (its first `k_row` graph outputs).
     pub fn scores(&self, encoding: &KevEncoding) -> Result<Vec<Vec<f32>>, Error> {
         pointer_scores(
-            &self.session,
+            &self.net,
             &encoding.rows,
             self.seq_multiple,
             self.layout.special_tokens.pad,
@@ -192,7 +198,7 @@ impl KevModel {
 /// its first `k_row` outputs. Rows run shortest first, in batches padded to a multiple of
 /// `seq_multiple`. Shared by the pointer layouts (`kev`, `strands`).
 pub(crate) fn pointer_scores(
-    session: &Mutex<Session>,
+    net: &Decoder,
     rows: &[KevRow],
     seq_multiple: usize,
     pad: u32,
@@ -207,7 +213,6 @@ pub(crate) fn pointer_scores(
     let pad = i64::from(pad);
 
     let mut scores = vec![Vec::new(); rows.len()];
-    let mut session = session.lock().expect("session mutex poisoned");
     for range in crate::engine::batches(&padded, TOKEN_BUDGET, MAX_ROWS) {
         let batch = &order[range.clone()];
         let seq = padded[range].iter().copied().max().unwrap_or(0);
@@ -225,19 +230,29 @@ pub(crate) fn pointer_scores(
                 opt_pos[[r, c]] = p as i64;
             }
         }
-        let options = crate::engine::run_options(device, batch.len() * seq, TOKEN_BUDGET)?;
-        let outputs = session.run_with_options(
-            ort::inputs![
-                "input_ids" => ort::value::Tensor::from_array(input_ids)?,
-                "decide_pos" => ort::value::Tensor::from_array(decide_pos)?,
-                "opt_pos" => ort::value::Tensor::from_array(opt_pos)?,
-            ],
-            &options,
-        )?;
-        let out = outputs[OUTPUT]
-            .try_extract_array::<f32>()?
-            .into_dimensionality::<Ix2>()
-            .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?;
+        let out = match net {
+            Decoder::Ort(session) => {
+                let options = crate::engine::run_options(device, batch.len() * seq, TOKEN_BUDGET)?;
+                let mut session = session.lock().expect("session mutex poisoned");
+                let outputs = session.run_with_options(
+                    ort::inputs![
+                        "input_ids" => ort::value::Tensor::from_array(input_ids)?,
+                        "decide_pos" => ort::value::Tensor::from_array(decide_pos)?,
+                        "opt_pos" => ort::value::Tensor::from_array(opt_pos)?,
+                    ],
+                    &options,
+                )?;
+                outputs[OUTPUT]
+                    .try_extract_array::<f32>()?
+                    .into_dimensionality::<Ix2>()
+                    .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?
+                    .to_owned()
+            }
+            #[cfg(feature = "mlx")]
+            Decoder::Mlx(net) => {
+                net.endpoint(&input_ids, decide_pos.as_slice().unwrap(), &opt_pos)?
+            }
+        };
         if out.nrows() != batch.len() || out.ncols() != k {
             return Err(Error::Model(format!(
                 "{OUTPUT} has shape {:?} for {} rows of up to {k} options",

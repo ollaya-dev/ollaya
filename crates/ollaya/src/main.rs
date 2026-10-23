@@ -137,9 +137,9 @@ enum Command {
         /// The arch layer, for the MLX engine
         #[arg(long)]
         arch: Option<PathBuf>,
-        /// The weights file, for the MLX engine
+        /// The weights files, for the MLX engine (one `--weights` per file, in the arch layer's order)
         #[arg(long)]
-        weights: Option<PathBuf>,
+        weights: Vec<PathBuf>,
         /// auto, cpu, cuda, cuda:<n>, rocm, rocm:<n>, vulkan, vulkan:<n> or metal
         #[arg(long, default_value = "auto")]
         device: ollaya_runner::server::DeviceRequest,

@@ -115,16 +115,20 @@ def hf_json(repo, commit, path):
         return json.load(r)
 
 
-def arch_layers(v, blobs, weights_path):
+def arch_layers(v, blobs, weights_paths):
     """The arch layer for MLX, when the catalog entry asks for one: `arch.family` and the author's
     `arch.config` (and, for laya, `arch.agent_config`) at the pinned commit, checked against the
-    local copy of the weights file."""
+    local copies of the weights files (in the order of the manifest's weights layers)."""
     spec = v.get("arch")
     if not spec:
         return []
-    config = hf_json(v["repo"], v["commit"], spec["config"])
-    agent = hf_json(v["repo"], v["commit"], spec["agent_config"]) if spec.get("agent_config") else None
-    layer = mlx_arch.build(spec["family"], config, weights_path, agent)
+    def fetch(path):  # a path in the model's repo, or a (repo, commit, path) triple (a LoRA's base)
+        return hf_json(*(path if isinstance(path, tuple) else (v["repo"], v["commit"], path)))
+
+    config = fetch(spec["config"])
+    agent = fetch(spec["agent_config"]) if spec.get("agent_config") else None
+    lora = fetch(spec["lora_config"]) if spec.get("lora_config") else None
+    layer = mlx_arch.build(spec["family"], config, weights_paths, agent, lora)
     return [blobs.put(MEDIA["arch"], mlx_arch.dumps(layer))]
 
 
@@ -186,9 +190,7 @@ def package_wl(spec, tag, v, blobs):
         oids[location] = oid
         weights.append(d)
         locals_.append(local)
-    if v.get("arch") and len(locals_) != 1:
-        raise SystemExit("%s: the MLX engine reads one weights file" % spec["model"])
-    arch = arch_layers(v, blobs, locals_[0]) if v.get("arch") else []
+    arch = arch_layers(v, blobs, locals_) if v.get("arch") else []
     data, stats = graph_from_wl(v["wl_dir"], oids)
     precision = v.get("precision", "fp32")
     print("  %s:%s %s graph %.1f MB %s" % (spec["model"], tag, precision, len(data) / 2**20, stats))

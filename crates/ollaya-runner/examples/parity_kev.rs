@@ -116,6 +116,7 @@ fn main() -> Result<()> {
     }
     let device = match args.get(3).map(String::as_str) {
         Some("cuda") => Device::Cuda(0),
+        Some("metal") => Device::Metal,
         _ => Device::Cpu,
     };
     let latency = args.iter().any(|a| a == "--latency");

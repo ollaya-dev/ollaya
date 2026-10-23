@@ -20,8 +20,8 @@ pub struct RunnerFiles {
     pub decision: PathBuf,
     /// The arch layer (models the MLX engine can run).
     pub arch: Option<PathBuf>,
-    /// The weights file, passed with an arch layer.
-    pub weights: Option<PathBuf>,
+    /// The weights files, passed with an arch layer, in the manifest's order.
+    pub weights: Vec<PathBuf>,
     /// A vision model's image graph.
     pub vision_graph: Option<PathBuf>,
 }
@@ -157,14 +157,15 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
         tokenizer: blob(media::TOKENIZER)?,
         decision: blob(media::DECISION)?,
         arch: None,
-        weights: None,
+        weights: Vec::new(),
         vision_graph: None,
     };
-    // MLX builds its network from one weights file; sharded weights stay on ONNX Runtime.
-    let weights: Vec<_> = manifest.layers_of(media::WEIGHTS).collect();
-    if let (Some(arch), [weights]) = (manifest.layer(media::ARCH), weights.as_slice()) {
+    // MLX builds its network from the weights files, in the order the arch layer lists them.
+    if let Some(arch) = manifest.layer(media::ARCH) {
         files.arch = Some(store.blob_path(&arch.digest)?);
-        files.weights = Some(store.blob_path(&weights.digest)?);
+        for w in manifest.layers_of(media::WEIGHTS) {
+            files.weights.push(store.blob_path(&w.digest)?);
+        }
     }
     for g in manifest.layers_of(media::GRAPH_ONNX) {
         let path = store.blob_path(&g.digest)?;
@@ -324,13 +325,14 @@ mod tests {
     }
 
     #[test]
-    fn an_arch_layer_passes_the_weights_file_to_mlx() {
-        let (files, ..) = resolve_with(1, true, false);
-        assert!(files.arch.is_some() && files.weights.is_some());
-        // Without an arch layer, or with sharded weights, the model stays on ONNX Runtime.
-        for (files, ..) in [resolve_with(1, false, false), resolve_with(2, true, false)] {
-            assert!(files.arch.is_none() && files.weights.is_none());
+    fn an_arch_layer_passes_the_weights_files_to_mlx() {
+        for n in [1, 2] {
+            let (files, ..) = resolve_with(n, true, false);
+            assert!(files.arch.is_some() && files.weights.len() == n);
         }
+        // Without an arch layer the model stays on ONNX Runtime.
+        let (files, ..) = resolve_with(1, false, false);
+        assert!(files.arch.is_none() && files.weights.is_empty());
     }
 
     #[test]

@@ -31,8 +31,12 @@ pub enum Head {
     SequenceClassification,
     OptionMarker,
     Gliclass,
-    /// A decoder's tied LM head at one position per row (qwen3guard).
+    /// A decoder's tied LM head at one position per row (qwen3guard, decider).
     TiedRows,
+    /// Decision 1.0's candidate head (decision).
+    Endpoint,
+    /// Kev's pointer head (kev).
+    Pointer,
 }
 
 impl Head {
@@ -44,6 +48,8 @@ impl Head {
             Head::OptionMarker => "option-marker",
             Head::Gliclass => "gliclass-uni",
             Head::TiedRows => "tied-rows",
+            Head::Endpoint => "endpoint",
+            Head::Pointer => "pointer",
         }
     }
 }

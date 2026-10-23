@@ -40,6 +40,8 @@ pub const LAYOUTS: &[&str] = &[
     "gliclass-uni-v1",
     "qwen3guard-gen-v1",
     "decider-slots-v1",
+    "decision-endpoint-v1",
+    "kev-pointer-v1",
 ];
 
 /// Where `mlx.metallib` is, first match wins:
@@ -149,16 +151,10 @@ impl MlxNet {
                 expect.name()
             )));
         }
-        let weights = match &files.weights {
-            Some(w) => w.clone(),
-            None => arch_path
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join(&arch.weights.file),
-        };
+        let (paths, dir) = (files.weights.clone(), arch_dir(arch_path));
         let metallib = metallib().map_err(Error::Model)?;
         let worker = Worker::start("ollaya-mlx", &metallib, move || {
-            Model::load(&arch, &weights).map_err(|e| ollaya_mlx::Error(e.to_string()))
+            Model::load(&arch, &paths, &dir).map_err(|e| ollaya_mlx::Error(e.to_string()))
         })
         .map_err(mlx)?;
         Ok(MlxNet { worker })
@@ -210,9 +206,15 @@ impl MlxNet {
 
 type Output = (usize, Vec<f32>);
 
+/// The directory of a development model: the weights files sit next to `arch.json` under their
+/// upstream names.
+fn arch_dir(arch_path: &Path) -> PathBuf {
+    arch_path.parent().unwrap_or(Path::new(".")).to_path_buf()
+}
+
 impl Model {
-    fn load(arch: &Arch, weights: &Path) -> Result<Model, Error> {
-        let t = Tensors::open(weights, &arch.weights)?;
+    fn load(arch: &Arch, paths: &[PathBuf], dir: &Path) -> Result<Model, Error> {
+        let t = Tensors::open(paths, dir, &arch.weights)?;
         let backbone = match &arch.backbone {
             Backbone::Modernbert(c) => Encoder::ModernBert(modernbert::ModernBert::load(c, &t)?),
             Backbone::DebertaV2(c) => Encoder::DebertaV2(deberta::DebertaV2::load(c, &t)?),
@@ -245,9 +247,9 @@ impl Model {
             }
             Head::OptionMarker(h) => HeadModel::OptionMarker(heads::OptionMarker::load(h, d, &t)?),
             Head::GliclassUni(h) => HeadModel::Gliclass(heads::Gliclass::load(h, d, &t)?),
-            Head::TiedRows => {
+            Head::TiedRows | Head::Endpoint(_) | Head::Pointer(_) => {
                 return Err(Error::Model(
-                    "the tied-rows head needs a decoder backbone".into(),
+                    "a decoder head needs a decoder backbone".into(),
                 ));
             }
         };
@@ -357,35 +359,63 @@ impl Model {
 
 // --- decoders --------------------------------------------------------------------------------------
 
-/// A causal decoder, on the MLX thread.
-enum DecoderModel {
+/// A causal decoder and its head, on the MLX thread.
+struct DecoderModel {
+    backbone: DecoderBackbone,
+    head: DecoderHead,
+}
+
+enum DecoderBackbone {
     Qwen3(qwen3::Qwen3),
     Qwen35(qwen35::Qwen35),
 }
 
-impl DecoderModel {
+enum DecoderHead {
+    /// The tied LM head at one position per row: no weights of its own.
+    TiedRows,
+    Endpoint(heads::Endpoint),
+    Pointer(heads::Pointer),
+}
+
+impl DecoderBackbone {
     /// The token embedding, the tied LM head.
     fn embed(&self) -> &Array {
         match self {
-            DecoderModel::Qwen3(m) => &m.embed,
-            DecoderModel::Qwen35(m) => &m.embed,
+            DecoderBackbone::Qwen3(m) => &m.embed,
+            DecoderBackbone::Qwen35(m) => &m.embed,
         }
     }
 
     /// Rows are padded to a multiple of this many tokens.
     fn seq_multiple(&self) -> i32 {
         match self {
-            DecoderModel::Qwen3(_) => 1,
-            DecoderModel::Qwen35(_) => qwen35::CHUNK,
+            DecoderBackbone::Qwen3(_) => 1,
+            DecoderBackbone::Qwen35(_) => qwen35::CHUNK,
         }
     }
 
     fn forward(&self, ids: &Array) -> Result<Array, Error> {
         match self {
-            DecoderModel::Qwen3(m) => m.forward(ids),
-            DecoderModel::Qwen35(m) => m.forward(ids),
+            DecoderBackbone::Qwen3(m) => m.forward(ids),
+            DecoderBackbone::Qwen35(m) => m.forward(ids),
         }
     }
+}
+
+/// `ids` [rows, seq] right-padded, padded further to `multiple` with the last column's id
+/// (causal: never read); returns the padded ids and the padded length.
+fn pad_rows(ids: Vec<i32>, rows: usize, seq: usize, multiple: usize) -> (Vec<i32>, usize) {
+    let padded = seq.div_ceil(multiple) * multiple;
+    if padded == seq {
+        return (ids, seq);
+    }
+    let mut out = Vec::with_capacity(rows * padded);
+    for r in 0..rows {
+        let row = &ids[r * seq..(r + 1) * seq];
+        out.extend_from_slice(row);
+        out.extend(std::iter::repeat_n(row[seq - 1], padded - seq));
+    }
+    (out, padded)
 }
 
 /// A decoder network (qwen3guard) on the MLX thread: rows of token ids in, the tied LM head at one
@@ -409,25 +439,40 @@ impl MlxDecoder {
                 expect.name()
             )));
         }
-        let weights = match &files.weights {
-            Some(w) => w.clone(),
-            None => arch_path
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join(&arch.weights.file),
-        };
+        let (paths, dir) = (files.weights.clone(), arch_dir(arch_path));
         let metallib = metallib().map_err(Error::Model)?;
         let worker = Worker::start("ollaya-mlx", &metallib, move || {
-            let t = Tensors::open(&weights, &arch.weights)
+            let t = Tensors::open(&paths, &dir, &arch.weights)
                 .map_err(|e| ollaya_mlx::Error(e.to_string()))?;
-            match &arch.backbone {
-                Backbone::Qwen3(c) => qwen3::Qwen3::load(c, &t).map(DecoderModel::Qwen3),
-                Backbone::Qwen35(c) => qwen35::Qwen35::load(c, &t).map(DecoderModel::Qwen35),
-                _ => Err(Error::Model(
-                    "the tied-rows head needs a decoder backbone".into(),
-                )),
-            }
-            .map_err(|e| ollaya_mlx::Error(e.to_string()))
+            let t = match &arch.lora {
+                Some(lora) => t.with_lora(arch.backbone.prefix(), lora),
+                None => t,
+            };
+            let load = || -> Result<DecoderModel, Error> {
+                let backbone = match &arch.backbone {
+                    Backbone::Qwen3(c) => DecoderBackbone::Qwen3(qwen3::Qwen3::load(c, &t)?),
+                    Backbone::Qwen35(c) => DecoderBackbone::Qwen35(qwen35::Qwen35::load(c, &t)?),
+                    _ => {
+                        return Err(Error::Model(
+                            "a decoder head needs a decoder backbone".into(),
+                        ));
+                    }
+                };
+                let d = arch.backbone.hidden_size();
+                let head = match &arch.head {
+                    Head::TiedRows => DecoderHead::TiedRows,
+                    Head::Endpoint(h) => DecoderHead::Endpoint(heads::Endpoint::load(h, d, &t)?),
+                    Head::Pointer(h) => DecoderHead::Pointer(heads::Pointer::load(h, d, &t)?),
+                    other => {
+                        return Err(Error::Model(format!(
+                            "head {} is an encoder's",
+                            other.name()
+                        )));
+                    }
+                };
+                Ok(DecoderModel { backbone, head })
+            };
+            load().map_err(|e| ollaya_mlx::Error(e.to_string()))
         })
         .map_err(mlx)?;
         Ok(MlxDecoder { worker })
@@ -454,26 +499,17 @@ impl MlxDecoder {
             .worker
             .run(move |m| {
                 let r = || -> Result<Vec<f32>, Error> {
-                    // Pad to the backbone's multiple with the last column's id: causal, never read.
-                    let multiple = m.seq_multiple() as usize;
-                    let padded = seq.div_ceil(multiple) * multiple;
-                    let ids: Vec<i32> = if padded == seq {
-                        ids
-                    } else {
-                        let mut out = Vec::with_capacity(rows * padded);
-                        for r in 0..rows {
-                            let row = &ids[r * seq..(r + 1) * seq];
-                            out.extend_from_slice(row);
-                            out.extend(std::iter::repeat_n(row[seq - 1], padded - seq));
-                        }
-                        out
-                    };
+                    if !matches!(m.head, DecoderHead::TiedRows) {
+                        return Err(Error::Model("this model's head is not tied-rows".into()));
+                    }
+                    let (ids, padded) =
+                        pad_rows(ids, rows, seq, m.backbone.seq_multiple() as usize);
                     let ids =
                         Array::from_slice(&ids, &[rows as i32, padded as i32]).map_err(mlx)?;
                     let pos = Array::from_slice(&pos, &[rows as i32]).map_err(mlx)?;
                     let tokens = Array::from_slice(&tokens, &[width as i32]).map_err(mlx)?;
-                    let h = m.forward(&ids)?;
-                    qwen3::tied_rows(&h, m.embed(), &pos, &tokens)?
+                    let h = m.backbone.forward(&ids)?;
+                    qwen3::tied_rows(&h, m.backbone.embed(), &pos, &tokens)?
                         .to_f32_vec()
                         .map_err(mlx)
                 };
@@ -481,6 +517,47 @@ impl MlxDecoder {
             })
             .map_err(mlx)?;
         Array2::from_shape_vec((rows, width), data).map_err(|e| Error::Model(e.to_string()))
+    }
+
+    /// Decision 1.0's candidate head or kev's pointer head: the logits [rows, k] of each row's
+    /// options (`cand_pos` [rows, k], padded with 0) against its query or decide token (`query_pos`
+    /// [rows]).
+    pub fn endpoint(
+        &self,
+        ids: &Array2<i64>,
+        query_pos: &[i64],
+        cand_pos: &Array2<i64>,
+    ) -> Result<Array2<f32>, Error> {
+        let (rows, seq) = ids.dim();
+        let k = cand_pos.ncols();
+        let ids: Vec<i32> = ids.iter().map(|&v| v as i32).collect();
+        let query_pos: Vec<i32> = query_pos.iter().map(|&v| v as i32).collect();
+        let cand_pos: Vec<i32> = cand_pos.iter().map(|&v| v as i32).collect();
+        let data = self
+            .worker
+            .run(move |m| {
+                let r = || -> Result<Vec<f32>, Error> {
+                    let (ids, padded) =
+                        pad_rows(ids, rows, seq, m.backbone.seq_multiple() as usize);
+                    let ids =
+                        Array::from_slice(&ids, &[rows as i32, padded as i32]).map_err(mlx)?;
+                    let q = Array::from_slice(&query_pos, &[rows as i32]).map_err(mlx)?;
+                    let c = Array::from_slice(&cand_pos, &[rows as i32, k as i32]).map_err(mlx)?;
+                    let h = m.backbone.forward(&ids)?;
+                    match &m.head {
+                        DecoderHead::Endpoint(head) => head.forward(&h, &q, &c)?,
+                        DecoderHead::Pointer(head) => head.forward(&h, &q, &c)?,
+                        DecoderHead::TiedRows => {
+                            return Err(Error::Model("this model's head scores no options".into()));
+                        }
+                    }
+                    .to_f32_vec()
+                    .map_err(mlx)
+                };
+                r().map_err(|e| ollaya_mlx::Error(e.to_string()))
+            })
+            .map_err(mlx)?;
+        Array2::from_shape_vec((rows, k), data).map_err(|e| Error::Model(e.to_string()))
     }
 }
 
@@ -493,11 +570,7 @@ mod tests {
     #[test]
     fn only_models_with_an_arch_layer_and_a_known_layout_try_mlx() {
         let arch = Some(Path::new("arch.json"));
-        assert!(
-            usable(arch, "kev-pointer-v1")
-                .unwrap_err()
-                .contains("layout")
-        );
+        assert!(usable(arch, "clm-v1").unwrap_err().contains("layout"));
         assert!(
             usable(None, "laya-markers-v1")
                 .unwrap_err()
