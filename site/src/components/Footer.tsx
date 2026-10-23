@@ -20,6 +20,7 @@ const footerGroups: { title: string; links: { href: string; label: string }[] }[
       ...(hasAsset('try.js') ? [{ href: '/try', label: 'Try in the browser' }] : []),
       { href: benchUrl(), label: 'Ollaya Bench' },
       { href: '/stats', label: 'Stats' },
+      { href: '/blog', label: 'Blog' },
     ],
   },
   { title: 'Docs', links: ['quickstart', 'cli', 'api', 'modelfile', 'typesafe-compatibility', 'faq'].map(docNav) },

@@ -6,14 +6,16 @@ import { Icon } from './Icon'
 import { LogoMark } from './Logo'
 
 export type NavKey = 'models' | 'results' | 'docs' | 'download' | 'try'
-export type PageNav = NavKey
+/** What a page highlights in the top nav: a main section, or the blog, which is linked after them. */
+export type PageNav = NavKey | 'blog'
 
-const allLinks: { key: NavKey; href: string; label: string }[] = [
+const allLinks: { key: PageNav; href: string; label: string }[] = [
   { key: 'models', href: '/search', label: 'Models' },
   { key: 'try', href: '/try', label: 'Try' },
   // Ollaya Bench, on its own host: the href is set at render time (benchUrl needs the build's origin).
   { key: 'results', href: '', label: 'Bench' },
   { key: 'docs', href: '/docs', label: 'Docs' },
+  { key: 'blog', href: '/blog', label: 'Blog' },
 ]
 // /try exists only when the build bundled the in-browser runtime (scripts/build.mjs).
 const navLinks = () => allLinks.filter((l) => l.key !== 'try' || hasAsset('try.js'))

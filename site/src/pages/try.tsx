@@ -268,7 +268,10 @@ export function TryPage() {
             ]}
           />
         </div>
-        <p class="mt-6 text-sm">
+        <p class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <a href="/docs/browser-to-code" class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
+            Use it in code: curl, Python, TypeScript, Docker <Icon name="arrowRight" class="size-4" />
+          </a>
           <a href="/docs/api" class="inline-flex items-center gap-1.5 font-medium text-fg underline-offset-4 hover:underline">
             The request and answer format <Icon name="arrowRight" class="size-4" />
           </a>
