@@ -14,7 +14,9 @@ import { asset } from '../lib/assets'
 import { benchUrl } from '../lib/bench'
 import { githubStars } from '../lib/stars'
 import { GITHUB_URL } from '../site'
-import { compatRequest, compatResponse, JEV, OLLAMA, speedup, TerminalMock, vs, vsFeatures } from './home'
+import { hero, type HeroQuestion } from '../data/hero'
+import triage from '../../../crates/ollaya-api/src/presets/triage.json'
+import { compatRequest, compatResponse, JEV, OLLAMA, speedup, vs, vsFeatures } from './home'
 import { accuracyScatter } from './results'
 
 const INSTALL = 'curl -fsSL https://ollaya.dev/install.sh | sh'
@@ -22,8 +24,30 @@ const lastWeek = stats.weeks.at(-1)!
 const fmt = (n: number) => n.toLocaleString('en-US')
 const mostAccurate = vs('pplx-decider:flash', 'ollaya')
 
-/** Publishers worth a name on the page, in the order they read best. */
-const PUBLISHERS = ['Perplexity AI', 'Cloudflare', 'PostHog', 'Bespoke Labs', 'Qwen', 'Strands Agents', 'Knowledgator', 'Convai Innovations']
+/**
+ * Publishers worth a mark on the page. The SVG paths are simple-icons' (CC0) drawings of each brand's
+ * own mark; the PNGs are the organisation's own Hugging Face avatar. Trademarks stay their owners'.
+ */
+const PUBLISHERS: { name: string; path?: string; png?: string }[] = [
+  { name: 'Perplexity AI', path: 'M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z' },
+  { name: 'Cloudflare', path: 'M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727' },
+  { name: 'PostHog', path: 'M9.854 14.5 5 9.647.854 5.5A.5.5 0 0 0 0 5.854V8.44a.5.5 0 0 0 .146.353L5 13.647l.147.146L9.854 18.5l.146.147v-.049c.065.03.134.049.207.049h2.586a.5.5 0 0 0 .353-.854L9.854 14.5zm0-5-4-4a.487.487 0 0 0-.409-.144.515.515 0 0 0-.356.21.493.493 0 0 0-.089.288V8.44a.5.5 0 0 0 .147.353l9 9a.5.5 0 0 0 .853-.354v-2.585a.5.5 0 0 0-.146-.354l-5-5zm1-4a.5.5 0 0 0-.854.354V8.44a.5.5 0 0 0 .147.353l4 4a.5.5 0 0 0 .853-.354V9.854a.5.5 0 0 0-.146-.354l-4-4zm12.647 11.515a3.863 3.863 0 0 1-2.232-1.1l-4.708-4.707a.5.5 0 0 0-.854.354v6.585a.5.5 0 0 0 .5.5H23.5a.5.5 0 0 0 .5-.5v-.6c0-.276-.225-.497-.499-.532zm-5.394.032a.8.8 0 1 1 0-1.6.8.8 0 0 1 0 1.6zM.854 15.5a.5.5 0 0 0-.854.354v2.293a.5.5 0 0 0 .5.5h2.293c.222 0 .39-.135.462-.309a.493.493 0 0 0-.109-.545L.854 15.501zM5 14.647.854 10.5a.5.5 0 0 0-.854.353v2.586a.5.5 0 0 0 .146.353L4.854 18.5l.146.147h2.793a.5.5 0 0 0 .353-.854L5 14.647z' },
+  { name: 'Bespoke Labs', png: 'bespokelabs' },
+  { name: 'Qwen', path: 'M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z' },
+  { name: 'Strands Agents', png: 'strandsagents' },
+  { name: 'Knowledgator', png: 'knowledgator' },
+  { name: 'Convai Innovations', png: 'convai' },
+]
+
+function Mark({ p }: { p: (typeof PUBLISHERS)[number] }) {
+  if (p.path)
+    return (
+      <svg viewBox="0 0 24 24" class="size-5 shrink-0" fill="currentColor" aria-hidden="true">
+        <path d={p.path} />
+      </svg>
+    )
+  return <img src={asset(`logos/${p.png}.png`)} class="size-5 shrink-0 rounded-[3px] brightness-150 grayscale" alt="" width="20" height="20" />
+}
 
 const tokens = `
 .rd {
@@ -49,9 +73,9 @@ const tokens = `
 .rd .panel { background: rgb(255 255 255 / 0.03); border: 1px solid var(--color-line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .rd .panel-strong { background: rgb(12 12 12 / 0.78); }
 /* The grain: an SVG noise tile over everything, blended so it only breaks up the flat colour. */
-.rd .grain { position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0.1; mix-blend-mode: soft-light;
+.rd .grain { position: fixed; inset: 0; z-index: 50; pointer-events: none; opacity: 0.085; mix-blend-mode: screen;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 240px 240px; }
+  background-size: 180px 180px; }
 /* Blurred colour fields behind the hero and the closer: what the panels blur. */
 .rd .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .rd .field i { position: absolute; display: block; border-radius: 9999px; filter: blur(90px); opacity: 0.5; }
@@ -65,6 +89,10 @@ const tokens = `
 }
 @keyframes drift { to { transform: translate3d(6vw, 4vw, 0) scale(1.08); } }
 .rd .term-glow { box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.06) inset, 0 40px 120px -40px rgb(0 0 0 / 0.9); }
+@media (prefers-reduced-motion: no-preference) {
+  .rd .fill { transform-origin: left; animation: fill 0.7s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(0.6s + var(--row, 0) * 0.18s); }
+}
+@keyframes fill { from { transform: scaleX(0); } }
 .rd ::selection { background: rgb(140 200 255 / 0.3); }
 `
 
@@ -147,11 +175,74 @@ function Hero() {
             Try it in the browser <Icon name="arrowRight" class="size-4" />
           </a>
         </div>
-        <div class="mx-auto mt-16 max-w-3xl text-left">
-          <TerminalMock />
+        <div class="mx-auto mt-16 max-w-4xl text-left">
+          <DecisionDemo />
         </div>
       </div>
     </section>
+  )
+}
+
+// The hero's example: the real recording in hero.json (a message, the triage preset, the model's
+// answers) shown as the request reads to a person: the message, then each question in the preset's
+// own words with the answer the model gave and how sure it was.
+const QUESTION_TEXT: Record<string, string> = Object.fromEntries(
+  Object.entries(triage as Record<string, { instructions: string }>).map(([k, q]) => [k, q.instructions.replace(/`message`/g, 'the message')]),
+)
+const nice = (label: string) => label.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+
+function AnswerRow({ q, row }: { q: HeroQuestion; row: number }) {
+  const runnerUp = q.others[0]
+  return (
+    <li class="term-row px-5 py-3.5" style={`--row:${row}`}>
+      <p class="text-[13px] text-muted">{QUESTION_TEXT[q.name] ?? q.name}</p>
+      <div class="mt-1.5 flex items-center gap-4">
+        <span class="w-36 shrink-0 truncate text-[15px] font-medium text-fg" title={q.answer.full}>
+          {nice(q.answer.label)}
+        </span>
+        <span class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-fill-strong" aria-hidden="true">
+          <span class="fill block h-full rounded-full bg-us" style={`width:${(q.answer.p * 100).toFixed(1)}%;--row:${row}`}></span>
+        </span>
+        <span class="w-10 text-right text-[13px] text-fg tabular-nums">{q.answer.p.toFixed(2)}</span>
+      </div>
+      {runnerUp ? (
+        <p class="term-fold mt-1 h-5 text-xs leading-5 text-muted" style={`--row:${row}`}>
+          next: {nice(runnerUp.label)} {runnerUp.p.toFixed(2)}
+          {q.others.length > 1 ? `, +${q.others.length - 1} more` : ''}
+        </p>
+      ) : null}
+    </li>
+  )
+}
+
+function DecisionDemo() {
+  const n = hero.questions.length
+  return (
+    <figure class="panel panel-strong overflow-hidden rounded-lg" style="--fold-at:3.4s" data-ui>
+      <div class="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+        <div class="border-b border-line p-5 md:border-r md:border-b-0">
+          <p class="text-[13px] text-muted">A support message comes in</p>
+          <blockquote class="term-row mt-3 text-[15px] leading-relaxed text-fg" style="--row:0">
+            “{hero.message}”
+          </blockquote>
+          <p class="mt-5 text-[13px] text-muted">
+            Ollaya asks <span class="font-mono text-[12px] text-body">{hero.model}</span> the {n} questions of the{' '}
+            <span class="font-mono text-[12px] text-body">{hero.preset}</span> preset, in one request.
+          </p>
+        </div>
+        <ol class="divide-y divide-line" role="list">
+          {hero.questions.map((q, i) => (
+            <AnswerRow q={q} row={i + 1} />
+          ))}
+        </ol>
+      </div>
+      <figcaption class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-line px-5 py-3 text-[13px] text-muted">
+        <span>
+          Real output: {n} answers in <span class="text-fg">{hero.latencyMs} ms</span> on an {hero.device}, one forward pass.
+        </span>
+        <span>Every answer is a probability you can set a threshold on.</span>
+      </figcaption>
+    </figure>
   )
 }
 
@@ -176,7 +267,10 @@ function Proof() {
       <div class="rule flex flex-wrap items-center gap-x-8 gap-y-3 px-6 py-5 text-[15px] font-medium text-body">
         <span class="text-[13px] tracking-[0.14em] text-muted uppercase">Models by</span>
         {PUBLISHERS.map((p) => (
-          <span>{p}</span>
+          <span class="inline-flex items-center gap-2">
+            <Mark p={p} />
+            {p.name}
+          </span>
         ))}
       </div>
     </section>
