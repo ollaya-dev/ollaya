@@ -34,6 +34,7 @@ import { runs } from './data/results'
 import { SearchPage } from './pages/search'
 import { llmsFullTxt, llmsTxt } from './pages/llms'
 import { ContributorsPage } from './pages/contributors'
+import { StatsPage } from './pages/stats'
 
 export { withReadmeBlocks } from './data/readme'
 
@@ -95,6 +96,14 @@ function pages(origin: string): Page[] {
         ogImage: hasAsset('og/results.png') ? 'og/results.png' : undefined,
       },
       render: () => <ResultsPage />,
+    },
+    {
+      url: '/stats',
+      meta: {
+        title: 'Stats',
+        description: 'How much Ollaya is used, week by week: model pulls, install script runs, GitHub stars and release downloads.',
+      },
+      render: () => <StatsPage />,
     },
     {
       url: '/docs',
