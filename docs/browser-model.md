@@ -99,7 +99,8 @@ Ollaya's runtime gives the same answers (parity below).
 | fp150-T | 150m | fp | gold + teacher | 0.765 | 0.541 | 0.594 zero-shot |
 | fp150-id-T | 150m | fp | + in-domain | 0.765 | 0.544 | 0.705 in-domain |
 | fp68-id-T | 68m | fp | + in-domain | 0.731 | 0.476 | 0.697 in-domain |
-| fp400-id-T | 400m | fp | + in-domain | **0.811** | **0.573** | **0.749** in-domain |
+| fp400-T | 400m | fp | gold + teacher | **0.824** | **0.606** | 0.605 zero-shot |
+| fp400-id-T | 400m | fp | + in-domain | 0.811 | 0.573 | **0.749** in-domain |
 | t150-T3w | 150m | ternary | gold + teacher | 0.718 | 0.502 | 0.478 zero-shot |
 | t150-id-T3w | 150m | ternary | + in-domain | 0.736 | 0.531 | 0.688 in-domain |
 | t68-id-T3w | 68m | ternary | + in-domain | 0.705 | 0.448 | 0.664 in-domain |
@@ -107,9 +108,11 @@ Ollaya's runtime gives the same answers (parity below).
 For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed and 0.824 public;
 `decider:0.8b` 0.46–0.51 typed and 0.669 public; `laya:typed-decisions` 0.594 public; `laya:en` 0.532 public.
 
-- The teacher's soft labels help (+0.016 val, +0.03 zero-shot public over gold only); the in-domain rows lift the
-  public score by 0.11 and leave typed-decisions where it was.
-- 150m to 400m gains 0.046 val, 0.029 typed and 0.044 public.
+- The teacher's soft labels help (+0.016 val, +0.03 zero-shot public over gold only).
+- The in-domain rows lift the public score by 0.11 (150m) and 0.14 (400m). They leave typed-decisions where it was
+  at 150m (0.541 to 0.544) but cost 0.033 at 400m, nearly all of it on yes/no questions (0.702 to 0.582; at
+  150m those went the other way, 0.638 to 0.687), so part of it may be noise on about 100 rows.
+- 150m to 400m gains 0.06 val, 0.03–0.065 typed and 0.01–0.044 public.
 - Ternary (recipe T3w: QAT from the fp model, logit + relation + every-layer hidden-state distillation from it,
   quantization warm-up over 30% of the steps, 4-bit embeddings) keeps 96% of the fp model's val and 98% of its
   typed and in-domain public scores at 150m.
