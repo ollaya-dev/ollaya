@@ -19,7 +19,7 @@ npm install @ollaya/web
 ```js
 import { fromHub, load } from '@ollaya/web';
 
-const model = await load(fromHub('<org>/<model>'), {
+const model = await load(fromHub('ollaya-dev/coba-150m-ternary'), {
   onProgress: ({ loaded, total }) => console.log(`${loaded} of ${total} bytes`),
 });
 const { answers } = await model.decide({
@@ -44,7 +44,7 @@ Without a bundler, one page:
 </script>
 <script type="module">
   import { fromHub, load } from 'https://cdn.jsdelivr.net/npm/@ollaya/web@0.1.0/ollaya.js';
-  const model = await load(fromHub('<org>/<model>'));
+  const model = await load(fromHub('ollaya-dev/coba-150m-ternary'));
   console.log(await model.decide({ state: 'Where is my parcel?', questions: { q: { type: 'noul', instructions: 'Is this about shipping?' } } }));
 </script>
 ```
@@ -66,9 +66,9 @@ and `score` (2 to 10 described levels). See [the API reference](https://ollaya.d
 
 ## Speed and memory
 
-The ternary 150M model is a 63 MB download plus a 3.6 MB tokenizer. On a laptop CPU it answers a request of a few
-questions in 0.2–0.4 s with four WebAssembly threads, using about 0.5 GB of memory. Threads need the page to be
-cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy:
+`coba:150m-ternary`, the ternary 150M model, is a 63 MB download plus a 3.6 MB tokenizer. On a laptop CPU it answers
+a request of a few questions in 0.2–0.4 s with four WebAssembly threads, using about 0.5 GB of memory. Threads need
+the page to be cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy:
 credentialless` or `require-corp`); without them onnxruntime-web uses one thread. In Chrome the first few calls run
 slower while the browser optimizes the WebAssembly; a couple of warm-up calls after `load` take care of it.
 
