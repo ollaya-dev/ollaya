@@ -75,7 +75,7 @@ export function Code({ code, lang }: { code: string; lang?: string }) {
 export function CodeBlock({ code, lang = 'shell', class: cls = '' }: { code: string; lang?: string; class?: string }) {
   return (
     <div class={`relative ${cls}`} data-copy-scope>
-      <pre class="h-full overflow-x-auto rounded-md bg-code py-4 pr-12 pl-4 font-mono text-[13px] leading-relaxed text-fg">
+      <pre class="h-full overflow-x-auto rounded-md bg-code py-4 pr-13 pl-4 font-mono text-[13px] leading-relaxed text-fg">
         <Code code={code} lang={lang} />
       </pre>
       <CopyButton />
@@ -126,7 +126,7 @@ export function CodeTabs({ id, label, tabs, selected }: { id: string; label: str
           tabindex={0}
           class="bg-code focus-visible:outline-offset-[-2px]"
         >
-          <pre class="overflow-x-auto p-4 font-mono text-[13px] leading-relaxed text-fg">
+          <pre class="overflow-x-auto p-4 pr-6 font-mono text-[13px] leading-relaxed text-fg">
             <Code code={t.code} lang={t.lang ?? t.key} />
           </pre>
         </div>

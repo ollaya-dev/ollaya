@@ -190,9 +190,9 @@
     font-size: 0.8125rem;
     line-height: 1.65;
     background-color: var(--color-code);
-    border-radius: 0.5rem;
+    border-radius: 0.375rem;
     padding: 1rem 1.25rem;
-    padding-right: 3rem;
+    padding-right: 3.25rem;
     overflow-x: auto;
     color: var(--color-fg);
   }
@@ -275,14 +275,21 @@
    so a long line scrolling under it stays readable instead of running into the icon. */
 @layer components {
   .copy-over {
-    background-color: var(--color-code);
-    /* A fade on its left, and the 0.5rem between it and the block's edge filled. */
+    /* The button sits in the block's top-right corner on an opaque face (the code colour is a
+       translucent wash over the canvas, so both are stacked), with a short fade on its left: a
+       long line scrolls under it and stays readable up to the fade. The pre's own right padding
+       cannot keep the text out, since it scrolls with the text. */
+    top: 0.5rem;
+    right: 0.5rem;
+    border-radius: 0.375rem;
+    background-color: var(--color-canvas);
+    background-image: linear-gradient(var(--color-code), var(--color-code));
     box-shadow:
-      -14px 0 10px -2px var(--color-code),
-      8px 0 0 0 var(--color-code);
+      -16px 0 12px -4px color-mix(in oklab, var(--color-code), var(--color-canvas)),
+      0 0 0 6px color-mix(in oklab, var(--color-code), var(--color-canvas));
   }
   .copy-over:hover {
-    background-color: color-mix(in oklab, var(--color-fg) 6%, var(--color-code));
+    background-image: linear-gradient(var(--color-fill), var(--color-fill));
   }
 }
 
