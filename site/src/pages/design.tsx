@@ -44,11 +44,11 @@ const PUBLISHERS: { name: string; path?: string; png?: string }[] = [
 function Mark({ p }: { p: (typeof PUBLISHERS)[number] }) {
   if (p.path)
     return (
-      <svg viewBox="0 0 24 24" class="size-6 shrink-0" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 24 24" class="size-9 shrink-0" fill="currentColor" aria-hidden="true">
         <path d={p.path} />
       </svg>
     )
-  return <img src={asset(`logos/${p.png}.png`)} class="size-6 shrink-0 rounded-[3px] brightness-150 grayscale" alt="" width="24" height="24" />
+  return <img src={asset(`logos/${p.png}.png`)} class="size-9 shrink-0 rounded-[4px] brightness-150 grayscale" alt="" width="36" height="36" />
 }
 
 const tokens = `
@@ -102,7 +102,7 @@ const tokens = `
 @keyframes fill { from { transform: scaleX(0); } }
 /* The publishers' marks on an endless belt: the track is laid twice and slides by half its width. */
 .rd .marquee { overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
-.rd .marquee-track { display: flex; width: max-content; gap: 3.5rem; padding-right: 3.5rem; }
+.rd .marquee-track { display: flex; width: max-content; gap: 4.5rem; padding-right: 4.5rem; }
 @media (prefers-reduced-motion: no-preference) {
   .rd .marquee-track { animation: marquee 38s linear infinite; }
   .rd .marquee:hover .marquee-track { animation-play-state: paused; }
@@ -361,11 +361,11 @@ function Proof() {
         ))}
       </dl>
       <div class="rule grid items-center md:grid-cols-[10rem_minmax(0,1fr)]">
-        <p class="px-6 pt-5 text-[13px] text-muted md:py-6">Models by</p>
-        <div class="marquee py-5 md:py-6" aria-label={PUBLISHERS.map((p) => p.name).join(', ')}>
+        <p class="px-6 pt-7 text-[15px] text-muted md:py-9">Models by</p>
+        <div class="marquee py-7 md:py-9" aria-label={PUBLISHERS.map((p) => p.name).join(', ')}>
           <div class="marquee-track" aria-hidden="true">
             {[...PUBLISHERS, ...PUBLISHERS].map((p) => (
-              <span class="inline-flex shrink-0 items-center gap-2.5 text-[15px] font-medium whitespace-nowrap text-body">
+              <span class="inline-flex shrink-0 items-center gap-3.5 text-[22px] font-medium whitespace-nowrap text-body">
                 <Mark p={p} />
                 {p.name}
               </span>
