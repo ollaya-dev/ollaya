@@ -2,7 +2,8 @@
 # Set the release version everywhere it is written (docs/model-lifecycle.md, stage 6):
 #   scripts/bump-version.sh 0.14.0
 # The workspace and desktop crates, their lock files (Ollaya's own crates only), the desktop app's package files and
-# its UI mock. Fails if any file did not change, so a new place the version lives is noticed.
+# its UI mock, and the MCP Registry entry (server.json). Fails if any file did not change, so a new place the version
+# lives is noticed.
 set -eu
 new=${1:?usage: scripts/bump-version.sh X.Y.Z}
 cd "$(dirname "$0")/.."
@@ -17,6 +18,11 @@ done
 perl -pi -e "s/^  \"version\": \"\\Q$old\\E\"/  \"version\": \"$new\"/" desktop/package.json desktop/src-tauri/tauri.conf.json
 perl -0pi -e "s/^(  \"version\": )\"\\Q$old\\E\"/\$1\"$new\"/m; s/(\"\": \\{\\n      \"name\": \"[^\"]*\",\\n      \"version\": )\"\\Q$old\\E\"/\$1\"$new\"/" desktop/package-lock.json
 perl -pi -e "s/version: '\\Q$old\\E'/version: '$new'/g" desktop/ui/src/mock.ts
+# The MCP Registry entry can already name the coming release (0.17.0 was its first image), so it is set and checked by
+# content, not by diff.
+perl -pi -e "s/^  \"version\": \"[^\"]*\"/  \"version\": \"$new\"/; s{(\"ghcr\\.io/ollaya-dev/ollaya:)[^\"]*\"}{\${1}$new\"}" server.json
+grep -q "^  \"version\": \"$new\"" server.json && grep -q "\"ghcr\\.io/ollaya-dev/ollaya:$new\"" server.json \
+  || { echo "server.json: version or image tag not set to $new"; exit 1; }
 for f in Cargo.toml Cargo.lock desktop/package.json desktop/package-lock.json desktop/src-tauri/Cargo.toml \
          desktop/src-tauri/Cargo.lock desktop/src-tauri/tauri.conf.json desktop/ui/src/mock.ts; do
   git diff --quiet -- "$f" && { echo "$f: no $old found"; exit 1; }
