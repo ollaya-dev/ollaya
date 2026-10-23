@@ -109,6 +109,7 @@ Ollaya's runtime gives the same answers (parity below).
 | t150-id-T3w-e2 | 150m | ternary | + in-domain, 2 epochs | 0.764 | 0.547 | 0.699 in-domain |
 | t400-id-T3w | 400m | ternary | + in-domain | 0.791 | 0.548 | 0.716 in-domain |
 | t68-id-T3w | 68m | ternary | + in-domain | 0.705 | 0.448 | 0.664 in-domain |
+| t68-id-T3w-e2 | 68m | ternary | + in-domain, 2 epochs | 0.734 | 0.493 | 0.677 in-domain |
 
 For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed and 0.824 public;
 `decider:0.8b` 0.46–0.51 typed and 0.669 public; `laya:typed-decisions` 0.594 public; `laya:en` 0.532 public.
@@ -127,8 +128,8 @@ For reference (Ollaya bench): `pplx-decider:flash` (the teacher, 4B) 0.726 typed
   typed and in-domain public scores at 150m, and 96–98% at 400m. The ternary 400m beats the fp 150m on all three.
 - Unlike the fp runs, ternary training gains from a second epoch: t150-id-T3w-e2 adds 0.028 val, 0.016 typed
   and 0.011 public. That matches the fp 150m on val (0.764 against 0.765) and typed (0.547 against 0.544), leaves
-  0.006 public, and draws level with the 1-epoch ternary 400m on typed. The 68m and 400m ternaries are training
-  for two epochs too.
+  0.006 public, and draws level with the 1-epoch ternary 400m on typed. At 68m the second epoch adds more:
+  0.029 val, 0.045 typed and 0.013 public. The 400m ternary is training for two epochs too.
 
 ## Browser runtime
 
@@ -150,9 +151,9 @@ memory for the 150m (onnxruntime-web holds several copies while it loads), which
 
 Parity, Ollaya's native runtime on the CPU against the checkpoint's PyTorch goldens (`parity_run`, 483
 questions): decisions 100% the same, probabilities within 8.2e-6 (fp400-T 4.9e-6, fp400-id-T 2.7e-6, fp150-id-T
-6.2e-6, t400-id-T3w 8.2e-6, t150-id-T3w 2.8e-6, t150-id-T3w-e2 3.4e-6, t68-id-T3w 1.4e-6). The browser against the native runtime
+6.2e-6, t400-id-T3w 8.2e-6, t150-id-T3w 2.8e-6, t150-id-T3w-e2 3.4e-6, t68-id-T3w 1.4e-6, t68-id-T3w-e2 1.4e-6). The browser against the native runtime
 (`web/parity.mjs`, the 391 of those questions the API accepts): decisions 100% the same, within 2e-6
-(fp150-id-T; t150-id-T3w and t68-id-T3w float32 and 2-bit; t400-id-T3w and t150-id-T3w-e2 2-bit).
+(fp150-id-T; t150-id-T3w and t68-id-T3w float32 and 2-bit; t400-id-T3w, t150-id-T3w-e2 and t68-id-T3w-e2 2-bit).
 
 Size and speed of the 2-bit graphs on that parity set (Node 26, 4 WASM threads, M4 Pro; 83 requests of about
 five questions, states up to 512 tokens):
