@@ -436,7 +436,9 @@ const vsRuns: VsRun[] = VS_TAGS.map(([tag, server]) => {
   if (!r) throw new Error(`home: no ${server} public-benchmark row for ${tag} in results/`)
   return { tag, server, acc: r.macro_accuracy, ece: r.pooled_ece, ms: Math.round(r.median_ms) }
 }).sort((a, b) => b.acc - a.acc)
-const vs = (tag: string, server: VsRun['server']) => vsRuns.find((r) => r.tag === tag && r.server === server)!
+// The section's copy says Ollaya runs the most accurate model; fail the build if results/ stop saying so.
+if (vsRuns[0]!.server !== 'ollaya') throw new Error(`home: ${vsRuns[0]!.tag} on Ollama is now the most accurate; update the vs-ollama copy`)
+const vs =(tag: string, server: VsRun['server']) => vsRuns.find((r) => r.tag === tag && r.server === server)!
 const OLLAMA = `Ollama ${publicBench?.servers.ollama ?? ''}`.trim()
 /** How many times faster Ollama is on the same weights, as a range over the pairs both serve. */
 function speedup() {
@@ -502,7 +504,7 @@ function VersusOllama() {
       id="vs-ollama"
       title="Ollaya and Ollama"
       lead="Inspired by Ollama, measured side by side."
-      body={`${OLLAMA}'s nine decision models and Ollaya's, on the same ${benchGpu} and 3,880 human-labeled questions. Ollama is ${speedup()} times faster on the same weights; Ollaya applies each author's temperature and runs more models.`}
+      body={`${OLLAMA}'s nine decision models and Ollaya's, on the same ${benchGpu} and 3,880 human-labeled questions. Ollaya runs the most accurate model and more of them, with each author's temperature. On the same weights Ollama is ${speedup()} times faster: it runs Q8_0 GGUFs, where Ollaya computes the authors' BF16 weights in fp32.`}
     >
       <div class="grid overflow-hidden rounded-2xl border border-line sm:grid-cols-3">
         <Stat value={vs('pplx-decider:flash', 'ollaya').acc.toFixed(3)} unit="" label="Most accurate on Ollaya: pplx-decider:flash" detail={`Ollama's best: ${vs('pplx-decider', 'ollama').acc.toFixed(3)} (pplx-decider, 27B)`} />
