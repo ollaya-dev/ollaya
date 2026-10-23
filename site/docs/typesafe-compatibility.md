@@ -1,7 +1,7 @@
 ---
-title: TypeSafe compatibility
+title: TypeSafe compatibility (Jev-compatible API)
 nav: TypeSafe compatibility
-description: Use the official TypeSafe SDK and existing code with local, open models by changing environment variables.
+description: Ollaya is a self-hosted, Jev-compatible API server. Use the official TypeSafe SDK and existing Jev code with local, open models by changing environment variables.
 order: 5
 ---
 

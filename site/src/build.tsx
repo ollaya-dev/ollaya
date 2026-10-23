@@ -26,7 +26,7 @@ import { DocsIndex, DocView, withOrigin } from './pages/docs'
 import { DownloadPage } from './pages/download'
 import { HomePage } from './pages/home'
 import { LibraryRedirect, ModelPage, TagPage, TagsPage } from './pages/library'
-import { robotsTxt, sitemapXml } from './pages/meta'
+import { faqJsonLd, robotsTxt, sitemapXml, softwareJsonLd } from './pages/meta'
 import { NotFoundPage } from './pages/notFound'
 import { accuracyScatter, ResultsPage, speedDots } from './pages/results'
 import { DotPlot, Scatter } from './components/charts'
@@ -63,7 +63,7 @@ interface Page {
 /** Every HTML page of the site. Also the sitemap, in this order. */
 function pages(origin: string): Page[] {
   const list: Page[] = [
-    { url: '/', meta: {}, render: () => <HomePage /> },
+    { url: '/', meta: { jsonLd: softwareJsonLd(origin) }, render: () => <HomePage /> },
     {
       url: '/search',
       meta: {
@@ -103,11 +103,19 @@ function pages(origin: string): Page[] {
       },
       render: () => <DocsIndex />,
     },
-    ...docPages.map((page) => ({
-      url: `/docs/${page.slug}`,
-      meta: { title: page.title, description: page.description, nav: 'docs' as const },
-      render: () => <DocView page={page} html={withResults(withOrigin(page.html, origin))} />,
-    })),
+    ...docPages.map((page) => {
+      const html = withResults(withOrigin(page.html, origin))
+      return {
+        url: `/docs/${page.slug}`,
+        meta: {
+          title: page.title,
+          description: page.description,
+          nav: 'docs' as const,
+          jsonLd: page.slug === 'faq' ? faqJsonLd(html) : undefined,
+        },
+        render: () => <DocView page={page} html={html} />,
+      }
+    }),
   ]
 
   for (const model of catalog) {
