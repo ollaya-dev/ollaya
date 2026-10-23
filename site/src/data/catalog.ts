@@ -114,6 +114,20 @@ const overlays: Record<string, ModelOverlay> = {
       '68m-ternary': { summary: 'The smallest: ternary Ettin 68M, in-domain.', capabilities: ['fine-tuned'] },
     },
   },
+  sura: {
+    stats: stats('sura:0.8b'),
+    title: 'sura',
+    description:
+      "Ollaya's own decoder decision model: Qwen3.5 distilled from pplx-decider:flash in its joint format. Every question of a request shares one sequence and reads the whole request; up to 255 options. English, zero-shot.",
+    publisher: { name: 'Ollaya', url: 'https://huggingface.co/ollaya-dev' },
+    capabilities: ['decision', 'zero-shot'],
+    keywords: ['sura', 'ollaya', 'pplx', 'pplx-decider', 'qwen', 'qwen3.5', 'decoder', 'distilled', 'joint', 'llm', 'decision', 'classification', 'typesafe', 'jev'],
+    rank: 25,
+    tags: {
+      latest: { summary: 'Same as sura:0.8b.' },
+      '0.8b': { summary: `Qwen3.5-0.8B: ${result('sura:0.8b', 'typed.accuracy', 3)} on typed decisions, zero-shot; ${result('sura:0.8b', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+    },
+  },
   nli: {
     stats: stats('nli:deberta-v3-large'),
     title: 'NLI zero-shot',

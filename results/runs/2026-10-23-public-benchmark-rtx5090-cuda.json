@@ -6,7 +6,7 @@
  "device": "cuda",
  "suite": "public-benchmark",
  "servers": {
-  "ollaya": "0.16.0"
+  "ollaya": "0.17.0"
  },
  "protocol": {
   "benchmark": "Bespoke Labs' public decision benchmark: 13 subsets of 11 human-labeled public datasets, 3,880 questions",
@@ -324,6 +324,109 @@
      "errors": 11,
      "accuracy": 0.608,
      "ece": 0.1715
+    }
+   }
+  },
+  {
+   "server": "ollaya",
+   "model": "sura:0.8b",
+   "digest": "b5a8e8f48b6aeba1bb805c5941d992832458e8e5e868fd8f80302915ff063f7f",
+   "records": 3880,
+   "errors": 0,
+   "macro_accuracy": 0.5861,
+   "macro_accuracy_ci": [
+    0.5699,
+    0.6013
+   ],
+   "micro_accuracy": 0.6088,
+   "macro_ece": 0.1324,
+   "pooled_ece": 0.0573,
+   "brier": 0.509,
+   "median_ms": 59.3,
+   "p95_ms": 80.3,
+   "by_type": {
+    "choice": 0.6396,
+    "noul": 0.6672,
+    "score": 0.3619
+   },
+   "per_subset": {
+    "vitaminc-dev": {
+     "n": 599,
+     "errors": 0,
+     "accuracy": 0.7212,
+     "ece": 0.0382
+    },
+    "massive-en-US": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.7514,
+     "ece": 0.0299
+    },
+    "massive-de-DE": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.6171,
+     "ece": 0.066
+    },
+    "boolq": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.6967,
+     "ece": 0.0495
+    },
+    "squad2": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.6087,
+     "ece": 0.214
+    },
+    "paws": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.664,
+     "ece": 0.0657
+    },
+    "multinli": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.6321,
+     "ece": 0.071
+    },
+    "civil_comments": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.8467,
+     "ece": 0.0449
+    },
+    "aegis2": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.52,
+     "ece": 0.2325
+    },
+    "helpsteer2": {
+     "n": 249,
+     "errors": 0,
+     "accuracy": 0.3052,
+     "ece": 0.158
+    },
+    "summeval-relevance": {
+     "n": 240,
+     "errors": 0,
+     "accuracy": 0.1417,
+     "ece": 0.4137
+    },
+    "summeval-consistency": {
+     "n": 144,
+     "errors": 0,
+     "accuracy": 0.6389,
+     "ece": 0.262
+    },
+    "pubmedqa": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.476,
+     "ece": 0.0753
     }
    }
   },

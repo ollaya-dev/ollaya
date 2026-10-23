@@ -70,7 +70,8 @@
   "coba:400m",
   "coba:400m-ternary",
   "coba:150m-ternary",
-  "coba:68m-ternary"
+  "coba:68m-ternary",
+  "sura:0.8b"
  ],
  "score": {
   "definition": "Mean over 14 tasks (13 public subsets and typed-decisions, equal weight) of the chance-corrected accuracy 100 * (accuracy - chance) / (1 - chance); chance is the mean of 1/K over the task's questions. A model trained on a task's train split is scored on the other tasks",
@@ -735,6 +736,31 @@
     "trained_on": []
    },
    {
+    "model": "sura:0.8b",
+    "score": 37.21,
+    "score_ci": [
+     34.9,
+     39.47
+    ],
+    "tasks": {
+     "vitaminc-dev": 58.18,
+     "massive-en-US": 73.68,
+     "massive-de-DE": 59.46,
+     "boolq": 39.33,
+     "squad2": 21.74,
+     "paws": 32.8,
+     "multinli": 44.82,
+     "civil_comments": 69.33,
+     "aegis2": 4.0,
+     "helpsteer2": 13.15,
+     "summeval-relevance": -7.29,
+     "summeval-consistency": 54.86,
+     "pubmedqa": 21.4,
+     "typed-decisions": 35.53
+    },
+    "trained_on": []
+   },
+   {
     "model": "laya:multilingual",
     "score": 36.74,
     "score_ci": [
@@ -1353,7 +1379,8 @@
     "coba:400m",
     "coba:400m-ternary",
     "coba:150m-ternary",
-    "coba:68m-ternary"
+    "coba:68m-ternary",
+    "sura:0.8b"
    ]
   }
  ]

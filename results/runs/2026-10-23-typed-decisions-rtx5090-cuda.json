@@ -5,7 +5,7 @@
  "machine": "rtx-5090",
  "device": "cuda",
  "suite": "typed-decisions",
- "ollaya": "0.16.0",
+ "ollaya": "0.17.0",
  "protocol": {
   "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each (2,000 questions: 600 choice, 600 noul, 800 score)",
   "source": "https://huggingface.co/datasets/LocalLLaMA/typed-decisions",
@@ -77,6 +77,38 @@
    "soft_ce": 1.2941,
    "median_ms": 21.7,
    "p95_ms": 26.9,
+   "trained_on_split": false
+  },
+  {
+   "model": "sura:0.8b",
+   "digest": "b5a8e8f48b6aeba1bb805c5941d992832458e8e5e868fd8f80302915ff063f7f",
+   "answered_by": [
+    "sura:0.8b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.56,
+   "accuracy_ci": [
+    0.533,
+    0.585
+   ],
+   "by_type": {
+    "choice": 0.5517,
+    "noul": 0.5867,
+    "score": 0.5463
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.53,
+    "customer_service": 0.67,
+    "invoice_processing": 0.494,
+    "security_incidents": 0.546
+   },
+   "ece": 0.0547,
+   "brier": 0.5457,
+   "soft_ce": 1.1128,
+   "median_ms": 71.8,
+   "p95_ms": 80.0,
    "trained_on_split": false
   },
   {
