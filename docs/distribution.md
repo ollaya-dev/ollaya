@@ -586,6 +586,12 @@ $env:OLLAYA_NO_CUDA = '1'; irm https://ollaya.dev/install.ps1 | iex   # CPU only
 separate Cargo workspace, so the engine's builds and CI never pull in the webview stack
 (WebKitGTK on Linux).
 
+- **The window:** two pages. Overview shows the server's address, its API endpoints, requests,
+  requests per second, the median response time and the latest requests (`GET /api/activity`).
+  Models shows the library as cards; each opens a page with its versions, a panel to try it and its
+  model card. The library comes from `https://ollaya.dev/data/library.json`, which the site build
+  writes, so a model added to the site appears in the app without a new release.
+
 - **macOS:** a menu bar app (`src-tauri/src/tray.rs`): no Dock icon until the window is open,
   and a menu with the server's state, Start/Stop, the installed models (checked when loaded;
   click to load or unload), downloads, Open at Login (a LaunchAgent) and Quit. Windows and Linux
@@ -607,7 +613,8 @@ separate Cargo workspace, so the engine's builds and CI never pull in the webvie
   release.
 - **Developing:** `cd desktop && npm ci`, copy a built `ollaya` into `src-tauri/binaries/` under its
   triple name, then `npx tauri dev`. `npm run preview` builds the page against a fake backend for
-  design work in a browser.
+  design work in a browser. `OLLAYA_LIBRARY_URL` points the app at another library, such as
+  `site/dist/data/library.json` served locally before the site is deployed.
 
 ### Signing the desktop app
 
