@@ -1,8 +1,7 @@
 /**
  * Ollaya's mark: the gaze, two rings with one pupil (an owl reduced to its eyes; the pupil is the
  * option that got chosen). Monochrome: inherits currentColor. Keep in sync with public/favicon.svg,
- * public/static/logo*.svg, scripts/og-lib.mjs and the desktop app (desktop/app-icon.svg,
- * desktop/scripts/tray-icons.swift, GAZE in desktop/ui/src/main.ts).
+ * public/static/logo*.svg and scripts/og-lib.mjs.
  */
 export const GAZE = {
   left: { cx: 9.5, cy: 16, r: 6.5 },

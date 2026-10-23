@@ -1,7 +1,7 @@
 /*
- * The desktop app's styles: Tailwind CSS v4 with the website's tokens and surfaces
- * (site/src/styles/app.css), so the app and ollaya.dev look like one product: one dark theme, the
- * ruled frame, the grain and the segmented confidence meter.
+ * The desktop app's styles: Tailwind CSS v4 with the website's tokens (site/src/styles/app.css),
+ * so the app and ollaya.dev look like one product: one dark theme, the same inks, lines and
+ * greens, and the segmented confidence meter.
  */
 @import "tailwindcss" source(none);
 
@@ -19,8 +19,7 @@
   --color-line: rgb(255 255 255 / 0.1);
   --color-line-strong: rgb(255 255 255 / 0.2);
   --color-subtle: rgb(255 255 255 / 0.025);
-  /* A cell's hover in a grid of shared borders: opaque, or the grid's line colour shows through. */
-  --color-raised: #111111;
+  --color-panel: rgb(255 255 255 / 0.02);
   --color-code: rgb(255 255 255 / 0.04);
   --color-fill: rgb(255 255 255 / 0.06);
   --color-fill-strong: rgb(255 255 255 / 0.1);
@@ -56,6 +55,24 @@
   select {
     cursor: default;
   }
+  /* A desktop window, not a page: nothing to select by accident, nothing to drag. */
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  :is(input, textarea, code, pre, .prose) {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-fill-strong);
+    border: 3px solid var(--color-canvas);
+    border-radius: 5px;
+  }
 }
 
 @layer components {
@@ -65,45 +82,6 @@
   }
   .spin {
     animation: spin 0.9s linear infinite;
-  }
-  /* The frame: two rails down the page, with a cross where a band's rule meets them. */
-  .frame {
-    position: relative;
-    border-left: 1px solid var(--color-line);
-    border-right: 1px solid var(--color-line);
-  }
-  .rule {
-    position: relative;
-    border-top: 1px solid var(--color-line);
-  }
-  .rule::before,
-  .rule::after {
-    content: "";
-    position: absolute;
-    top: -7px;
-    width: 13px;
-    height: 13px;
-    pointer-events: none;
-    background:
-      linear-gradient(var(--color-line-strong), var(--color-line-strong)) 6px 0 / 1px 100% no-repeat,
-      linear-gradient(var(--color-line-strong), var(--color-line-strong)) 0 6px / 100% 1px no-repeat;
-  }
-  .rule::before {
-    left: -7px;
-  }
-  .rule::after {
-    left: calc(100% - 6px);
-  }
-  /* The grain: an SVG noise tile over everything, blended so it only breaks up the flat colour. */
-  .grain {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    pointer-events: none;
-    opacity: 0.16;
-    mix-blend-mode: screen;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-size: 160px 160px;
   }
   /* The confidence meter: ten segments, as many lit as the answer is sure. */
   .meter {

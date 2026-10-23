@@ -1,6 +1,6 @@
-// Ollaya desktop: an overview of the local server (its address, endpoints, speed and the latest
-// requests) and the model library as cards, each opening a model page with downloads, a panel to
-// try it and its model card. Plain DOM, rendered from one state object.
+// Ollaya desktop, laid out as a desktop app: a rail of pages on the left (Discover, My Models,
+// Playground, Server), the page in the middle and the server's status in a bar along the bottom.
+// Plain DOM, rendered from one state object.
 import {
   backend,
   type ActivityResponse,
@@ -36,12 +36,14 @@ const ICON = {
   download: svg('<path d="M10 3v10m0 0 4-4m-4 4-4-4M4 16h12"/>'),
   check: svg('<path d="m5 10.5 3.2 3.2L15 7"/>', 1.8),
   x: svg('<path d="m6 6 8 8M14 6l-8 8"/>'),
-  back: svg('<path d="M16 10H4m0 0 5-5m-5 5 5 5"/>'),
   external: svg('<path d="M11 4h5v5m0-5-7 7M8 5H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-3"/>'),
   copy: svg('<rect x="7" y="7" width="9" height="9" rx="1.5"/><path d="M13 7V5.5A1.5 1.5 0 0 0 11.5 4h-6A1.5 1.5 0 0 0 4 5.5v6A1.5 1.5 0 0 0 5.5 13H7"/>'),
-  overview: svg('<path d="M3 10h3l2-5 4 10 2-5h3"/>'),
-  models: svg('<rect x="3.5" y="3.5" width="5" height="5" rx="1"/><rect x="11.5" y="3.5" width="5" height="5" rx="1"/><rect x="3.5" y="11.5" width="5" height="5" rx="1"/><rect x="11.5" y="11.5" width="5" height="5" rx="1"/>'),
+  discover: svg('<circle cx="10" cy="10" r="7"/><path d="m12.8 7.2-1.6 4-4 1.6 1.6-4z"/>'),
+  models: svg('<path d="M3.5 6.5 10 3l6.5 3.5v7L10 17l-6.5-3.5zM3.5 6.5 10 10l6.5-3.5M10 10v7"/>'),
+  play: svg('<path d="M6.5 4.5v11l9-5.5z"/>'),
+  server: svg('<path d="M3 10h3l2-5 4 10 2-5h3"/>'),
   search: svg('<circle cx="9" cy="9" r="5"/><path d="m16 16-3.5-3.5"/>'),
+  chevron: svg('<path d="m6 8 4 4 4-4"/>'),
   spinner: `<svg viewBox="0 0 20 20" fill="none" aria-hidden="true" class="spin"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><path d="M17 10a7 7 0 0 0-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
 }
 function icon(markup: string, cls: string): HTMLElement {
@@ -58,10 +60,10 @@ interface Pulling {
   status: string
 }
 
-type View = { page: 'overview' } | { page: 'models' } | { page: 'model'; name: string }
+type Page = 'discover' | 'mine' | 'playground' | 'server'
 
 const state = {
-  view: { page: 'overview' } as View,
+  page: 'discover' as Page,
   status: null as Status | null,
   statusBusy: false,
   statusError: '',
@@ -69,12 +71,15 @@ const state = {
   update: null as string | null,
   library: [] as LibraryModel[],
   libraryError: '',
-  installed: new Set<string>(),
+  /** The versions on this computer, with their size. */
+  installed: new Map<string, number>(),
   loaded: [] as string[],
   activity: null as ActivityResponse | null,
   activityError: '',
   query: '',
   onlyInstalled: false,
+  /** The family open in Discover's detail pane. */
+  selected: '',
   pulling: new Map<string, Pulling>(),
   pullError: '',
   presets: [] as Preset[],
@@ -105,7 +110,11 @@ const mainTags = (m: LibraryModel) => {
 const tagOf = (m: LibraryModel, tag: string) => m.tags.find((t) => t.name === tag)
 const installedTags = (m: LibraryModel) => mainTags(m).filter((t) => state.installed.has(t))
 const modelNamed = (name: string) => state.library.find((m) => m.name === name)
-const title = (m: LibraryModel) => m.title || m.name
+/** Every installed version: the library's order first, then what the library does not list. */
+const allInstalled = () => {
+  const known = state.library.flatMap(installedTags)
+  return [...known, ...[...state.installed.keys()].filter((t) => !known.includes(t)).sort()]
+}
 
 /** `builtinOf` requests, one per version. */
 const asking = new Map<string, Promise<string[] | null>>()
@@ -143,22 +152,23 @@ function forget(tag: string) {
 
 /** Poll the server; redraw only when what is shown changed, so a caret or a selection survives. */
 async function refresh() {
-  const before = JSON.stringify([state.status, [...state.installed], state.loaded, state.activity, state.activityError])
+  const snapshot = () => JSON.stringify([state.status, [...state.installed], state.loaded, state.activity, state.activityError])
+  const before = snapshot()
   state.status = await backend.status()
   if (state.status.running) {
     const [installed, loaded, activity] = await Promise.allSettled([backend.installed(), backend.loaded(), backend.activity()])
-    state.installed = new Set(installed.status === 'fulfilled' ? installed.value.map((m) => m.name) : [])
+    state.installed = new Map(installed.status === 'fulfilled' ? installed.value.map((m) => [m.name, m.size]) : [])
     state.loaded = loaded.status === 'fulfilled' ? loaded.value : []
     state.activity = activity.status === 'fulfilled' ? activity.value : null
     // A server older than 0.17.0 (a command-line install) has no activity log.
     state.activityError = activity.status === 'rejected' ? String(activity.reason) : ''
   } else {
-    state.installed = new Set()
+    state.installed = new Map()
     state.loaded = []
     state.activity = null
   }
-  // The overview has no field to keep, and its per-second rate moves with the clock.
-  if (state.view.page === 'overview' || JSON.stringify([state.status, [...state.installed], state.loaded, state.activity, state.activityError]) !== before) render()
+  // The server page has no field to keep, and its per-second rate moves with the clock.
+  if (state.page === 'server' || snapshot() !== before) render()
 }
 
 async function toggleServer() {
@@ -221,24 +231,19 @@ async function run() {
   }
   state.running = false
   render()
-  // Bring the answers into view inside the main pane (they land below the fold on a small window).
-  const pane = document.getElementById('main-pane')
-  const answers = document.getElementById('answers')
-  if (pane && answers) {
-    const below = answers.getBoundingClientRect().bottom + 24 - pane.getBoundingClientRect().bottom
-    if (below > 0) pane.scrollTop += below
-  }
 }
 
-function go(view: View) {
-  document.getElementById('main-pane')?.scrollTo({ top: 0 })
-  if (view.page === 'model' && !(state.view.page === 'model' && state.view.name === view.name)) {
-    state.runModel = ''
-    state.result = null
-    state.runError = ''
-  }
-  state.view = view
+function go(page: Page) {
+  state.page = page
   render()
+}
+
+/** Open the playground with `tag` picked. */
+function tryOut(tag: string) {
+  state.runModel = tag
+  state.result = null
+  state.runError = ''
+  go('playground')
 }
 
 async function copy(text: string) {
@@ -291,20 +296,20 @@ function speed(a: ActivityResponse) {
   return { median, perSecond: at.length > 1 ? (at.length - 1) / seconds : at.length / 60, samples: times.length }
 }
 
-// --- view: frame ----------------------------------------------------------------------------------
+// --- view: pieces ---------------------------------------------------------------------------------
 
 const btnPrimary =
-  'inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-btn px-3.5 text-[13px] font-medium text-btn-fg hover:bg-btn-hover disabled:opacity-50'
+  'inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-btn px-3 text-xs font-medium text-btn-fg hover:bg-btn-hover disabled:opacity-50'
 const btnSecondary =
-  'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-line px-3.5 text-[13px] font-medium text-fg hover:border-line-strong hover:bg-fill disabled:opacity-50'
-const btnSmall =
-  'inline-flex h-7 items-center gap-1 rounded-md border border-line px-2.5 text-xs font-medium text-fg hover:border-line-strong hover:bg-fill disabled:opacity-50'
-const field =
-  'rounded-md border border-line bg-canvas/60 text-fg placeholder:text-muted hover:border-line-strong focus:border-line-strong focus:ring-2 focus:ring-fill-strong focus:outline-none'
-const card = 'rounded-md border border-line'
-const h2 = 'text-sm font-semibold text-fg'
+  'inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-line px-3 text-xs font-medium text-fg hover:border-line-strong hover:bg-fill disabled:opacity-50'
+const btnQuiet = 'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-fill hover:text-fg disabled:opacity-50'
+const field = 'rounded-md border border-line bg-canvas text-fg placeholder:text-muted hover:border-line-strong focus:border-line-strong focus:outline-none'
+const panel = 'rounded-md border border-line bg-panel'
+/** A section's label inside a page. */
+const label = 'text-[11px] font-medium tracking-[0.06em] text-muted uppercase'
+const mono = 'font-mono text-xs'
 
-/** What the server's device means, for the status line's tooltip (#44). */
+/** What the server's device means, for the status bar's tooltip (#44). */
 function deviceHint(device: string | null): string {
   if (device === 'CPU only')
     return "The app's built-in server runs every model on the CPU. Install the command-line Ollaya with its GPU pack (install.ps1 or install.sh) and the app starts the server from there, on your NVIDIA GPU."
@@ -312,299 +317,115 @@ function deviceHint(device: string | null): string {
   return ''
 }
 
-function header(): HTMLElement {
-  const s = state.status
-  const running = !!s?.running
-  return h(
-    'header',
-    { class: 'flex h-14 shrink-0 items-center justify-between border-b border-line bg-canvas/70 px-5 backdrop-blur-xl' },
-    h(
-      'div',
-      { class: 'flex items-center gap-2 text-fg' },
-      icon(GAZE, 'size-7'),
-      h('span', { class: 'text-[17px] font-semibold tracking-[-0.035em]' }, 'ollaya'),
-    ),
-    h(
-      'div',
-      { class: 'flex items-center gap-3' },
-      state.statusError ? h('span', { class: 'max-w-80 truncate text-xs text-bad', title: state.statusError }, state.statusError) : null,
-      state.update
-        ? h(
-            'button',
-            { class: btnSmall, title: 'Opens the download page', onClick: () => void backend.openDownload() },
-            `Ollaya ${state.update} is available`,
-          )
-        : null,
-      h(
-        'span',
-        { class: 'flex items-center gap-2 text-[13px] text-muted', title: running ? deviceHint(s?.device ?? null) : '' },
-        h('span', { class: `size-2 rounded-full ${running ? 'bg-ok' : 'bg-faint'}` }),
-        s === null ? 'Checking…' : running ? ['Running', s.device].filter(Boolean).join(' · ') : 'Stopped',
-      ),
-      h(
-        'button',
-        { class: running ? btnSecondary : btnPrimary, disabled: state.statusBusy || s === null, onClick: toggleServer },
-        state.statusBusy ? icon(ICON.spinner, 'size-3.5') : null,
-        running ? 'Stop' : 'Start',
-      ),
-    ),
-  )
-}
-
-function sidebar(): HTMLElement {
-  const item = (label: string, svgIcon: string, view: View, on: boolean, note?: string) =>
-    h(
-      'button',
-      {
-        class: `flex h-9 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] ${on ? 'bg-fill font-medium text-fg' : 'text-body hover:bg-fill hover:text-fg'}`,
-        'aria-current': on ? 'page' : undefined,
-        onClick: () => go(view),
-      },
-      icon(svgIcon, 'size-4'),
-      h('span', { class: 'flex-1' }, label),
-      note ? h('span', { class: 'text-xs text-muted tabular-nums' }, note) : null,
-    )
-  const page = state.view.page
-  const have = state.library.filter((m) => installedTags(m).length).length
-  return h(
-    'nav',
-    { class: 'flex w-52 shrink-0 flex-col justify-between border-r border-line p-2.5', 'aria-label': 'Pages' },
-    h(
-      'div',
-      { class: 'space-y-0.5' },
-      item('Overview', ICON.overview, { page: 'overview' }, page === 'overview'),
-      item('Models', ICON.models, { page: 'models' }, page !== 'overview', have ? String(have) : undefined),
-    ),
-    h('p', { class: 'px-2.5 pb-1 text-[11px] text-muted' }, state.status?.version ? `Ollaya ${state.status.version}` : ''),
-  )
-}
-
-/** A page is the website's frame: two rails, and bands one under the other, a rule between them. */
-function main(): HTMLElement {
-  const v = state.view
-  const bands = v.page === 'overview' ? overview() : v.page === 'models' ? models() : modelPage(modelNamed(v.name))
-  return h(
-    'main',
-    { id: 'main-pane', class: 'relative min-w-0 flex-1 overflow-y-auto px-6' },
-    h('div', { class: 'frame mx-auto flex min-h-full w-full max-w-4xl flex-col pb-10' }, ...bands),
-  )
-}
-
-/** A page's opening band: its title, a lead, and whatever goes under them. */
-function head(title: Child, lead: Child, ...rest: Child[]): HTMLElement {
-  return h(
-    'header',
-    { class: 'px-8 pt-10 pb-8' },
-    h('h1', { class: 'text-3xl font-semibold tracking-[-0.03em] text-fg' }, title),
-    lead ? h('p', { class: 'mt-2 max-w-2xl text-[15px] text-body' }, lead) : null,
-    ...rest,
-  )
-}
-
-/** A band under the head, with a rule above it; `title` names it for screen readers too. */
-function band(title: string | null, ...children: Child[]): HTMLElement {
-  const id = title ? `band-${title.toLowerCase().replace(/\W+/g, '-')}` : undefined
-  return h('section', { class: 'rule px-8 py-7', 'aria-labelledby': id }, title ? h('h2', { id, class: h2 }, title) : null, ...children)
-}
-
-function copyButton(text: string, label: string): HTMLElement {
+function copyButton(text: string, what: string): HTMLElement {
   const done = state.copied === text
   return h(
     'button',
-    { class: 'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-fill hover:text-fg', title: done ? 'Copied' : label, 'aria-label': label, onClick: () => void copy(text) },
+    { class: btnQuiet, title: done ? 'Copied' : what, 'aria-label': what, onClick: () => void copy(text) },
     icon(done ? ICON.check : ICON.copy, `size-4 ${done ? 'text-ok' : ''}`),
   )
 }
 
-// --- view: overview -------------------------------------------------------------------------------
-
-function overview(): HTMLElement[] {
-  const s = state.status
-  const top = head('Overview', 'The server on this computer, and what it has answered.')
-  if (!s?.running)
-    return [
-      top,
-      band(
-        null,
-        h(
-          'div',
-          { class: 'flex items-center justify-between gap-4' },
-          h('p', { class: 'text-sm text-muted' }, s === null ? 'Checking the server…' : 'The server is stopped. Start it to download and run models.'),
-          h('button', { class: btnPrimary, disabled: state.statusBusy || s === null, onClick: toggleServer }, 'Start'),
-        ),
-      ),
-    ]
-  return [top, stats(), server(s.url), endpoints(s.url), recent()]
-}
-
-/** The numbers as the website's proof strip: cells sharing their borders. */
-function stats(): HTMLElement {
-  const a = state.activity
-  const sp = a ? speed(a) : null
-  const tile = (label: string, value: string, note: string) =>
-    h(
-      'div',
-      { class: 'bg-canvas px-6 py-6' },
-      h('p', { class: 'text-3xl font-semibold tracking-[-0.03em] text-fg tabular-nums' }, value),
-      h('p', { class: 'mt-1 text-[13px] text-body' }, label),
-      h('p', { class: 'mt-0.5 text-xs text-muted' }, note),
-    )
-  const median = sp?.median ?? null
+function select(attrs: Attrs, ...options: HTMLElement[]): HTMLElement {
   return h(
-    'div',
-    { class: 'rule grid grid-cols-4 gap-px bg-line' },
-    tile('Requests', a ? a.total.toLocaleString() : '–', 'since the server started'),
-    tile('Per second', sp ? sp.perSecond.toFixed(sp.perSecond < 10 ? 1 : 0) : '–', 'over the last minute'),
-    tile('Response time', median === null ? '–' : `${ms(median)} ms`, sp?.samples ? `median of the last ${sp.samples}` : 'no requests yet'),
-    tile('Capacity', median === null ? '–' : `${Math.floor(1000 / median).toLocaleString()}/s`, 'one request at a time'),
+    'span',
+    { class: 'relative inline-flex' },
+    h('select', { ...attrs, class: `h-7 appearance-none pr-7 pl-2.5 text-xs ${field}` }, ...options),
+    icon(ICON.chevron, 'pointer-events-none absolute top-1.5 right-2 size-3.5 text-muted'),
   )
 }
 
-function server(url: string): HTMLElement {
-  const row = (label: string, value: Node | string) =>
-    h('div', { class: 'flex min-h-11 items-center justify-between gap-4 border-t border-line px-4 py-2 first:border-t-0' }, h('span', { class: 'text-[13px] text-muted' }, label), value)
-  return band(
-    'Server',
-    h(
-      'div',
-      { class: `${card} mt-3` },
-      row('Address', h('span', { class: 'flex items-center gap-1' }, h('span', { class: 'font-mono text-[13px] text-fg' }, url), copyButton(url, 'Copy the address'))),
-      row(
-        'Loaded models',
-        state.loaded.length
-          ? h('span', { class: 'flex flex-wrap justify-end gap-1.5' }, ...state.loaded.map((m) => h('span', { class: 'rounded-md bg-fill px-2 py-0.5 font-mono text-xs text-body' }, m)))
-          : h('span', { class: 'text-[13px] text-muted' }, 'None. A model loads on its first request.'),
-      ),
-    ),
-  )
+function option(value: string, text: string, selected: boolean): HTMLElement {
+  return h('option', { value, selected }, text)
 }
-
-function endpoints(url: string): HTMLElement {
-  const list: [string, string, string][] = [
-    ['POST', '/api/decide', 'Answers questions about a text or JSON, with a preset or your own questions'],
-    ['POST', '/v1/decisions', 'TypeSafe-compatible: its SDKs work unchanged (also /v1/systemone)'],
-    ['GET', '/v1/models', 'The models on this computer'],
-  ]
-  const model = [...state.installed].sort()[0] ?? 'largha'
-  const example = `curl ${url}/api/decide -d '${JSON.stringify({ model: model.replace(/:latest$/, ''), preset: 'triage', state: 'I was charged twice this month.' })}'`
-  return h(
-    'section',
-    { class: 'rule px-8 py-7', 'aria-labelledby': 'api-title' },
-    h(
-      'div',
-      { class: 'flex items-baseline justify-between' },
-      h('h2', { id: 'api-title', class: h2 }, 'API'),
-      h('button', { class: 'inline-flex items-center gap-1 text-xs text-muted hover:text-fg', onClick: () => void backend.openLink('https://ollaya.dev/docs/api') }, 'Reference', icon(ICON.external, 'size-3.5')),
-    ),
-    h(
-      'div',
-      { class: `${card} mt-3` },
-      ...list.map(([method, path, what]) =>
-        h(
-          'div',
-          { class: 'flex min-h-11 items-center gap-3 border-t border-line px-4 py-2 first:border-t-0' },
-          h('span', { class: 'w-11 font-mono text-[11px] font-semibold text-muted' }, method),
-          h('span', { class: 'w-36 shrink-0 font-mono text-[13px] text-fg' }, path),
-          h('span', { class: 'min-w-0 flex-1 truncate text-[13px] text-muted', title: what }, what),
-          copyButton(url + path, `Copy ${path}`),
-        ),
-      ),
-      h(
-        'div',
-        { class: 'flex items-start gap-2 rounded-b-md border-t border-line bg-code px-4 py-3' },
-        h('code', { class: 'min-w-0 flex-1 font-mono text-xs leading-relaxed wrap-anywhere text-body' }, example),
-        copyButton(example, 'Copy the example'),
-      ),
-    ),
-  )
-}
-
-function recent(): HTMLElement {
-  const a = state.activity
-  const section = band('Recent requests')
-  if (!a) {
-    section.append(h('p', { class: 'mt-3 text-sm text-muted' }, state.activityError ? 'This server does not list its requests. Update Ollaya to 0.17.0 or newer.' : 'Loading…'))
-    return section
-  }
-  if (!a.requests.length) {
-    section.append(
-      h(
-        'div',
-        { class: `${card} mt-3 px-4 py-6 text-center text-sm text-muted` },
-        'No requests yet. ',
-        h('button', { class: 'font-medium text-fg underline underline-offset-4', onClick: () => go({ page: 'models' }) }, 'Try a model'),
-        ', or call the API from your code.',
-      ),
-    )
-    return section
-  }
-  const cell = 'px-4 py-2'
-  section.append(
-    h(
-      'div',
-      { class: `${card} mt-3 overflow-hidden` },
-      h(
-        'table',
-        { class: 'w-full text-[13px]' },
-        h(
-          'thead',
-          { class: 'bg-subtle text-left text-xs text-muted' },
-          h('tr', {}, ...['Time', 'Model', 'Endpoint', 'Questions', 'Took'].map((t, i) => h('th', { class: `${cell} font-medium ${i > 2 ? 'text-right' : ''}` }, t))),
-        ),
-        h(
-          'tbody',
-          {},
-          ...a.requests.slice(0, 20).map((r) =>
-            h(
-              'tr',
-              { class: 'border-t border-line' },
-              h('td', { class: `${cell} text-muted tabular-nums` }, new Date(r.at).toLocaleTimeString()),
-              h('td', { class: `${cell} font-mono text-xs text-fg` }, r.model),
-              h('td', { class: `${cell} font-mono text-xs text-muted` }, r.endpoint),
-              h('td', { class: `${cell} text-right tabular-nums ${r.error ? 'text-bad' : 'text-body'}` }, r.error ? r.error.toLowerCase().replaceAll('_', ' ') : String(r.questions)),
-              h('td', { class: `${cell} text-right text-body tabular-nums` }, `${ms(r.total_duration / 1e6)} ms`),
-            ),
-          ),
-        ),
-      ),
-    ),
-  )
-  return section
-}
-
-// --- view: models ---------------------------------------------------------------------------------
 
 /** The Download button, or how far a download is, or that it is on this computer. */
-function pullState(tag: string, compact: boolean): HTMLElement {
+function pullState(tag: string): HTMLElement {
   const p = state.pulling.get(tag)
   if (p)
     return h(
       'span',
-      { class: `flex items-center gap-2 ${compact ? 'w-24' : 'w-40'}` },
-      h('span', { class: 'h-1.5 flex-1 overflow-hidden rounded-full bg-fill-strong' }, h('span', { class: 'bar block h-full rounded-full transition-[width]', style: `width:${p.total ? (p.completed / p.total) * 100 : 2}%` })),
-      h('span', { class: 'w-8 text-right text-xs text-muted tabular-nums' }, percent(p)),
+      { class: 'flex w-36 items-center gap-2' },
+      h('span', { class: 'h-1 flex-1 overflow-hidden rounded-full bg-fill-strong' }, h('span', { class: 'block h-full rounded-full bg-us transition-[width]', style: `width:${p.total ? (p.completed / p.total) * 100 : 2}%` })),
+      h('span', { class: 'w-8 text-right text-[11px] text-muted tabular-nums' }, percent(p)),
     )
-  if (state.installed.has(tag)) return h('span', { class: 'flex items-center gap-1 text-xs text-muted' }, icon(ICON.check, 'size-4 text-ok'), compact ? 'On this computer' : 'Installed')
+  if (state.installed.has(tag)) return h('span', { class: 'inline-flex items-center gap-1 text-xs text-muted' }, icon(ICON.check, 'size-3.5 text-ok'), 'Installed')
   return h(
     'button',
     {
-      class: compact ? btnSmall : btnSecondary,
+      class: btnSecondary,
       disabled: !state.status?.running,
       title: state.status?.running ? undefined : 'Start the server first',
-      onClick: (e: Event) => (e.stopPropagation(), void pull(tag)),
+      onClick: () => void pull(tag),
     },
     icon(ICON.download, 'size-3.5'),
     'Download',
   )
 }
 
-function models(): HTMLElement[] {
+function empty(text: string, ...rest: Child[]): HTMLElement {
+  return h('div', { class: 'flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-[13px] text-muted' }, h('p', {}, text), ...rest)
+}
+
+// --- view: the rail and the status bar ------------------------------------------------------------
+
+function rail(): HTMLElement {
+  const item = (page: Page, text: string, svgIcon: string, note?: string) =>
+    h(
+      'button',
+      {
+        class: `relative flex w-full flex-col items-center gap-1 rounded-md py-2 text-[10px] ${state.page === page ? 'bg-fill text-fg' : 'text-muted hover:bg-fill hover:text-fg'}`,
+        'aria-current': state.page === page ? 'page' : undefined,
+        onClick: () => go(page),
+      },
+      icon(svgIcon, 'size-5'),
+      text,
+      note ? h('span', { class: 'absolute top-1 right-2 rounded-full bg-fill-strong px-1.5 text-[9px] leading-4 text-body tabular-nums' }, note) : null,
+    )
+  const have = state.installed.size
+  return h(
+    'nav',
+    { class: 'flex w-[72px] shrink-0 flex-col items-center gap-1 border-r border-line px-2 pt-3', 'aria-label': 'Pages' },
+    icon(GAZE, 'mb-3 size-7 text-fg'),
+    item('discover', 'Discover', ICON.discover),
+    item('mine', 'My Models', ICON.models, have ? String(have) : undefined),
+    item('playground', 'Playground', ICON.play),
+    item('server', 'Server', ICON.server),
+  )
+}
+
+function statusBar(): HTMLElement {
+  const s = state.status
+  const running = !!s?.running
+  const dot = h('span', { class: `size-2 rounded-full ${running ? 'bg-ok' : 'bg-faint'}` })
+  const what = s === null ? 'Checking the server…' : running ? `Running on ${s.url.replace(/^https?:\/\//, '')}` : 'Server stopped'
+  return h(
+    'footer',
+    { class: 'flex h-8 shrink-0 items-center gap-3 border-t border-line px-3 text-xs text-muted' },
+    h('span', { class: 'flex items-center gap-2', title: running ? deviceHint(s?.device ?? null) : '' }, dot, h('span', { class: running ? 'text-body' : '' }, what), running && s?.device ? h('span', {}, `· ${s.device}`) : null),
+    running ? h('span', { class: 'truncate' }, state.loaded.length ? `· loaded: ${state.loaded.join(', ')}` : '· nothing loaded') : null,
+    state.statusError ? h('span', { class: 'truncate text-bad', title: state.statusError }, state.statusError) : null,
+    h('span', { class: 'flex-1' }),
+    state.update ? h('button', { class: 'text-fg underline underline-offset-4', title: 'Opens the download page', onClick: () => void backend.openDownload() }, `Update to ${state.update}`) : null,
+    h(
+      'button',
+      { class: `${btnSecondary} h-6`, disabled: state.statusBusy || s === null, onClick: toggleServer },
+      state.statusBusy ? icon(ICON.spinner, 'size-3') : null,
+      running ? 'Stop' : 'Start',
+    ),
+    s?.version ? h('span', { class: 'tabular-nums' }, `v${s.version}`) : null,
+  )
+}
+
+// --- view: discover -------------------------------------------------------------------------------
+
+function discover(): HTMLElement {
   const q = state.query.trim().toLowerCase()
   const shown = state.library
     .filter((m) => !state.onlyInstalled || installedTags(m).length)
     .filter((m) => !q || [m.name, m.title, m.description, m.publisher ?? '', ...m.caps].join(' ').toLowerCase().includes(q))
   const search = h('input', {
-    class: `h-8 w-full pr-3 pl-8 text-[13px] ${field}`,
+    class: `h-7 w-full pr-2 pl-7 text-xs ${field}`,
     type: 'search',
     placeholder: 'Search models',
     'aria-label': 'Search models',
@@ -614,151 +435,98 @@ function models(): HTMLElement[] {
     },
   }) as HTMLInputElement
   search.value = state.query
-  // The website's filter chips: an outline, filled when on.
-  const tab = (label: string, only: boolean) =>
+  const tab = (text: string, only: boolean) =>
+    h(
+      'button',
+      { class: `rounded px-2 py-0.5 ${state.onlyInstalled === only ? 'bg-fill-strong text-fg' : 'text-muted hover:text-fg'}`, 'aria-pressed': state.onlyInstalled === only ? 'true' : 'false', onClick: () => ((state.onlyInstalled = only), render()) },
+      text,
+    )
+  const m = modelNamed(state.selected) ?? shown[0]
+  const list = h(
+    'aside',
+    { class: 'flex w-72 shrink-0 flex-col border-r border-line' },
+    h(
+      'div',
+      { class: 'space-y-2 border-b border-line p-2.5' },
+      h('div', { class: 'relative' }, icon(ICON.search, 'pointer-events-none absolute top-1.5 left-2 size-4 text-muted'), search),
+      h('div', { class: 'flex items-center gap-1 text-[11px]' }, tab('All', false), tab('Installed', true), h('span', { class: 'ml-auto text-muted tabular-nums' }, state.library.length ? `${shown.length} of ${state.library.length}` : '')),
+    ),
+    state.libraryError
+      ? empty('The model library could not be reached. It comes from ollaya.dev.', h('button', { class: btnSecondary, onClick: () => void loadLibrary() }, 'Try again'))
+      : !state.library.length
+        ? empty('Loading the model library…')
+        : !shown.length
+          ? empty(state.onlyInstalled && !q ? 'No models on this computer yet.' : 'No model matches.')
+          : h('ul', { id: 'list-pane', class: 'min-h-0 flex-1 overflow-y-auto p-1.5', role: 'list' }, ...shown.map((x) => modelRow(x, x === m))),
+  )
+  return h('div', { class: 'flex min-h-0 flex-1' }, list, m ? detail(m) : h('div', { class: 'flex flex-1' }, empty('Pick a model on the left.')))
+}
+
+function modelRow(m: LibraryModel, on: boolean): HTMLElement {
+  const have = installedTags(m).length
+  const size = tagOf(m, `${m.name}:latest`)?.size
+  return h(
+    'li',
+    {},
     h(
       'button',
       {
-        class: `rounded-md border px-3 py-1 text-[13px] ${state.onlyInstalled === only ? 'border-fg bg-fg text-canvas' : 'border-line text-body hover:border-line-strong'}`,
-        'aria-pressed': state.onlyInstalled === only ? 'true' : 'false',
-        onClick: () => ((state.onlyInstalled = only), render()),
-      },
-      label,
-    )
-  const top = head(
-    'Models',
-    'Open decision models that run on this computer. Pick one to download and try it.',
-    h(
-      'div',
-      { class: 'mt-6 flex items-center gap-3' },
-      h('div', { class: 'relative w-64' }, icon(ICON.search, 'pointer-events-none absolute top-2 left-2.5 size-4 text-muted'), search),
-      h('div', { class: 'flex gap-2' }, tab('All', false), tab('On this computer', true)),
-    ),
-    state.pullError ? h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError) : null,
-  )
-  const note = (text: string) => band(null, h('p', { class: 'py-6 text-center text-sm text-muted' }, text))
-  if (state.libraryError)
-    return [
-      top,
-      band(
-        null,
-        h('p', { class: 'text-sm font-medium text-fg' }, 'The model library could not be reached'),
-        h('p', { class: 'mt-1 text-sm text-muted' }, 'It comes from ollaya.dev. Check the internet connection and try again.'),
-        h('p', { class: 'mt-2 text-xs break-all text-muted' }, state.libraryError),
-        h('button', { class: `mt-4 ${btnSecondary}`, onClick: () => void loadLibrary() }, 'Try again'),
-      ),
-    ]
-  if (!state.library.length) return [top, note('Loading the model library…')]
-  if (!shown.length) return [top, note(state.onlyInstalled && !q ? 'No models on this computer yet.' : 'No model matches.')]
-  // Empty cells close the last row, which would otherwise show the grid's line colour.
-  const blank = (n: number, cls: string) => Array.from({ length: n }, () => h('li', { class: `bg-canvas ${cls}`, 'aria-hidden': 'true' }))
-  return [
-    top,
-    h(
-      'ul',
-      { class: 'rule grid grid-cols-2 gap-px border-b border-line bg-line lg:grid-cols-3', role: 'list' },
-      ...shown.map(modelCard),
-      ...blank((2 - (shown.length % 2)) % 2, 'lg:hidden'),
-      ...blank((3 - (shown.length % 3)) % 3, 'hidden lg:block'),
-    ),
-  ]
-}
-
-/** A model as the website's card: who made it, what it is, its numbers from the bench. */
-function modelCard(m: LibraryModel): HTMLElement {
-  const latest = `${m.name}:latest`
-  const have = installedTags(m)
-  const size = tagOf(m, latest)?.size
-  const summary = (m.description.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? m.description).replace(/\.$/, '')
-  const stat = (value: string, label: string) =>
-    h('div', {}, h('p', { class: 'text-lg font-semibold tracking-[-0.02em] text-fg tabular-nums' }, value), h('p', { class: 'text-[11px] text-muted' }, label))
-  const open = () => go({ page: 'model', name: m.name })
-  return h(
-    'li',
-    { class: 'flex' },
-    h(
-      'div',
-      {
-        class: 'group flex w-full cursor-default flex-col bg-canvas p-5 hover:bg-raised',
-        role: 'button',
-        tabindex: '0',
-        'aria-label': `${title(m)}: open`,
-        onClick: open,
-        onKeydown: (e: Event) => {
-          if ((e as KeyboardEvent).key === 'Enter') open()
-        },
+        class: `flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left ${on ? 'bg-fill text-fg' : 'hover:bg-fill'}`,
+        'aria-current': on ? 'true' : undefined,
+        onClick: () => ((state.selected = m.name), render()),
       },
       h(
-        'div',
-        { class: 'flex items-start justify-between gap-3' },
-        h(
-          'div',
-          { class: 'min-w-0' },
-          h('p', { class: 'truncate font-mono text-[15px] text-fg underline-offset-4 group-hover:underline' }, m.name),
-          h('p', { class: 'mt-0.5 truncate text-xs text-muted' }, m.publisher ?? ''),
-        ),
-        have.length && !state.pulling.has(latest) ? pullState(have[0]!, true) : pullState(latest, true),
+        'span',
+        { class: 'min-w-0 flex-1' },
+        h('span', { class: `block truncate ${mono} text-[13px] text-fg` }, m.name),
+        h('span', { class: 'block truncate text-[11px] text-muted' }, m.publisher ?? m.title),
       ),
-      h('p', { class: 'mt-3 line-clamp-3 flex-1 text-[13px] leading-5 text-body' }, summary),
-      h(
-        'div',
-        { class: 'mt-5 flex items-end gap-5 border-t border-line pt-3.5' },
-        stat(m.stats?.accuracy ? m.stats.accuracy.toFixed(3) : '—', 'accuracy'),
-        stat(m.stats?.latencyMs ? `${Math.round(m.stats.latencyMs)} ms` : '—', 'five questions'),
-        h('div', { class: 'ml-auto text-right text-xs text-muted tabular-nums' }, size ? bytes(size) : ''),
-      ),
+      h('span', { class: 'flex shrink-0 flex-col items-end gap-0.5 text-[11px] text-muted tabular-nums' }, size ? bytes(size) : '', have ? icon(ICON.check, 'size-3.5 text-ok') : null),
     ),
   )
 }
 
-// --- view: one model ------------------------------------------------------------------------------
-
-function modelPage(m: LibraryModel | undefined): HTMLElement[] {
-  if (!m) return [h('p', { class: 'pt-24 text-center text-sm text-muted' }, 'Loading the model library…')]
+function detail(m: LibraryModel): HTMLElement {
   const running = !!state.status?.running
-  const bands = [
+  const stat = (value: string, what: string) => h('span', {}, h('span', { class: 'font-medium text-fg tabular-nums' }, value), ` ${what}`)
+  const have = installedTags(m)
+  return h(
+    'div',
+    { id: 'main-pane', class: 'min-w-0 flex-1 overflow-y-auto' },
     h(
-      'header',
-      { class: 'px-8 pt-8 pb-8' },
-      h(
-        'nav',
-        { class: 'flex items-center gap-1.5 text-[13px] text-muted', 'aria-label': 'Breadcrumb' },
-        h('button', { class: 'underline-offset-4 hover:text-fg hover:underline', onClick: () => go({ page: 'models' }) }, 'Models'),
-        h('span', { 'aria-hidden': 'true' }, '/'),
-        h('span', { class: 'text-body' }, m.name),
-      ),
+      'div',
+      { class: 'mx-auto max-w-3xl p-6' },
       h(
         'div',
-        { class: 'mt-4 flex items-start justify-between gap-4' },
+        { class: 'flex items-start justify-between gap-4' },
         h(
           'div',
           { class: 'min-w-0' },
-          h('h1', { class: 'truncate font-mono text-3xl font-semibold tracking-tight text-fg' }, m.name),
-          h('p', { class: 'mt-1.5 text-[13px] text-muted' }, [m.publisher && `by ${m.publisher}`, m.license].filter(Boolean).join(' · ')),
+          h('h1', { class: 'font-mono text-xl font-semibold tracking-tight text-fg' }, m.name),
+          h('p', { class: 'mt-1 text-xs text-muted' }, [m.publisher && `by ${m.publisher}`, m.license].filter(Boolean).join(' · ')),
         ),
-        pullState(`${m.name}:latest`, false),
+        h('span', { class: 'flex shrink-0 items-center gap-2' }, have.length ? h('button', { class: btnPrimary, disabled: !running, onClick: () => tryOut(have[0]!) }, icon(ICON.play, 'size-3.5'), 'Try') : null, pullState(`${m.name}:latest`)),
       ),
-      h('p', { class: 'mt-4 max-w-2xl text-[15px] text-body' }, m.description),
-      h('div', { class: 'mt-4 flex flex-wrap gap-2' }, ...m.caps.map((c) => h('span', { class: 'rounded-md bg-cap-bg px-2 py-[2px] text-[13px] font-medium text-cap-fg' }, c))),
+      h('p', { class: 'mt-4 text-[13px] leading-relaxed text-body' }, m.description),
+      h(
+        'p',
+        { class: 'mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted' },
+        m.stats?.accuracy ? stat(m.stats.accuracy.toFixed(3), 'accuracy') : null,
+        m.stats?.latencyMs ? stat(`${Math.round(m.stats.latencyMs)} ms`, 'for five questions') : null,
+        ...m.caps.map((c) => h('span', { class: 'rounded bg-cap-bg px-1.5 py-px text-[11px] font-medium text-cap-fg' }, c)),
+      ),
       state.pullError ? h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError) : null,
-    ),
-  ]
-  if (!running) bands.push(band(null, h('p', { class: 'text-sm text-muted' }, 'Start the server to download and try models.')))
-  else if (installedTags(m).length) bands.push(tryPanel(m))
-  bands.push(band('Versions', h('div', { class: `${card} mt-3 overflow-hidden` }, ...mainTags(m).map((t, i) => versionRow(m, t, i)))))
-  if (m.readme) bands.push(readme(m))
-  bands.push(
-    band(
-      null,
+      h('p', { class: `${label} mt-8` }, 'Versions'),
+      h('div', { class: `${panel} mt-2 overflow-hidden` }, ...mainTags(m).map((t, i) => versionRow(m, t, i))),
+      m.readme ? readme(m) : null,
       h(
         'button',
-        { class: 'inline-flex items-center gap-1 text-xs text-muted hover:text-fg', onClick: () => void backend.openLink(`https://ollaya.dev/library/${m.name}`) },
+        { class: 'mt-8 inline-flex items-center gap-1 text-xs text-muted hover:text-fg', onClick: () => void backend.openLink(`https://ollaya.dev/library/${m.name}`) },
         `${m.name} on ollaya.dev`,
         icon(ICON.external, 'size-3.5'),
       ),
     ),
   )
-  return bands
 }
 
 function versionRow(m: LibraryModel, tag: string, i: number): HTMLElement {
@@ -767,27 +535,26 @@ function versionRow(m: LibraryModel, tag: string, i: number): HTMLElement {
   const have = state.installed.has(tag) && !state.pulling.has(tag)
   return h(
     'div',
-    { class: `flex min-h-14 items-center justify-between gap-4 px-4 py-2.5 ${i ? 'border-t border-line' : ''}` },
+    { class: `flex min-h-11 items-center justify-between gap-4 px-3 py-2 ${i ? 'border-t border-line' : ''}` },
     h(
       'div',
       { class: 'min-w-0' },
-      h('p', { class: 'font-mono text-[13px] text-fg' }, tag, t?.size ? h('span', { class: 'ml-2 font-sans text-xs text-muted' }, bytes(t.size)) : null),
-      summary ? h('p', { class: 'mt-0.5 truncate text-xs text-muted', title: summary }, summary) : null,
+      h('p', { class: `${mono} text-fg` }, tag, t?.size ? h('span', { class: 'ml-2 font-sans text-[11px] text-muted' }, bytes(t.size)) : null),
+      summary ? h('p', { class: 'mt-0.5 truncate text-[11px] text-muted', title: summary }, summary) : null,
     ),
     h(
       'span',
       { class: 'flex shrink-0 items-center gap-1' },
-      pullState(tag, false),
-      have
-        ? h('button', { class: 'ml-1 inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-fill hover:text-fg', title: `Remove ${tag}`, 'aria-label': `Remove ${tag}`, onClick: () => void remove(tag) }, icon(ICON.x, 'size-4'))
-        : null,
+      have ? h('button', { class: btnQuiet, title: `Try ${tag}`, 'aria-label': `Try ${tag}`, disabled: !state.status?.running, onClick: () => tryOut(tag) }, icon(ICON.play, 'size-4')) : null,
+      pullState(tag),
+      have ? h('button', { class: btnQuiet, title: `Remove ${tag}`, 'aria-label': `Remove ${tag}`, onClick: () => void remove(tag) }, icon(ICON.x, 'size-4')) : null,
     ),
   )
 }
 
 /** The model card from ollaya.dev. Its links open in the browser, never inside the app. */
 function readme(m: LibraryModel): HTMLElement {
-  const body = h('div', { class: 'prose mt-4' })
+  const body = h('div', { class: 'prose mt-2' })
   body.innerHTML = m.readme! // ollaya.dev's own HTML; the page's CSP runs none of its scripts
   body.addEventListener('click', (e) => {
     const a = (e.target as Element).closest('a')
@@ -797,20 +564,97 @@ function readme(m: LibraryModel): HTMLElement {
     if (href.startsWith('#')) body.querySelector(href)?.scrollIntoView({ behavior: 'smooth' })
     else void backend.openLink(new URL(href, `https://ollaya.dev/library/${m.name}`).href)
   })
-  return band('Model card', body)
+  return h('section', { 'aria-label': 'Model card' }, h('p', { class: `${label} mt-8` }, 'Model card'), body)
 }
 
-function tryPanel(m: LibraryModel): HTMLElement {
-  const tags = installedTags(m)
-  if (!tags.includes(state.runModel)) state.runModel = tags[0] ?? ''
+// --- view: my models ------------------------------------------------------------------------------
+
+function mine(): HTMLElement {
+  const tags = allInstalled()
+  const running = !!state.status?.running
+  if (!running) return empty(state.status === null ? 'Checking the server…' : 'Start the server to see the models on this computer.')
+  if (!tags.length) return empty('No models on this computer yet.', h('button', { class: btnSecondary, onClick: () => go('discover') }, 'Discover models'))
+  const cell = 'px-3 py-2'
+  const total = tags.reduce((n, t) => n + (state.installed.get(t) ?? 0), 0)
+  return h(
+    'div',
+    { id: 'main-pane', class: 'min-w-0 flex-1 overflow-y-auto' },
+    h(
+      'div',
+      { class: 'mx-auto max-w-3xl p-6' },
+      h('div', { class: 'flex items-baseline justify-between' }, h('p', { class: label }, 'On this computer'), h('p', { class: 'text-xs text-muted tabular-nums' }, `${tags.length} ${tags.length === 1 ? 'version' : 'versions'} · ${bytes(total)}`)),
+      state.pullError ? h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError) : null,
+      h(
+        'div',
+        { class: `${panel} mt-2 overflow-hidden` },
+        h(
+          'table',
+          { class: 'w-full text-xs' },
+          h('thead', { class: 'text-left text-[11px] text-muted' }, h('tr', {}, ...['Version', 'Size', 'State', ''].map((t) => h('th', { class: `${cell} font-medium` }, t)))),
+          h(
+            'tbody',
+            {},
+            ...tags.map((t) =>
+              h(
+                'tr',
+                { class: 'border-t border-line' },
+                h('td', { class: `${cell} ${mono} text-fg` }, t),
+                h('td', { class: `${cell} text-muted tabular-nums` }, bytes(state.installed.get(t) ?? 0)),
+                h('td', { class: `${cell} text-muted` }, state.loaded.includes(t) ? h('span', { class: 'inline-flex items-center gap-1.5 text-body' }, h('span', { class: 'size-1.5 rounded-full bg-ok' }), 'Loaded') : 'On disk'),
+                h(
+                  'td',
+                  { class: `${cell} text-right` },
+                  h('span', { class: 'inline-flex gap-1' }, h('button', { class: btnQuiet, title: `Try ${t}`, 'aria-label': `Try ${t}`, onClick: () => tryOut(t) }, icon(ICON.play, 'size-4')), h('button', { class: btnQuiet, title: `Remove ${t}`, 'aria-label': `Remove ${t}`, onClick: () => void remove(t) }, icon(ICON.x, 'size-4'))),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+}
+
+// --- view: playground -----------------------------------------------------------------------------
+
+function playground(): HTMLElement {
+  const tags = allInstalled()
+  const running = !!state.status?.running
+  if (!running) return empty(state.status === null ? 'Checking the server…' : 'Start the server to run a model.')
+  if (!tags.length) return empty('Download a model first.', h('button', { class: btnSecondary, onClick: () => go('discover') }, 'Discover models'))
+  if (!tags.includes(state.runModel)) state.runModel = tags[0]!
   // A model with built-in questions takes no preset or custom questions. Until the server says
   // which kind this version is, neither the inputs nor the note show.
   const own = state.builtin.get(state.runModel)
-  if (own === undefined && state.runModel) void builtinOf(state.runModel)
-  const selectCls = `h-8 px-2.5 text-[13px] ${field}`
+  if (own === undefined) void builtinOf(state.runModel)
+  const mac = navigator.platform.toLowerCase().includes('mac')
+  const toolbar = h(
+    'div',
+    { class: 'flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2 text-xs text-muted' },
+    'Model',
+    select({ 'aria-label': 'Model', onChange: (e) => ((state.runModel = (e.target as HTMLSelectElement).value), (state.result = null), render()) }, ...tags.map((t) => option(t, t, t === state.runModel))),
+    own
+      ? h('span', { class: 'ml-2' }, 'Asks its own questions: ', h('span', { class: `${mono} text-body` }, own.join(', ')))
+      : own === null
+        ? h(
+            'span',
+            { class: 'ml-2 inline-flex items-center gap-2' },
+            'Questions',
+            select(
+              { 'aria-label': 'Questions', onChange: (e) => ((state.preset = (e.target as HTMLSelectElement).value), render()) },
+              ...state.presets.map((p) => option(p.name, p.builtin ? `${p.name} preset` : `${p.name} (your preset)`, p.name === state.preset)),
+              option('custom', 'Custom JSON', state.preset === 'custom'),
+            ),
+          )
+        : null,
+    h('span', { class: 'flex-1' }),
+    h('span', { class: 'text-[11px]' }, mac ? '⌘ Return' : 'Ctrl + Enter'),
+    h('button', { id: 'run-button', class: btnPrimary, disabled: state.running || !state.input.trim(), onClick: () => void run() }, icon(state.running ? ICON.spinner : ICON.play, 'size-3.5'), 'Run'),
+  )
   const textarea = h('textarea', {
-    class: `mt-3 block h-28 w-full resize-y px-3.5 py-3 text-sm leading-relaxed ${field}`,
+    class: 'block min-h-0 w-full flex-1 resize-none bg-transparent p-4 text-[13px] leading-relaxed text-fg placeholder:text-muted focus:outline-none',
     placeholder: 'Paste a message, an email or a JSON object…',
+    'aria-label': 'State',
     spellcheck: 'false',
     onInput: (e) => {
       state.input = (e.target as HTMLTextAreaElement).value
@@ -824,98 +668,58 @@ function tryPanel(m: LibraryModel): HTMLElement {
     },
   }) as HTMLTextAreaElement
   textarea.value = state.input
-  const panel = band(
-    'Try it',
-    h(
-      'div',
-      { class: 'mt-3 flex flex-wrap items-center gap-2' },
-      tags.length > 1
-        ? labelled('Version', h('select', { class: selectCls, onChange: (e) => ((state.runModel = (e.target as HTMLSelectElement).value), render()) }, ...tags.map((t) => option(t, t, t === state.runModel))))
-        : null,
-      own
-        ? h('p', { class: 'text-[13px] text-muted' }, 'This model asks its own questions: ', h('span', { class: 'font-mono text-xs text-body' }, own.join(', ')))
-        : own === null
-          ? labelled(
-              'Questions',
-              h(
-                'select',
-                { class: selectCls, onChange: (e) => ((state.preset = (e.target as HTMLSelectElement).value), render()) },
-                ...state.presets.map((p) => option(p.name, p.builtin ? `${p.name} preset` : `${p.name} (your preset)`, p.name === state.preset)),
-                option('custom', 'Custom JSON', state.preset === 'custom'),
-              ),
-            )
-          : null,
-    ),
+  const input = h(
+    'div',
+    { class: 'flex min-w-0 flex-1 flex-col border-r border-line' },
+    h('div', { class: 'flex h-8 shrink-0 items-center justify-between border-b border-line px-4' }, h('span', { class: label }, 'State'), h('button', { class: 'text-[11px] text-muted hover:text-fg', onClick: () => ((state.input = EXAMPLE), render()) }, 'Use an example')),
     textarea,
   )
   if (own === null && state.preset === 'custom') {
     const q = h('textarea', {
-      class: `mt-2 block h-40 w-full resize-y px-3.5 py-3 font-mono text-xs leading-relaxed ${field}`,
+      class: `block h-40 w-full shrink-0 resize-none bg-transparent p-4 ${mono} leading-relaxed text-fg focus:outline-none`,
       spellcheck: 'false',
       'aria-label': 'Questions as JSON',
       onInput: (e) => (state.customQuestions = (e.target as HTMLTextAreaElement).value),
     }) as HTMLTextAreaElement
     q.value = state.customQuestions
-    panel.append(q)
+    input.append(h('div', { class: 'flex h-8 shrink-0 items-center border-y border-line px-4' }, h('span', { class: label }, 'Questions')), q)
   }
-  const mac = navigator.platform.toLowerCase().includes('mac')
-  panel.append(
-    h(
-      'div',
-      { class: 'mt-3 flex items-center justify-between gap-3' },
-      h('button', { class: 'text-xs text-muted underline underline-offset-4 hover:text-fg', onClick: () => ((state.input = EXAMPLE), render()) }, 'Use an example'),
-      h(
-        'span',
-        { class: 'flex items-center gap-3' },
-        h('span', { class: 'text-xs text-muted' }, mac ? '⌘ Return' : 'Ctrl + Enter'),
-        h('button', { id: 'run-button', class: btnPrimary, disabled: state.running || !state.input.trim(), onClick: () => void run() }, state.running ? icon(ICON.spinner, 'size-3.5') : null, 'Run'),
-      ),
-    ),
+  const out = h(
+    'div',
+    { id: 'main-pane', class: 'flex min-w-0 flex-1 flex-col overflow-y-auto' },
+    h('div', { class: 'flex h-8 shrink-0 items-center border-b border-line px-4' }, h('span', { class: label }, 'Answers')),
+    state.runError
+      ? h('p', { class: 'p-4 text-xs text-bad' }, state.runError)
+      : state.result
+        ? results(state.result)
+        : empty(state.running ? 'Running…' : 'The answers appear here: one per question, with how sure the model is.'),
   )
-  if (state.runError) panel.append(h('p', { class: 'mt-4 text-sm text-bad' }, state.runError))
-  if (state.result) panel.append(results(state.result))
-  return panel
+  return h('div', { class: 'flex min-h-0 flex-1 flex-col' }, toolbar, h('div', { class: 'flex min-h-0 flex-1' }, input, out))
 }
 
-function labelled(label: string, control: HTMLElement): HTMLElement {
-  return h('label', { class: 'flex items-center gap-2 text-[13px] text-muted' }, label, control)
-}
-
-function option(value: string, text: string, selected: boolean): HTMLElement {
-  return h('option', { value, selected }, text)
-}
-
-/** One row per answer, as the website's hero shows them: the question, the answer, a meter of ten
- * segments and its probability. */
+/** One row per answer: the question, the answer, a meter of ten segments and its probability. */
 function results(r: DecideResponse): HTMLElement {
   const rows = Object.entries(r.answers).map(([q, a]) => {
     const [text, note, p] = describe(a)
     const lit = Math.round(p * 10)
     return h(
       'li',
-      { class: 'border-t border-line px-5 py-3 first:border-t-0' },
-      h('p', { class: 'font-mono text-xs text-muted' }, q),
+      { class: 'border-b border-line px-4 py-2.5' },
+      h('p', { class: `${mono} text-muted` }, q),
       h(
         'div',
-        { class: 'mt-1.5 flex items-center gap-4' },
-        h('span', { class: 'w-48 shrink-0 truncate text-[15px] font-medium text-fg', title: [text, note].filter(Boolean).join(': ') }, text, note ? h('span', { class: 'ml-2 text-[13px] font-normal text-muted' }, note) : null),
+        { class: 'mt-1 flex items-center gap-3' },
+        h('span', { class: 'w-40 shrink-0 truncate text-[13px] font-medium text-fg', title: [text, note].filter(Boolean).join(': ') }, text, note ? h('span', { class: 'ml-1.5 text-xs font-normal text-muted' }, note) : null),
         h('span', { class: 'meter min-w-0 flex-1', 'aria-hidden': 'true' }, ...Array.from({ length: 10 }, (_, i) => h('i', { class: i < lit ? 'on' : undefined }))),
-        h('span', { class: 'w-10 text-right text-[13px] text-fg tabular-nums' }, p.toFixed(2)),
+        h('span', { class: 'w-9 text-right text-xs text-fg tabular-nums' }, p.toFixed(2)),
       ),
     )
   })
   return h(
     'div',
-    { id: 'answers', class: `${card} mt-6 overflow-hidden bg-subtle` },
+    {},
     h('ul', { role: 'list' }, ...rows),
-    h(
-      'p',
-      { class: 'border-t border-line px-5 py-3 text-xs text-muted' },
-      'Answered by ',
-      h('span', { class: 'font-mono text-body' }, r.routing?.model ?? r.model),
-      ' in ',
-      h('span', { class: 'font-medium text-fg' }, `${ms(r.total_duration / 1e6)} ms`),
-    ),
+    h('p', { class: 'px-4 py-2.5 text-[11px] text-muted' }, 'Answered by ', h('span', { class: `${mono} text-body` }, r.routing?.model ?? r.model), ' in ', h('span', { class: 'text-fg' }, `${ms(r.total_duration / 1e6)} ms`)),
   )
 }
 
@@ -935,20 +739,106 @@ function describe(a: Answer): [string, string, number] {
   }
 }
 
+// --- view: server ---------------------------------------------------------------------------------
+
+function server(): HTMLElement {
+  const s = state.status
+  if (!s?.running)
+    return empty(
+      s === null ? 'Checking the server…' : 'The server is stopped. Start it to download and run models.',
+      h('button', { class: btnPrimary, disabled: state.statusBusy || s === null, onClick: toggleServer }, 'Start'),
+    )
+  const a = state.activity
+  const sp = a ? speed(a) : null
+  const median = sp?.median ?? null
+  const tile = (value: string, what: string, note: string) =>
+    h('div', { class: 'px-4 py-3' }, h('p', { class: 'text-xl font-semibold tracking-tight text-fg tabular-nums' }, value), h('p', { class: 'text-xs text-body' }, what), h('p', { class: 'text-[11px] text-muted' }, note))
+  const endpoints: [string, string, string][] = [
+    ['POST', '/api/decide', 'Answers questions about a text or JSON, with a preset or your own questions'],
+    ['POST', '/v1/decisions', 'TypeSafe-compatible: its SDKs work unchanged (also /v1/systemone)'],
+    ['GET', '/v1/models', 'The models on this computer'],
+  ]
+  const model = allInstalled()[0] ?? 'largha'
+  const example = `curl ${s.url}/api/decide -d '${JSON.stringify({ model: model.replace(/:latest$/, ''), preset: 'triage', state: 'I was charged twice this month.' })}'`
+  const row = (...children: Child[]) => h('div', { class: 'flex min-h-10 items-center gap-3 border-t border-line px-3 py-1.5 first:border-t-0' }, ...children)
+  return h(
+    'div',
+    { id: 'main-pane', class: 'min-w-0 flex-1 overflow-y-auto' },
+    h(
+      'div',
+      { class: 'mx-auto max-w-3xl p-6' },
+      h(
+        'div',
+        { class: `${panel} grid grid-cols-4 divide-x divide-line` },
+        tile(a ? a.total.toLocaleString() : '–', 'Requests', 'since the server started'),
+        tile(sp ? sp.perSecond.toFixed(sp.perSecond < 10 ? 1 : 0) : '–', 'Per second', 'over the last minute'),
+        tile(median === null ? '–' : `${ms(median)} ms`, 'Response time', sp?.samples ? `median of the last ${sp.samples}` : 'no requests yet'),
+        tile(median === null ? '–' : `${Math.floor(1000 / median).toLocaleString()}/s`, 'Capacity', 'one request at a time'),
+      ),
+      h('div', { class: 'mt-6 flex items-baseline justify-between' }, h('p', { class: label }, 'API'), h('button', { class: 'inline-flex items-center gap-1 text-[11px] text-muted hover:text-fg', onClick: () => void backend.openLink('https://ollaya.dev/docs/api') }, 'Reference', icon(ICON.external, 'size-3'))),
+      h(
+        'div',
+        { class: `${panel} mt-2 overflow-hidden text-xs` },
+        row(h('span', { class: 'w-11 text-muted' }, 'Address'), h('span', { class: `${mono} flex-1 text-fg` }, s.url), copyButton(s.url, 'Copy the address')),
+        ...endpoints.map(([method, path, what]) =>
+          row(h('span', { class: `w-11 ${mono} text-[11px] font-semibold text-muted` }, method), h('span', { class: `w-32 shrink-0 ${mono} text-fg` }, path), h('span', { class: 'min-w-0 flex-1 truncate text-muted', title: what }, what), copyButton(s.url + path, `Copy ${path}`)),
+        ),
+        h('div', { class: 'flex items-start gap-2 border-t border-line bg-code px-3 py-2.5' }, h('code', { class: `min-w-0 flex-1 ${mono} leading-relaxed wrap-anywhere text-body` }, example), copyButton(example, 'Copy the example')),
+      ),
+      h('p', { class: `${label} mt-6` }, 'Recent requests'),
+      recent(),
+    ),
+  )
+}
+
+function recent(): HTMLElement {
+  const a = state.activity
+  if (!a) return h('p', { class: 'mt-2 text-xs text-muted' }, state.activityError ? 'This server does not list its requests. Update Ollaya to 0.17.0 or newer.' : 'Loading…')
+  if (!a.requests.length)
+    return h('p', { class: 'mt-2 text-xs text-muted' }, 'No requests yet. ', h('button', { class: 'text-fg underline underline-offset-4', onClick: () => go('playground') }, 'Try a model'), ', or call the API from your code.')
+  const cell = 'px-3 py-1.5'
+  return h(
+    'div',
+    { class: `${panel} mt-2 overflow-hidden` },
+    h(
+      'table',
+      { class: 'w-full text-xs' },
+      h('thead', { class: 'text-left text-[11px] text-muted' }, h('tr', {}, ...['Time', 'Model', 'Endpoint', 'Questions', 'Took'].map((t, i) => h('th', { class: `${cell} font-medium ${i > 2 ? 'text-right' : ''}` }, t)))),
+      h(
+        'tbody',
+        {},
+        ...a.requests.slice(0, 20).map((r) =>
+          h(
+            'tr',
+            { class: 'border-t border-line' },
+            h('td', { class: `${cell} text-muted tabular-nums` }, new Date(r.at).toLocaleTimeString()),
+            h('td', { class: `${cell} ${mono} text-fg` }, r.model),
+            h('td', { class: `${cell} ${mono} text-muted` }, r.endpoint),
+            h('td', { class: `${cell} text-right tabular-nums ${r.error ? 'text-bad' : 'text-body'}` }, r.error ? r.error.toLowerCase().replaceAll('_', ' ') : String(r.questions)),
+            h('td', { class: `${cell} text-right text-body tabular-nums` }, `${ms(r.total_duration / 1e6)} ms`),
+          ),
+        ),
+      ),
+    ),
+  )
+}
+
 // --- render loop ----------------------------------------------------------------------------------
 
 const root = document.getElementById('app')!
 
 function render() {
-  // Keep the focused field's caret across redraws.
+  // Keep the focused field's caret and the panes' scroll across redraws.
   const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
-  const field = active && ['TEXTAREA', 'INPUT'].includes(active.tagName) ? (active.getAttribute('aria-label') ?? 'state') : null
-  const caret = field ? ([active!.selectionStart, active!.selectionEnd] as const) : null
-  const scrolled = document.getElementById('main-pane')?.scrollTop ?? 0
-  root.replaceChildren(header(), h('div', { class: 'flex min-h-0 flex-1' }, sidebar(), main()))
-  document.getElementById('main-pane')?.scrollTo({ top: scrolled })
-  if (field && caret) {
-    const again = [...root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('textarea, input')].find((t) => (t.getAttribute('aria-label') ?? 'state') === field)
+  const fieldName = active && ['TEXTAREA', 'INPUT'].includes(active.tagName) ? active.getAttribute('aria-label') : null
+  const caret = fieldName ? ([active!.selectionStart, active!.selectionEnd] as const) : null
+  const panes = ['main-pane', 'list-pane']
+  const scrolled = panes.map((id) => document.getElementById(id)?.scrollTop ?? 0)
+  const page = state.page === 'discover' ? discover() : state.page === 'mine' ? mine() : state.page === 'playground' ? playground() : server()
+  root.replaceChildren(h('div', { class: 'flex min-h-0 flex-1' }, rail(), h('main', { class: 'flex min-w-0 flex-1 flex-col' }, page)), statusBar())
+  panes.forEach((id, i) => document.getElementById(id)?.scrollTo({ top: scrolled[i] }))
+  if (fieldName && caret) {
+    const again = root.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[aria-label="${fieldName}"]`)
     again?.focus()
     again?.setSelectionRange(caret[0], caret[1])
   }
@@ -981,8 +871,8 @@ async function boot() {
   await refresh()
   // Like Ollama's app: the server runs while the app is open.
   if (!state.status?.running) await toggleServer()
-  // A first run has nothing to show on the overview: start where the models are.
-  if (!state.installed.size) state.view = { page: 'models' }
+  // With models on this computer, start where they run; a first run starts where they are found.
+  if (state.installed.size) state.page = 'playground'
   // Custom presets live on the server, which may only have started just now.
   state.presets = await backend.presets().catch(() => state.presets)
   state.update = await backend.updateAvailable().catch(() => null)
@@ -990,11 +880,11 @@ async function boot() {
   setInterval(() => void refresh(), 2000)
   // Preview only (npm run preview): #result shows a finished run, #pull a download in progress.
   if (__MOCK__ && location.hash === '#result') {
-    go({ page: 'model', name: 'laya' })
+    tryOut('laya:latest')
     state.input = EXAMPLE
     await run()
   }
-  if (__MOCK__ && location.hash === '#pull') void pull('decider:latest'), go({ page: 'model', name: 'decider' })
+  if (__MOCK__ && location.hash === '#pull') (state.selected = 'decider'), go('discover'), void pull('decider:latest')
 }
 
 declare const __MOCK__: boolean
