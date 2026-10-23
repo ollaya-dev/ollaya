@@ -48,6 +48,11 @@ TRAINED_ON = {
     "jeb:4b": ["typed-decisions"],
     "jeb:9b": ["typed-decisions"],
     "jeb:27b": ["typed-decisions"],
+    # The in-domain coba tags saw the train splits of ten public tasks (DATA_SOURCES.tsv, indomain/*). MASSIVE
+    # is parallel across languages, so its German subset is not held out either.
+    **{"coba:" + t: ["vitaminc-dev", "massive-en-US", "massive-de-DE", "boolq", "squad2", "paws", "multinli",
+                     "civil_comments", "aegis2", "helpsteer2", "pubmedqa"]
+       for t in ("400m-ternary", "150m-ternary", "68m-ternary")},
 }
 
 

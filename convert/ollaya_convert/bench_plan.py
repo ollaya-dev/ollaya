@@ -29,7 +29,7 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Tags the bench leaves out: image tags (the bench is text only) and the laya family's single-precision tags (laya:en
 # runs the same graphs, fp16 on a GPU and fp32 on a CPU).
-OUT_OF_SCOPE = re.compile(r"-vision$|^(laya|largha):.+-fp(16|32)$")
+OUT_OF_SCOPE = re.compile(r"-vision$|^(laya|largha|coba):.+-fp(16|32)$")
 # Models that answer only their built-in questions: timed, never scored.
 NO_ACCURACY = {"qwen3guard:0.6b"}
 # The router answers through laya:en or laya:multilingual, which are timed themselves.
