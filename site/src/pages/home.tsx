@@ -237,14 +237,14 @@ function ExamplePanel({ ex, hidden }: { ex: Recording; hidden: boolean }) {
   return (
     <div data-example hidden={hidden}>
       <div class="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
-        <div class="border-b border-line p-5 md:border-r md:border-b-0">
-          <p class="text-[13px] text-muted">A support message comes in</p>
-          <blockquote class="term-row mt-3 text-[15px] leading-relaxed text-fg" style="--row:0">
+        <div class="flex flex-col border-b border-line p-6 md:border-r md:border-b-0">
+          <p class="text-sm text-muted">A support message comes in</p>
+          <blockquote class="term-row mt-4 text-xl leading-snug font-medium text-fg md:text-[22px]" style="--row:0">
             “{ex.message}”
           </blockquote>
-          <p class="mt-5 text-[13px] text-muted">
-            Ollaya asks <span class="font-mono text-[12px] text-body">{ex.model}</span> the {n} questions of the{' '}
-            <span class="font-mono text-[12px] text-body">{ex.preset}</span> preset, in one request.
+          <p class="mt-8 text-sm leading-relaxed text-muted md:mt-auto md:pt-8">
+            Ollaya asks <span class="font-mono text-[13px] text-body">{ex.model}</span> the {n} questions of the{' '}
+            <span class="font-mono text-[13px] text-body">{ex.preset}</span> preset, in one request.
           </p>
         </div>
         <ol class="divide-y divide-line" role="list">
