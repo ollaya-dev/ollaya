@@ -464,7 +464,7 @@ async fn library_now() -> Result<Value, String> {
     let body = reqwest::get(url)
         .await
         .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("could not load the model library: {e}"))?;
+        .map_err(|e| e.to_string())?;
     let index: Value = body.json().await.map_err(|e| e.to_string())?;
     Ok(index["models"].clone())
 }

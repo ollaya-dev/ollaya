@@ -111,7 +111,11 @@ export function mock(): Backend {
     status: async () => status,
     startServer: async () => ((status = { ...status, running: true, version: '0.17.0' }), status),
     stopServer: async () => ((status = { ...status, running: false, version: null }), status),
-    library: async () => library,
+    // Preview only: #offline fails as the app does without a connection.
+    library: async () => {
+      if (location.hash === '#offline') throw 'error sending request for url (https://ollaya.dev/data/library.json)'
+      return library
+    },
     installed: async () => (status.running ? local : []),
     loaded: async () => ['laya:en'],
     activity: async () => ({ total, requests }),

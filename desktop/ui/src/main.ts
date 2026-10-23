@@ -610,7 +610,17 @@ function models(): HTMLElement {
     ),
   )
   if (state.pullError) page.append(h('p', { class: 'mt-3 text-xs text-bad' }, state.pullError))
-  if (state.libraryError) page.append(h('p', { class: 'mt-6 text-sm text-bad' }, state.libraryError))
+  if (state.libraryError)
+    page.append(
+      h(
+        'div',
+        { class: `mt-6 ${card} p-5` },
+        h('p', { class: 'text-sm font-medium' }, 'The model library could not be reached'),
+        h('p', { class: 'mt-1 text-sm text-muted' }, 'It comes from ollaya.dev. Check the internet connection and try again.'),
+        h('p', { class: 'mt-2 text-xs break-all text-faint' }, state.libraryError),
+        h('button', { class: `mt-4 ${btnSecondary}`, onClick: () => void loadLibrary() }, 'Try again'),
+      ),
+    )
   else if (!state.library.length) page.append(h('p', { class: 'mt-10 text-center text-sm text-muted' }, 'Loading the model library…'))
   else if (!shown.length) page.append(h('p', { class: 'mt-10 text-center text-sm text-muted' }, state.onlyInstalled && !q ? 'No models on this computer yet.' : 'No model matches.'))
   else page.append(h('div', { class: 'mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3' }, ...shown.map(modelCard)))
@@ -880,11 +890,20 @@ backend.onPullProgress((p) => {
   render()
 })
 
+async function loadLibrary() {
+  state.libraryError = ''
+  render()
+  try {
+    state.library = [...(await backend.library())].sort((a, b) => a.rank - b.rank)
+  } catch (e) {
+    state.libraryError = String(e)
+  }
+  render()
+}
+
 async function boot() {
   render()
-  const [lib, presets] = await Promise.allSettled([backend.library(), backend.presets()])
-  if (lib.status === 'fulfilled') state.library = [...lib.value].sort((a, b) => a.rank - b.rank)
-  else state.libraryError = `Could not load the model library: ${lib.reason}`
+  const [, presets] = await Promise.allSettled([loadLibrary(), backend.presets()])
   if (presets.status === 'fulfilled') {
     state.presets = presets.value
     state.customQuestions = JSON.stringify(presets.value.find((p) => p.name === 'triage')?.questions ?? {}, null, 2)
