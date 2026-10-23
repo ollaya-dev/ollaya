@@ -99,6 +99,8 @@ WORKDIR /home/ollaya
 USER ${OLLAYA_UID}:${OLLAYA_UID}
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD ["/usr/local/bin/ollaya-healthcheck"]
+# The MCP Registry lists `ollaya mcp` from this image (server.json) and checks this label.
+LABEL io.modelcontextprotocol.server.name="io.github.ollaya-dev/ollaya"
 ENTRYPOINT ["/usr/bin/ollaya"]
 CMD ["serve"]
 

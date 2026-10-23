@@ -9,6 +9,8 @@
 
 <p align="center"><strong>Run open decision models locally, the way Ollama runs LLMs.</strong></p>
 
+<p align="center">System 1 for AI agents: fast, typed, calibrated decisions for routing, guardrails, triage and tool approval.</p>
+
 <p align="center">
   <a href="https://ollaya.dev">Website</a> ·
   <a href="https://ollaya.dev/search">Models</a> ·
@@ -45,6 +47,35 @@ Or ask your own questions: `ollaya run kev --ask "Is a refund requested?" --ask 
 `winnow:e4b` is the recommended model: 0.724 accuracy on typed decisions (TypeSafe reports 0.738 for its Jev) and 113 ms for five questions on an RTX 5090. It is a 4B-class language model, so without an NVIDIA GPU start with `laya`: `laya:multilingual` answers five questions in 516 ms on a CPU. All models and their numbers: [ollaya.dev/search](https://ollaya.dev/search).
 <!-- /results:recommended -->
 
+## A self-hosted, Jev-compatible API
+
+**What is a Jev-compatible API?** An HTTP API that takes the same requests as TypeSafe's hosted
+Jev (a `state` plus typed `questions` at `POST /v1/systemone`) and returns the same `answers`, so
+TypeSafe's SDK and any client written for Jev work against it unchanged. Ollaya's `/v1/systemone`,
+`/v1/decisions` and `/v1/models` are wire-identical to TypeSafe's (as `typesafe-sdk` 0.7.1 defines
+them), served from your own machine with open models.
+
+**Migrating from Jev.** Point the SDK at Ollaya and pick an open model:
+
+```sh
+export TYPESAFE_BASE_URL=http://localhost:11435
+export TYPESAFE_API_KEY=local              # any non-empty value
+export TYPESAFE_DEFAULT_MODEL=winnow:e4b   # instead of "jev-latest"
+```
+
+Details, including proxies and warm-up: [TypeSafe compatibility](https://ollaya.dev/docs/typesafe-compatibility).
+
+| | Ollaya | TypeSafe Jev | Ollama |
+|---|---|---|---|
+| Runs on | Your machine or server | TypeSafe's cloud | Your machine or server |
+| Jev API | `/v1/systemone`, `/v1/decisions`, `/v1/models` | The original | `/v1/systemone` |
+| Models | Open decision models from Perplexity, Cloudflare, PostHog, Bespoke Labs and others | Jev (closed) | Its own GGUF builds of nine decision models (0.40, October 2026) |
+| Probabilities | Each author's calibration | TypeSafe's | Raw softmax |
+| Your data leaves the machine | No | Yes | No |
+| License | Apache-2.0 | Proprietary, hosted | MIT |
+
+The [FAQ](https://ollaya.dev/docs/faq) compares Ollaya and Ollama in more detail, measured on the same GPU.
+
 ## Features
 
 - **One binary.** `ollaya serve` runs the daemon; `ollaya run`, `pull`, `list`, `ps`, `show`, `rm`,
@@ -61,7 +92,7 @@ Or ask your own questions: `ollaya run kev --ask "Is a refund requested?" --ask 
   Hugging Face repository, pinned to a commit and verified by sha256. Models whose authors publish
   GGUF files (`winnow`, `jevk5`, `jeb`) run that file itself on llama.cpp. Ollaya never re-hosts weights.
 - **For agents.** `ollaya mcp` serves the models to Claude Code, Claude Desktop, Cursor and other
-  MCP clients (`claude mcp add ollaya -- ollaya mcp`), and the
+  MCP clients (`claude mcp add ollaya -- ollaya mcp`, or [one click in Cursor](https://cursor.com/install-mcp?name=ollaya&config=eyJjb21tYW5kIjoib2xsYXlhIiwiYXJncyI6WyJtY3AiXX0%3D)), and the
   [`ollaya-decisions` skill](skills/ollaya-decisions/SKILL.md) teaches agents when and how to use
   them (`npx skills add ollaya-dev/ollaya --skill ollaya-decisions`).
 - **Routers.** `laya` detects the script and language of each request, then answers with

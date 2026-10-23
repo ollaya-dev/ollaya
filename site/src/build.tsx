@@ -26,7 +26,7 @@ import { DocsIndex, DocView, withOrigin } from './pages/docs'
 import { DownloadPage } from './pages/download'
 import { HomePage } from './pages/home'
 import { LibraryRedirect, ModelPage, TagPage, TagsPage } from './pages/library'
-import { robotsTxt, sitemapXml } from './pages/meta'
+import { faqJsonLd, robotsTxt, sitemapXml, softwareJsonLd } from './pages/meta'
 import { NotFoundPage } from './pages/notFound'
 import { accuracyScatter, ResultsPage, speedDots } from './pages/results'
 import { DotPlot, Scatter } from './components/charts'
@@ -34,6 +34,9 @@ import { runs } from './data/results'
 import { SearchPage } from './pages/search'
 import { TryPage } from './pages/try'
 import { MODEL } from './data/try'
+import { llmsFullTxt, llmsTxt } from './pages/llms'
+import { ContributorsPage } from './pages/contributors'
+import { StatsPage } from './pages/stats'
 
 export { withReadmeBlocks } from './data/readme'
 
@@ -65,7 +68,7 @@ interface Page {
 /** Every HTML page of the site. Also the sitemap, in this order. */
 function pages(origin: string): Page[] {
   const list: Page[] = [
-    { url: '/', meta: {}, render: () => <HomePage /> },
+    { url: '/', meta: { jsonLd: softwareJsonLd(origin) }, render: () => <HomePage /> },
     {
       url: '/search',
       meta: {
@@ -97,6 +100,14 @@ function pages(origin: string): Page[] {
       render: () => <ResultsPage />,
     },
     {
+      url: '/stats',
+      meta: {
+        title: 'Stats',
+        description: 'How much Ollaya is used, week by week: model pulls, install script runs, GitHub stars and release downloads.',
+      },
+      render: () => <StatsPage />,
+    },
+    {
       url: '/docs',
       meta: {
         title: 'Docs',
@@ -119,11 +130,27 @@ function pages(origin: string): Page[] {
           },
         ]
       : []),
-    ...docPages.map((page) => ({
-      url: `/docs/${page.slug}`,
-      meta: { title: page.title, description: page.description, nav: 'docs' as const },
-      render: () => <DocView page={page} html={withResults(withOrigin(page.html, origin))} />,
-    })),
+    {
+      url: '/contributors',
+      meta: {
+        title: 'Contributors',
+        description: 'The people who trained the models Ollaya runs, and the people who brought them to Ollaya.',
+      },
+      render: () => <ContributorsPage />,
+    },
+    ...docPages.map((page) => {
+      const html = withResults(withOrigin(page.html, origin))
+      return {
+        url: `/docs/${page.slug}`,
+        meta: {
+          title: page.title,
+          description: page.description,
+          nav: 'docs' as const,
+          jsonLd: page.slug === 'faq' ? faqJsonLd(html) : undefined,
+        },
+        render: () => <DocView page={page} html={html} />,
+      }
+    }),
   ]
 
   for (const model of catalog) {
@@ -133,7 +160,7 @@ function pages(origin: string): Page[] {
       {
         url: `/library/${model.name}`,
         meta: { title: model.name, description: model.description, nav: 'models', ogImage },
-        render: () => <ModelPage model={model} />,
+        render: () => <ModelPage model={model} origin={origin} />,
       },
       {
         url: `/library/${model.name}/tags`,
@@ -204,6 +231,8 @@ export async function renderSite({ origin, bench, assetVersions, stars }: BuildO
   out.push({ path: 'robots.txt', body: robotsTxt(origin) })
   out.push({ path: 'sitemap.xml', body: sitemapXml(origin, all.map((p) => p.url)) })
   out.push({ path: 'search.json', body: `${JSON.stringify(searchIndex())}\n` })
+  out.push({ path: 'llms.txt', body: llmsTxt(origin, bench, docPages, catalog) })
+  out.push({ path: 'llms-full.txt', body: llmsFullTxt(origin, docPages) })
   // The measurements behind /results, as the tools wrote them (../results/runs), under /data so they do not shadow the /results page.
   for (const { file, ...run } of runs) out.push({ path: `data/results/${file}`, body: `${JSON.stringify(run, null, 1)}\n` })
   // Two charts as their own .svg files, for the README (light and dark through prefers-color-scheme).

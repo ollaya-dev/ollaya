@@ -1,0 +1,44 @@
+{
+  "weeks": [
+    {
+      "end": "2026-10-16",
+      "pulls": 16259,
+      "pulls_by_model": {
+        "laya": 12683,
+        "winnow": 967,
+        "nli": 605,
+        "gliclass": 585,
+        "kev": 361,
+        "decider": 245,
+        "decima": 221,
+        "jeb": 108,
+        "qwen3guard": 70,
+        "snap": 62
+      },
+      "install_sh": 566,
+      "install_ps1": 202,
+      "stars": null,
+      "release_downloads": null
+    },
+    {
+      "end": "2026-10-23",
+      "pulls": 4931,
+      "pulls_by_model": {
+        "laya": 3278,
+        "winnow": 329,
+        "kev": 213,
+        "nli": 198,
+        "gliclass": 183,
+        "decider": 150,
+        "jevk5": 128,
+        "decima": 80,
+        "jeb": 68,
+        "pplx-decider": 67
+      },
+      "install_sh": 569,
+      "install_ps1": 122,
+      "stars": 1382,
+      "release_downloads": 14442
+    }
+  ]
+}

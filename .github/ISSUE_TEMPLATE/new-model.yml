@@ -1,0 +1,51 @@
+name: New model
+description: Propose a decision model for the library, or say you'd like to port one.
+title: "Support <model>"
+labels: ["models"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! The answers below are the intake checks of [docs/model-lifecycle.md](https://github.com/ollaya-dev/ollaya/blob/main/docs/model-lifecycle.md). Model authors planning a release can also get [Day-0 support](https://ollaya.dev/docs/model-authors).
+  - type: input
+    id: repo
+    attributes:
+      label: Hugging Face repository
+      placeholder: https://huggingface.co/<author>/<model>
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: License
+      placeholder: Apache-2.0
+    validations:
+      required: true
+  - type: input
+    id: code
+    attributes:
+      label: The author's inference code
+      description: The code that builds the input and reads the answer. A model card alone isn't enough to check parity against.
+      placeholder: https://github.com/<author>/<repo>
+    validations:
+      required: true
+  - type: input
+    id: size
+    attributes:
+      label: Base model and size
+      placeholder: Qwen3.5-4B, LoRA merged, BF16 safetensors (or GGUF)
+  - type: textarea
+    id: how
+    attributes:
+      label: How it answers
+      description: How a question is turned into input, and how the answer is read (option letters, a head, an embedding, ...). Links to the code are enough.
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who would port it?
+      options:
+        - I'd like to port it myself
+        - I'm the author and can help
+        - I'm asking for it
+    validations:
+      required: true

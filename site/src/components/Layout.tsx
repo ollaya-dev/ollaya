@@ -15,6 +15,8 @@ export interface PageMeta {
   noindex?: boolean
   /** Social card under /static (default og.png), e.g. "og/laya.png" for a model's pages. */
   ogImage?: string
+  /** schema.org structured data, written as a JSON-LD script. */
+  jsonLd?: object
 }
 
 export interface LayoutProps {
@@ -55,6 +57,10 @@ export function Layout({ origin, path, meta, children }: LayoutProps) {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content={ogImage} />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        {meta.jsonLd ? (
+          // `<` escaped so no string in the data can close the script element.
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(meta.jsonLd).replaceAll('<', '\\u003c') }}></script>
+        ) : null}
         {ANALYTICS.key ? (
           <script async src={ANALYTICS.src} data-key={ANALYTICS.key} data-collector={ANALYTICS.collector}></script>
         ) : null}

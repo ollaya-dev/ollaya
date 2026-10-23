@@ -126,6 +126,7 @@ async function buildDocs() {
       description: data.description,
       order: Number(data.order),
       html: renderer.render(body),
+      md: body,
     })
   }
   return pages.sort((a, b) => a.order - b.order)
@@ -150,7 +151,7 @@ await mkdir(outDir, { recursive: true })
 await writeFile(
   join(outDir, 'content.ts'),
   header +
-    `export interface DocPage {\n  slug: string\n  title: string\n  nav: string\n  description: string\n  order: number\n  html: string\n}\n\n` +
+    `export interface DocPage {\n  slug: string\n  title: string\n  nav: string\n  description: string\n  order: number\n  html: string\n  /** The Markdown source, for llms-full.txt. */\n  md: string\n}\n\n` +
     `export const docPages: DocPage[] = ${JSON.stringify(docs, null, 2)}\n\n` +
     `export const readmes: Record<string, string> = ${JSON.stringify(readmes, null, 2)}\n`,
 )

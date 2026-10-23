@@ -1,12 +1,14 @@
 import { benchUrl } from '../lib/bench'
 import { AUTHOR, COPYRIGHT_YEAR, GITHUB_URL, HF_URL } from '../site'
 
-// Six links: two even rows of three on a phone, one row from sm up.
+// Three to a row on a phone, one row from sm up.
 const links = [
   { href: '/search', label: 'Models' },
   { href: '', label: 'Bench' },
   { href: '/docs', label: 'Docs' },
   { href: '/download', label: 'Download' },
+  { href: '/contributors', label: 'Contributors' },
+  { href: '/stats', label: 'Stats' },
   { href: GITHUB_URL, label: 'GitHub' },
   { href: HF_URL, label: 'Hugging Face' },
 ]
