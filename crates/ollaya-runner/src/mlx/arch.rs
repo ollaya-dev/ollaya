@@ -34,6 +34,17 @@ pub struct Arch {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Backbone {
     Modernbert(ModernBertConfig),
+    #[serde(rename = "deberta-v2")]
+    DebertaV2(DebertaV2Config),
+}
+
+impl Backbone {
+    pub fn hidden_size(&self) -> usize {
+        match self {
+            Backbone::Modernbert(c) => c.hidden_size,
+            Backbone::DebertaV2(c) => c.hidden_size,
+        }
+    }
 }
 
 /// Hugging Face `ModernBertConfig` (transformers 5), as the encoder's `config.json` gives it.
@@ -60,6 +71,36 @@ pub struct ModernBertConfig {
     pub rope_theta: BTreeMap<String, f32>,
 }
 
+/// Hugging Face `DebertaV2Config` (transformers 5), as the encoder's `config.json` gives it, for
+/// DeBERTa-v3: relative attention over log buckets, no absolute positions, no token types, no conv.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DebertaV2Config {
+    /// Name prefix of the encoder's tensors in the weights file, e.g. `deberta.`.
+    pub prefix: String,
+    pub vocab_size: usize,
+    pub hidden_size: usize,
+    pub intermediate_size: usize,
+    pub num_hidden_layers: usize,
+    pub num_attention_heads: usize,
+    pub layer_norm_eps: f32,
+    /// Only `gelu` (exact, erf) is supported.
+    pub hidden_act: String,
+    /// `c2p` and/or `p2c`, with `share_att_key`.
+    pub pos_att_type: Vec<String>,
+    pub share_att_key: bool,
+    pub position_buckets: usize,
+    /// Resolved: `max_position_embeddings` when the config says -1.
+    pub max_relative_positions: usize,
+    /// `layer_norm` or `none`.
+    pub norm_rel_ebd: String,
+    /// Must be false (no absolute position embeddings).
+    pub position_biased_input: bool,
+    /// Must be 0 (no token type embeddings).
+    pub type_vocab_size: usize,
+    /// Must be 0 (no conv layer after layer 0).
+    pub conv_kernel_size: usize,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Head {
@@ -67,6 +108,8 @@ pub enum Head {
     Laya(LayaHead),
     /// `ModernBertForSequenceClassification` (`nli-pairs-v1`).
     SequenceClassification(SequenceClassificationHead),
+    /// `DebertaV2ForSequenceClassification`: `ContextPooler`, `classifier` (`nli-pairs-v1`).
+    ContextPooler(ContextPoolerHead),
     /// Von's `OptionMarkerScorer` (`von-option-marker-v1`).
     OptionMarker(OptionMarkerHead),
     /// GLiClass `GLiClassUniEncoder` (`gliclass-uni-v1`).
@@ -77,7 +120,7 @@ impl Head {
     pub fn name(&self) -> &'static str {
         match self {
             Head::Laya(_) => "laya",
-            Head::SequenceClassification(_) => "sequence-classification",
+            Head::SequenceClassification(_) | Head::ContextPooler(_) => "sequence-classification",
             Head::OptionMarker(_) => "option-marker",
             Head::GliclassUni(_) => "gliclass-uni",
         }
@@ -117,6 +160,19 @@ pub struct SequenceClassificationHead {
     /// Only `gelu`.
     pub activation: String,
     pub classifier_bias: bool,
+    pub num_labels: usize,
+}
+
+/// `DebertaV2ForSequenceClassification`: `ContextPooler` (dense, activation, on the first token),
+/// `classifier`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ContextPoolerHead {
+    /// `pooler.`: `dense`.
+    pub pooler_prefix: String,
+    /// `classifier.`
+    pub classifier_prefix: String,
+    /// Only `gelu`.
+    pub activation: String,
     pub num_labels: usize,
 }
 
@@ -191,25 +247,54 @@ impl Arch {
                 arch.schema
             ));
         }
-        let Backbone::Modernbert(c) = &arch.backbone;
-        if c.hidden_activation != "gelu" {
-            return Err(format!(
-                "unsupported hidden_activation {:?}",
-                c.hidden_activation
-            ));
-        }
-        if c.layer_types.len() != c.num_hidden_layers
-            || c.num_attention_heads == 0
-            || c.hidden_size % c.num_attention_heads != 0
-        {
-            return Err("inconsistent backbone".into());
-        }
-        if let Some(t) = c
-            .layer_types
-            .iter()
-            .find(|t| !c.rope_theta.contains_key(*t))
-        {
-            return Err(format!("no rope_theta for {t}"));
+        match &arch.backbone {
+            Backbone::Modernbert(c) => {
+                if c.hidden_activation != "gelu" {
+                    return Err(format!(
+                        "unsupported hidden_activation {:?}",
+                        c.hidden_activation
+                    ));
+                }
+                if c.layer_types.len() != c.num_hidden_layers
+                    || c.num_attention_heads == 0
+                    || c.hidden_size % c.num_attention_heads != 0
+                {
+                    return Err("inconsistent backbone".into());
+                }
+                if let Some(t) = c
+                    .layer_types
+                    .iter()
+                    .find(|t| !c.rope_theta.contains_key(*t))
+                {
+                    return Err(format!("no rope_theta for {t}"));
+                }
+            }
+            Backbone::DebertaV2(c) => {
+                if c.hidden_act != "gelu" {
+                    return Err(format!("unsupported hidden_act {:?}", c.hidden_act));
+                }
+                if !c.share_att_key
+                    || c.pos_att_type.is_empty()
+                    || c.pos_att_type.iter().any(|a| a != "c2p" && a != "p2c")
+                {
+                    return Err(format!(
+                        "unsupported attention: pos_att_type {:?}, share_att_key {}",
+                        c.pos_att_type, c.share_att_key
+                    ));
+                }
+                if c.position_biased_input || c.type_vocab_size != 0 || c.conv_kernel_size != 0 {
+                    return Err("unsupported DeBERTa options (absolute positions, token types or a conv layer)".into());
+                }
+                if !matches!(c.norm_rel_ebd.as_str(), "layer_norm" | "none") {
+                    return Err(format!("unsupported norm_rel_ebd {:?}", c.norm_rel_ebd));
+                }
+                if c.num_attention_heads == 0
+                    || c.hidden_size % c.num_attention_heads != 0
+                    || (c.position_buckets == 0 && c.max_relative_positions == 0)
+                {
+                    return Err("inconsistent backbone".into());
+                }
+            }
         }
         Ok(arch)
     }
@@ -245,6 +330,30 @@ mod tests {
         assert_eq!(a.head.name(), "option-marker");
         assert_eq!(a.weights.format, WeightsFormat::TorchZip);
         assert_eq!(a.weights.tensors["scorer.dense.weight"].offset, 64);
+    }
+
+    #[test]
+    fn reads_a_deberta_arch() {
+        let text = json!({
+            "schema": SCHEMA,
+            "backbone": {
+                "type": "deberta-v2", "prefix": "deberta.", "vocab_size": 10, "hidden_size": 8,
+                "intermediate_size": 12, "num_hidden_layers": 2, "num_attention_heads": 2,
+                "layer_norm_eps": 1e-7, "hidden_act": "gelu", "pos_att_type": ["p2c", "c2p"],
+                "share_att_key": true, "position_buckets": 4, "max_relative_positions": 8,
+                "norm_rel_ebd": "layer_norm", "position_biased_input": false, "type_vocab_size": 0,
+                "conv_kernel_size": 0
+            },
+            "head": {"type": "context-pooler", "pooler_prefix": "pooler.", "classifier_prefix": "classifier.",
+                     "activation": "gelu", "num_labels": 2},
+            "weights": {"format": "safetensors", "file": "model.safetensors"}
+        })
+        .to_string();
+        let a = Arch::parse(&text).unwrap();
+        assert_eq!(a.head.name(), "sequence-classification");
+        assert_eq!(a.backbone.hidden_size(), 8);
+        let conv = text.replace("\"conv_kernel_size\":0", "\"conv_kernel_size\":3");
+        assert!(Arch::parse(&conv).unwrap_err().contains("conv"));
     }
 
     #[test]

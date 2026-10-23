@@ -3,12 +3,13 @@
 //! A family engine (`OnnxModel`, `NliModel`, `VonModel`, `GliclassModel`) keeps its tokenizer,
 //! layout and readout, and swaps its ONNX Runtime session for an [`MlxNet`] on
 //! [`Device::Metal`](crate::Device::Metal). The network is our own fp32 code per backbone
-//! ([`modernbert`]) and per head ([`heads`]), built from the model's `arch` layer; every op runs on
-//! the runner's one MLX thread ([`ollaya_mlx::Worker`]).
+//! ([`modernbert`], [`deberta`]) and per head ([`heads`]), built from the model's `arch` layer;
+//! every op runs on the runner's one MLX thread ([`ollaya_mlx::Worker`]).
 //!
 //! Design and parity evidence: `docs/decisions/0001-mlx-engine.md`.
 
 pub mod arch;
+mod deberta;
 mod heads;
 mod modernbert;
 mod weights;
@@ -77,13 +78,43 @@ pub fn usable(arch: Option<&Path>, layout: &str) -> Result<PathBuf, String> {
 }
 
 struct Model {
-    backbone: modernbert::ModernBert,
+    backbone: Encoder,
     head: HeadModel,
+}
+
+enum Encoder {
+    ModernBert(modernbert::ModernBert),
+    DebertaV2(deberta::DebertaV2),
+}
+
+impl Encoder {
+    fn embed(&self, ids: &Array) -> Result<Array, Error> {
+        match self {
+            Encoder::ModernBert(m) => m.embed(ids),
+            Encoder::DebertaV2(m) => m.embed(ids),
+        }
+    }
+
+    fn forward(&self, x: &Array, attention: &Array) -> Result<Array, Error> {
+        match self {
+            Encoder::ModernBert(m) => m.forward(x, attention),
+            Encoder::DebertaV2(m) => m.forward(x, attention),
+        }
+    }
+
+    /// How many rows one pass takes: DeBERTa's scores and biases are [rows, heads, seq, seq].
+    fn rows_per_pass(&self, seq: usize) -> usize {
+        match self {
+            Encoder::ModernBert(_) => usize::MAX,
+            Encoder::DebertaV2(m) => m.rows_per_pass(seq),
+        }
+    }
 }
 
 enum HeadModel {
     Laya(heads::Laya),
     SequenceClassification(heads::SequenceClassification),
+    ContextPooler(heads::ContextPooler),
     OptionMarker(heads::OptionMarker),
     Gliclass(heads::Gliclass),
 }
@@ -148,7 +179,7 @@ impl MlxNet {
         let (main, act) = self
             .worker
             .run(move |m| {
-                m.forward(rows, seq, ids, attention, markers, qtype)
+                m.forward_chunked(rows, seq, ids, attention, markers, qtype)
                     .map_err(|e| ollaya_mlx::Error(e.to_string()))
             })
             .map_err(mlx)?;
@@ -174,18 +205,79 @@ type Output = (usize, Vec<f32>);
 impl Model {
     fn load(arch: &Arch, weights: &Path) -> Result<Model, Error> {
         let t = Tensors::open(weights, &arch.weights)?;
-        let Backbone::Modernbert(c) = &arch.backbone;
-        let backbone = modernbert::ModernBert::load(c, &t)?;
-        let d = c.hidden_size;
+        let backbone = match &arch.backbone {
+            Backbone::Modernbert(c) => Encoder::ModernBert(modernbert::ModernBert::load(c, &t)?),
+            Backbone::DebertaV2(c) => Encoder::DebertaV2(deberta::DebertaV2::load(c, &t)?),
+        };
+        let d = arch.backbone.hidden_size();
         let head = match &arch.head {
             Head::Laya(h) => HeadModel::Laya(heads::Laya::load(h, d, &t)?),
-            Head::SequenceClassification(h) => HeadModel::SequenceClassification(
-                heads::SequenceClassification::load(h, d, c.norm_bias, c.norm_eps, &t)?,
-            ),
+            Head::SequenceClassification(h) => {
+                // ModernBERT's head shares the encoder's norm settings.
+                let Backbone::Modernbert(c) = &arch.backbone else {
+                    return Err(Error::Model(
+                        "the sequence-classification head needs a ModernBERT backbone".into(),
+                    ));
+                };
+                HeadModel::SequenceClassification(heads::SequenceClassification::load(
+                    h,
+                    d,
+                    c.norm_bias,
+                    c.norm_eps,
+                    &t,
+                )?)
+            }
+            Head::ContextPooler(h) => {
+                HeadModel::ContextPooler(heads::ContextPooler::load(h, d, &t)?)
+            }
             Head::OptionMarker(h) => HeadModel::OptionMarker(heads::OptionMarker::load(h, d, &t)?),
             Head::GliclassUni(h) => HeadModel::Gliclass(heads::Gliclass::load(h, d, &t)?),
         };
         Ok(Model { backbone, head })
+    }
+
+    /// [`Self::forward`] in passes of as many rows as the backbone takes at once, the outputs
+    /// joined in row order.
+    fn forward_chunked(
+        &self,
+        rows: usize,
+        seq: usize,
+        ids: Vec<i32>,
+        attention: Vec<bool>,
+        markers: Option<(usize, Vec<i32>, Vec<bool>)>,
+        qtype: Option<Vec<i32>>,
+    ) -> Result<(Output, Option<Output>), Error> {
+        let per = self.backbone.rows_per_pass(seq).min(rows.max(1));
+        if per >= rows {
+            return self.forward(rows, seq, ids, attention, markers, qtype);
+        }
+        let mut main: Option<Output> = None;
+        let mut act: Option<Output> = None;
+        let mut start = 0;
+        while start < rows {
+            let end = (start + per).min(rows);
+            let part = |v: &[i32], width: usize| v[start * width..end * width].to_vec();
+            let (m, a) = self.forward(
+                end - start,
+                seq,
+                part(&ids, seq),
+                attention[start * seq..end * seq].to_vec(),
+                markers
+                    .as_ref()
+                    .map(|(k, pos, mask)| (*k, part(pos, *k), mask[start * k..end * k].to_vec())),
+                qtype.as_ref().map(|q| q[start..end].to_vec()),
+            )?;
+            let join = |into: &mut Option<Output>, (width, data): Output| match into {
+                Some((_, v)) => v.extend(data),
+                None => *into = Some((width, data)),
+            };
+            join(&mut main, m);
+            if let Some(a) = a {
+                join(&mut act, a);
+            }
+            start = end;
+        }
+        Ok((main.expect("at least one pass"), act))
     }
 
     fn forward(
@@ -232,6 +324,7 @@ impl Model {
                 Ok((read(&logits)?, Some(read(&act)?)))
             }
             HeadModel::SequenceClassification(head) => Ok((read(&head.forward(&h, &att)?)?, None)),
+            HeadModel::ContextPooler(head) => Ok((read(&head.forward(&h)?)?, None)),
             HeadModel::OptionMarker(head) => {
                 let (pos, mask) = marker_arrays()?;
                 Ok((read(&head.forward(&h, &pos, &mask)?)?, None))

@@ -179,19 +179,21 @@ Logs: `convert/out/logs/parity-{deberta,modernbert}-large-zeroshot-v2.0-wl.log`.
 
 ## Metal parity (MLX)
 
-The MLX engine ([decision record](../decisions/0001-mlx-engine.md)) runs `modernbert-large` on
-the Apple GPU from the upstream `model.safetensors`, with the `sequence-classification` arch layer.
-It is built with the `mlx` feature, which is not in releases yet. `deberta-v3-large` stays on ONNX
-Runtime until the DeBERTa backbone (phase 3).
+The MLX engine ([decision record](../decisions/0001-mlx-engine.md)) runs both models on the Apple
+GPU from the upstream `model.safetensors`, with the `sequence-classification` arch layer:
+`modernbert-large` on its ModernBERT backbone (phase 2) and `deberta-v3-large` on the DeBERTa-v3
+backbone (phase 3, `crates/ollaya-runner/src/mlx/deberta.rs`). It is built with the `mlx` feature,
+which is not in releases yet.
 
 ```sh
 cargo run --release -p ollaya-runner --features mlx --example parity_nli -- <model-dir> convert/out/goldens-modernbert-large-zeroshot-v2.0.jsonl metal
+cargo run --release -p ollaya-runner --features mlx --example parity_nli -- <model-dir> convert/out/goldens-deberta-v3-large-zeroshot-v2.0.jsonl metal
 ```
 
 Apple M4 Pro, macOS 27, against the same goldens and the same gate as the CPU (row scores and
 option logits within 1e-3, same decisions):
 
-| | MLX on Metal | ONNX Runtime CPU, same Mac |
+| modernbert-large | MLX on Metal | ONNX Runtime CPU, same Mac |
 |---|---|---|
 | hypotheses and token ids identical | 483 questions, 1,513 rows | same |
 | max \|Δ row score\|, \|Δ option logit\| | 7.2e-4, 7.0e-4 | 4.1e-4, 4.1e-4 |
@@ -201,6 +203,14 @@ option logits within 1e-3, same decisions):
 
 The daemon timings are the golden requests (4.7 questions and about 15 rows each) sent twice, with other
 jobs running on the machine.
+
+| deberta-v3-large | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| hypotheses and token ids identical | 483 questions, 1,513 rows | same |
+| max \|Δ row score\|, \|Δ option logit\| | 1.9e-4, 1.9e-4 | 3.0e-5, 3.0e-5 |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| | 1.9e-5 (p99 7.3e-6) | 1.2e-5 (p99 3.6e-6) |
+| all 97 requests, in process (the parity example's forward time) | 38.0 s | 78.8 s |
 
 ## Quality and speed
 

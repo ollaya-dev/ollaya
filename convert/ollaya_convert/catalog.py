@@ -263,7 +263,7 @@ CATALOG = {
                 "deberta-v3-large-zeroshot-v2.0", "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
                 "cf44676c28ba7312e5c5f8f8d2c22b3e0c9cdae2",
                 "Zero-shot NLI classifier (DeBERTa-v3-large): each option is a hypothesis scored for entailment.",
-                "435M", 512, ["en"]),
+                "435M", 512, ["en"], arch={"family": "sequence-classification", "config": "config.json"}),
             "modernbert-large": _wl(
                 "modernbert-large-zeroshot-v2.0", "MoritzLaurer/ModernBERT-large-zeroshot-v2.0",
                 "a51e07b524299e309dd2b88d48b0cfa2bd9ec598",
@@ -293,7 +293,7 @@ CATALOG = {
                 "gliclass-instruct-large", "knowledgator/gliclass-instruct-large-v1.0",
                 "825e5478c1bf4bffbf297690517097ccbdb2e006",
                 "Instruction-following zero-shot classifier: all options scored in one pass.",
-                "439M", 1024, ["en"]),
+                "439M", 1024, ["en"], arch={"family": "gliclass", "config": "config.json"}),
         },
         "aliases": {"latest": "large"},
         "parity": "Ollaya's Rust runtime matches the Python reference exactly on 482 questions. "

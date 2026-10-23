@@ -144,6 +144,69 @@ def modernbert(config, prefix):
     }
 
 
+def deberta_v2(config, prefix):
+    """Hugging Face DebertaV2Config for DeBERTa-v3: relative attention over log buckets with shared
+    content/position projections, no absolute position or token-type embeddings, no conv layer
+    (`crates/ollaya-runner/src/mlx/deberta.rs` runs exactly this shape)."""
+    c = config
+    if c.get("model_type") != "deberta-v2":
+        raise SystemExit("not a DeBERTa-v2 config: %r" % c.get("model_type"))
+    max_rel = c.get("max_relative_positions", -1)
+    if max_rel is None or max_rel < 1:
+        max_rel = c["max_position_embeddings"]
+    return {
+        "type": "deberta-v2",
+        "prefix": prefix,
+        "vocab_size": c["vocab_size"],
+        "hidden_size": c["hidden_size"],
+        "intermediate_size": c["intermediate_size"],
+        "num_hidden_layers": c["num_hidden_layers"],
+        "num_attention_heads": c["num_attention_heads"],
+        "layer_norm_eps": c.get("layer_norm_eps", 1e-7),
+        "hidden_act": c.get("hidden_act", "gelu"),
+        "pos_att_type": list(c.get("pos_att_type") or []) if c.get("relative_attention") else [],
+        "share_att_key": bool(c.get("share_att_key", False)),
+        "position_buckets": max(0, c.get("position_buckets", -1) or 0),
+        "max_relative_positions": max_rel,
+        "norm_rel_ebd": c.get("norm_rel_ebd", "none"),
+        "position_biased_input": bool(c.get("position_biased_input", True)),
+        "type_vocab_size": c.get("type_vocab_size", 0),
+        "conv_kernel_size": c.get("conv_kernel_size", 0) or 0,
+    }
+
+
+def backbone(config, prefix):
+    """The encoder the config describes: ModernBERT or DeBERTa-v2."""
+    if config.get("model_type") == "deberta-v2":
+        return deberta_v2(config, prefix)
+    return modernbert(config, prefix)
+
+
+def deberta_v2_tensors(b):
+    """Every tensor `crates/ollaya-runner/src/mlx/deberta.rs` reads."""
+    p = b["prefix"]
+    names = [p + "embeddings.word_embeddings.weight", p + "embeddings.LayerNorm.weight", p + "embeddings.LayerNorm.bias",
+             p + "encoder.rel_embeddings.weight"]
+    if "layer_norm" in b["norm_rel_ebd"]:
+        names += [p + "encoder.LayerNorm.weight", p + "encoder.LayerNorm.bias"]
+    for i in range(b["num_hidden_layers"]):
+        lp = "%sencoder.layer.%d." % (p, i)
+        for m in ("attention.self.query_proj", "attention.self.key_proj", "attention.self.value_proj",
+                  "attention.output.dense", "attention.output.LayerNorm", "intermediate.dense", "output.dense",
+                  "output.LayerNorm"):
+            names += [lp + m + ".weight", lp + m + ".bias"]
+    return names
+
+
+def backbone_tensors(b):
+    return deberta_v2_tensors(b) if b["type"] == "deberta-v2" else modernbert_tensors(b)
+
+
+def embedding_tensor(b):
+    """The word embedding's name, whose shape checks the config against the file."""
+    return b["prefix"] + ("embeddings.word_embeddings.weight" if b["type"] == "deberta-v2" else "embeddings.tok_embeddings.weight")
+
+
 def modernbert_tensors(b):
     """Every tensor `crates/ollaya-runner/src/mlx/modernbert.rs` reads."""
     p = b["prefix"]
@@ -191,7 +254,20 @@ def laya(config, agent):
 
 def sequence_classification(config):
     """transformers `ModernBertForSequenceClassification`: pooling, `head` (dense, activation,
-    norm), `classifier`."""
+    norm), `classifier`; or `DebertaV2ForSequenceClassification`: `ContextPooler` (dense,
+    activation, on the first token), `classifier`."""
+    if config.get("model_type") == "deberta-v2":
+        head = {
+            "type": "context-pooler",
+            "pooler_prefix": "pooler.",
+            "classifier_prefix": "classifier.",
+            "activation": config.get("pooler_hidden_act", "gelu"),
+            "num_labels": len(config["id2label"]),
+        }
+        if config.get("pooler_hidden_size", config["hidden_size"]) != config["hidden_size"]:
+            raise SystemExit("unsupported pooler_hidden_size")
+        names = ["pooler.dense.weight", "pooler.dense.bias", "classifier.weight", "classifier.bias"]
+        return deberta_v2(config, "deberta."), head, names
     head = {
         "type": "sequence-classification",
         "head_prefix": "head.",
@@ -242,7 +318,7 @@ def gliclass(config):
         names += [p + n for n in ("linear_1.weight", "linear_1.bias", "linear_2.weight", "linear_2.bias")]
     names += ["model.scorer.mlp.%d.%s" % (i, n) for i in (0, 2, 4) for n in ("weight", "bias")]
     encoder = dict(config["encoder_config"], vocab_size=config.get("vocab_size", config["encoder_config"]["vocab_size"]))
-    return modernbert(encoder, "model.encoder_model."), head, names
+    return backbone(encoder, "model.encoder_model."), head, names
 
 
 # ----------------------------------------------------------------------------------------- build
@@ -250,16 +326,16 @@ def gliclass(config):
 
 def build(family, config, weights_path, agent_config=None):
     if family == "laya":
-        backbone, head, names = laya(config, agent_config or {})
+        enc, head, names = laya(config, agent_config or {})
     elif family == "sequence-classification":
-        backbone, head, names = sequence_classification(config)
+        enc, head, names = sequence_classification(config)
     elif family == "von":
-        backbone, head, names = von(config)
+        enc, head, names = von(config)
     elif family == "gliclass":
-        backbone, head, names = gliclass(config)
+        enc, head, names = gliclass(config)
     else:
         raise SystemExit("unknown family %r" % family)
-    names += modernbert_tensors(backbone)
+    names += backbone_tensors(enc)
 
     torch_zip = zipfile.is_zipfile(weights_path)
     index = torch_zip_index(weights_path) if torch_zip else safetensors_index(weights_path)
@@ -269,8 +345,8 @@ def build(family, config, weights_path, agent_config=None):
     bad = [n for n in names if index[n][0] not in ("F32", "F16", "BF16")]
     if bad:
         raise SystemExit("unsupported dtypes: %s" % bad[:3])
-    b = backbone
-    emb = index[b["prefix"] + "embeddings.tok_embeddings.weight"][1]
+    b = enc
+    emb = index[embedding_tensor(b)][1]
     if tuple(emb) != (b["vocab_size"], b["hidden_size"]):
         raise SystemExit("embedding shape %s does not match the config" % (emb,))
 
@@ -279,7 +355,7 @@ def build(family, config, weights_path, agent_config=None):
     if torch_zip:
         weights["tensors"] = {n: {"dtype": index[n][0], "shape": list(index[n][1]), "offset": index[n][2]}
                               for n in sorted(names)}
-    return {"schema": SCHEMA, "backbone": backbone, "head": head, "weights": weights}
+    return {"schema": SCHEMA, "backbone": enc, "head": head, "weights": weights}
 
 
 def dumps(arch):

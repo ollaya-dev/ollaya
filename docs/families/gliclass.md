@@ -179,16 +179,25 @@ Logs: `convert/out/logs/parity-gliclass-instruct-{large,edge}-wl.log`.
 ## Metal parity (MLX)
 
 The MLX engine ([decision record](../decisions/0001-mlx-engine.md)) implements the uni-encoder head
-(segment embeddings, label-span pooling, the two projectors and the MLP scorer) on its ModernBERT
-backbone, with the `gliclass` arch layer. `instruct-edge` passes on the Apple GPU; it is not in the
-library (see [Quality and speed](#quality-and-speed)), so this verifies the head. `instruct-large`
-stays on ONNX Runtime until the DeBERTa backbone (phase 3).
+(segment embeddings, label-span pooling, the two projectors and the MLP scorer) over either
+backbone, with the `gliclass` arch layer: `instruct-large` on DeBERTa-v3 (phase 3,
+`crates/ollaya-runner/src/mlx/deberta.rs`), and `instruct-edge` on ModernBERT (phase 2; it is not
+in the library, see [Quality and speed](#quality-and-speed), so it verified the head first).
 
 ```sh
+cargo run --release -p ollaya-runner --features mlx --example parity_gliclass -- <model-dir> convert/out/goldens-gliclass-instruct-large.jsonl metal
 cargo run --release -p ollaya-runner --features mlx --example parity_gliclass -- <model-dir> convert/out/goldens-gliclass-instruct-edge.jsonl metal
 ```
 
 Apple M4 Pro, macOS 27, same goldens and gate as the CPU (label logits within 1e-3, same decisions):
+
+| large | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| texts, ids and label positions identical | 482 questions (+1 rejected as expected) | same |
+| max \|Δ label logit\| | 8.8e-5 (p99 7.1e-5) | 6.1e-5 (p99 2.8e-5) |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| | 1.1e-5 (p99 9.4e-6) | 7.1e-6 (p99 5.4e-6) |
+| all 97 requests, in process | 14.3 s | 32.8 s |
 
 | edge | MLX on Metal | ONNX Runtime CPU, same Mac |
 |---|---|---|

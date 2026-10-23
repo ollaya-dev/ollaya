@@ -4,7 +4,7 @@
   off by default and in no release. Shipping it waits on the owner's decision to raise the minimum
   macOS to 14.0 ([To ship it](#to-ship-it)).
 - **Date:** 2026-09-26.
-- **Scope so far:** phases 1 (foundation) and 2 (ModernBERT) of the plan below.
+- **Scope so far:** phases 1 (foundation), 2 (ModernBERT) and 3 (DeBERTa-v3) of the plan below.
 
 ## Context
 
@@ -79,9 +79,9 @@ Only fp32 with our own model code passes; fp16, bf16 and the stock MLX model lib
     sent before.
   - `mlx/arch.rs` reads the arch layer, `mlx/weights.rs` the author's weights file (safetensors, or
     a PyTorch zip at the byte offsets the arch layer lists; nothing is unpickled at run time),
-    `mlx/modernbert.rs` is the backbone and `mlx/heads.rs` the heads: laya's `DecisionModel`,
-    `ModernBertForSequenceClassification`, von's `OptionMarkerScorer` and GLiClass's uni-encoder.
-    Weights are upcast to fp32.
+    `mlx/modernbert.rs` and `mlx/deberta.rs` are the backbones and `mlx/heads.rs` the heads: laya's
+    `DecisionModel`, `ModernBertForSequenceClassification`, DeBERTa's `ContextPooler` classifier,
+    von's `OptionMarkerScorer` and GLiClass's uni-encoder. Weights are upcast to fp32.
   - `mlx::LAYOUTS` lists the layouts `auto` runs on MLX: the ones whose models passed their gate
     (below).
 
@@ -93,8 +93,8 @@ the tensor names, derived at build time from the author's `config.json` (and, fo
 against the weights file. It holds no weights: MLX reads the same upstream weights layer the ONNX
 graph references. A model without an arch layer, or with more than one weights file, runs on ONNX
 Runtime only. `package.py` adds the layer to the tags whose catalog entry has `arch`, which are the
-tags that passed on Metal: `laya:en`, `laya:multilingual` and `nli:modernbert-large`. The published
-registry does not have them yet.
+tags that passed on Metal: `laya:en`, `laya:multilingual`, `nli:modernbert-large`,
+`nli:deberta-v3-large` and `gliclass:large`. The published registry does not have them yet.
 
 ### Devices and the runner protocol
 
@@ -128,6 +128,16 @@ Each of these was measured against the goldens:
 - Attention is MLX's fused SDPA with a boolean key mask. A query row that may see no key comes out
   NaN and spreads through the next layer, so the padding queries of the sliding-window layers get
   the full key mask; their outputs are never read.
+- **DeBERTa-v3** (`mlx/deberta.rs`, phase 3) writes its attention out: the disentangled bias
+  (content→position and position→content, two gathers over the relative embeddings projected by
+  the layer's own query and key weights, `share_att_key`) is added to the scores, masked positions
+  get `finfo(float32).min` as the reference does (a fully padded query row is uniform, not NaN),
+  then softmax and the values. The log buckets of the relative positions are computed on the CPU in
+  f32 exactly as `make_log_bucket_position` does, and a unit test pins the table to torch's. The
+  relative embeddings' LayerNorm and projections depend only on the weights, so each layer computes
+  them once at load. The scores and the two bias gathers are [rows, heads, seq, seq], so a batch
+  runs in passes of as many rows as keep each of them around a quarter of a GiB
+  (`rows_per_pass`); ModernBERT runs a batch in one pass as before.
 
 ## Parity on Metal
 
@@ -150,6 +160,8 @@ weights file under its upstream name.
 | `laya:multilingual` | goldens-all, 2,383 questions | same | 100%, 1.0e-5 (p99 6.2e-6) | | yes |
 | `nli:modernbert-large` | 97 cases, 483 questions, 1,513 rows | row scores and option logits within 1e-3, same decisions | 100%, logits 7.2e-4, prob diff 5.9e-5 | 100%, 4.1e-4, 5.2e-5 | yes |
 | `gliclass-instruct-edge` (not in the library) | 97 cases, 482 questions | label logits within 1e-3, same decisions | 100%, logits 7.7e-5, prob diff 1.4e-5 | 100%, 9.1e-5, 6.9e-6 | yes (head verified) |
+| `nli:deberta-v3-large` (phase 3) | 97 cases, 483 questions, 1,513 rows | row scores and option logits within 1e-3, same decisions | 100%, logits 1.9e-4, prob diff 1.9e-5 (p99 7.3e-6) | 100%, 3.0e-5, 1.2e-5 | yes |
+| `gliclass:large` (phase 3) | 97 cases, 482 questions | label logits within 1e-3, same decisions | 100%, logits 8.8e-5, prob diff 1.1e-5 (p99 9.4e-6) | 100%, 6.1e-5, 7.1e-6 | yes |
 | `von:1.1` | 98 cases, 485 questions, 653 rows (float64 network) | row and option logits within 1e-3, same decisions | 100% decisions, prob diff 3.1e-5, **logits 2.0e-3 on one row** | **1.1e-3 on the same row** | **no** |
 
 - **`laya:en` on goldens-all.** The maximum is one question, `preset/guard/email_dict` `jailbreak`

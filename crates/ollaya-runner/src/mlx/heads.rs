@@ -3,7 +3,9 @@
 
 use ollaya_mlx::{Array, Dtype};
 
-use super::arch::{GliclassHead, LayaHead, OptionMarkerHead, SequenceClassificationHead};
+use super::arch::{
+    ContextPoolerHead, GliclassHead, LayaHead, OptionMarkerHead, SequenceClassificationHead,
+};
 use super::modernbert::{Linear, Norm, gelu, relu};
 use super::weights::{Tensors, mlx};
 use crate::Error;
@@ -273,6 +275,34 @@ impl SequenceClassification {
         };
         let x = self.norm.forward(&gelu(&self.dense.forward(&pooled)?)?)?;
         self.classifier.forward(&x)
+    }
+}
+
+/// `DebertaV2ForSequenceClassification` after the encoder: `ContextPooler` (the first token
+/// through `dense` and the activation), `classifier`.
+pub struct ContextPooler {
+    dense: Linear,
+    classifier: Linear,
+}
+
+impl ContextPooler {
+    pub fn load(c: &ContextPoolerHead, d: usize, t: &Tensors) -> Result<Self> {
+        if c.activation != "gelu" {
+            return Err(Error::Model(format!(
+                "unsupported pooler activation {:?}",
+                c.activation
+            )));
+        }
+        Ok(ContextPooler {
+            dense: Linear::load(t, &format!("{}dense.", c.pooler_prefix), d, d, true)?,
+            classifier: Linear::load(t, &c.classifier_prefix, c.num_labels, d, true)?,
+        })
+    }
+
+    /// Class logits [rows, labels].
+    pub fn forward(&self, h: &Array) -> Result<Array> {
+        self.classifier
+            .forward(&gelu(&self.dense.forward(&first_token(h)?)?)?)
     }
 }
 
