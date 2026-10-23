@@ -121,8 +121,8 @@ const tokens = `
 .rd .code .tok-fn, .rd .code .tok-cmd { font-weight: 600; }
 /* The scatter: Ollaya's models are filled dots, Ollama's are rings; the one under the pointer lights up. */
 .rd .pt { cursor: default; outline: none; }
-.rd .pt circle { transition: r 0.15s, opacity 0.15s; }
-.rd .pt.is-on circle { r: 7; }
+.rd .pt circle { transition: none; }
+.rd .pt.is-on circle { r: 8; }
 .rd .pt.is-on .dot { fill: var(--color-us-bright); stroke: var(--color-us-bright); }
 .rd .pt.is-off { opacity: 0.12; pointer-events: none; }
 .rd .pt.is-kin .dot { stroke: var(--color-us-bright); stroke-width: 2.5; }
@@ -130,6 +130,13 @@ const tokens = `
 .rd .links line { stroke: var(--color-us-bright); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.7; }
 .rd .pt:focus-visible circle { stroke: var(--color-us-bright); stroke-width: 2; }
 .rd .tip { position: absolute; z-index: 10; pointer-events: none; white-space: nowrap; }
+.rd .tip table { border-collapse: collapse; }
+.rd .tip th, .rd .tip td { padding: 4px 10px; text-align: right; font-weight: 400; font-variant-numeric: tabular-nums; }
+.rd .tip thead th { color: var(--color-muted); font-size: 12px; padding-bottom: 2px; }
+.rd .tip tbody th { text-align: left; color: var(--color-fg); }
+.rd .tip tbody th span { display: block; font-size: 12px; color: var(--color-muted); }
+.rd .tip tr.on th, .rd .tip tr.on td { color: var(--color-us-bright); }
+.rd .tip tr.on th span { color: var(--color-us); }
 /* The confidence meter: ten segments, lit in turn. */
 .rd .meter { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
 .rd .meter i { display: block; height: 6px; border-radius: 1px; background: var(--color-fill-strong); }
@@ -549,7 +556,6 @@ function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
             data-ms={Math.round(d.ms)}
           >
             <title>{`${d.name} on ${d.server === 'ollaya' ? 'Ollaya' : OLLAMA}: accuracy ${d.acc.toFixed(3)}, ECE ${d.ece.toFixed(3)}, ${Math.round(d.ms)} ms`}</title>
-            <circle cx={x(d.ms)} cy={y(d.acc)} r="12" fill="transparent" />
             {d.server === 'ollaya' ? (
               <circle cx={x(d.ms)} cy={y(d.acc)} r="5" class="dot fill-us stroke-canvas" stroke-width="1.5" />
             ) : (
@@ -563,7 +569,7 @@ function DesignScatter({ W = 760, H = 420 }: { W?: number; H?: number }) {
           </g>
         ))}
       </svg>
-      <div class="tip panel panel-strong rounded-md px-3 py-2 text-[13px] text-body [&_b]:font-medium [&_b]:text-fg [&_span]:text-muted" data-tip hidden></div>
+      <div class="tip panel panel-strong rounded-md px-1 py-1 text-[14px] text-body" data-tip hidden></div>
     </div>
   )
 }

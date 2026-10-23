@@ -25,7 +25,9 @@
         }),
       )
       for (const k of kin) k.classList.add('is-kin')
-      tip.innerHTML = `<b>${d.name}</b> <span>on ${d.server}</span><br>accuracy ${d.acc} · ECE ${d.ece} · ${d.ms} ms${kin.length ? `<br><span>${kin.map((k) => `${k.dataset.name} on ${k.dataset.server}: ${k.dataset.acc}, ${k.dataset.ms} ms`).join(' · ')}</span>` : ''}`
+      const row = (p, on) =>
+        `<tr${on ? ' class="on"' : ''}><th scope="row">${p.dataset.name}<span>on ${p.dataset.server}</span></th><td>${p.dataset.acc}</td><td>${p.dataset.ece}</td><td>${p.dataset.ms} ms</td></tr>`
+      tip.innerHTML = `<table><thead><tr><th></th><th>Accuracy</th><th>ECE</th><th>Latency</th></tr></thead><tbody>${row(pt, true)}${kin.map((k) => row(k, false)).join('')}</tbody></table>`
       tip.hidden = false
       const r = pt.getBoundingClientRect()
       const b = root.getBoundingClientRect()
@@ -41,11 +43,28 @@
       links.replaceChildren()
       for (const p of svg.querySelectorAll('.pt')) p.classList.remove('is-on', 'is-kin')
     }
-    for (const pt of svg.querySelectorAll('.pt')) {
-      pt.addEventListener('pointerenter', () => show(pt))
-      pt.addEventListener('focus', () => show(pt))
-      pt.addEventListener('pointerleave', hide)
-      pt.addEventListener('blur', hide)
+    // The pointer picks the nearest point wherever it is over the chart, so sweeping across reads every one.
+    const pts = [...svg.querySelectorAll('.pt')]
+    let current = null
+    svg.addEventListener('pointermove', (e) => {
+      const r = svg.getBoundingClientRect()
+      const vb = svg.viewBox.baseVal
+      const k = r.width / vb.width
+      let best = null
+      let bestD = Infinity
+      for (const p of pts) {
+        if (p.classList.contains('is-off')) continue
+        const dx = r.left + p.dataset.x * k - e.clientX
+        const dy = r.top + p.dataset.y * k - e.clientY
+        const d = dx * dx + dy * dy
+        if (d < bestD) (bestD = d), (best = p)
+      }
+      if (best && best !== current) show((current = best))
+    })
+    svg.addEventListener('pointerleave', () => hide(), (current = null))
+    for (const pt of pts) {
+      pt.addEventListener('focus', () => show((current = pt)))
+      pt.addEventListener('blur', () => hide(), (current = null))
     }
     for (const btn of root.querySelectorAll('[data-series]')) {
       btn.addEventListener('click', () => {
