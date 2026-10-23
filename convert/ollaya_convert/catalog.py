@@ -843,6 +843,33 @@ CATALOG = {
                   "CUDA (RTX 4090): 593 questions, every decision the same, option logits within 7.7e-6 and "
                   "probabilities within 1.6e-6. The prompts are byte-identical to the author's jevk5.prompt.",
     },
+    "jev-style": {
+        "namespace": "library",
+        "model": "jev-style",
+        "family": "jev-style",
+        "author": "chaoliangUNSW",
+        "license": "Apache-2.0",
+        "license_text": "Jev-Style by chaoliangUNSW (https://huggingface.co/chaoliangUNSW), a fine-tune of "
+                        "Qwen3.5-2B by the Qwen team (Apache-2.0). Its render v2 input and verdict readout "
+                        "are the author's.\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        "tags": {
+            # Jev-Style-2B-Decision-v3, Q4_K_M. The GGUF holds the weights, tokenizer and the
+            # readout tokens (' yes' 9542, ' no' 874, ' ->' 1411); jev-score-v2 is reproduced by the runner.
+            "2b": _gguf("jev-style-2b-q4_k_m", "chaoliangUNSW/Jev-Style-2B-Decision-v3-GGUF",
+                        "283b9eb7903aeb184b16d49ab8f38b256f4afcb3",
+                        "Jev-Style-2B-Decision-v3-Q4_K_M.gguf",
+                        "Jev-Style-2B-Decision-v3 (Qwen3.5-2B fine-tune), Q4_K_M GGUF on llama.cpp: a "
+                        "non-causal block-attention decision model, the verdict readout logit(' yes') - "
+                        "logit(' no') at each option's ' ->' slot, with the author's global temperature 0.828. "
+                        "No option cap.",
+                        "2B", ["en"]),
+        },
+        "aliases": {"latest": "2b"},
+        "parity": "Prompt parity: the render matches the model's own jev_style_decision_gguf.py "
+                  "(ollaya_convert.families.jev_style.ref). Logit parity vs the author's jev-score-v2 is "
+                  "pending (non-causal readout; see the PR).",
+    },
     "decima": {
         "namespace": "library",
         "model": "decima",
