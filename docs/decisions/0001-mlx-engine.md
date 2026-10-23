@@ -101,7 +101,7 @@ against the weights file. It holds no weights: MLX reads the same upstream weigh
 graph references. A model without an arch layer, or with more than one weights file, runs on ONNX
 Runtime only. `package.py` adds the layer to the tags whose catalog entry has `arch`, which are the
 tags that passed on Metal: `laya:en`, `laya:multilingual`, `nli:modernbert-large`,
-`nli:deberta-v3-large`, `gliclass:large`, `qwen3guard:0.6b` and `decider:0.8b`. The published registry
+`nli:deberta-v3-large`, `gliclass:large`, `qwen3guard:0.6b`, `decider:0.8b` and `decider:2b`. The published registry
 does not have them yet.
 
 ### Devices and the runner protocol
@@ -187,6 +187,7 @@ weights file under its upstream name.
 | `gliclass:large` (phase 3) | 97 cases, 482 questions | label logits within 1e-3, same decisions | 100%, logits 8.8e-5, prob diff 1.1e-5 (p99 9.4e-6) | 100%, 6.1e-5, 7.1e-6 | yes |
 | `qwen3guard:0.6b` (phase 4) | 74 states, 148 rows, 296 questions | candidate and option logits within 1e-3, same decisions | 100%, logits 6.7e-5, prob diff 1.3e-5 (p99 1.1e-5) | 100%, 7.4e-5, 9.9e-6 | yes |
 | `decider:0.8b` (phase 4) | 114 cases (14 rejected upstream), 479 questions, 902 rows | label and option logits within 1e-3, same decisions | 100%, logits 3.8e-5, prob diff 9.9e-6 (p99 5.8e-6) | 100%, 3.8e-5, 8.2e-6 | yes |
+| `decider:2b` (phase 4) | same goldens, made with decider-2b | same | 100%, logits 4.1e-5, prob diff 8.9e-6 (p99 5.8e-6) | 100%, 3.9e-5, 7.0e-6 | yes |
 | `von:1.1` | 98 cases, 485 questions, 653 rows (float64 network) | row and option logits within 1e-3, same decisions | 100% decisions, prob diff 3.1e-5, **logits 2.0e-3 on one row** | **1.1e-3 on the same row** | **no** |
 
 - **`laya:en` on goldens-all.** The maximum is one question, `preset/guard/email_dict` `jailbreak`

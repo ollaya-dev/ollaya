@@ -317,7 +317,8 @@ CATALOG = {
             "2b": _wl("decider-2b", "Mapika/decider-2b", "9839cc9d908be16c5988c0d041034b5fdf82c7a2",
                       "Decoder decision model (Qwen3.5-2B base): reads option-letter logits at an answer slot. "
                       "Highest accuracy of the open models Ollaya ships.",
-                      "1.9B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-2b")),
+                      "1.9B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-2b"),
+                      arch={"family": "tied-rows", "config": "config.json"}),
             # v5 text weights in the Qwen3.5-2B vision-language model: `decider-vision-v1`, two graphs
             # (vision.onnx, the image tower; model.onnx, the decoder with M-RoPE positions).
             "2b-vision": _wl("decider-2b-vision", "Mapika/decider-2b-vision", "863e290863655f1d6b69324d77d09ac972d21609",

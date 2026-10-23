@@ -329,6 +329,14 @@ the same gate as above (label and option logits within 1e-3, same decisions):
 | max \|Δ probability\| | 9.9e-6 (p99 5.8e-6) | 8.2e-6 (p99 6.7e-6) |
 | all 114 requests, in process | 78.1 s (781 ms per request) | 203.3 s (2,033 ms per request) |
 
+| decider-2b | MLX on Metal | ONNX Runtime CPU, same Mac |
+|---|---|---|
+| rejections, token rows and slots | 0 mismatches (114 cases, 479 questions, 902 rows) | 0 mismatches |
+| max \|Δ label logit\| | 4.1e-5 | 3.9e-5 |
+| decisions agree | **100 %** | **100 %** |
+| max \|Δ probability\| | 8.9e-6 (p99 5.8e-6) | 7.0e-6 (p99 5.7e-6) |
+| all 114 requests, in process | 151.3 s (1,513 ms per request) | 278.7 s (2,787 ms per request) |
+
 ## ONNX Runtime CUDA EP note (measured)
 
 - **The bug.** ORT 1.30 CUDA EP runs these raw dynamo exports only with
