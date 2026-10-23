@@ -33,6 +33,7 @@ import { DotPlot, Scatter } from './components/charts'
 import { runs } from './data/results'
 import { SearchPage } from './pages/search'
 import { llmsFullTxt, llmsTxt } from './pages/llms'
+import { ContributorsPage } from './pages/contributors'
 
 export { withReadmeBlocks } from './data/readme'
 
@@ -103,6 +104,14 @@ function pages(origin: string): Page[] {
         nav: 'docs',
       },
       render: () => <DocsIndex />,
+    },
+    {
+      url: '/contributors',
+      meta: {
+        title: 'Contributors',
+        description: 'The people who trained the models Ollaya runs, and the people who brought them to Ollaya.',
+      },
+      render: () => <ContributorsPage />,
     },
     ...docPages.map((page) => {
       const html = withResults(withOrigin(page.html, origin))

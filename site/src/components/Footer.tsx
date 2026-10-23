@@ -7,6 +7,7 @@ const links = [
   { href: '', label: 'Bench' },
   { href: '/docs', label: 'Docs' },
   { href: '/download', label: 'Download' },
+  { href: '/contributors', label: 'Contributors' },
   { href: GITHUB_URL, label: 'GitHub' },
   { href: HF_URL, label: 'Hugging Face' },
 ]
