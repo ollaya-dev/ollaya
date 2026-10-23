@@ -276,19 +276,18 @@ function percent(p: { completed: number; total: number }): string {
   return p.total > 0 ? `${Math.floor((p.completed / p.total) * 100)}%` : '…'
 }
 
-/** What the activity log says about speed: the median answer time, and requests per second now. */
+/** What the activity log says about speed: the median answer time, and requests per second. */
 function speed(a: ActivityResponse) {
   const times = a.requests
     .filter((r) => !r.error)
     .map((r) => r.total_duration / 1e6)
     .sort((x, y) => x - y)
   const median = times.length ? times[Math.floor(times.length / 2)]! : null
-  const now = Date.now()
-  const lastMinute = a.requests.filter((r) => now - Date.parse(r.at) < 60_000)
-  // A full log may cover less than a minute: count over the time it does cover.
-  const full = a.requests.length >= 100 && lastMinute.length === a.requests.length
-  const seconds = full ? Math.max(1, (now - Date.parse(a.requests.at(-1)!.at)) / 1000) : 60
-  return { median, perSecond: lastMinute.length / seconds, samples: times.length }
+  // The rate between the first and the last request of the past minute: the log holds 100
+  // requests, which a busy client sends in a few seconds.
+  const at = a.requests.map((r) => Date.parse(r.at)).filter((t) => Date.now() - t < 60_000)
+  const seconds = at.length > 1 ? Math.max(1, (at[0]! - at.at(-1)!) / 1000) : 60
+  return { median, perSecond: at.length > 1 ? (at.length - 1) / seconds : at.length / 60, samples: times.length }
 }
 
 // --- view: frame ----------------------------------------------------------------------------------
