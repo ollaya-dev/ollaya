@@ -12,6 +12,7 @@ pub mod clef;
 pub mod clm;
 pub mod cygnet;
 pub mod d1;
+pub mod d1_omni;
 pub mod decider;
 pub mod decima;
 pub mod decision;

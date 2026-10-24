@@ -52,7 +52,7 @@ def command(family, d, device):
     name = os.path.basename(d)
     fp16 = name.endswith("-fp16")
     base = name[: -len("-fp16")] if fp16 else name
-    example = "parity_" + family + ("_vision" if base.endswith("-vision") else "")
+    example = "parity_" + family.replace("-", "_") + ("_vision" if base.endswith("-vision") else "")
     cmd = ["cargo", "run", "--release", "-q", "-p", "ollaya-runner", "--example", example]
     if device == "cuda":
         cmd += ["--features", "cuda"]

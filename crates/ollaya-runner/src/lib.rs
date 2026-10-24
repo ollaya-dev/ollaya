@@ -6,6 +6,7 @@
 pub mod arbiter;
 pub mod clef;
 pub mod clm;
+pub mod d1_omni;
 pub mod decider;
 pub mod decider_vision;
 pub mod decima;

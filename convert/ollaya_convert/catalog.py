@@ -175,6 +175,26 @@ CATALOG = {
                   "55 image questions on the CPU, an RTX 4090 and an RTX 5090 (29 and 24 on the contributor's CPU "
                   "and RTX 4070), every decision the same, option log-probabilities within 7.7e-6.",
     },
+    # d1-omni-600M: the same LFM Open License v1.0 text as d1-3B (the repo's LICENSE differs in blank lines only).
+    "d1-omni": {
+        "namespace": "library", "model": "d1-omni", "family": "d1-omni", "author": "Liquid AI",
+        "license": "LFM Open License v1.0",
+        "license_text": "d1-omni-600M by Liquid AI (https://huggingface.co/LiquidAI/d1-omni-600M).\n\n" +
+            open(os.path.join(os.path.dirname(__file__), "families", "d1", "LICENSE"), encoding="utf-8").read(),
+        "tags": {
+            # Text path only: the trunk (LFM2.5-Encoder-350M, bidirectional) and the decision head; the vision and
+            # audio encoders in the same checkpoint are not referenced (docs/families/d1-omni.md).
+            "600m": _wl("d1-omni-600m", "LiquidAI/d1-omni-600M", "02b55d7076f15129e59ab3f94783f32c4b088674",
+                        "Liquid AI's d1-omni-600M, text questions: an LFM2.5 encoder with a decision head that scores "
+                        "every option at its own marker, calibrated per question type and option count; 16k-token "
+                        "context. Images and audio are not served.",
+                        "587M", 16384, ["en", "de", "es", "fr", "it", "nl", "pl", "pt", "ar", "hi", "ja", "ru", "tr",
+                                        "vi", "zh"],
+                        wl_dir=os.path.join(OUT, "d1-omni-600m")),
+        },
+        "aliases": {"latest": "600m"},
+        "hf_license": ("lfm1.0", "https://huggingface.co/LiquidAI/d1-omni-600M/blob/02b55d7076f15129e59ab3f94783f32c4b088674/LICENSE"),
+    },
     "laya": {
         "namespace": "library",
         "model": "laya",
