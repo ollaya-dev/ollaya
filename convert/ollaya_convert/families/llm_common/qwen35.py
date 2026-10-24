@@ -110,7 +110,7 @@ def half_trunk(trunk):
     """fp16 compute for an exported trunk: weights and activations in fp16, while the RMSNorms, the gated
     delta rule and the attention softmax stay fp32, as HF's modules and this file upcast them. The rotary
     frequencies and the doubling masks stay fp32 (fp16 positions are off by whole radians at 8,000 tokens)."""
-    keep = {k: getattr(trunk, k) for k in ("inv_freq", "masks")}
+    keep = dict(trunk.named_buffers(recurse=False))   # rotary tables and masks, in every trunk
     trunk.half()
     for k, v in keep.items():
         setattr(trunk, k, v)

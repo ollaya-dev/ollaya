@@ -1,4 +1,4 @@
-//! ONNX Runtime engine for Strands Agents' Strands Decider (layout `strands-pointer-v1`).
+//! ONNX Runtime engine for Strands Agents' Strands Decider (layouts `strands-pointer-v1` and `-v2`).
 //!
 //! Every question is one row: the state, then the question with one line per option. The graph has
 //! kev's contract: `input_ids` [rows, seq] (right-padded to a multiple of 64, positions implicit,
@@ -85,10 +85,21 @@ impl StrandsModel {
         intra_threads: Option<usize>,
     ) -> Result<Self, Error> {
         let config: DecisionConfig = read_json(&files.decision)?;
-        if config.engine != "onnx" || config.layout != "strands-pointer-v1" {
+        if config.engine != "onnx"
+            || !matches!(
+                config.layout.as_str(),
+                "strands-pointer-v1" | "strands-pointer-v2"
+            )
+        {
             return Err(Error::Model(format!(
-                "unsupported engine/layout {}/{}; this engine serves onnx/strands-pointer-v1",
+                "unsupported engine/layout {}/{}; this engine serves onnx/strands-pointer-v1 and -v2",
                 config.engine, config.layout
+            )));
+        }
+        if config.layout == "strands-pointer-v2" && config.strands.special_tokens.bos.is_none() {
+            return Err(Error::Model(format!(
+                "{}: strands-pointer-v2 needs special_tokens.bos",
+                files.decision.display()
             )));
         }
         let bad = |e: String| Error::Model(format!("{}: {e}", files.decision.display()));
