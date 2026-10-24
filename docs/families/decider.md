@@ -10,8 +10,8 @@ The vision variant, `Mapika/decider-2b-vision`, has its own layout: [decider-vis
 | Model | Base | Params | Checkpoint | Upstream temperature | Status in Ollaya |
 |---|---|---|---|---|---|
 | `Mapika/decider-0.8b` (v1) | Qwen3.5-0.8B-Base | 0.75B | 1.5 GB BF16, 1 file | 1.03 | **converted, ONNX** |
-| `Mapika/decider-2b` (v10) | Qwen3.5-2B-Base | 1.9B | 3.6 GB BF16, 1 file | 1.30 | **converted, ONNX** |
-| `Mapika/decider-4b` (v2.1) | Qwen3.5-4B-Base | 4.2B | 8.4 GB BF16, 1 file | per type: choice 1.110, noul 1.560, score 1.287 | **converted, ONNX** (weights stay BF16 in memory) |
+| `Mapika/decider-2b` (v12) | Qwen3.5-2B-Base | 1.9B | 3.6 GB BF16, 1 file | per type: choice 2.465, noul 0.05, score 2.833 | **converted, ONNX** |
+| `Mapika/decider-4b` (v3) | Qwen3.5-4B-Base | 4.2B | 8.4 GB BF16, 1 file | per type: choice 2.098, noul 0.05, score 3.152 | **converted, ONNX** (weights stay BF16 in memory) |
 | `Mapika/decider-35b-a3b` (v1) | Qwen3.5-35B-A3B-Base (MoE) | 35B / 3B active | 65 GB BF16, 15 shards | 1.08 | not converted (see "Larger models") |
 
 ## Recommended engine: ONNX (single forward)
@@ -44,10 +44,13 @@ A decision is one prefill plus a 255-row matmul, with no generation, so option (
 | `decision.json`, `calibration.json` | derived, hosted by Ollaya |
 | license | Apache-2.0, stated in the model card. The repo has no LICENSE file; the Qwen3.5 base is Apache-2.0. |
 
-For `decider-2b` the source is `Mapika/decider-2b@9839cc9d908be16c5988c0d041034b5fdf82c7a2`, and for `decider-4b`
-`Mapika/decider-4b@eb5fbdfc9448473ec25e399882912863afbdb70e` (v2.1; `model.safetensors` 8.41 GB, sha256
-`ee8ce585…`, matches the HF LFS oid), with the same file names. All three repos ship the same `tokenizer.json`.
-Each export writes `files.json` with sizes and sha256 values.
+For `decider-2b` the source is `Mapika/decider-2b@7614a6c7ea5a047aa7d7bcfb1a0015469381c3e3` (v12, 2026-10-20;
+`model.safetensors` 3.76 GB, sha256 `1265b014…`), and for `decider-4b`
+`Mapika/decider-4b@585473dec4fa93f0325c2bf02dda7273b61f44c1` (v3, 2026-10-20; `model.safetensors` 8.41 GB, sha256
+`87f0f1e2…`), with the same file names; both match the HF LFS oids. All three repos ship the same `tokenizer.json`.
+Each export writes `files.json` with sizes and sha256 values. From these releases the two repos also carry `vision/`
+(the Qwen3.5 vision tower and the image-text config, 0.66 GB) and no longer ship the `decider/` package; Ollaya reads
+only the text files from them, and the image path is a separate layout (`docs/backlog.md`).
 
 - **Weights.** Every checkpoint tensor maps to a graph initializer (`weightless_sharded.py`): 320 for 0.8b and 2b,
   426 for 4b, each an external reference plus a `Cast` BF16→F32. Only masks and index constants stay inline, about
@@ -155,12 +158,18 @@ The graph returns `label_logits[row, 0:255]`.
 | Model | upstream `decider_config.json` | `calibration.json` `[choice, score, noul]` | `isolated_row_temperature` |
 |---|---|---|---|
 | 0.8b | `temperature` 1.03 | `[1.03, 1.0, 1.03]` | 1.03 |
-| 2b | `temperature` 1.3 | `[1.3, 1.0, 1.3]` | 1.3 |
-| 4b (v2.1) | `temperature_by_type` choice 1.110, noul 1.560, score 1.287 | `[1.11, 1.0, 1.56]` | 1.287 |
+| 2b (v12) | `temperature_by_type` choice 2.465, noul 0.05, score 2.833 | `[2.465, 1.0, 0.05]` | 2.833 |
+| 4b (v3) | `temperature_by_type` choice 2.098, noul 0.05, score 3.152 | `[2.098, 1.0, 0.05]` | 3.152 |
 
-Upstream fitted these on in-task data. decider-ai 1.4.0 added `temperature_by_type`; a type the map leaves out
-uses `temperature`, and an isolated Score question uses the score temperature on each of its level rows, which is
-what `isolated_row_temperature` reproduces.
+Upstream fitted the choice and score values on its own validation rows (v12 and v3 answer about twice as sharply as
+their predecessors, so the temperatures are about twice v11's and v2.1's). decider-ai 1.4.0 added `temperature_by_type`;
+a type the map leaves out uses `temperature`, and an isolated Score question uses the score temperature on each of its
+level rows, which is what `isolated_row_temperature` reproduces.
+
+**Noul 0.05 is upstream's choice, not a fit.** The cards say so: JevBench counts a yes/no probability between 0.2 and
+0.8 as wrong, so the config pushes yes/no answers to about 0 or 1 (the fitted values would be 3.185 for 2b and 2.795 for
+4b; the cards give the ECE cost). Ollaya ships what the config says, because parity is against the authors' served
+answers. v10 (2b) had one temperature, 1.3; v2.1 (4b) had choice 1.110, noul 1.560, score 1.287.
 
 ## ONNX contract
 
@@ -202,11 +211,19 @@ Additional properties:
   - Packed rows (`independent=false`).
   - Listwise score (`"isolated": false`).
   - `neutralize_none`, which is false in every config.
-- **noul without instructions (4b's package).** decider-4b ships the `decider/` subset of decider-ai 1.4.0, whose
-  `render_question` accepts a noul question with no `instructions` when its criteria describe true or false, and
-  asks "Which answer fits the context?". Ollaya's request parser requires `instructions` on every question, so
-  such a request gets 422 on every model. Every request that carries instructions renders identically to 2b's
-  package (checked: the 114 golden records give token-identical rows for 2b and 4b).
+- **noul without instructions.** From decider-ai 1.4.0, `render_question` accepts a noul question with no
+  `instructions` when its criteria describe true or false, and asks "Which answer fits the context?". Ollaya's request
+  parser requires `instructions` on every question, so such a request gets 422 on every model. Every request that
+  carries instructions renders identically in every package version (checked: the 114 golden records give
+  token-identical rows for 0.8b's in-repo package and decider-ai 1.10.0).
+
+## Reference code
+
+decider-0.8b ships the inference subset of `github.com/Mapika/decider` under `decider/` in its repo, and the goldens
+import that copy. decider-2b v12 and decider-4b v3 ship no code; their reference is decider-ai 1.10.0, the version the
+cards name, pinned by its commit (`ref.CODE`, `ab45f9147d…`) and downloaded once by `ref.code_root()`. On the text
+path the two differ only in what the goldens do not compare: `assemble` now reports TypeSafe's `confidence` formula
+and `x_p_max`, and a Gemma-style logit softcap applies to Gemma models only (`softcap_value` is None for Qwen3.5).
 
 ## Larger models
 
@@ -221,16 +238,19 @@ Additional properties:
 
 ## Upstream benchmark numbers (model cards)
 
-| | decider-0.8b | decider-2b v10 | decider-4b v2.1 |
-|---|---|---|---|
-| 69 in-task tasks, acc / ECE | 0.776 / 0.032 | 0.805 / 0.037 (v8 recipe: 0.809 / 0.030) | 0.831 / 0.031 (67 tasks) |
-| 24–28 held-out tasks, acc / ECE | 0.707 / 0.096 | 0.755 / 0.084 (rebuilt set) | 0.784 / 0.077 (28 tasks) |
-| JevBench public items, easy / standard / hard | – | 1.000 / 0.889 / 0.459 | 1.000 / 0.986 / 0.649 |
-| Bespoke public suite, macro | – | 0.704 | 0.756 |
-| OpenJev 5,252 rows, acc | – | 63.3 % | 66.0 % |
+The v12 and v3 cards (2026-10-20) report different suites from the earlier cards; all numbers are Mapika's own.
 
-The Decision Index 0.2 (2026-09-25) scores decider-4b at 36.58 balanced skill and decider-2b at 26.11 (Jev 51.67);
-it does not say which 4b revision it scored.
+| | decider-2b v12 (v11) | decider-4b v3 (v2.1) |
+|---|---|---|
+| Decision Index 0.3, 4,500-request sample | 38.17 (28.05) | 51.02 (41.55) |
+| Image questions, mean of 11 the_cauldron sets | 0.847 (0.780 with the base vision tower) | 0.891 (0.840) |
+| JevBench public items, easy / standard / hard | 1.000 / 0.917 / 0.595 (0.889 / 0.577) | 1.000 / 0.986 / 0.640 (0.986 / 0.649) |
+| Held-out yes/no set, scored the JevBench way | 29.6 (−27.9) | 44.3 (−1.9) |
+
+The image numbers are through Mapika's own image path, which Ollaya does not run yet (`docs/backlog.md`). The
+decider-0.8b card (unchanged): 69 in-task tasks 0.776 accuracy / 0.032 ECE, 24 held-out tasks 0.707 / 0.096. The
+earlier cards: decider-2b v10 in-task 0.805 / 0.037, held-out 0.755 / 0.084, Bespoke public suite macro 0.704;
+decider-4b v2.1 in-task 0.831 / 0.031, held-out 0.784 / 0.077, macro 0.756.
 
 ## Attribution
 
@@ -353,15 +373,17 @@ the same gate as above (label and option logits within 1e-3, same decisions):
   and the CUDA parity above passes with it. The sequential executor still fails there ("requested shape
   {11,11,-1,128}", measured 2026-09-25).
 
-## Typed-decisions quality (measured, for the catalog comparison)
+## Typed-decisions quality (measured on the earlier weights, for the catalog comparison)
 
 Test split: 400 rows, 2,000 questions, teacher gold. Scored with the fp32 upstream reference, which the
-ONNX graphs match to about 1e-5. Metrics are those of [llm-logits.md](llm-logits.md).
+ONNX graphs match to about 1e-5. Metrics are those of [llm-logits.md](llm-logits.md). These rows were measured
+on decider-2b v10 and decider-4b v2.1; the v12 and v3 weights are measured by Ollaya Bench
+(`results/`, stage 4 of `docs/model-lifecycle.md`), which is where the site's numbers come from.
 
 | | acc (as shipped) | ECE (as shipped) | cross-fitted acc / ECE |
 |---|---|---|---|
 | decider-4b (v2.1) | 0.680 | 0.023 | 0.680 / 0.132 |
-| decider-2b | 0.591 | 0.089 | 0.591 / 0.081 |
+| decider-2b (v10) | 0.591 | 0.089 | 0.591 / 0.081 |
 | decider-0.8b | 0.506 | 0.172 | 0.506 / 0.048 |
 
 decider-4b per type: choice 0.682, score 0.632, noul 0.742. Its shipped per-type temperatures calibrate this set
