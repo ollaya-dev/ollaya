@@ -57,16 +57,23 @@ def code_root(root: str) -> str:
     cache = os.path.join(os.path.expanduser("~/.cache/ollaya-convert"), "%s-%s" % (repo.split("/")[1], sha))
     if not os.path.isdir(os.path.join(cache, "decider")):
         import io
+        import shutil
         import tarfile
+        import tempfile
         import urllib.request
 
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        tmp = tempfile.mkdtemp(dir=os.path.dirname(cache))
         with urllib.request.urlopen("https://github.com/%s/archive/%s.tar.gz" % (repo, sha)) as r:
             data = r.read()
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
-            tf.extractall(cache + ".tmp", filter="data")  # one top-level directory, <name>-<sha>
-        os.makedirs(os.path.dirname(cache), exist_ok=True)
-        os.rename(os.path.join(cache + ".tmp", "%s-%s" % (repo.split("/")[1], sha)), cache)
-        os.rmdir(cache + ".tmp")
+            tf.extractall(tmp, filter="data")  # one top-level directory, <name>-<sha>
+        try:
+            os.rename(os.path.join(tmp, os.path.basename(cache)), cache)
+        except OSError:  # a parallel export won the race
+            if not os.path.isdir(os.path.join(cache, "decider")):
+                raise
+        shutil.rmtree(tmp, ignore_errors=True)
     return cache
 
 
