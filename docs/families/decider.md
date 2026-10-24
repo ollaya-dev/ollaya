@@ -277,28 +277,37 @@ Report in `convert/out/decider-0.8b/parity.json`.
 Goldens: `convert/out/goldens-decider-0.8b.jsonl`, written by `families/decider/goldens.py`. Per request
 it holds the exact rows and slots, label logits, option logits, probabilities and upstream answers.
 
-decider-2b: same harness, same 131 requests (the full edge set plus 50 typed-decisions rows). ONNX
-Runtime CPU, 12 threads; reference fp32 on CUDA. Report in `convert/out/decider-2b/parity.json`.
+decider-2b (v12, 2026-10-24): same harness, same 131 requests (the full edge set plus 50 typed-decisions rows);
+reference decider-ai 1.10.0 in fp32 on CUDA, ONNX Runtime CPU. Report in `convert/out/decider-2b/parity.json`.
 
 | | value |
 |---|---|
-| questions / scoring rows | 632 / 1,248; token rows identical 1,248 / 1,248 |
-| argmax agreement, ONNX vs fp32 / vs upstream `system_one` | **100 % / 100 %** |
-| max \|Δ logit\| | 3.4e-5 (p99 2.5e-5) |
-| max \|Δ probability\| | 5.5e-6 (choice), 4.0e-6 (noul), 5.9e-6 (score) |
-| contract vs upstream answers | ≤ 5.0e-5 (rounding) |
+| questions / scoring rows | 2B_EXPORT_QROWS |
+| argmax agreement, ONNX vs fp32 / vs upstream `system_one` | 2B_EXPORT_AGREE |
+| max \|Δ logit\| | 2B_EXPORT_LOGIT |
+| max \|Δ probability\| | 2B_EXPORT_PROB |
+| contract vs upstream answers | 2B_EXPORT_CONTRACT |
 
-- **Files.** The graph is 8.0 MB. It references `Mapika/decider-2b@9839cc9d…/model.safetensors`
-  (3.76 GB, sha256 `1bf79b6a…`, matches the HF LFS oid): 320 / 320 tensors, with no unused tensors.
-- **Goldens.** `convert/out/goldens-decider-2b.jsonl`.
+- **Files.** The graph is 7.7 MB. It references `Mapika/decider-2b@7614a6c7…/model.safetensors`
+  (3.76 GB, sha256 `1265b014…`, matches the HF LFS oid): 320 / 320 tensors, with no unused tensors.
+- **Goldens.** `convert/out/goldens-decider-2b.jsonl` (114 records, 14 of them rejected requests with their
+  `#valid` subsets, 482 questions).
+- v10 measured the same way: logits 3.4e-5 (p99 2.5e-5), probabilities at most 5.9e-6, 100 % agreement.
 
-decider-4b (v2.1): goldens from upstream fp32 on CUDA (TF32 off, the `decider/` package of the pinned
-commit, per-type temperatures), same 114 records as 2b. Their token rows are identical to decider-2b's,
-record for record: the prompt and tokenizer did not change.
+decider-4b (v3, 2026-10-24): same harness and reference. Report in `convert/out/decider-4b/parity.json`.
 
-- **Files.** The graph is 10.5 MB. It references `Mapika/decider-4b@eb5fbdfc…/model.safetensors`
-  (8.41 GB, sha256 `ee8ce585…`, matches the HF LFS oid): 426 / 426 tensors, with no unused tensors.
-- **Goldens.** `convert/out/goldens-decider-4b.jsonl`.
+| | value |
+|---|---|
+| questions / scoring rows | 4B_EXPORT_QROWS |
+| argmax agreement, ONNX vs fp32 / vs upstream `system_one` | 4B_EXPORT_AGREE |
+| max \|Δ logit\| | 4B_EXPORT_LOGIT |
+| max \|Δ probability\| | 4B_EXPORT_PROB |
+| contract vs upstream answers | 4B_EXPORT_CONTRACT |
+
+- **Files.** The graph is 10.6 MB. It references `Mapika/decider-4b@585473de…/model.safetensors`
+  (8.41 GB, sha256 `e83c74cc…`, matches the HF LFS oid): 426 / 426 tensors, with no unused tensors.
+- **Goldens.** `convert/out/goldens-decider-4b.jsonl`, the same 114 records as 2b; their token rows are identical
+  to decider-2b's, record for record (the prompt and tokenizer did not change).
 
 ## Rust runtime parity (measured)
 
@@ -312,18 +321,24 @@ cargo run --release -p ollaya-runner --example parity_decider -- convert/out/dec
 cargo run --release -p ollaya-runner --features ollaya-runner/cuda --example parity_decider -- convert/out/decider-4b convert/out/goldens-decider-4b.jsonl cuda
 ```
 
-Results on choso-wsl (i9-13900K; RTX 4090, CUDA 13), `ort` 2.0.0-rc.13 with ONNX Runtime 1.28, each model in
-its shipped configuration (4b: `weights_in_memory: bf16`):
+Results on the RTX 4090 desktop (i9-13900K; CUDA 13 under WSL2), 2026-10-24, on the v12 and v3 weights and their
+goldens, each model in its shipped configuration (4b: `weights_in_memory: bf16`); the records are
+`results/runs/2026-10-24-parity-rtx4090-{cuda,cpu}.json`:
 
-| | decider-4b CPU | decider-4b CUDA | decider-2b CUDA |
-|---|---|---|---|
-| rejections and token rows | 0 mismatches | 0 mismatches | 0 mismatches |
-| max \|Δ label logit\| | 3.0e-5 | 2.7e-5 | 5.2e-5 |
-| decisions agree | **100 %** | **100 %** | **100 %** |
-| max \|Δ probability\| | 4.8e-6 (p99 3.1e-6) | 6.1e-6 (p99 3.8e-6) | 6.3e-6 (p99 4.2e-6) |
+| | decider-2b CUDA | decider-2b CPU | decider-4b CUDA | decider-4b CPU |
+|---|---|---|---|---|
+| rejections and token rows | 0 mismatches | 0 mismatches | 0 mismatches | 0 mismatches |
+| max \|Δ label logit\| | 3.8e-5 | 4.0e-5 | 4.5e-5 | 5.3e-5 |
+| decisions agree | **100 %** | **100 %** | **100 %** | **100 %** |
+| max \|Δ probability\| | 7.5e-5 (p99 3.8e-6) | 5.0e-5 (p99 3.6e-6) | 2.0e-4 (p99 5.3e-6) | 1.8e-4 (p99 4.3e-6) |
+| forward, 114 requests | 167 ms per request | 7.0 s per request | 502 ms per request | 20.3 s per request |
 
-decider-2b was re-run on CUDA after the decoder sessions switched to exact arena growth
-([ADR-0002](../decisions/0002-decoder-weights-in-memory.md)): the numbers are unchanged.
+The probability maxima are larger than on the earlier weights (about 6e-6) because of the yes/no temperature of
+0.05: a 4e-5 logit difference becomes about 1e-3 of the softmax argument on a near-even yes/no question. The
+runtime clamps fixed temperatures to [0.5, 5] unless `calibration.json` widens the range; the decider export writes
+`temperature_range: [0.05, 5.0]`, and without it the first run of this gate applied 0.5 to yes/no questions and
+differed from the goldens by up to 0.38 in probability with every decision still the same. The earlier weights
+(2b v10, 4b v2.1) measured 2.7e-5 to 5.2e-5 on the logits and at most 6.3e-6 on the probabilities.
 
 ## Metal parity (MLX)
 
