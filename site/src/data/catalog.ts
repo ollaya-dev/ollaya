@@ -237,6 +237,19 @@ const overlays: Record<string, ModelOverlay> = {
       '1.1': { summary: `Von 1.1, ModernBERT-large, ${result('von:1.1', 'typed.accuracy', 3)} on typed decisions; 8,192-token context.` },
     },
   },
+  'd1-omni': {
+    title: 'd1-omni',
+    description:
+      "Liquid AI's d1-omni-600M, text questions: an LFM2.5 encoder with a decision head that scores every option at its own marker, all of a question's options in one pass, calibrated per question type and option count. 16k-token context. The checkpoint's image and audio paths are not served.",
+    publisher: { name: 'Liquid AI', url: 'https://huggingface.co/LiquidAI' },
+    capabilities: ['decision', 'multilingual', 'long-context'],
+    keywords: ['d1', 'd1-omni', 'liquid', 'liquid ai', 'lfm2', 'lfm2.5', 'encoder', 'option marker', 'von', 'decision', 'classification', 'classifier', 'typesafe', 'jev', 'system one'],
+    rank: 8,
+    tags: {
+      latest: { summary: 'Same as d1-omni:600m.' },
+      '600m': { summary: 'd1-omni-600M (LFM2.5-Encoder-350M trunk; 587M in the checkpoint, 381M read for text), fp32: text questions in 15 languages, 16,384-token context.' },
+    },
+  },
   credence: {
     title: 'Credence',
     description:

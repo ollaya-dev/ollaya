@@ -129,7 +129,7 @@ The [FAQ](https://ollaya.dev/docs/faq) compares Ollaya and Ollama in more detail
 | `qwen3guard` | Qwen3Guard-Gen-0.6B safety guard with built-in questions: safe, controversial or unsafe, and the category |
 | `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
 | `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
-| `von` | Victor Hugo Panisa's Von 1.1 (ModernBERT-large): every option scored at its own marker, 8k-token context |
+| `von` | Victor Hugo Panisa's Von 1.1 (ModernBERT-large): every option scored at its own marker, 8k-token context. Archived upstream on 2026-10-19; `d1-omni` is its successor |
 | `winnow` | EldanRing's Winnow-12B, the larger sibling of `winnow:e4b` |
 | `clm` | Contrastive-LM's CLM-v0.1-8B: the Qwen3-8B encoder and two projection heads score options by similarity, with questions and options cached. Built for agent, game and tool-calling states |
 | `jevk5` | alibiserikbay's JevK5 v0.3, a Qwen3.5-4B fine-tune run from the author's Q8_0 GGUF on llama.cpp, up to 16 options |
@@ -142,6 +142,7 @@ The [FAQ](https://ollaya.dev/docs/faq) compares Ollaya and Ollama in more detail
 | `cygnet` | blockbrain-ai's Cygnet: frozen Gemma 4 12B IT (Q8_0 GGUF) with a letter-readout prompt and temperature 3.4 |
 | `snap` | logitlab's snap1-2b: MiniCPM5-2B fine-tuned on the prompt of emnlmn's snap engine, run from the author's Q8_0 GGUF on llama.cpp with snap's own prompt, up to 26 options |
 | `d1`, `d1:3b-vision` | Liquid AI's d1-3B, on LFM2.5-VL-3B: typed text and image decisions from the author's Q8_0 GGUF and projector, with max-pooled answer forms and temperature 1.0 |
+| `d1-omni` | Liquid AI's d1-omni-600M, text questions: an LFM2.5 encoder with a decision head that scores every option at its own marker, calibrated per question type and option count; 16k-token context. Its image and audio paths are not served |
 | `decima`, `decima:agent`, `decima:small` | A. M. Madani's Decima: multilingual encoders with a late-interaction scorer that reads every option against the state. `decima:base` is mmBERT-base (321M); `decima:agent` (2.2) is fine-tuned for coding-agent decisions and knowledge-graph judgments; `decima:small` (122M) is the smallest |
 | `largha` | Phocinae's Largha: Laya's decision network on mmBERT-small (144M), fine-tuned on the typed-decisions workflows; runs on the CPU, CUDA and the Apple GPU |
 | `arbiter` | Codekins' Arbiter v3.3 (Zyot Lab): a LoRA and a fixed 24-slot head on Gemma 3 4B IT, one forward pass per question. It answers noul, choices of up to 16 options and scores of exactly 6 levels |
