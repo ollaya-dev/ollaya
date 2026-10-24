@@ -149,7 +149,10 @@ def export(slug: str, out_dir: str, root: str):
                      "with weights_in_memory bf16)",
         "weights_in_memory": ox.weights_in_memory(report),
     }
+    # The runtime clamps fixed temperatures to [0.5, 5] unless the file widens the range (calibration.rs); v12 and v3 ship
+    # noul 0.05 on purpose (the cards: JevBench's 0.2-0.8 band rule).
     calibration = {"temperature": [t_choice, 1.0, t_noul], "temperature_by_options": {},
+                   "temperature_range": [min(0.5, t_choice, t_noul), max(5.0, t_choice, t_noul)],
                    "source": ("decider_config.json temperature_by_type (choice, noul), as the authors ship it"
                               if by_type else "decider_config.json temperature (fitted upstream on in-task data)")
                              + "; score is 1.0 because the isolated-row temperature is applied inside the score option logits"}
