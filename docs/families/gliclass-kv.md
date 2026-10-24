@@ -94,8 +94,11 @@ shared edge cases plus 50 typed-decisions rows, JSON round-tripped.
 
 Report: `convert/out/gliclass-v4-2b/parity.json`. The graph is 11.9 MB: 270 checkpoint tensors referenced (the embedding
 table through a Gather before its Cast), 142 small constants inline (528 KB, the DeBERTa position tables among them),
-412 vision-tower tensors unused. Goldens: `convert/out/goldens-gliclass-v4-2b.jsonl` (`goldens.py`, 97 requests, 20
-typed-decisions rows).
+412 vision-tower tensors unused. The 9B's graph is 15.4 MB: 338 referenced, 182 inline (1.2 MB), 486 unused; its eager
+graph matches upstream to 2.0e-6 on the calibrated logits. Export parity was not run for the 9B: its fp32 reference
+(38 GB) and the ONNX session do not fit choso's RAM together; the goldens and the runtime gate cover it. Goldens:
+`convert/out/goldens-gliclass-v4-{2b,9b}.jsonl` (`goldens.py`, 97 requests, 20 typed-decisions rows; the 9B's
+reference on the CPU).
 
 ## Rust runtime parity
 
@@ -110,7 +113,12 @@ typed-decisions rows).
 The CUDA maximum is one noul row whose three recurrent steps compound the fp32 differences of the DeltaNet scan
 and the calibrator; the gate (logits within 1e-3) holds, the decisions are identical and the p99 sits at 1e-5.
 
-RUNTIME_PARITY_9B
+`gliclass-v4-9b`, the same recipe (goldens of 97 requests, 483 questions; the reference on the CPU):
+
+| Device | calls and rows | decisions | max \|Δ calibrated logit\| | max \|Δ probability\| (p99) | forward, 97 requests |
+|---|---|---|---|---|---|
+| RTX 4090, CUDA (TF32 off) | 483 / 483 identical | **100 %** | 2.5e-5 | 5.0e-6 (3.8e-6) | 51.5 s (531 ms/request) |
+| CPU (i9-13900K), fp32 | 483 / 483 identical | **100 %** | 2.8e-5 | 4.2e-6 (3.0e-6) | 1,556 s (16.0 s/request) |
 
 ## Limits
 

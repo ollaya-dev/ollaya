@@ -4,7 +4,7 @@
  "date": "2026-10-24",
  "machine": "rtx-4090",
  "device": "cpu",
- "ollaya": "0.17.0 at b97e96a (decider rows, PR #144) and at b37b867 (d1-omni:600m) and at d4ea37f (strands-decider:e2b, :e4b)",
+ "ollaya": "0.17.0 at b97e96a (decider rows, PR #144) and at b37b867 (d1-omni:600m) and at d4ea37f (strands-decider:e2b, :e4b) and at 59d230f (gliclass-v4:2b, :9b)",
  "protocol": {
   "reference": "goldens from each family's goldens.py: the authors' code in PyTorch fp32 (TF32 off) on the checkpoint the manifest names",
   "gate": "fp32 tags: identical encodings and decisions, option logits within 1e-3, wire answers as the authors' code; -fp16 tags (docs/decisions/0008-fp16-decoder-tags.md): identical encodings, at least 99.5 % of decisions the same, differences reported",
@@ -75,6 +75,32 @@
    "kind": "runtime",
    "gate": "fp32",
    "export_sha256": "935ac79395c9f9014e4ac201c31898ccb71d873757acc524345e017b4d6d2f5a"
+  },
+  {
+   "model": "gliclass-v4:2b",
+   "questions": 483,
+   "decisions_same": 483,
+   "max_logit_diff": 9.393692016601562e-05,
+   "max_prob_diff": 2.4913899255962768e-05,
+   "p99_prob_diff": 5.3676184151307815e-06,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "75258aa8dc83b422eb43ff03f3c6245e95a8fb255fc5ed89c9e497185501d00e"
+  },
+  {
+   "model": "gliclass-v4:9b",
+   "questions": 483,
+   "decisions_same": 483,
+   "max_logit_diff": 2.8371810913307982e-05,
+   "max_prob_diff": 4.151531498075567e-06,
+   "p99_prob_diff": 2.9835161614588657e-06,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "16ca230cea5d297fa0dc74e7327600652b7bd3aff893ff2d9180415546da1774"
   }
  ]
 }
