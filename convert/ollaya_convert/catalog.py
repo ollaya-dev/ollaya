@@ -309,14 +309,16 @@ CATALOG = {
         "license_text": "decider by Mapika (https://huggingface.co/Mapika/decider-2b)\n"
                         "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
         "tags": {
-            # v2.1: temperature_by_type (choice 1.110, noul 1.560, score 1.287) in decision.json/calibration.json.
-            "4b": _wl("decider-4b", "Mapika/decider-4b", "eb5fbdfc9448473ec25e399882912863afbdb70e",
-                      "Largest decider (Qwen3.5-4B base, v2.1): reads option-letter logits at an answer slot, with one "
+            # v3 and v12 (2026-10-20): temperature_by_type in decision.json/calibration.json (4b: choice 2.098, noul 0.05,
+            # score 3.152; 2b: choice 2.465, noul 0.05, score 2.833). The yes/no temperature is upstream's choice for
+            # JevBench's 0.2-0.8 band rule, so yes/no probabilities come out near 0 or 1.
+            "4b": _wl("decider-4b", "Mapika/decider-4b", "585473dec4fa93f0325c2bf02dda7273b61f44c1",
+                      "Largest decider (Qwen3.5-4B base, v3): reads option-letter logits at an answer slot, with one "
                       "fitted temperature per answer type. Needs about 9 GB of memory.",
                       "4.2B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-4b")),
-            "2b": _wl("decider-2b", "Mapika/decider-2b", "9839cc9d908be16c5988c0d041034b5fdf82c7a2",
-                      "Decoder decision model (Qwen3.5-2B base): reads option-letter logits at an answer slot. "
-                      "Highest accuracy of the open models Ollaya ships.",
+            "2b": _wl("decider-2b", "Mapika/decider-2b", "7614a6c7ea5a047aa7d7bcfb1a0015469381c3e3",
+                      "Decoder decision model (Qwen3.5-2B base, v12): reads option-letter logits at an answer slot, with one "
+                      "fitted temperature per answer type.",
                       "1.9B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-2b"),
                       arch={"family": "tied-rows", "config": "config.json"}),
             # v5 text weights in the Qwen3.5-2B vision-language model: `decider-vision-v1`, two graphs

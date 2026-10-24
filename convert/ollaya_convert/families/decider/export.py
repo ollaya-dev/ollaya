@@ -62,7 +62,7 @@ def export(slug: str, out_dir: str, root: str):
     from transformers import AutoModelForCausalLM
 
     meta = ref.MODELS[slug]
-    sys.path.insert(0, root)
+    sys.path.insert(0, ref.code_root(root))
     from decider.prompt import NARROW, label_table
 
     cfg = json.load(open(os.path.join(root, "decider_config.json"), encoding="utf-8"))
@@ -99,8 +99,10 @@ def export(slug: str, out_dir: str, root: str):
         "engine": "onnx",
         "family": "decider",
         "layout": "decider-slots-v1",
-        "upstream": {"repo": meta["repo"], "revision": meta["revision"], "version": cfg.get("version"),
-                     "base": meta["base"], "code": "decider/ in the model repo (inference subset of github.com/Mapika/decider)"},
+        "upstream": {"repo": meta["repo"], "revision": meta["revision"], "version": meta.get("version") or cfg.get("version"),
+                     "base": meta["base"],
+                     "code": ("decider/ in the model repo (inference subset of github.com/Mapika/decider)"
+                              if ref.code_root(root) == root else "github.com/%s at %s (decider-ai 1.10.0)" % ref.CODE)},
         "contract": {
             "inputs": {
                 "input_ids": {"dtype": "int64", "shape": ["rows", "seq"],
