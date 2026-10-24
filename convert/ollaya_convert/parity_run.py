@@ -56,7 +56,7 @@ def command(family, d, device, cuda_dynamic=None):
     """The cargo command that runs the parity example of export directory `d`, and its gate."""
     name = os.path.basename(d)
     fp16 = name.endswith("-fp16")
-    base = name[: -len("-fp16")] if fp16 else name
+    base = (name[: -len("-fp16")] if fp16 else name).removesuffix("-wl")  # gliclass: out/gliclass-<model>-wl
     example = "parity_" + EXAMPLE.get(family, family).replace("-", "_") + ("_vision" if base.endswith("-vision") else "")
     cmd = ["cargo", "run", "--release", "-q", "-p", "ollaya-runner", "--example", example]
     if device == "cuda" and cuda_dynamic:
