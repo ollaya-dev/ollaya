@@ -1,4 +1,4 @@
-"""The PyTorch reference for Decima (amyrmahdy/decima-small, -base, -agent, -guard and -guard-small): the author's
+"""The PyTorch reference for Decima (amyrmahdy/decima-small, -base, -base-clean, -agent, -guard and -guard-small): the author's
 own code (github.com/amyrmahdy/decima at v2.3.0, pinned below) on each model repository's `pytorch/` checkpoint, in fp32.
 
     d = ref.load("cpu", "decima-base")                   # upstream decima.model.Decima (fp32, eval)
@@ -67,6 +67,10 @@ MODELS = {
     # "choice_fit": true.
     "decima-guard": {"repo": "amyrmahdy/decima-guard", "revision": "98d3f734c8323cb390d9ad750e1a606a8dd56f09",
                      "tag": "v1.0-preview", "base": "amyrmahdy/decima-base-clean, on jhu-clsp/mmBERT-base (MIT)"},
+    # The tag v1.0: decima-base's network trained without non-commercial data and without BTZSC data, "choice_fit":
+    # true, states up to 512 tokens. main (a37e006f) is one commit later, with only README.md changed.
+    "decima-base-clean": {"repo": "amyrmahdy/decima-base-clean", "revision": "35eb218bdeeb8c450baba4159ebc08b67c4d632c",
+                          "tag": "v1.0", "base": "jhu-clsp/mmBERT-base (MIT)"},
     "decima-guard-small": {"repo": "amyrmahdy/decima-guard-small",
                            "revision": "ac11024887d51e9b7b9522b3b8ccc2d78ce7353d",
                            "tag": "v1.0-preview", "base": "jhu-clsp/mmBERT-small (MIT)"},
