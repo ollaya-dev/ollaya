@@ -79,3 +79,32 @@ request in that process stays slow: five-question requests went from 2.4 s to 20
 
 **Acceptance**
 - The Nimble v3 parity run, long row included, keeps the five-question p50 within 10% of a run without it.
+
+---
+
+## decider's own image path: `decider:2b` and `decider:4b` reading images (layout `decider-vision-v2`)
+
+**Why.** From decider-2b v12 and decider-4b v3 (2026-10-20) Mapika ships the text model with a `vision/` folder (the
+Qwen3.5 vision tower, 0.6 GB, and the image-text config) and serves images through the same weights (decider-ai 1.10.0,
+`decider/vision_reader.py`). Their image scores (0.847 for 2b, 0.891 for 4b on 11 the_cauldron sets) are well above the
+separate `Mapika/decider-2b-vision` (v5 text weights) that `decider:2b-vision` runs today. COB-559 updated the text tags
+and kept `decider:2b-vision` on its own repo: the new image path is a new layout, not a weight refresh.
+
+**Scope**
+- Layout `decider-vision-v2`, ported from `vision_reader.py` + `images.py`: the row is a `decider-slots-v1` text row (all
+  255 labels, isolated score levels), every asset reference in the state becomes "the image" ("image k" with several), and
+  one `<|vision_start|> <|image_pad|> x n <|vision_end|>` block per image goes in front of the whole row (slot shifted);
+  images resized to at most 768x768 pixels; up to 4 images; M-RoPE positions from the image-text model's
+  `get_rope_index` (as `decider-vision-v1`).
+- Wire: TypeSafe's Jev `assets` map (`{"<ref>": {"type": "image", "format": "png", "data_base64": ...}}`) on
+  `/v1/systemone` and `/api/decide`, references named in the state; keep `images` for `decider:2b-vision`.
+- Export: `vision.onnx` from `vision/visual.safetensors` (keys `model.visual.*`) and a decoder graph with
+  `position_ids` and `image_embeds` inputs reading the root `model.safetensors`; one manifest layer for the vision tower.
+  Decide whether the image graphs become `decider:2b-vision` / `decider:4b-vision` tags (sharing the text weights blob
+  with `decider:2b` / `decider:4b`) or the text tags themselves gain the image path.
+- Goldens from decider-ai 1.10.0's server path (`decider.serve._prepare_images` + `VisionReader.score`), fp32; the same
+  gate as the text tags; CPU and CUDA parity; `decider-2b-vision` retired once the new tag passes.
+
+**Acceptance**
+- Identical token ids, image blocks, positions and resized pixels on the goldens; same decisions; option logits within
+  1e-3; `/v1/systemone` with `assets` answers as decider-ai 1.10.0 does.

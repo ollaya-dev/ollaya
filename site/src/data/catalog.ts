@@ -155,8 +155,8 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 3,
     tags: {
       latest: { summary: 'Same as decider:2b.' },
-      '4b': { summary: `Qwen3.5-4B base (v2.1), ${result('decider:4b', 'typed.accuracy', 3)} on typed decisions, one fitted temperature per answer type. Best on a GPU.` },
-      '2b': { summary: `Qwen3.5-2B base, ${result('decider:2b', 'typed.accuracy', 3)} on typed decisions.` },
+      '4b': { summary: `Qwen3.5-4B base (v3), ${result('decider:4b', 'typed.accuracy', 3)} on typed decisions, one fitted temperature per answer type. Best on a GPU.` },
+      '2b': { summary: `Qwen3.5-2B base (v12), ${result('decider:2b', 'typed.accuracy', 3)} on typed decisions, one fitted temperature per answer type.` },
       '0.8b': { summary: `Qwen3.5-0.8B base, ${result('decider:0.8b', 'typed.accuracy', 3)} on typed decisions: smaller and faster.` },
       '2b-vision': {
         summary: 'Reads an image as well as the state: Qwen3.5-2B vision-language with v5 text weights. One PNG per request, up to 10 options.',
