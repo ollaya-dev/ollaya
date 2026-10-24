@@ -320,7 +320,7 @@ CATALOG = {
                 "gliclass-v4-edge", "knowledgator/gliclass-v4-edge", "2486b93469dde357d2b8f675a6514959e3f0fc6e",
                 "Knowledgator's GLiClass v4 Edge: instruction-following zero-shot classifier on DeBERTa-v3-large "
                 "with a calibrator that rescales every label's logit; all options scored in one pass.",
-                "435M", 1024, ["en"],
+                "440M", 1024, ["en"],
                 license_text="GLiClass v4 Edge by Knowledgator (https://huggingface.co/knowledgator/gliclass-v4-edge)\n"
                              "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE),
         },
