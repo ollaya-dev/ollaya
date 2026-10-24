@@ -515,7 +515,8 @@ CATALOG = {
         "license_text": ("Sura by Ollaya (https://huggingface.co/ollaya-dev)\n"
                          "Distilled from pplx-decider-flash-v1.2 by Perplexity AI, Apache-2.0; its protocol, processor files and "
                          "pplx_decider code are in the model repository unchanged (LICENSE and NOTICE there).\n"
-                         "Base model: Qwen3.5-0.8B-Base by the Qwen team (https://huggingface.co/Qwen/Qwen3.5-0.8B-Base), "
+                         "Base models: Qwen3.5-0.8B-Base and Qwen3.5-2B-Base by the Qwen team "
+                         "(https://huggingface.co/Qwen/Qwen3.5-0.8B-Base, https://huggingface.co/Qwen/Qwen3.5-2B-Base), "
                          "Apache-2.0.\n"
                          "Licensed under the Apache License, Version 2.0.\n\n") + LICENSE_APACHE,
         "tags": {
@@ -527,6 +528,14 @@ CATALOG = {
                         "0.8B", 8192, ["en"], wl_dir=os.path.join(OUT, "sura-0.8b"),
                         weights={"model.safetensors": "model.safetensors",
                                  "readout.safetensors": "readout.safetensors"}),
+            "2b": _wl("sura-2b", "ollaya-dev/sura-2b", "9676c6bd806e792046a895d1ffeb4e03b080bea9",
+                      "Ollaya's own decoder: Qwen3.5-2B-Base distilled from pplx-decider:flash in its joint format. "
+                      "Every question of a request shares one sequence, read at a marker after each question; the "
+                      "full-attention layers see the whole request. Up to 255 options and levels, 8,192 tokens per "
+                      "sequence. Trained zero-shot: none of the benchmark datasets Ollaya reports.",
+                      "2B", 8192, ["en"], wl_dir=os.path.join(OUT, "sura-2b"),
+                      weights={"model.safetensors": "model.safetensors",
+                               "readout.safetensors": "readout.safetensors"}),
         },
         "aliases": {"latest": "0.8b"},
         "parity": "Ollaya's Rust runtime matches upstream pplx_decider (the reference path, PyTorch fp32) on 696 "

@@ -31,6 +31,10 @@ MODELS = {
     "sura-0.8b": {"repo": "ollaya-dev/sura-0.8b",
                   "revision": "9e991faa3250b255cc41d9cd8f5422f1ca9f7694",
                   "shards": ["model.safetensors"]},
+    # The same on Qwen3.5-2B-Base.
+    "sura-2b": {"repo": "ollaya-dev/sura-2b",
+                "revision": "9676c6bd806e792046a895d1ffeb4e03b080bea9",
+                "shards": ["model.safetensors"]},
 }
 # Ollaya's window per sequence. Upstream's default is the backbone's 262,144 positions; the graph materializes
 # full attention (8 of 32 layers), so a sequence of n tokens takes 16 * n^2 * 4 bytes per such layer.
