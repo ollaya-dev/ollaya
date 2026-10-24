@@ -628,8 +628,10 @@ CATALOG = {
                       " Needs about 18 GB of memory; best on a 24 GB GPU.",
                       ["model-0000%d-of-00004.safetensors" % i for i in range(1, 5)]),
                  ]},
-        "aliases": {"latest": "nano"},
-        "parity": "PENDING",
+        "aliases": {"latest": "mini"},
+        "parity": "Ollaya's Rust runtime matches upstream d3_runtime (PyTorch fp32) on 696 questions from 151 requests, "
+                  "for each tag: identical token sequences, the same 10 rejected requests, the same decision on every "
+                  "question, option logits within 1.1e-4 and probabilities within 2.4e-5, on CUDA and on the CPU.",
     },
     "decision": {
         "namespace": "library",

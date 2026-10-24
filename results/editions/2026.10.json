@@ -25,7 +25,11 @@
   "2026-10-24-latency-rtx5090-cuda.json",
   "2026-10-24-latency-rtx5090-cpu.json",
   "2026-10-24-public-benchmark-rtx5090-cuda.json",
-  "2026-10-24-typed-decisions-rtx5090-cuda.json"
+  "2026-10-24-typed-decisions-rtx5090-cuda.json",
+  "2026-10-24-latency-rtx5090-cuda-d3.json",
+  "2026-10-24-latency-rtx5090-cpu-d3.json",
+  "2026-10-24-public-benchmark-rtx5090-cuda-d3.json",
+  "2026-10-24-typed-decisions-rtx5090-cuda-d3.json"
  ],
  "models": [
   "decima:small",
@@ -76,7 +80,12 @@
   "coba:150m-ternary",
   "coba:68m-ternary",
   "sura:0.8b",
-  "sura:2b"
+  "sura:2b",
+  "d3:edge",
+  "d3:lite",
+  "d3:nano",
+  "d3:mini",
+  "d3:flash"
  ],
  "score": {
   "definition": "Mean over 14 tasks (13 public subsets and typed-decisions, equal weight) of the chance-corrected accuracy 100 * (accuracy - chance) / (1 - chance); chance is the mean of 1/K over the task's questions. A model trained on a task's train split is scored on the other tasks",
@@ -108,6 +117,31 @@
     "trained_on": []
    },
    {
+    "model": "d3:mini",
+    "score": 68.0,
+    "score_ci": [
+     66.09,
+     69.85
+    ],
+    "tasks": {
+     "vitaminc-dev": 73.96,
+     "massive-en-US": 87.9,
+     "massive-de-DE": 86.08,
+     "boolq": 78.0,
+     "squad2": 48.49,
+     "paws": 78.4,
+     "multinli": 87.46,
+     "civil_comments": 86.67,
+     "aegis2": 60.8,
+     "helpsteer2": 26.71,
+     "summeval-relevance": 39.58,
+     "summeval-consistency": 79.17,
+     "pubmedqa": 57.4,
+     "typed-decisions": 61.39
+    },
+    "trained_on": []
+   },
+   {
     "model": "jeb:27b",
     "score": 67.85,
     "score_ci": [
@@ -133,6 +167,31 @@
     "trained_on": [
      "typed-decisions"
     ]
+   },
+   {
+    "model": "d3:flash",
+    "score": 67.8,
+    "score_ci": [
+     65.97,
+     69.55
+    ],
+    "tasks": {
+     "vitaminc-dev": 74.71,
+     "massive-en-US": 88.81,
+     "massive-de-DE": 88.2,
+     "boolq": 79.33,
+     "squad2": 44.48,
+     "paws": 76.8,
+     "multinli": 89.97,
+     "civil_comments": 85.33,
+     "aegis2": 59.2,
+     "helpsteer2": 32.23,
+     "summeval-relevance": 32.29,
+     "summeval-consistency": 80.9,
+     "pubmedqa": 59.2,
+     "typed-decisions": 57.8
+    },
+    "trained_on": []
    },
    {
     "model": "winnow:12b",
@@ -360,6 +419,31 @@
      "summeval-consistency": 70.49,
      "pubmedqa": 62.2,
      "typed-decisions": 48.35
+    },
+    "trained_on": []
+   },
+   {
+    "model": "d3:nano",
+    "score": 62.24,
+    "score_ci": [
+     60.27,
+     64.25
+    ],
+    "tasks": {
+     "vitaminc-dev": 70.7,
+     "massive-en-US": 83.36,
+     "massive-de-DE": 81.24,
+     "boolq": 75.33,
+     "squad2": 47.83,
+     "paws": 70.4,
+     "multinli": 82.94,
+     "civil_comments": 86.0,
+     "aegis2": 40.8,
+     "helpsteer2": 29.22,
+     "summeval-relevance": 34.9,
+     "summeval-consistency": 72.22,
+     "pubmedqa": 51.4,
+     "typed-decisions": 44.98
     },
     "trained_on": []
    },
@@ -614,6 +698,31 @@
     "trained_on": []
    },
    {
+    "model": "d3:lite",
+    "score": 49.87,
+    "score_ci": [
+     47.87,
+     51.76
+    ],
+    "tasks": {
+     "vitaminc-dev": 66.94,
+     "massive-en-US": 83.66,
+     "massive-de-DE": 80.64,
+     "boolq": 62.67,
+     "squad2": 45.82,
+     "paws": 68.8,
+     "multinli": 81.94,
+     "civil_comments": 78.67,
+     "aegis2": 18.4,
+     "helpsteer2": 15.16,
+     "summeval-relevance": 38.02,
+     "summeval-consistency": -13.72,
+     "pubmedqa": 40.6,
+     "typed-decisions": 30.62
+    },
+    "trained_on": []
+   },
+   {
     "model": "jevk5:4b",
     "score": 48.6,
     "score_ci": [
@@ -660,6 +769,31 @@
      "summeval-consistency": 80.03,
      "pubmedqa": 43.6,
      "typed-decisions": 27.55
+    },
+    "trained_on": []
+   },
+   {
+    "model": "d3:edge",
+    "score": 42.93,
+    "score_ci": [
+     40.74,
+     44.98
+    ],
+    "tasks": {
+     "vitaminc-dev": 60.68,
+     "massive-en-US": 78.22,
+     "massive-de-DE": 60.67,
+     "boolq": 45.33,
+     "squad2": 27.76,
+     "paws": 65.6,
+     "multinli": 68.39,
+     "civil_comments": 75.33,
+     "aegis2": 10.4,
+     "helpsteer2": 15.66,
+     "summeval-relevance": 29.69,
+     "summeval-consistency": 25.35,
+     "pubmedqa": 22.6,
+     "typed-decisions": 15.38
     },
     "trained_on": []
    },
@@ -1416,6 +1550,23 @@
     "coba:68m-ternary",
     "sura:0.8b",
     "sura:2b"
+   ]
+  },
+  {
+   "release": "0.18.0",
+   "date": "2026-10-24",
+   "runs": [
+    "2026-10-24-latency-rtx5090-cuda-d3.json",
+    "2026-10-24-latency-rtx5090-cpu-d3.json",
+    "2026-10-24-public-benchmark-rtx5090-cuda-d3.json",
+    "2026-10-24-typed-decisions-rtx5090-cuda-d3.json"
+   ],
+   "models": [
+    "d3:edge",
+    "d3:lite",
+    "d3:nano",
+    "d3:mini",
+    "d3:flash"
    ]
   }
  ]

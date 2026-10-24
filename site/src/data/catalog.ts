@@ -436,6 +436,7 @@ const overlays: Record<string, ModelOverlay> = {
     },
   },
   d3: {
+    stats: stats('d3:mini'),
     title: 'Decision 3.0 (d3)',
     description:
       'Decision 3.0 by the vLLM Semantic Router contributors: a fine-tuned Qwen3.5 whose full-attention layers read the whole prompt, with a readout over 255 answer codes. Every question is its own forward pass. Five sizes, 0.6B to 9B.',
@@ -444,12 +445,12 @@ const overlays: Record<string, ModelOverlay> = {
     keywords: ['d3', 'decision', 'decision 3.0', 'edge', 'lite', 'nano', 'mini', 'flash', 'semantic router', 'vllm', 'qwen', 'qwen3.5', 'llm', 'classification', 'typesafe', 'jev', 'system one'],
     rank: 26,
     tags: {
-      latest: { summary: 'Same as d3:nano.' },
-      edge: { summary: 'Qwen3.5-0.8B cut to 12 layers: the smallest and fastest. 20.2 on Decision Index 0.3.2 (upstream).' },
-      lite: { summary: 'Qwen3.5-0.8B: 32.3 on Decision Index 0.3.2 (upstream).' },
-      nano: { summary: 'Qwen3.5-2B: 38.9 on Decision Index 0.3.2 (upstream).' },
-      mini: { summary: 'Qwen3.5-4B: 52.6 on Decision Index 0.3.2 (upstream), about 9 GB in memory.' },
-      flash: { summary: 'Qwen3.5-9B: 55.8 on Decision Index 0.3.2 (upstream), about 18 GB in memory.' },
+      latest: { summary: 'Same as d3:mini.' },
+      edge: { summary: `Qwen3.5-0.8B cut to 12 layers, the fastest: ${result('d3:edge', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+      lite: { summary: `Qwen3.5-0.8B: ${result('d3:lite', 'typed.accuracy', 3)} on typed decisions, zero-shot.` },
+      nano: { summary: `Qwen3.5-2B: ${result('d3:nano', 'typed.accuracy', 3)} on typed decisions, zero-shot.` },
+      mini: { summary: `Qwen3.5-4B, the most accurate size: ${result('d3:mini', 'typed.accuracy', 3)} on typed decisions, zero-shot; ${result('d3:mini', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+      flash: { summary: `Qwen3.5-9B: ${result('d3:flash', 'typed.accuracy', 3)} on typed decisions, no more accurate than d3:mini at twice the memory.` },
     },
   },
   decima: {

@@ -136,6 +136,7 @@ The [FAQ](https://ollaya.dev/docs/faq) compares Ollaya and Ollama in more detail
 | `nimble`, `nimble:9b-v3` | Bespoke Labs' Nimble v2: a LoRA on Qwen3.5-9B that reads the whole request as a JSON schema and scores option codes, with the author's temperature, up to 255 options. `nimble:9b-v3` is v3 (non-commercial license) as the author's Decision Index engine serves it |
 | `strands-decider` | Strands Agents' Strands Decider: a LoRA and a pointer head on Qwen3.5-2B base, every option scored at the end of its own line, calibrated per question type; up to 255 options |
 | `pplx-decider` | Perplexity's pplx-decider-flash v1.2: Qwen3.5-4B distilled from its 27B decision models, every question in one sequence and read at its own marker, calibrated; up to 255 options |
+| `d3`, `d3:edge`, `d3:lite`, `d3:nano`, `d3:flash` | Decision 3.0 by the vLLM Semantic Router contributors: Qwen3.5 fine-tunes (0.6B to 9B, 4B by default) with a 255-code readout, every question its own forward pass. Images and videos are not served |
 | `jeb`, `jeb:4b`, `jeb:27b` | Jason Brashear's Jebadiah (AINode): LoRAs merged into Qwen3.5 (9B by default, 4B) and Qwen3.8-27B, run from the authors' GGUF on llama.cpp with their per-type temperatures |
 | `jeeves` | PostHog's Jeeves-9B without its reasoning chain: Qwen3.5-9B (LoRA merged) and a pointer head |
 | `clef` | Cloudflare's Clef-Flash: Qwen3.5-9B, fully post-trained, with a joint schema head that scores every question's options in one forward pass, with no fitted temperature |
@@ -166,9 +167,9 @@ Every model in the library is measured on our own machines and published, with t
 memory on a GPU and a CPU.
 
 <!-- results:bench -->
-Edition 2026.10 ran Ollaya 0.13.0 on an RTX 5090 desktop, and 0.14.0, 0.15.0 and 0.17.0 added what they changed:
+Edition 2026.10 ran Ollaya 0.13.0 on an RTX 5090 desktop, and 0.14.0, 0.15.0, 0.17.0 and 0.18.0 added what they changed:
 
-- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: `pplx-decider:flash` 73.7, `jeb:27b` 67.8 (scored without typed-decisions, which it was trained on), `winnow:12b` 65.7, `clef:flash` 65.1 and `jeb:9b` 64.9 (scored without typed-decisions, which it was trained on). The fastest of these, `jeb:9b`, answers five questions in 107 ms on the RTX 5090.
+- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: `pplx-decider:flash` 73.7, `d3:mini` 68.0, `jeb:27b` 67.8 (scored without typed-decisions, which it was trained on), `d3:flash` 67.8 and `winnow:12b` 65.7. The fastest of these, `pplx-decider:flash`, answers five questions in 127 ms on the RTX 5090.
 - **Calibration.** The lowest calibration errors on the public benchmark are 0.016 (`pplx-decider:flash`), 0.022 (`laya:typed-decisions`, `nimble:9b`) and 0.024 (`jeb:27b`).
 - **Speed and memory.** Five-question requests through the HTTP API take 14 ms to 1.0 s on the RTX 5090 and 314 ms to 62.0 s on its Threadripper 3960X. Every model's VRAM and RAM are on its page.
 - **Parity.** Before a model ships, its runtime is checked question by question against the authors' code (or llama.cpp's own server, for GGUF models) on each device it runs on.
