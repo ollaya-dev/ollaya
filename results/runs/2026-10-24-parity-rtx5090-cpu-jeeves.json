@@ -1,0 +1,28 @@
+{
+ "schema": 1,
+ "suite": "parity",
+ "date": "2026-10-24",
+ "machine": "rtx-5090",
+ "device": "cpu",
+ "ollaya": "0.17.0 at cf42f94",
+ "protocol": {
+  "reference": "goldens from each family's goldens.py: the authors' code in PyTorch fp32 (TF32 off) on the checkpoint the manifest names",
+  "gate": "fp32 tags: identical encodings and decisions, option logits within 1e-3, wire answers as the authors' code; -fp16 tags (docs/decisions/0008-fp16-decoder-tags.md): identical encodings, at least 99.5 % of decisions the same, differences reported",
+  "runner": "convert/ollaya_convert/parity_run.py with crates/ollaya-runner/examples/parity_<family>.rs"
+ },
+ "results": [
+  {
+   "model": "jeeves:9b",
+   "questions": 44,
+   "decisions_same": 44,
+   "max_logit_diff": 4.8160552978515625e-05,
+   "max_prob_diff": 2.9969305343491293e-06,
+   "p99_prob_diff": 2.9969305343491293e-06,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "f1c08fbffef53a3a3841abdc6b9fbc6ff880b9d811cfd3d30ac0f4f263266728"
+  }
+ ]
+}
