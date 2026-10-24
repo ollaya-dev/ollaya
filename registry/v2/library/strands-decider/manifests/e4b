@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+  "config": {
+    "mediaType": "application/vnd.ollaya.config.v1+json",
+    "digest": "sha256:0c9158cc192497ae372e582780d46c210184b37d9bdff393a571223d945b86f1",
+    "size": 611,
+    "urls": [
+      "https://ollaya.dev/blobs/sha256-0c9158cc192497ae372e582780d46c210184b37d9bdff393a571223d945b86f1"
+    ]
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.ollaya.graph.onnx",
+      "digest": "sha256:5bfd84aff0f16231ed9ad028bc6b928c162ae652896550c5e84b00e96f536894",
+      "size": 13786385,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-5bfd84aff0f16231ed9ad028bc6b928c162ae652896550c5e84b00e96f536894"
+      ],
+      "annotations": {
+        "org.ollaya.precision": "fp32"
+      }
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:cfbd3d2f1cd71bd471c37fe2bf8546d5028d41e5736f64e1ca6c6b8893125503",
+      "size": 15992595884,
+      "urls": [
+        "https://huggingface.co/google/gemma-4-E4B-it/resolve/ee0ef6023621cff504d758262d4e04895a5af4a2/model.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:0fd1bf62d764747b6f8531dbe153e79655fb0c8cbfdf5c85abae2d658974b944",
+      "size": 418644768,
+      "urls": [
+        "https://huggingface.co/StrandsAgents/strands-decider-E4B-gemma4-v1-2610/resolve/1344d44397c457f3be34b8ff15c593b41248c6bf/lora/adapter_model.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:609cd2b6fdd4c65b6b5df1abfcb0c7a60dced2d50322e7610f64f5c92fbba113",
+      "size": 15755752,
+      "urls": [
+        "https://huggingface.co/StrandsAgents/strands-decider-E4B-gemma4-v1-2610/resolve/1344d44397c457f3be34b8ff15c593b41248c6bf/head.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.tokenizer",
+      "digest": "sha256:30383f3ce90a169cbabe9eb3da7bb77988bf906aad2e59184b378f5470ec4dbd",
+      "size": 32170223,
+      "urls": [
+        "https://huggingface.co/StrandsAgents/strands-decider-E4B-gemma4-v1-2610/resolve/1344d44397c457f3be34b8ff15c593b41248c6bf/tokenizer.json"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.decision",
+      "digest": "sha256:0c285be4f756ce424e1fb526319b45c8cdd9faa4df9717b621ab1757f87c84ee",
+      "size": 2930,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-0c285be4f756ce424e1fb526319b45c8cdd9faa4df9717b621ab1757f87c84ee"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.calibration",
+      "digest": "sha256:a02b659b8842269f136777708e4a2aa8ad67edcd1c8a81c8e144ffb86569b512",
+      "size": 256,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-a02b659b8842269f136777708e4a2aa8ad67edcd1c8a81c8e144ffb86569b512"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.license",
+      "digest": "sha256:5fa45073bce529dfaf5e8a3a0a6005bab356018c7c0725aa3399f1acee9acedd",
+      "size": 10665,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-5fa45073bce529dfaf5e8a3a0a6005bab356018c7c0725aa3399f1acee9acedd"
+      ]
+    }
+  ]
+}
