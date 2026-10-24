@@ -122,6 +122,7 @@ pub const LAYOUTS: &[&str] = &[
     "strands-pointer-v1",
     "pplx-joint-v1",
     "d1-omni-markers-v1",
+    "gliclass-kv-v1",
 ];
 
 /// The layout a `decision` layer declares.
@@ -193,6 +194,9 @@ pub fn load(
             files, device, threads,
         )?)),
         "d1-omni-markers-v1" => Ok(Box::new(crate::d1_omni::D1OmniModel::load_files(
+            files, device, threads,
+        )?)),
+        "gliclass-kv-v1" => Ok(Box::new(crate::gliclass_kv::GliclassKvModel::load_files(
             files, device, threads,
         )?)),
         other => Err(Error::Model(format!(
