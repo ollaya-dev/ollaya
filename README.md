@@ -165,10 +165,10 @@ Every model in the library is measured on our own machines and published, with t
 memory on a GPU and a CPU.
 
 <!-- results:bench -->
-Edition 2026.10 ran Ollaya 0.13.0 on an RTX 5090 desktop, and 0.14.0, 0.15.0 and 0.17.0 added what they changed:
+Edition 2026.10 ran Ollaya 0.13.0 on an RTX 5090 desktop, and 0.14.0, 0.15.0, 0.17.0 and 0.18.0 added what they changed:
 
-- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: `pplx-decider:flash` 73.7, `jeb:27b` 67.8 (scored without typed-decisions, which it was trained on), `winnow:12b` 65.7, `clef:flash` 65.1 and `jeb:9b` 64.9 (scored without typed-decisions, which it was trained on). The fastest of these, `jeb:9b`, answers five questions in 107 ms on the RTX 5090.
-- **Calibration.** The lowest calibration errors on the public benchmark are 0.016 (`pplx-decider:flash`), 0.022 (`laya:typed-decisions`, `nimble:9b`) and 0.024 (`jeb:27b`).
+- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: `pplx-decider:flash` 73.7, `jeb:27b` 69.1 (scored without the 5 tasks it was trained on), `jeb:9b` 66.0 (scored without the 5 tasks it was trained on), `winnow:12b` 65.7 and `clef:flash` 65.1. The fastest of these, `jeb:9b`, answers five questions in 111 ms on the RTX 5090.
+- **Calibration.** The lowest calibration errors on the public benchmark are 0.016 (`pplx-decider:flash`), 0.020 (`jeb:9b`) and 0.022 (`laya:typed-decisions`, `nimble:9b`).
 - **Speed and memory.** Five-question requests through the HTTP API take 14 ms to 1.0 s on the RTX 5090 and 314 ms to 62.0 s on its Threadripper 3960X. Every model's VRAM and RAM are on its page.
 - **Parity.** Before a model ships, its runtime is checked question by question against the authors' code (or llama.cpp's own server, for GGUF models) on each device it runs on.
 

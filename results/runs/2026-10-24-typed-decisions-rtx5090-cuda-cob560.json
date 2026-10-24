@@ -1,0 +1,179 @@
+{
+ "schema": 1,
+ "date": "2026-10-24",
+ "edition": "2026.10",
+ "machine": "rtx-5090",
+ "device": "cuda",
+ "suite": "typed-decisions",
+ "ollaya": "0.17.0",
+ "protocol": {
+  "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each (2,000 questions: 600 choice, 600 noul, 800 score)",
+  "source": "https://huggingface.co/datasets/LocalLLaMA/typed-decisions",
+  "runner": "convert/ollaya_convert/bench_typed.py",
+  "client": "one request (one state, its five questions) at a time over HTTP to /v1/systemone, timed by the client",
+  "accuracy": "argmax of the returned probabilities against the gold label, over all 2,000 questions; a rejected request counts as wrong on its five questions; 95 % bootstrap interval over states",
+  "ece": "ten-bin expected calibration error of the top probability, pooled over the answered questions"
+ },
+ "results": [
+  {
+   "model": "jeb:27b",
+   "digest": "978465d647d1de010ea24370f135b3b2552020208612163c5907abe92de465de",
+   "answered_by": [
+    "jeb:27b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.802,
+   "accuracy_ci": [
+    0.782,
+    0.822
+   ],
+   "by_type": {
+    "choice": 0.7483,
+    "noul": 0.88,
+    "score": 0.7837
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.716,
+    "customer_service": 0.85,
+    "invoice_processing": 0.846,
+    "security_incidents": 0.796
+   },
+   "ece": 0.1054,
+   "brier": 0.3008,
+   "soft_ce": 0.9345,
+   "median_ms": 970.8,
+   "p95_ms": 3910.8,
+   "trained_on_split": true
+  },
+  {
+   "model": "jeb:9b",
+   "digest": "737d66d5ad2aaf17e4271257a8b7853a6613967d6953bda3c8167fb8e6d5270c",
+   "answered_by": [
+    "jeb:9b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.795,
+   "accuracy_ci": [
+    0.7755,
+    0.8145
+   ],
+   "by_type": {
+    "choice": 0.735,
+    "noul": 0.86,
+    "score": 0.7913
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.728,
+    "customer_service": 0.852,
+    "invoice_processing": 0.82,
+    "security_incidents": 0.78
+   },
+   "ece": 0.0971,
+   "brier": 0.3027,
+   "soft_ce": 0.9404,
+   "median_ms": 236.2,
+   "p95_ms": 324.3,
+   "trained_on_split": true
+  },
+  {
+   "model": "winnow:e2b",
+   "digest": "75b519b33318ec29f6a734f514f5e7636614e78a07e552cbeb7f98d6672ca808",
+   "answered_by": [
+    "winnow:e2b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.616,
+   "accuracy_ci": [
+    0.592,
+    0.64
+   ],
+   "by_type": {
+    "choice": 0.595,
+    "noul": 0.72,
+    "score": 0.5537
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.536,
+    "customer_service": 0.686,
+    "invoice_processing": 0.646,
+    "security_incidents": 0.596
+   },
+   "ece": 0.1459,
+   "brier": 0.5316,
+   "soft_ce": 1.3452,
+   "median_ms": 217.8,
+   "p95_ms": 398.0,
+   "trained_on_split": false
+  },
+  {
+   "model": "gliclass:v4-edge",
+   "digest": "3b1849b2b5ec38109cbf8772715bccaf8f546ab48f6ecefdee41f4d6af1c5b39",
+   "answered_by": [
+    "gliclass:v4-edge"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.5065,
+   "accuracy_ci": [
+    0.4825,
+    0.5305
+   ],
+   "by_type": {
+    "choice": 0.4767,
+    "noul": 0.59,
+    "score": 0.4662
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.518,
+    "customer_service": 0.638,
+    "invoice_processing": 0.362,
+    "security_incidents": 0.508
+   },
+   "ece": 0.1879,
+   "brier": 0.6357,
+   "soft_ce": 1.4015,
+   "median_ms": 51.5,
+   "p95_ms": 98.1,
+   "trained_on_split": false
+  },
+  {
+   "model": "decima:base-clean",
+   "digest": "b3d4c59e951d30fef560f8a2ed6d2b2c1355cfae84b4b538dbefdea2fbcf289c",
+   "answered_by": [
+    "decima:base-clean"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 7,
+   "accuracy": 0.4745,
+   "accuracy_ci": [
+    0.45,
+    0.5005
+   ],
+   "by_type": {
+    "choice": 0.375,
+    "noul": 0.59,
+    "score": 0.4625
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.422,
+    "customer_service": 0.538,
+    "invoice_processing": 0.368,
+    "security_incidents": 0.57
+   },
+   "ece": 0.0607,
+   "brier": 0.619,
+   "soft_ce": 1.1627,
+   "median_ms": 44.0,
+   "p95_ms": 58.0,
+   "trained_on_split": false
+  }
+ ]
+}
