@@ -5,7 +5,8 @@
 
 With --update RELEASE, the runs go into the existing edition instead (ADR 0009, a rolling edition): only the models
 a release changed are measured (`bench_plan`), their run files are added to the edition's runs, where a later run's
-row replaces an earlier one of the same model, their scores replace the old ones, and `updates` records the release, once (a second update of it joins the first).
+row replaces an earlier one of the same model, their scores replace the old ones, and `updates` records the release
+(once: a second update of the same release joins the first).
 `-fp16` tags are not added to the edition's models: the site shows them under their base tag, unranked.
 
 OUT_DIR is what `bench_run` writes on the bench machine:
