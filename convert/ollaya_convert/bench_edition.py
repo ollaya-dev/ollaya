@@ -49,8 +49,10 @@ TRAINED_ON = {
     "laya:typed-decisions": ["typed-decisions"],
     "largha:150m": ["typed-decisions"],
     "jeb:4b": ["typed-decisions"],
-    "jeb:9b": ["typed-decisions"],
-    "jeb:27b": ["typed-decisions"],
+    # jeb:9b and jeb:27b are v2.1, whose 90 training sources (the card's table) add civil_comments, HelpSteer2 and
+    # MASSIVE intents, parallel across languages, to typed-decisions.
+    **{"jeb:" + t: ["typed-decisions", "civil_comments", "helpsteer2", "massive-en-US", "massive-de-DE"]
+       for t in ("9b", "27b")},
     # The in-domain coba tags saw the train splits of ten public tasks (DATA_SOURCES.tsv, indomain/*). MASSIVE
     # is parallel across languages, so its German subset is not held out either.
     **{"coba:" + t: ["vitaminc-dev", "massive-en-US", "massive-de-DE", "boolq", "squad2", "paws", "multinli",
