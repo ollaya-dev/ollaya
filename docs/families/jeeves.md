@@ -74,11 +74,16 @@ v1 (2026-09-30, RTX 4090): the same 430 questions, scores within 1.9e-4, probabi
 
 ## Quality
 
-- **Typed-decisions** (all 400 test states, 2,000 questions, argmax against the majority label, through the
-  Rust runtime on CUDA): **0.680** (choice 0.657, score 0.601, noul 0.808), ECE **0.031** at the shipped
-  temperature 1.859. Jeeves' training sources (`export.json`) do not include typed-decisions.
-- **RTX 4090, HTTP API:** the triage preset (five questions) on a short message takes 838 ms at the median of
-  15 warm requests.
+Ollaya Bench, edition 2026.10 (0.18.0 update), RTX 5090:
+
+- **Typed-decisions** (all 400 test states, 2,000 questions, argmax against the majority label): **0.790**
+  (choice 0.760, score 0.754, noul 0.868), ECE **0.225** at the authors' temperature 1.522. The mean top
+  probability is 0.565, so v2 is underconfident on this split. v2 trained on typed-decisions' train split
+  (`export.json`), so the test split is in-domain for it. v1: 0.680, ECE 0.028 at 1.859.
+- **Public benchmark** (13 subsets): macro accuracy 0.756, macro ECE 0.083 (pooled 0.018).
+- **Score.** 54.0 without the 8 tasks v2 trained on (typed-decisions, BoolQ, MultiNLI, PAWS, civil_comments,
+  HelpSteer2 and both MASSIVE subsets). v1 scored 61.1 over all 14, so the two scores are not comparable.
+- **Latency** (five questions, p50 over HTTP): 388 ms on CUDA, 19.4 s on the CPU. v1: 380 ms and 20.5 s.
 
 ## Limits
 

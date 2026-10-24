@@ -21,7 +21,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `jeev
 ## How it works
 
 - **Rows.** Ollaya builds each question exactly as the authors' encoder does: the state, the question and the options between marker tokens, an empty thought, then the options again and a decide marker. The pointer head scores each option at its marker against the decide marker.
-- **No thinking.** Jeeves' reasoning mode generates a chain first, which Ollaya's one-pass runtime does not do. Without it the authors report 0.804 against 0.840 on their test split, at a fraction of the latency.
+- **No thinking.** Jeeves' reasoning mode generates a chain first, which Ollaya's one-pass runtime does not do. Without it the authors report 0.812 against 0.851 on their test split for v2, at a fraction of the latency.
 - **Calibrated.** One fitted temperature, 1.522, from the model's `export.json` (the authors fit a second one for answers after a reasoning chain, which Ollaya does not write).
 - **Weights.** PostHog's five BF16 shards and `head.pt` download from Hugging Face, pinned to a commit and verified by sha256. Ollaya hosts only the ONNX graph (11 MB).
 - **Parity.** Ollaya's Rust runtime matches the authors' own code in fp32 on CUDA: identical token rows and the same decision on all 430 test questions, probabilities within 5.8e-6. On the CPU the 44 smoke questions agree too.
