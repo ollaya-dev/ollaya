@@ -129,6 +129,7 @@ The [FAQ](https://ollaya.dev/docs/faq) compares Ollaya and Ollama in more detail
 | `qwen3guard` | Qwen3Guard-Gen-0.6B safety guard with built-in questions: safe, controversial or unsafe, and the category |
 | `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
 | `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
+| `gliclass-v4`, `gliclass-v4:9b` | Knowledgator's GLiClass v4 (decoder-KV on Qwen3.5-2B and -9B): the labels follow the instructions and the state in one decoder row, a two-layer scorer with up to three reasoning steps reads them, and the model's own calibrator rescales every label; text only |
 | `von` | Victor Hugo Panisa's Von 1.1 (ModernBERT-large): every option scored at its own marker, 8k-token context. Archived upstream on 2026-10-19; `d1-omni` is its successor |
 | `winnow` | EldanRing's Winnow-12B, the larger sibling of `winnow:e4b` |
 | `clm` | Contrastive-LM's CLM-v0.1-8B: the Qwen3-8B encoder and two projection heads score options by similarity, with questions and options cached. Built for agent, game and tool-calling states |

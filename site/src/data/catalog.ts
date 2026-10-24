@@ -144,6 +144,20 @@ const overlays: Record<string, ModelOverlay> = {
       'modernbert-large': { summary: `ModernBERT-large, Apache-2.0. Faster, slightly less accurate (${result('nli:modernbert-large', 'typed.accuracy', 3)}).` },
     },
   },
+  'gliclass-v4': {
+    title: 'GLiClass v4',
+    description:
+      "Knowledgator's GLiClass v4, the decoder-KV generation: a Qwen3.5 decoder (2B or 9B) reads the instructions, the state and the labels in one row, a two-layer scorer with up to three reasoning steps scores every label against the text, and the model's own calibrator rescales the logits. Up to 8k-token rows. Text only.",
+    publisher: { name: 'Knowledgator', url: 'https://huggingface.co/knowledgator' },
+    capabilities: ['decision', 'long-context', 'fine-tuned'],
+    keywords: ['gliclass', 'gliclass v4', 'knowledgator', 'qwen', 'qwen3.5', 'decoder-kv', 'scx', 'zero-shot', 'classification', 'classifier', 'reranking', 'guardrails', 'decision', 'typesafe', 'jev', 'system one'],
+    rank: 12,
+    tags: {
+      latest: { summary: 'Same as gliclass-v4:2b.' },
+      '2b': { summary: 'gliclass-v4-2b (decoder-KV on Qwen3.5-2B, 2.4B weights read), fp32 compute on BF16 weights: about 7 GB in memory.' },
+      '9b': { summary: 'gliclass-v4-9b (decoder-KV on Qwen3.5-9B, 9.5B weights read): about 20 GB in memory.' },
+    },
+  },
   decider: {
     stats: stats('decider:4b'),
     title: 'decider',
