@@ -29,7 +29,11 @@
   "2026-10-24-latency-rtx5090-cuda-d3.json",
   "2026-10-24-latency-rtx5090-cpu-d3.json",
   "2026-10-24-public-benchmark-rtx5090-cuda-d3.json",
-  "2026-10-24-typed-decisions-rtx5090-cuda-d3.json"
+  "2026-10-24-typed-decisions-rtx5090-cuda-d3.json",
+  "2026-10-24-latency-rtx5090-cuda-cob562.json",
+  "2026-10-24-latency-rtx5090-cpu-cob562.json",
+  "2026-10-24-public-benchmark-rtx5090-cuda-cob562.json",
+  "2026-10-24-typed-decisions-rtx5090-cuda-cob562.json"
  ],
  "models": [
   "decima:small",
@@ -523,31 +527,6 @@
     "trained_on": []
    },
    {
-    "model": "jeeves:9b",
-    "score": 61.11,
-    "score_ci": [
-     59.09,
-     62.96
-    ],
-    "tasks": {
-     "vitaminc-dev": 44.91,
-     "massive-en-US": 85.78,
-     "massive-de-DE": 84.27,
-     "boolq": 74.0,
-     "squad2": 65.89,
-     "paws": 64.0,
-     "multinli": 87.96,
-     "civil_comments": 58.0,
-     "aegis2": 54.4,
-     "helpsteer2": 20.18,
-     "summeval-relevance": 25.52,
-     "summeval-consistency": 80.03,
-     "pubmedqa": 57.4,
-     "typed-decisions": 53.19
-    },
-    "trained_on": []
-   },
-   {
     "model": "credence:e4b",
     "score": 60.99,
     "score_ci": [
@@ -696,6 +675,40 @@
      "typed-decisions": 40.07
     },
     "trained_on": []
+   },
+   {
+    "model": "jeeves:9b",
+    "score": 54.02,
+    "score_ci": [
+     50.66,
+     57.1
+    ],
+    "tasks": {
+     "vitaminc-dev": 61.94,
+     "massive-en-US": 87.6,
+     "massive-de-DE": 85.48,
+     "boolq": 76.0,
+     "squad2": 55.18,
+     "paws": 68.0,
+     "multinli": 84.95,
+     "civil_comments": 73.33,
+     "aegis2": 52.0,
+     "helpsteer2": 28.21,
+     "summeval-relevance": 12.5,
+     "summeval-consistency": 80.9,
+     "pubmedqa": 61.6,
+     "typed-decisions": 69.23
+    },
+    "trained_on": [
+     "typed-decisions",
+     "boolq",
+     "multinli",
+     "paws",
+     "civil_comments",
+     "helpsteer2",
+     "massive-en-US",
+     "massive-de-DE"
+    ]
    },
    {
     "model": "d3:lite",
@@ -1559,14 +1572,19 @@
     "2026-10-24-latency-rtx5090-cuda-d3.json",
     "2026-10-24-latency-rtx5090-cpu-d3.json",
     "2026-10-24-public-benchmark-rtx5090-cuda-d3.json",
-    "2026-10-24-typed-decisions-rtx5090-cuda-d3.json"
+    "2026-10-24-typed-decisions-rtx5090-cuda-d3.json",
+    "2026-10-24-latency-rtx5090-cuda-cob562.json",
+    "2026-10-24-latency-rtx5090-cpu-cob562.json",
+    "2026-10-24-public-benchmark-rtx5090-cuda-cob562.json",
+    "2026-10-24-typed-decisions-rtx5090-cuda-cob562.json"
    ],
    "models": [
     "d3:edge",
     "d3:lite",
     "d3:nano",
     "d3:mini",
-    "d3:flash"
+    "d3:flash",
+    "jeeves:9b"
    ]
   }
  ]

@@ -72,6 +72,9 @@ class EditionUpdate(unittest.TestCase):
         self.assertEqual(out["models"], ["kev:4b", "d1:3b", "strands-decider:2b"])  # -fp16 stays off the leaderboard
         self.assertEqual([r["model"] for r in out["score"]["results"]], ["d1:3b", "strands-decider:2b", "kev:4b"])
         self.assertEqual(out["updates"][0]["release"], "0.14.0")
+        out = bench_edition.merge_update(out, "0.14.0", "2026-10-21", ["c.json"], ["d3:mini"], [])
+        self.assertEqual(len(out["updates"]), 1)  # the same release again: one entry
+        self.assertEqual((out["updates"][0]["date"], out["updates"][0]["runs"]), ("2026-10-21", ["b.json", "c.json"]))
 
 
 class Run(unittest.TestCase):

@@ -5,7 +5,8 @@
 
 With --update RELEASE, the runs go into the existing edition instead (ADR 0009, a rolling edition): only the models
 a release changed are measured (`bench_plan`), their run files are added to the edition's runs, where a later run's
-row replaces an earlier one of the same model, their scores replace the old ones, and `updates` records the release.
+row replaces an earlier one of the same model, their scores replace the old ones, and `updates` records the release
+(once: a second update of the same release joins the first).
 `-fp16` tags are not added to the edition's models: the site shows them under their base tag, unranked.
 
 OUT_DIR is what `bench_run` writes on the bench machine:
@@ -56,6 +57,10 @@ TRAINED_ON = {
     **{"coba:" + t: ["vitaminc-dev", "massive-en-US", "massive-de-DE", "boolq", "squad2", "paws", "multinli",
                      "civil_comments", "aegis2", "helpsteer2", "pubmedqa"]
        for t in ("400m-ternary", "150m-ternary", "68m-ternary")},
+    # Jeeves v2's export.json sources: typed_decisions, boolq, mnli, paws, and decider_* sets built from
+    # civil_comments, HelpSteer2 and MASSIVE intents.
+    "jeeves:9b": ["typed-decisions", "boolq", "multinli", "paws", "civil_comments", "helpsteer2", "massive-en-US",
+                  "massive-de-DE"],
 }
 
 
@@ -293,7 +298,14 @@ def merge_update(edition, release, date, files, models, scores):
     new = {s["model"] for s in scores}
     edition["score"]["results"] = sorted([r for r in edition["score"]["results"] if r["model"] not in new] + scores,
                                          key=lambda r: -r["score"])
-    edition.setdefault("updates", []).append({"release": release, "date": date, "runs": files, "models": models})
+    updates = edition.setdefault("updates", [])
+    same = next((u for u in updates if u["release"] == release), None)  # a second update for the same release
+    if same:
+        same["date"] = max(same["date"], date)
+        same["runs"] += [f for f in files if f not in same["runs"]]
+        same["models"] += [m for m in models if m not in same["models"]]
+    else:
+        updates.append({"release": release, "date": date, "runs": files, "models": models})
     return edition
 
 
