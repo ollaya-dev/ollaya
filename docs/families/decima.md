@@ -10,6 +10,7 @@ their order cannot change the answer. Score questions go through a cumulative-li
 | Tag | Weights (fp32, `pytorch/` of the repository) | Encoder | Temperature |
 |---|---|---|---|
 | `decima:base`, `decima:latest` | `amyrmahdy/decima-base@2468005d` (Hub tag `v2.0`): `encoder/model.safetensors` (1.23 GB) and `head.safetensors` (57 MB) | `jhu-clsp/mmBERT-base` (MIT), 321M parameters | 0.7269 |
+| `decima:base-clean` | `amyrmahdy/decima-base-clean@35eb218b` (Hub tag `v1.0`; `main` changes only the README): the same two files, base retrained without non-commercial data | the same | 0.6930 |
 | `decima:agent` | `amyrmahdy/decima-agent@652d90ac` (Hub tag `v2.3`): the same two files, fine-tuned from decima-base for coding-agent decisions and knowledge-graph judgments, states up to 8,192 tokens | the same | 0.6125 |
 | `decima:guard` | `amyrmahdy/decima-guard@98d3f734` (Hub tag `v1.0-preview`): the same two files, a guard for LLM apps fine-tuned from decima-base-clean | the same | 0.8051 |
 | `decima:guard-small` | `amyrmahdy/decima-guard-small@ac110248` (Hub tag `v1.0-preview`): `encoder/model.safetensors` (562 MB) and `head.safetensors`, guard's checks and training data | `jhu-clsp/mmBERT-small` (MIT), 140M parameters | 0.7546 |
@@ -27,6 +28,15 @@ checkpoint whose `decima.json` has `"choice_fit": true`, so it runs on its own l
 Agent 2.3, guard and guard-small have it too. `decima:agent` pointed at 2.1 (`86a07aab`, Hub tag `v2.1`,
 temperature 0.6082) until 2.2, and at 2.2 (`5c14a460`, Hub tag `v2.2`, temperature 0.7193, states up to 2,048
 tokens) until 2.3.
+
+**Decima-base-clean** is decima-base retrained "without any non-commercial data and without any data from the
+BTZSC benchmark": the author's `release/LICENSING.md` names ANLI and XNLI (CC BY-NC 4.0), AG News and SST-5 among
+base 2.0's training sources, and decima-agent inherits them. Use base-clean where that matters. It is not a
+replacement for base: the author reports it lower on every set (typed decisions 0.477 against 0.484), so
+`decima:latest` stays on base. Its `decima.json` has `"choice_fit": true`, so it runs on
+`decima-late-interaction-v2`, with base's 512-token state window. Its `tokenizer_config.json` drops the padding and
+truncation keys the other pins carry; Ollaya reads only `tokenizer.json` (the same file as base's), and
+`decima.check` finds the rows identical to upstream's.
 
 The author also publishes int8 ONNX exports; Ollaya's graphs read the fp32 checkpoints instead, so that the weights
 come unmodified from the files the author's own code loads.
