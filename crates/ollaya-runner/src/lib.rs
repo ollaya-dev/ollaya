@@ -13,6 +13,7 @@ pub mod decima;
 pub mod decision;
 pub mod engine;
 pub mod gliclass;
+pub mod gliclass_kv;
 pub mod jeeves;
 pub mod kev;
 pub mod llama;

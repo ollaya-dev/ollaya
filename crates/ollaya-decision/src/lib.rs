@@ -18,6 +18,7 @@ pub mod decider;
 pub mod decima;
 pub mod decision;
 pub mod gliclass;
+pub mod gliclass_kv;
 pub mod jebadiah;
 pub mod jeeves;
 pub mod jevk5;

@@ -338,6 +338,31 @@ CATALOG = {
                   "The token ids and label positions are identical, and so is the decision on every "
                   "question. Probabilities are within 1e-5, on CPU and CUDA.",
     },
+    # GLiClass v4 (decoder-KV): a different architecture and layout from the uni-encoder `gliclass`, so its own entry.
+    "gliclass-v4": {
+        "namespace": "library",
+        "model": "gliclass-v4",
+        "family": "gliclass-kv",
+        "author": "Knowledgator (GLiClass) and the Qwen team (base models)",
+        "license": "Apache-2.0",
+        "license_text": "GLiClass v4 by Knowledgator (https://huggingface.co/knowledgator/gliclass-v4-2b, "
+                        "https://huggingface.co/knowledgator/gliclass-v4-9b)\n"
+                        "Base models: Qwen3.5-2B and Qwen3.5-9B by the Qwen team, Apache-2.0.\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        "tags": {
+            "2b": _wl("gliclass-v4-2b", "knowledgator/gliclass-v4-2b", "40fe023b45e8d97d1ae4f7f9342279ac1c76317d",
+                      "GLiClass v4 2B (decoder-KV on Qwen3.5-2B): the labels follow the instructions and the state in one "
+                      "decoder row, a two-layer scorer reads them against the text with up to three reasoning steps, and "
+                      "the model's own calibrator scales every label logit. Up to 25 labels upstream; 8,192 tokens per row. "
+                      "Text only. Needs about 7 GB of memory (BF16 weights in memory).",
+                      "2.4B", 8192, ["en"], wl_dir=os.path.join(OUT, "gliclass-v4-2b")),
+            "9b": _wl("gliclass-v4-9b", "knowledgator/gliclass-v4-9b", "14d11a92b5e0bab4a166e1fce4cc0777cac27182",
+                      "GLiClass v4 9B (decoder-KV on Qwen3.5-9B): the same scorer and calibrator on the 9B decoder. "
+                      "Text only. Needs about 20 GB of memory (BF16 weights in memory).",
+                      "9.5B", 8192, ["en"], wl_dir=os.path.join(OUT, "gliclass-v4-9b")),
+        },
+        "aliases": {"latest": "2b"},
+    },
     "decider": {
         "namespace": "library",
         "model": "decider",
