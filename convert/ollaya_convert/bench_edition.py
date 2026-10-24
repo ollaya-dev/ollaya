@@ -166,6 +166,8 @@ def main():
     ap.add_argument("--models", nargs="+", required=True)
     ap.add_argument("--results", required=True)
     ap.add_argument("--update", metavar="RELEASE", help="add these runs to the existing edition (ADR 0009)")
+    ap.add_argument("--suffix", default="", help="added to the run files' names, when that day's files already exist "
+                    "(for example 2026-10-24-latency-rtx5090-cuda-cob560.json)")
     ap.add_argument("--note", default="", help="added to the public and typed run files' note (for example, rows "
                     "carried from an earlier build of the same graphs)")
     a = ap.parse_args()
@@ -174,6 +176,7 @@ def main():
     (results / "runs").mkdir(parents=True, exist_ok=True)
     (results / "editions").mkdir(parents=True, exist_ok=True)
     stem = "%s-%%s-%s" % (a.date, a.machine.replace("-", ""))
+    sfx = "-" + a.suffix if a.suffix else ""
     files = []
 
     # Latency: the files as bench_latency.py wrote them, with the edition named.
@@ -188,7 +191,7 @@ def main():
         for r in run["results"]:
             if r.get("digest"):
                 digests.setdefault(r["model"], r["digest"])
-        name = "%s-%s.json" % (stem % "latency", device)
+        name = "%s-%s%s.json" % (stem % "latency", device, sfx)
         json.dump(run, open(results / "runs" / name, "w", encoding="utf-8"), indent=1)
         files.append(name)
 
@@ -241,7 +244,7 @@ def main():
 
     common = {"schema": 1, "date": a.date, "edition": a.edition, "machine": a.machine, "device": "cuda"}
     if public_results:
-        name = "%s-cuda.json" % (stem % "public-benchmark")
+        name = "%s-cuda%s.json" % (stem % "public-benchmark", sfx)
         prev = json.load(open(results / "runs" / "2026-09-30-public-benchmark-rtx5090-cuda.json", encoding="utf-8"))
         json.dump({**common, "suite": "public-benchmark", "servers": {"ollaya": version},
                    "protocol": prev["protocol"], "note": ("Ollaya Bench edition %s. %s" % (a.edition, a.note)).strip(),
@@ -249,7 +252,7 @@ def main():
                   open(results / "runs" / name, "w", encoding="utf-8"), indent=1)
         files.append(name)
     if typed_results:
-        name = "%s-cuda.json" % (stem % "typed-decisions")
+        name = "%s-cuda%s.json" % (stem % "typed-decisions", sfx)
         json.dump({**common, "suite": "typed-decisions", "ollaya": version, **({"note": a.note} if a.note else {}), "protocol": {
             "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each "
                          "(2,000 questions: 600 choice, 600 noul, 800 score)",

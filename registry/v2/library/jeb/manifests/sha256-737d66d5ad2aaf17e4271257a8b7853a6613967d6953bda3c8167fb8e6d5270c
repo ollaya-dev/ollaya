@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+  "config": {
+    "mediaType": "application/vnd.ollaya.config.v1+json",
+    "digest": "sha256:31eb6212ded4248c46e5b73580c68e471ead413ac636579345ac3ffdcb85cb16",
+    "size": 463,
+    "urls": [
+      "https://ollaya.dev/blobs/sha256-31eb6212ded4248c46e5b73580c68e471ead413ac636579345ac3ffdcb85cb16"
+    ]
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.ollaya.weights.gguf",
+      "digest": "sha256:031de099ea132414cbcb89ac363d44fe5ff09c71994028825ce671a4e1bd51f1",
+      "size": 9786060416,
+      "urls": [
+        "https://huggingface.co/frontier-infra/jebadiah-9b-v2-1-GGUF/resolve/2182dd8d70b09ffdce5b68b0ddf6c4591bf38810/jebadiah-9b-v2-1-Q8_0.gguf"
+      ],
+      "annotations": {
+        "org.ollaya.quantization": "Q8_0"
+      }
+    },
+    {
+      "mediaType": "application/vnd.ollaya.decision",
+      "digest": "sha256:9fcc8babb997eb2e7c404770789f82cc8eeae39f047af05a627d7a0f4c42deb2",
+      "size": 6861,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-9fcc8babb997eb2e7c404770789f82cc8eeae39f047af05a627d7a0f4c42deb2"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.calibration",
+      "digest": "sha256:466285e5467cfcd253640a730131341c5682ef17b7842d6546bf48dd1f656e6f",
+      "size": 163,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-466285e5467cfcd253640a730131341c5682ef17b7842d6546bf48dd1f656e6f"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.license",
+      "digest": "sha256:bf69a57a4975927ec684a9c0bdc80e4dfa614ce372fcca5deb3d72dacee1538a",
+      "size": 10469,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-bf69a57a4975927ec684a9c0bdc80e4dfa614ce372fcca5deb3d72dacee1538a"
+      ]
+    }
+  ]
+}
