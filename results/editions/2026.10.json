@@ -21,7 +21,11 @@
   "2026-10-23-latency-rtx5090-cuda.json",
   "2026-10-23-latency-rtx5090-cpu.json",
   "2026-10-23-public-benchmark-rtx5090-cuda.json",
-  "2026-10-23-typed-decisions-rtx5090-cuda.json"
+  "2026-10-23-typed-decisions-rtx5090-cuda.json",
+  "2026-10-24-latency-rtx5090-cuda.json",
+  "2026-10-24-latency-rtx5090-cpu.json",
+  "2026-10-24-public-benchmark-rtx5090-cuda.json",
+  "2026-10-24-typed-decisions-rtx5090-cuda.json"
  ],
  "models": [
   "decima:small",
@@ -71,7 +75,8 @@
   "coba:400m-ternary",
   "coba:150m-ternary",
   "coba:68m-ternary",
-  "sura:0.8b"
+  "sura:0.8b",
+  "sura:2b"
  ],
  "score": {
   "definition": "Mean over 14 tasks (13 public subsets and typed-decisions, equal weight) of the chance-corrected accuracy 100 * (accuracy - chance) / (1 - chance); chance is the mean of 1/K over the task's questions. A model trained on a task's train split is scored on the other tasks",
@@ -655,6 +660,31 @@
      "summeval-consistency": 80.03,
      "pubmedqa": 43.6,
      "typed-decisions": 27.55
+    },
+    "trained_on": []
+   },
+   {
+    "model": "sura:2b",
+    "score": 40.9,
+    "score_ci": [
+     38.54,
+     43.04
+    ],
+    "tasks": {
+     "vitaminc-dev": 57.68,
+     "massive-en-US": 76.4,
+     "massive-de-DE": 64.61,
+     "boolq": 41.33,
+     "squad2": 35.12,
+     "paws": 39.2,
+     "multinli": 55.85,
+     "civil_comments": 66.0,
+     "aegis2": 7.2,
+     "helpsteer2": 20.18,
+     "summeval-relevance": -6.25,
+     "summeval-consistency": 41.84,
+     "pubmedqa": 36.4,
+     "typed-decisions": 37.0
     },
     "trained_on": []
    },
@@ -1367,12 +1397,16 @@
   },
   {
    "release": "0.17.0",
-   "date": "2026-10-23",
+   "date": "2026-10-24",
    "runs": [
     "2026-10-23-latency-rtx5090-cuda.json",
     "2026-10-23-latency-rtx5090-cpu.json",
     "2026-10-23-public-benchmark-rtx5090-cuda.json",
-    "2026-10-23-typed-decisions-rtx5090-cuda.json"
+    "2026-10-23-typed-decisions-rtx5090-cuda.json",
+    "2026-10-24-latency-rtx5090-cuda.json",
+    "2026-10-24-latency-rtx5090-cpu.json",
+    "2026-10-24-public-benchmark-rtx5090-cuda.json",
+    "2026-10-24-typed-decisions-rtx5090-cuda.json"
    ],
    "models": [
     "coba:1b",
@@ -1380,7 +1414,8 @@
     "coba:400m-ternary",
     "coba:150m-ternary",
     "coba:68m-ternary",
-    "sura:0.8b"
+    "sura:0.8b",
+    "sura:2b"
    ]
   }
  ]
