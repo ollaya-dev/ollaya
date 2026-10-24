@@ -1,6 +1,7 @@
 """Export a GLiClass uni-encoder (encoder + label-span pooling + projectors + MLP scorer) to one ONNX graph.
 
     uv run --with gliclass==0.1.20 python -m ollaya_convert.families.gliclass.export large --out out/gliclass-instruct-large
+    uv run --with gliclass==0.1.21 python -m ollaya_convert.families.gliclass.export v4-edge --out out/gliclass-v4-edge
 
 Contract M ("markers"), one row per question (dynamic along rows `n`, sequence `s`, labels `k`):
     input_ids      int64 [n, s]
@@ -11,13 +12,16 @@ Contract M ("markers"), one row per question (dynamic along rows `n`, sequence `
 Output:
     logits         float32 [n, k] GLiClass label logits; masked slots are -1e4
 
-The graph is GLiClassUniEncoder.forward for this config, vectorised:
-  * segment ids: 1 from the first <<SEP>> on (argmax semantics: all 1 if there is none), else 0;
-    added to the word embeddings (`_create_segment_ids`; <<EXAMPLE>> never occurs after sanitising)
-  * label k's embedding = mean of hidden states from marker k up to (excluding) marker k+1; the last
-    label's span runs to the end of the sequence (`_extract_class_features_averaged` with
-    extract_text_features=False), padding excluded
+The graph is GLiClassModel.forward for the variant's config, vectorised:
+  * segment ids (use_segment_embeddings): 1 from the first <<SEP>> on (argmax semantics: all 1 if there is
+    none), else 0; added to the word embeddings (`_create_segment_ids`; <<EXAMPLE>> never occurs after sanitising)
+  * label k's embedding, class_token_pooling "average": the mean of hidden states from marker k up to (excluding)
+    marker k+1; the last label's span runs to the end of the sequence (`_extract_class_features_averaged` with
+    extract_text_features=False), padding excluded. "first": the hidden state at marker k
+    (`_extract_class_features_first` with embed_class_token)
   * text embedding = hidden state 0 -> text_projector; labels -> classes_projector; MLPScorer
+  * the calibrator (use_calibrator; GLiClassModel._calibrate): beta * logit + bias, beta and bias per label from
+    the projected text, the projected label and the row's logit statistics over its real labels
 Sigmoid / softmax stay in the runtime.
 """
 import argparse
@@ -40,26 +44,40 @@ class Graph(torch.nn.Module):
     def __init__(self, gliclass_model):
         super().__init__()
         self.model = gliclass_model.model  # keeps parameter names == checkpoint names ("model.…")
-        self.sep_id = int(gliclass_model.config.text_token_index)
+        self.calibrator = getattr(gliclass_model, "calibrator", None)  # "calibrator.…"; gliclass 0.1.20 has none
+        cfg = gliclass_model.config
+        self.sep_id = int(cfg.text_token_index)
+        self.segments = bool(cfg.use_segment_embeddings)
+        self.average = cfg.class_token_pooling == "average"
 
     def forward(self, input_ids, attention_mask, marker_pos, marker_mask, qtype):
         u = self.model
         s = input_ids.shape[1]
         pos = torch.arange(s, device=input_ids.device)
-        first_sep = torch.argmax((input_ids == self.sep_id).to(torch.int64), dim=1)
-        segment = (pos[None, :] >= first_sep[:, None]).to(torch.int64)
-        x = u.encoder_model.get_input_embeddings()(input_ids) + u.segment_embeddings(segment)
-        h = u.encoder_model(inputs_embeds=x, attention_mask=attention_mask)[0]
+        if self.segments:
+            first_sep = torch.argmax((input_ids == self.sep_id).to(torch.int64), dim=1)
+            segment = (pos[None, :] >= first_sep[:, None]).to(torch.int64)
+            x = u.encoder_model.get_input_embeddings()(input_ids) + u.segment_embeddings(segment)
+            h = u.encoder_model(inputs_embeds=x, attention_mask=attention_mask)[0]
+        else:
+            h = u.encoder_model(input_ids, attention_mask=attention_mask)[0]
 
-        started = (marker_pos[:, :, None] <= pos[None, None, :]) & marker_mask[:, :, None]
-        cum = started.to(torch.int64).sum(1)  # [n, s]: labels opened at or before each position
-        k_range = torch.arange(marker_pos.shape[1], device=input_ids.device)[None, :, None]
-        span = (cum[:, None, :] == k_range + 1) & attention_mask[:, None, :].bool()
-        span = span.to(h.dtype)
-        classes = torch.einsum("bks,bsd->bkd", span, h) / span.sum(-1, keepdim=True).clamp(min=1)
+        if self.average:
+            started = (marker_pos[:, :, None] <= pos[None, None, :]) & marker_mask[:, :, None]
+            cum = started.to(torch.int64).sum(1)  # [n, s]: labels opened at or before each position
+            k_range = torch.arange(marker_pos.shape[1], device=input_ids.device)[None, :, None]
+            span = (cum[:, None, :] == k_range + 1) & attention_mask[:, None, :].bool()
+            span = span.to(h.dtype)
+            classes = torch.einsum("bks,bsd->bkd", span, h) / span.sum(-1, keepdim=True).clamp(min=1)
+        else:
+            classes = torch.gather(h, 1, marker_pos[:, :, None].expand(-1, -1, h.shape[-1]))
 
         pooled = u.text_projector(u.pooler(h))
-        logits = u.scorer(pooled, u.classes_projector(classes)).float()
+        labels = u.classes_projector(classes)
+        logits = u.scorer(pooled, labels).float()
+        if self.calibrator is not None:
+            beta, bias = self.calibrator(pooled, labels, logits, marker_mask)
+            logits = beta * logits + bias
         logits = logits + (qtype[:, None] * 0).to(logits.dtype)
         return logits.masked_fill(~marker_mask, -1e4)
 
@@ -105,7 +123,7 @@ def export(variant: str, out_dir: str) -> str:
         "family": "gliclass",
         "layout": "gliclass-uni-v1",
         "contract": "markers",
-        "source": {"repo": m.repo, "revision": m.revision, "reference": ref.UPSTREAM, "license": "Apache-2.0",
+        "source": {"repo": m.repo, "revision": m.revision, "reference": ref.UPSTREAM[variant], "license": "Apache-2.0",
                    "author": "Knowledgator"},
         "encoder": cfg.encoder_model_name,
         "max_len": ref.MAX_LEN,

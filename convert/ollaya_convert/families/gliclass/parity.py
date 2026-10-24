@@ -1,6 +1,7 @@
 """Check a GLiClass ONNX export against the PyTorch fp32 reference and the upstream pipeline call.
 
     uv run --with gliclass==0.1.20 python -m ollaya_convert.families.gliclass.parity large out/gliclass-instruct-large-wl
+    uv run --with gliclass==0.1.21 python -m ollaya_convert.families.gliclass.parity v4-edge out/gliclass-v4-edge-wl
 
 Checks per question:
   1. tokenizer   `tokenizers.Tokenizer.from_file(<dir>/tokenizer.json)` (the Rust core) with padding off
