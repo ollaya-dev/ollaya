@@ -282,11 +282,11 @@ reference decider-ai 1.10.0 in fp32 on CUDA, ONNX Runtime CPU. Report in `conver
 
 | | value |
 |---|---|
-| questions / scoring rows | 2B_EXPORT_QROWS |
-| argmax agreement, ONNX vs fp32 / vs upstream `system_one` | 2B_EXPORT_AGREE |
-| max \|Δ logit\| | 2B_EXPORT_LOGIT |
-| max \|Δ probability\| | 2B_EXPORT_PROB |
-| contract vs upstream answers | 2B_EXPORT_CONTRACT |
+| questions / scoring rows | 632 / 1,248 (0 row-token mismatches; 14 requests rejected by both) |
+| argmax agreement, ONNX vs fp32 / vs upstream `system_one` | **100 %** / **100 %** |
+| max \|Δ logit\| | 4.3e-5 (p99 2.5e-5), all 255 labels |
+| max \|Δ probability\| | 4.5e-6 (choice), 3.7e-5 (noul, T 0.05), 3.5e-6 (score) |
+| contract vs upstream answers | ≤ 5.0e-5, upstream's 4-decimal rounding |
 
 - **Files.** The graph is 7.7 MB. It references `Mapika/decider-2b@7614a6c7…/model.safetensors`
   (3.76 GB, sha256 `1265b014…`, matches the HF LFS oid): 320 / 320 tensors, with no unused tensors.
@@ -298,11 +298,11 @@ decider-4b (v3, 2026-10-24): same harness and reference. Report in `convert/out/
 
 | | value |
 |---|---|
-| questions / scoring rows | 4B_EXPORT_QROWS |
-| argmax agreement, ONNX vs fp32 / vs upstream `system_one` | 4B_EXPORT_AGREE |
-| max \|Δ logit\| | 4B_EXPORT_LOGIT |
-| max \|Δ probability\| | 4B_EXPORT_PROB |
-| contract vs upstream answers | 4B_EXPORT_CONTRACT |
+| questions / scoring rows | 632 / 1,248 (0 row-token mismatches; 14 requests rejected by both) |
+| argmax agreement, ONNX vs fp32 / vs upstream `system_one` | **100 %** / **100 %** |
+| max \|Δ logit\| | 4.7e-5 (p99 3.4e-5), all 255 labels |
+| max \|Δ probability\| | 4.8e-6 (choice), 2.2e-4 (noul, T 0.05), 3.2e-6 (score) |
+| contract vs upstream answers | ≤ 5.0e-5, upstream's 4-decimal rounding |
 
 - **Files.** The graph is 10.6 MB. It references `Mapika/decider-4b@585473de…/model.safetensors`
   (8.41 GB, sha256 `e83c74cc…`, matches the HF LFS oid): 426 / 426 tensors, with no unused tensors.
