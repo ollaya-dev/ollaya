@@ -1,4 +1,4 @@
-"""The PyTorch reference for StrandsAgents/strands-decider-2B-qwen3.5-v1-2610: upstream's own package, in fp32.
+"""The PyTorch reference for StrandsAgents/strands-decider-* (Qwen3.5-2B and Gemma 4 E2B/E4B): upstream's own package, in fp32.
 
 The model repo holds the LoRA adapter (`lora/`), the pointer head (`head.safetensors`), its config
 (`strands_decider_config.json`, with the fitted temperatures) and a tokenizer; the inference code is
@@ -29,6 +29,16 @@ MODELS = {
                            "revision": "216d1ccb46a9e9b036eb9187b248db98480f77d4",
                            "base": "Qwen/Qwen3.5-2B-Base", "base_revision": "b1485b2fa6dfa1287294f269f5fb618e03d52d7c",
                            "base_files": ["model.safetensors-00001-of-00001.safetensors"]},
+    # v1 2610 on Gemma 4 (provenance.json run_id g26-e2b-code-soup3 / g26-e4b-code-soup3, 2026-10-09). The base
+    # revision is the Hub main upstream's loader resolved when the models were made (provenance.json names it).
+    "strands-decider-e2b": {"repo": "StrandsAgents/strands-decider-E2B-gemma4-v1-2610",
+                            "revision": "d383ecf8534b13d49b3b567a1b66f88fca6d50ba",
+                            "base": "google/gemma-4-E2B-it", "base_revision": "3e22461f65e89153144f8adb70e3b8c2cc9845a7",
+                            "base_files": ["model.safetensors"]},
+    "strands-decider-e4b": {"repo": "StrandsAgents/strands-decider-E4B-gemma4-v1-2610",
+                            "revision": "1344d44397c457f3be34b8ff15c593b41248c6bf",
+                            "base": "google/gemma-4-E4B-it", "base_revision": "ee0ef6023621cff504d758262d4e04895a5af4a2",
+                            "base_files": ["model.safetensors"]},
 }
 
 

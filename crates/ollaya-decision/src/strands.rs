@@ -1,6 +1,7 @@
-//! `strands-pointer-v1`: Strands Agents' Strands Decider (a LoRA on a Qwen3.5 base plus a pointer
-//! head), whose rows follow upstream `strands_decider.prompting` and `SystemOneEngine._fit`
-//! (`ollaya_convert.families.strands.layout`).
+//! `strands-pointer-v1` and `-v2`: Strands Agents' Strands Decider (a LoRA on a Qwen3.5 or Gemma 4
+//! base plus a pointer head), whose rows follow upstream `strands_decider.prompting` and
+//! `SystemOneEngine._fit` (`ollaya_convert.families.strands.layout`). v2 differs in one token: the
+//! state starts with `special_tokens.bos`, as Gemma's tokenizer adds it.
 //!
 //! Every question becomes one causal row: the state, then the question with one line per option.
 //!
@@ -57,6 +58,10 @@ pub struct Templates {
 #[derive(Debug, Clone, Deserialize)]
 pub struct StrandsTokens {
     pub pad: u32,
+    /// `strands-pointer-v2`: the token the tokenizer prepends to the state (Gemma's `<bos>`,
+    /// upstream `force_bos`); it counts against the state's budget as upstream's truncation does.
+    #[serde(default)]
+    pub bos: Option<u32>,
 }
 
 /// The layout as `decision.json` declares it.
@@ -273,6 +278,12 @@ impl StrandsLayout {
             .collect::<Result<Vec<_>, Error>>()?;
         let (state_ids, _) =
             enc.encode_offsets(&format!("<state>\n{}\n</state>\n", render(state)))?;
+        let state_ids: Vec<u32> = self
+            .special_tokens
+            .bos
+            .into_iter()
+            .chain(state_ids)
+            .collect();
         let cap = self.reserve_cap();
         let mut rows = Vec::with_capacity(texts.len());
         let mut truncated = false;
@@ -347,7 +358,7 @@ mod tests {
             max_batch: 2,
             choice_options: [2, 255],
             score_levels: [2, 10],
-            special_tokens: StrandsTokens { pad: 0 },
+            special_tokens: StrandsTokens { pad: 0, bos: None },
             templates: Templates {
                 headers: Headers {
                     noul: "N.".into(),
@@ -394,6 +405,33 @@ mod tests {
             .unwrap();
         assert!(noul.contains("1. false \u{2014} does not hold\n2. true\n</options>"));
         assert!(noul.contains("N.\n[\n  \"x\"\n]\n"));
+    }
+
+    #[test]
+    fn v2_prepends_bos_to_the_state() {
+        let qs = questions(json!({"q": {"type": "noul", "instructions": "ok?"}}));
+        let mut l = layout(4096);
+        l.special_tokens.bos = Some(7);
+        let e = l.encode(&Chars, &json!("a state"), &qs).unwrap();
+        let plain = layout(4096).encode(&Chars, &json!("a state"), &qs).unwrap();
+        let (row, base) = (&e.rows[0], &plain.rows[0]);
+        assert_eq!(row.ids[0], 7);
+        assert_eq!(row.ids[1..], base.ids[..]);
+        assert_eq!(row.decide, base.decide + 1);
+        assert_eq!(
+            row.opts.iter().map(|o| o - 1).collect::<Vec<_>>(),
+            base.opts
+        );
+        assert_eq!(e.state_tokens, plain.state_tokens + 1);
+        // In a tight window BOS counts against the state's budget, as upstream's truncation counts it.
+        let long = json!("s".repeat(500));
+        let mut t = layout(120);
+        t.special_tokens.bos = Some(7);
+        let a = t.encode(&Chars, &long, &qs).unwrap();
+        let b = layout(120).encode(&Chars, &long, &qs).unwrap();
+        assert_eq!(a.rows[0].ids.len(), b.rows[0].ids.len());
+        assert_eq!(a.rows[0].ids[0], 7);
+        assert!(a.state_truncated);
     }
 
     #[test]

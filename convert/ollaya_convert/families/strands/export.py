@@ -1,17 +1,19 @@
-"""Export StrandsAgents/strands-decider-2B-qwen3.5-v1-2610 (Qwen3.5-2B-Base + LoRA + pointer head) to a weightless ONNX graph.
+"""Export StrandsAgents/strands-decider-* (a Qwen3.5-2B or Gemma 4 E2B/E4B base + LoRA + pointer head) to a weightless ONNX graph.
 
     STRANDS_SRC=/path/to/strands-decider/src uv run --with peft==0.21.0 --with pydantic==2.12.5 \
         python -m ollaya_convert.families.strands.export strands-decider-2b --out out/strands-decider-2b
 
-Graph (layout `strands-pointer-v1`, see layout.py and docs/families/strands.md):
+Graph (layout `strands-pointer-v1`, or `-v2` when the tokenizer prepends BOS to the state as Gemma's does; see
+layout.py and docs/families/strands.md):
     inputs   input_ids   int64   [rows, seq]  one row per question; seq a multiple of 64, right-padded
              decide_pos  int64   [rows]       position of the row's last token (`<answer>`)
              opt_pos     int64   [rows, k]    positions of the last token of each option line (pad with 0)
     outputs  scores      float32 [rows, k]    raw pointer scores (k(norm(h_opt)) . q(norm(h_decide))) / sqrt(768)
 
 The LoRA is NOT merged: every adapted Linear runs as `x W^T + 2.0 * (x A^T) B^T`, so the graph references
-the upstream files byte for byte: the base `model.safetensors-00001-of-00001.safetensors` (BF16,
-Qwen/Qwen3.5-2B-Base), the adapter `lora/adapter_model.safetensors` (F32) and `head.safetensors` (F32).
+the upstream files byte for byte: the base checkpoint (BF16; Qwen/Qwen3.5-2B-Base's one shard, or Gemma 4's
+`model.safetensors`, whose vision and audio towers stay unused), the adapter `lora/adapter_model.safetensors` (F32)
+and `head.safetensors` (F32). The trunk is `llm_common.qwen35` or `llm_common.gemma4` by the base's model type.
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ import tokenizers
 import torch
 
 from ..llm_common import onnx_export as ox
+from ..llm_common.gemma4 import Gemma4Trunk
 from ..llm_common.qwen35 import CHUNK, Qwen35Trunk, half_trunk
 from ...weightless_sharded import safetensors_source
 from . import ref
@@ -41,7 +44,8 @@ SAMPLE_QUESTIONS = {"team": {"type": "choice", "instructions": "Which team?",
 class StrandsGraph(torch.nn.Module):
     def __init__(self, text_model, head):
         super().__init__()
-        self.trunk = Qwen35Trunk(text_model)
+        gemma = str(text_model.config.model_type).startswith("gemma4")
+        self.trunk = Gemma4Trunk(text_model) if gemma else Qwen35Trunk(text_model)
         self.head = head
 
     def forward(self, input_ids, decide_pos, opt_pos):
@@ -74,7 +78,7 @@ def export(slug, out_dir, run_dir, base_dir, fp16=False):
     if cfg.head_type != "pointer":
         raise SystemExit("%s has a %s head; this layout reads a pointer head" % (slug, cfg.head_type))
     model.eval()
-    lora_model = model.torso.base_model.model   # Qwen3_5TextModel with peft LoRA Linear wrappers
+    lora_model = model.torso.base_model.model   # Qwen3_5TextModel / Gemma4TextModel with peft LoRA Linear wrappers
     graph = StrandsGraph(lora_model, model.head).eval()
 
     # two rows, three options each: every dynamic axis > 1
@@ -100,9 +104,18 @@ def export(slug, out_dir, run_dir, base_dir, fp16=False):
     secs = ox.export_graph(graph, args, INPUT_NAMES, OUTPUT_NAMES, dyn, os.path.join(tmp, "model.onnx"))
     print("exported in %.0fs" % secs)
     tok = engine.tok
+    # The state is tokenized with the tokenizer's special tokens (upstream `_fit`): Qwen's adds none, Gemma's
+    # prepends BOS (`force_bos`); the runtime prepends `special_tokens.bos` itself, so the layout is v2 then.
     sample = "<state>\nx\n</state>\n"
-    if tok(sample, add_special_tokens=True)["input_ids"] != tok(sample, add_special_tokens=False)["input_ids"]:
-        raise SystemExit("the tokenizer adds special tokens to the state; the layout assumes it adds none")
+    plain = tok(sample, add_special_tokens=False)["input_ids"]
+    special = tok(sample, add_special_tokens=True)["input_ids"]
+    if special == plain:
+        bos = None
+    elif special == [tok.bos_token_id] + plain:
+        bos = tok.bos_token_id
+    else:
+        raise SystemExit("the tokenizer adds special tokens the layout cannot express: %s" % special[: 3])
+    layout = "strands-pointer-v2" if bos is not None else "strands-pointer-v1"
     del graph, lora_model, model, engine, want, got
     gc.collect()
 
@@ -128,7 +141,7 @@ def export(slug, out_dir, run_dir, base_dir, fp16=False):
     decision = {
         "engine": "onnx",
         "family": "strands",
-        "layout": "strands-pointer-v1",
+        "layout": layout,
         "upstream": {"repo": meta["repo"], "revision": meta["revision"], "base": meta["base"],
                      "base_revision": meta["base_revision"], "code": ref.STRANDS_GIT,
                      "lora": {"r": lora["r"], "alpha": lora["lora_alpha"], "scaling": lora["lora_alpha"] / lora["r"],
@@ -153,7 +166,7 @@ def export(slug, out_dir, run_dir, base_dir, fp16=False):
         "max_batch": 32,
         "choice_options": [2, schema.MAX_CHOICE_OPTIONS],
         "score_levels": [schema.MIN_SCORE_LEVELS, schema.MAX_SCORE_LEVELS],
-        "special_tokens": {"pad": tok.pad_token_id, "add_special_tokens": False},
+        "special_tokens": {"pad": tok.pad_token_id, "bos": bos, "add_special_tokens": bos is not None},
         "templates": {
             "state": "<state>\\n{render(state)}\\n</state>\\n",
             "question": "<question type=\"{type}\">\\n{header}\\n{render(instructions)}\\n<options>\\n{lines}\\n"

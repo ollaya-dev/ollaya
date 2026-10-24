@@ -120,6 +120,7 @@ pub const LAYOUTS: &[&str] = &[
     "decima-late-interaction-v2",
     "arbiter-fixed-v1",
     "strands-pointer-v1",
+    "strands-pointer-v2",
     "pplx-joint-v1",
     "d1-omni-markers-v1",
 ];
@@ -186,9 +187,9 @@ pub fn load(
         "arbiter-fixed-v1" => Ok(Box::new(crate::arbiter::ArbiterModel::load_files(
             files, device, threads,
         )?)),
-        "strands-pointer-v1" => Ok(Box::new(crate::strands::StrandsModel::load_files(
-            files, device, threads,
-        )?)),
+        "strands-pointer-v1" | "strands-pointer-v2" => Ok(Box::new(
+            crate::strands::StrandsModel::load_files(files, device, threads)?,
+        )),
         "pplx-joint-v1" => Ok(Box::new(crate::pplx::PplxModel::load_files(
             files, device, threads,
         )?)),
