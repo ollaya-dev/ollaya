@@ -3,19 +3,19 @@
   "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
   "config": {
     "mediaType": "application/vnd.ollaya.config.v1+json",
-    "digest": "sha256:6f14b8275a896c364d9556688c47199347e78319f6b723087bddfc69cec099eb",
+    "digest": "sha256:831441c2b7a5b7ef3c9da3fe75ba8579542619e76321e97ee6b8fc0ece96ed3a",
     "size": 476,
     "urls": [
-      "https://ollaya.dev/blobs/sha256-6f14b8275a896c364d9556688c47199347e78319f6b723087bddfc69cec099eb"
+      "https://ollaya.dev/blobs/sha256-831441c2b7a5b7ef3c9da3fe75ba8579542619e76321e97ee6b8fc0ece96ed3a"
     ]
   },
   "layers": [
     {
       "mediaType": "application/vnd.ollaya.graph.onnx",
-      "digest": "sha256:92d357766af83791f40283de3410665637edd403ddeb73aa1489d2f4091b44cf",
-      "size": 10992650,
+      "digest": "sha256:ab0e2680b16c1417b4b719004f0ce8147a2735be837517a91487c40565cff0c9",
+      "size": 11152138,
       "urls": [
-        "https://ollaya.dev/blobs/sha256-92d357766af83791f40283de3410665637edd403ddeb73aa1489d2f4091b44cf"
+        "https://ollaya.dev/blobs/sha256-ab0e2680b16c1417b4b719004f0ce8147a2735be837517a91487c40565cff0c9"
       ],
       "annotations": {
         "org.ollaya.precision": "fp32"
@@ -23,34 +23,34 @@
     },
     {
       "mediaType": "application/vnd.ollaya.weights",
-      "digest": "sha256:c8d38178b51c845d6befca9e2c8a579889055cecf510fdbc85dbdf7bb867a0d6",
+      "digest": "sha256:aab4cd72ce197c122c314a75380b5580a2c5a6f4089f7326dc2c49b3cedb592e",
       "size": 4268059288,
       "urls": [
-        "https://huggingface.co/PostHog/jeeves/resolve/8622b7d1652a9dcb8629486b84dce9e8d690c5cd/model-00001-of-00005.safetensors"
+        "https://huggingface.co/PostHog/jeeves/resolve/04b9f87a79484fda54131de3b030b579d399e704/model-00001-of-00005.safetensors"
       ]
     },
     {
       "mediaType": "application/vnd.ollaya.weights",
-      "digest": "sha256:a25e1a608a5be9cadef95e3f40fdca5c17b6c21e86481186adfd7a8a1f5b8f40",
+      "digest": "sha256:8d5a3ab2fe0235336a5c26a2782003b2467945b3b32ad85798cb29d01742e67a",
       "size": 4266315424,
       "urls": [
-        "https://huggingface.co/PostHog/jeeves/resolve/8622b7d1652a9dcb8629486b84dce9e8d690c5cd/model-00002-of-00005.safetensors"
+        "https://huggingface.co/PostHog/jeeves/resolve/04b9f87a79484fda54131de3b030b579d399e704/model-00002-of-00005.safetensors"
       ]
     },
     {
       "mediaType": "application/vnd.ollaya.weights",
-      "digest": "sha256:ab693e0b5940052ad04450fccfd12c87a49ce9ad23984bdfc07ee20d3ab654fe",
+      "digest": "sha256:5809ff16230bf34923cb3f7c65f03a5f2bf9fbf3c02e1132fc941724c4c36aee",
       "size": 4215378072,
       "urls": [
-        "https://huggingface.co/PostHog/jeeves/resolve/8622b7d1652a9dcb8629486b84dce9e8d690c5cd/model-00003-of-00005.safetensors"
+        "https://huggingface.co/PostHog/jeeves/resolve/04b9f87a79484fda54131de3b030b579d399e704/model-00003-of-00005.safetensors"
       ]
     },
     {
       "mediaType": "application/vnd.ollaya.weights",
-      "digest": "sha256:9942b7369222a4403809a05f1da21f53b006f2d5cf72651483dda48c4931ed9a",
+      "digest": "sha256:799ca2358f6801d5a5d204ea5864efc82a57bce57f9fd0d82633e318e18b0b00",
       "size": 3123665648,
       "urls": [
-        "https://huggingface.co/PostHog/jeeves/resolve/8622b7d1652a9dcb8629486b84dce9e8d690c5cd/model-00004-of-00005.safetensors"
+        "https://huggingface.co/PostHog/jeeves/resolve/04b9f87a79484fda54131de3b030b579d399e704/model-00004-of-00005.safetensors"
       ]
     },
     {
@@ -58,15 +58,15 @@
       "digest": "sha256:dd63614f1dc80dce2d83be3f3e69af1f8a0ebc8add9b8e0abf3910f563e44344",
       "size": 2034237568,
       "urls": [
-        "https://huggingface.co/PostHog/jeeves/resolve/8622b7d1652a9dcb8629486b84dce9e8d690c5cd/model-00005-of-00005.safetensors"
+        "https://huggingface.co/PostHog/jeeves/resolve/04b9f87a79484fda54131de3b030b579d399e704/model-00005-of-00005.safetensors"
       ]
     },
     {
       "mediaType": "application/vnd.ollaya.weights",
-      "digest": "sha256:2ab935dea9eecf263086d9ed6dfe97fd5558193663ecae102fd3c50ae6878d60",
+      "digest": "sha256:228601cd90a4ca047711847b573c47a790ba72b2dfce310a6333b5c78cc8ce44",
       "size": 8392767,
       "urls": [
-        "https://huggingface.co/PostHog/jeeves/resolve/8622b7d1652a9dcb8629486b84dce9e8d690c5cd/head.pt"
+        "https://huggingface.co/PostHog/jeeves/resolve/04b9f87a79484fda54131de3b030b579d399e704/head.pt"
       ]
     },
     {
@@ -79,18 +79,18 @@
     },
     {
       "mediaType": "application/vnd.ollaya.decision",
-      "digest": "sha256:96633b0ae45b2922287afebff86f01a946febaa5f6ecc8b551a53334a11e059e",
+      "digest": "sha256:606b4f72ad775a56741cf437c4589d1e7ef9750c81f8896e781b750fb48e55a1",
       "size": 2273,
       "urls": [
-        "https://ollaya.dev/blobs/sha256-96633b0ae45b2922287afebff86f01a946febaa5f6ecc8b551a53334a11e059e"
+        "https://ollaya.dev/blobs/sha256-606b4f72ad775a56741cf437c4589d1e7ef9750c81f8896e781b750fb48e55a1"
       ]
     },
     {
       "mediaType": "application/vnd.ollaya.calibration",
-      "digest": "sha256:b3c01d4ac3e35e77871a346312251323e0a3c922004b4e2f94750270bf52df1f",
-      "size": 217,
+      "digest": "sha256:034d821796b1f8d8dec99d7fdfabe7fb246aa48338cc7b3376b2bc537a1f0e3c",
+      "size": 178,
       "urls": [
-        "https://ollaya.dev/blobs/sha256-b3c01d4ac3e35e77871a346312251323e0a3c922004b4e2f94750270bf52df1f"
+        "https://ollaya.dev/blobs/sha256-034d821796b1f8d8dec99d7fdfabe7fb246aa48338cc7b3376b2bc537a1f0e3c"
       ]
     },
     {
