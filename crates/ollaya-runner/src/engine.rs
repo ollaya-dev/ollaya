@@ -122,6 +122,7 @@ pub const LAYOUTS: &[&str] = &[
     "strands-pointer-v1",
     "pplx-joint-v1",
     "d1-omni-markers-v1",
+    "d3-code-readout-v1",
 ];
 
 /// The layout a `decision` layer declares.
@@ -189,7 +190,7 @@ pub fn load(
         "strands-pointer-v1" => Ok(Box::new(crate::strands::StrandsModel::load_files(
             files, device, threads,
         )?)),
-        "pplx-joint-v1" => Ok(Box::new(crate::pplx::PplxModel::load_files(
+        "pplx-joint-v1" | "d3-code-readout-v1" => Ok(Box::new(crate::pplx::PplxModel::load_files(
             files, device, threads,
         )?)),
         "d1-omni-markers-v1" => Ok(Box::new(crate::d1_omni::D1OmniModel::load_files(

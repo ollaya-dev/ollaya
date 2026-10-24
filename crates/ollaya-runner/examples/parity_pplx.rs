@@ -1,5 +1,6 @@
-//! Compare the `pplx-joint-v1` runtime against golden fixtures from
-//! `ollaya_convert.families.pplx.goldens` (upstream pplx_decider in fp32, TF32 off).
+//! Compare the `pplx-joint-v1` and `d3-code-readout-v1` runtimes against golden fixtures from
+//! `ollaya_convert.families.pplx.goldens` (upstream pplx_decider in fp32, TF32 off) or
+//! `ollaya_convert.families.d3.goldens` (upstream d3_runtime in fp32).
 //!
 //!     cargo run --release -p ollaya-runner --example parity_pplx -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--fp16] [--smoke]
 //!

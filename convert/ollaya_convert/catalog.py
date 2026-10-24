@@ -593,6 +593,44 @@ CATALOG = {
                   "requests, the same decision on every question, option logits within 8.2e-5 and probabilities "
                   "within 6.8e-6 (CUDA).",
     },
+    "d3": {
+        "namespace": "library",
+        "model": "d3",
+        "family": "d3",
+        "author": "the vLLM Semantic Router contributors",
+        "license": "Apache-2.0",
+        "license_text": "Decision 3.0 (d3) by the vLLM Semantic Router contributors (https://huggingface.co/vllm-sr)\n"
+                        "Model, readout and code: Apache-2.0 (LICENSE and NOTICE in each model repository).\n"
+                        "A fine-tune of Qwen3.5 by the Qwen team (https://huggingface.co/Qwen), Apache-2.0.\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        # Upstream's AutoTokenizer is transformers 5's rebuild of the vocabulary, which equals Nimble v2's file
+        # (families/d3/export.py); the repositories' own tokenizer.json splits combining marks differently.
+        "tags": {tag: dict(_wl("d3-" + tag, "vllm-sr/d3-" + tag, commit,
+                               "d3-%s (Decision 3.0): a fine-tuned %s with a 255-code readout. Every question is its own "
+                               "sequence, read at its last token; the full-attention layers see the whole prompt. Up to "
+                               "255 options, 2 to 10 score levels, 8,192 tokens per question. Text only in Ollaya.%s"
+                               % (tag, base, memory),
+                               params, 8192, ["en"], wl_dir=os.path.join(OUT, "d3-" + tag),
+                               weights={**{f: f for f in shards}, "readout.safetensors": "readout.safetensors"}),
+                           tokenizer=("bespokelabs/Bespoke-Nimble-9B-v2", "4b8c04d1ac2cea3e41e5e3c4d2130bcead2c0abe",
+                                      "tokenizer.json"))
+                 for tag, commit, base, params, memory, shards in [
+                     ("edge", "c454ee39b862248d70abd7f84195d2f54ffe6d43", "Qwen3.5-0.8B (12 of its layers)", "0.6B",
+                      "", ["model-00001-of-00001.safetensors"]),
+                     ("lite", "03560c26f5199c3c04129a2ccb38960c913635e0", "Qwen3.5-0.8B", "0.8B",
+                      "", ["model-00001-of-00001.safetensors"]),
+                     ("nano", "462efc366229ea268cf4eed3738b3fc4415e4817", "Qwen3.5-2B", "2B",
+                      "", ["model.safetensors"]),
+                     ("mini", "bd0090dd758d32ba59ef5c749910a8e87fc4391f", "Qwen3.5-4B", "4B",
+                      " Needs about 9 GB of memory.",
+                      ["model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors"]),
+                     ("flash", "13dc1cc8ef23caefa765907e1d764751e5629f7d", "Qwen3.5-9B", "9B",
+                      " Needs about 18 GB of memory; best on a 24 GB GPU.",
+                      ["model-0000%d-of-00004.safetensors" % i for i in range(1, 5)]),
+                 ]},
+        "aliases": {"latest": "nano"},
+        "parity": "PENDING",
+    },
     "decision": {
         "namespace": "library",
         "model": "decision",

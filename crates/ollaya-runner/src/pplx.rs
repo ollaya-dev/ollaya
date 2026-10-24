@@ -1,6 +1,8 @@
-//! ONNX Runtime engine for Perplexity's pplx-decider (layout `pplx-joint-v1`).
+//! ONNX Runtime engine for Perplexity's pplx-decider (layout `pplx-joint-v1`) and vllm-sr's d3
+//! (layout `d3-code-readout-v1`), which share the graph.
 //!
-//! A request is one sequence (or, over the window, a few; `ollaya_decision::pplx`). The graph maps
+//! A pplx request is one sequence (or, over the window, a few; `ollaya_decision::pplx`); a d3
+//! request is one sequence per question, read at its last token (`ollaya_decision::d3`). The graph maps
 //! `input_ids` [rows, seq] (right-padded to a multiple of 64, positions implicit), `lengths` [rows]
 //! (the full-attention layers read only a row's real tokens; the linear-attention layers are
 //! causal) and `markers` [rows, q] to the readout `logits` [rows, q, 255]. A question's option
@@ -10,6 +12,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use ndarray::{Array1, Array2, Ix3};
+use ollaya_decision::d3::D3Layout;
 use ollaya_decision::pplx::{PplxLayout, PplxSequence};
 use ollaya_decision::{Calibration, CalibrationFile, Questions, TokenEncoder};
 use ort::session::Session;
@@ -43,15 +46,67 @@ struct DecisionConfig {
     contract: Contract,
     #[serde(default)]
     weights_in_memory: WeightsInMemory,
-    #[serde(flatten)]
-    pplx: PplxLayout,
+}
+
+/// How a request becomes the graph's rows.
+pub enum Layout {
+    /// `pplx-joint-v1`: every question in one sequence, read at its marker.
+    Joint(PplxLayout),
+    /// `d3-code-readout-v1`: one sequence per question, read at its last token.
+    PerQuestion(D3Layout),
+}
+
+impl Layout {
+    fn parse(layout: &str, config: Value) -> Result<Self, String> {
+        let layout = match layout {
+            "pplx-joint-v1" => {
+                Layout::Joint(serde_json::from_value(config).map_err(|e| e.to_string())?)
+            }
+            "d3-code-readout-v1" => {
+                Layout::PerQuestion(serde_json::from_value(config).map_err(|e| e.to_string())?)
+            }
+            other => return Err(format!("unsupported layout {other}")),
+        };
+        match &layout {
+            Layout::Joint(l) => l.validate(),
+            Layout::PerQuestion(l) => l.validate(),
+        }
+        .map_err(|e| e.to_string())?;
+        Ok(layout)
+    }
+
+    fn encode(
+        &self,
+        tok: &Tokenizer,
+        state: &Value,
+        questions: &Questions,
+    ) -> Result<Vec<PplxSequence>, ollaya_decision::Error> {
+        match self {
+            Layout::Joint(l) => l.encode(tok, state, questions),
+            Layout::PerQuestion(l) => l.encode(tok, state, questions),
+        }
+    }
+
+    fn pad(&self) -> u32 {
+        match self {
+            Layout::Joint(l) => l.special_tokens.pad,
+            Layout::PerQuestion(l) => l.special_tokens.pad,
+        }
+    }
+
+    fn max_options(&self) -> usize {
+        match self {
+            Layout::Joint(l) => l.max_options,
+            Layout::PerQuestion(l) => l.max_options,
+        }
+    }
 }
 
 pub struct PplxModel {
     session: Mutex<Session>,
     tokenizer: Tokenizer,
     seq_multiple: usize,
-    pub layout: PplxLayout,
+    pub layout: Layout,
     pub calibration: Calibration,
     pub device: Device,
 }
@@ -90,15 +145,17 @@ impl PplxModel {
         device: Device,
         intra_threads: Option<usize>,
     ) -> Result<Self, Error> {
-        let config: DecisionConfig = read_json(&files.decision)?;
-        if config.engine != "onnx" || config.layout != "pplx-joint-v1" {
-            return Err(Error::Model(format!(
-                "unsupported engine/layout {}/{}; this engine serves onnx/pplx-joint-v1",
-                config.engine, config.layout
+        let raw: Value = read_json(&files.decision)?;
+        let bad = |e: String| Error::Model(format!("{}: {e}", files.decision.display()));
+        let config: DecisionConfig =
+            serde_json::from_value(raw.clone()).map_err(|e| bad(e.to_string()))?;
+        if config.engine != "onnx" {
+            return Err(bad(format!(
+                "unsupported engine {}; this engine serves onnx",
+                config.engine
             )));
         }
-        let bad = |e: String| Error::Model(format!("{}: {e}", files.decision.display()));
-        config.pplx.validate().map_err(|e| bad(e.to_string()))?;
+        let layout = Layout::parse(&config.layout, raw).map_err(bad)?;
         if config.contract.seq_multiple == 0 {
             return Err(bad("contract.seq_multiple must be positive".into()));
         }
@@ -128,7 +185,7 @@ impl PplxModel {
             session: Mutex::new(session),
             tokenizer: Tokenizer(tokenizer),
             seq_multiple: config.contract.seq_multiple,
-            layout: config.pplx,
+            layout,
             calibration,
             device,
         })
@@ -147,7 +204,7 @@ impl PplxModel {
             .iter()
             .map(|&i| seqs[i].ids.len().div_ceil(self.seq_multiple) * self.seq_multiple)
             .collect();
-        let pad = i64::from(self.layout.special_tokens.pad);
+        let pad = i64::from(self.layout.pad());
         let mut logits = vec![Vec::new(); n];
         let mut session = self.session.lock().expect("session mutex poisoned");
         for range in crate::engine::batches(&padded, TOKEN_BUDGET, MAX_ROWS) {
@@ -183,7 +240,8 @@ impl PplxModel {
                 .try_extract_array::<f32>()?
                 .into_dimensionality::<Ix3>()
                 .map_err(|e| Error::Model(format!("{OUTPUT}: {e}")))?;
-            if out.shape()[..2] != [batch.len(), width] || out.shape()[2] < self.layout.max_options
+            if out.shape()[..2] != [batch.len(), width]
+                || out.shape()[2] < self.layout.max_options()
             {
                 return Err(Error::Model(format!(
                     "{OUTPUT} has shape {:?} for {} rows of {width} questions",

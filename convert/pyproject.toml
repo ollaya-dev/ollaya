@@ -16,6 +16,8 @@ dependencies = [
     "onnxruntime==1.30.*",
     "numpy>=2",
     "pyarrow>=20",
+    # d3's reference runtime (d3_runtime.py, in the model repositories) loads its backbone with a device_map.
+    "accelerate>=1.10",
 ]
 
 [tool.uv]

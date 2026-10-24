@@ -435,6 +435,23 @@ const overlays: Record<string, ModelOverlay> = {
       flash: { summary: 'pplx-decider-flash-v1.2 (Qwen3.5-4B), about 9 GB in memory.' },
     },
   },
+  d3: {
+    title: 'Decision 3.0 (d3)',
+    description:
+      'Decision 3.0 by the vLLM Semantic Router contributors: a fine-tuned Qwen3.5 whose full-attention layers read the whole prompt, with a readout over 255 answer codes. Every question is its own forward pass. Five sizes, 0.6B to 9B.',
+    publisher: { name: 'vLLM Semantic Router', url: 'https://huggingface.co/vllm-sr' },
+    capabilities: ['decision', 'fine-tuned'],
+    keywords: ['d3', 'decision', 'decision 3.0', 'edge', 'lite', 'nano', 'mini', 'flash', 'semantic router', 'vllm', 'qwen', 'qwen3.5', 'llm', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 26,
+    tags: {
+      latest: { summary: 'Same as d3:nano.' },
+      edge: { summary: 'Qwen3.5-0.8B cut to 12 layers: the smallest and fastest. 20.2 on Decision Index 0.3.2 (upstream).' },
+      lite: { summary: 'Qwen3.5-0.8B: 32.3 on Decision Index 0.3.2 (upstream).' },
+      nano: { summary: 'Qwen3.5-2B: 38.9 on Decision Index 0.3.2 (upstream).' },
+      mini: { summary: 'Qwen3.5-4B: 52.6 on Decision Index 0.3.2 (upstream), about 9 GB in memory.' },
+      flash: { summary: 'Qwen3.5-9B: 55.8 on Decision Index 0.3.2 (upstream), about 18 GB in memory.' },
+    },
+  },
   decima: {
     stats: stats('decima:base'),
     title: 'Decima',
