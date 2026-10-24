@@ -1,0 +1,30 @@
+{
+ "schema": 1,
+ "suite": "parity",
+ "date": "2026-10-24",
+ "machine": "mac-m4-pro",
+ "device": "metal",
+ "ollaya": "0.17.0 at b97e96a",
+ "protocol": {
+  "reference": "goldens from each family's goldens.py: the authors' code in PyTorch fp32 (TF32 off) on the checkpoint the manifest names",
+  "gate": "fp32 tags: identical encodings and decisions, option logits within 1e-3, wire answers as the authors' code; -fp16 tags (docs/decisions/0008-fp16-decoder-tags.md): identical encodings, at least 99.5 % of decisions the same, differences reported",
+  "runner": "crates/ollaya-runner/examples/parity_decider.rs with --features mlx and the device metal, run by hand (parity_run records cuda and cpu only)"
+ },
+ "results": [
+  {
+   "model": "decider:2b",
+   "questions": 479,
+   "decisions_same": 479,
+   "max_logit_diff": 4.100799560546875e-05,
+   "max_prob_diff": 4.591483227245341e-05,
+   "p99_prob_diff": 2.766943943965927e-06,
+   "pass": true,
+   "device": "metal",
+   "kind": "runtime",
+   "gate": "fp32",
+   "encoding_mismatches": 0,
+   "goldens": "convert/out/goldens-decider-2b.jsonl (114 cases, decider-ai 1.10.0 fp32 on CUDA, made on the rtx-4090 the same day)",
+   "engine": "mlx"
+  }
+ ]
+}

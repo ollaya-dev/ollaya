@@ -13,6 +13,8 @@ option gets a `[MASK]` token in one sequence and is scored from that token's hid
 
 The existing Laya export does not apply. This document is the spec the Rust port implements.
 
+**Upstream status (2026-10-19): archived.** The author no longer maintains Von; the card points to LiquidAI/d1-omni-600M, which Ollaya serves as `d1-omni` ([d1-omni.md](d1-omni.md)). `von:1.1` stays as it is.
+
 **Status: implemented, library entry prepared** as `von:1.1` (also `von:latest`), issue #5. The
 runtime is `ollaya_decision::von` (rows), `ollaya_decision::pyrepr` (Python `str()`),
 `ollaya_decision::calibration::TemperatureMap` (the input-conditioned temperature) and

@@ -155,8 +155,8 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 3,
     tags: {
       latest: { summary: 'Same as decider:2b.' },
-      '4b': { summary: `Qwen3.5-4B base (v2.1), ${result('decider:4b', 'typed.accuracy', 3)} on typed decisions, one fitted temperature per answer type. Best on a GPU.` },
-      '2b': { summary: `Qwen3.5-2B base, ${result('decider:2b', 'typed.accuracy', 3)} on typed decisions.` },
+      '4b': { summary: `Qwen3.5-4B base (v3), ${result('decider:4b', 'typed.accuracy', 3)} on typed decisions, one fitted temperature per answer type. Best on a GPU.` },
+      '2b': { summary: `Qwen3.5-2B base (v12), ${result('decider:2b', 'typed.accuracy', 3)} on typed decisions, one fitted temperature per answer type.` },
       '0.8b': { summary: `Qwen3.5-0.8B base, ${result('decider:0.8b', 'typed.accuracy', 3)} on typed decisions: smaller and faster.` },
       '2b-vision': {
         summary: 'Reads an image as well as the state: Qwen3.5-2B vision-language with v5 text weights. One PNG per request, up to 10 options.',
@@ -235,6 +235,19 @@ const overlays: Record<string, ModelOverlay> = {
     tags: {
       latest: { summary: 'Same as von:1.1.' },
       '1.1': { summary: `Von 1.1, ModernBERT-large, ${result('von:1.1', 'typed.accuracy', 3)} on typed decisions; 8,192-token context.` },
+    },
+  },
+  'd1-omni': {
+    title: 'd1-omni',
+    description:
+      "Liquid AI's d1-omni-600M, text questions: an LFM2.5 encoder with a decision head that scores every option at its own marker, all of a question's options in one pass, calibrated per question type and option count. 16k-token context. The checkpoint's image and audio paths are not served.",
+    publisher: { name: 'Liquid AI', url: 'https://huggingface.co/LiquidAI' },
+    capabilities: ['decision', 'multilingual', 'long-context'],
+    keywords: ['d1', 'd1-omni', 'liquid', 'liquid ai', 'lfm2', 'lfm2.5', 'encoder', 'option marker', 'von', 'decision', 'classification', 'classifier', 'typesafe', 'jev', 'system one'],
+    rank: 8,
+    tags: {
+      latest: { summary: 'Same as d1-omni:600m.' },
+      '600m': { summary: 'd1-omni-600M (LFM2.5-Encoder-350M trunk; 587M in the checkpoint, 381M read for text), fp32: text questions in 15 languages, 16,384-token context.' },
     },
   },
   credence: {
@@ -420,6 +433,24 @@ const overlays: Record<string, ModelOverlay> = {
     tags: {
       latest: { summary: 'Same as pplx-decider:flash.' },
       flash: { summary: 'pplx-decider-flash-v1.2 (Qwen3.5-4B), about 9 GB in memory.' },
+    },
+  },
+  d3: {
+    stats: stats('d3:mini'),
+    title: 'Decision 3.0 (d3)',
+    description:
+      'Decision 3.0 by the vLLM Semantic Router contributors: a fine-tuned Qwen3.5 whose full-attention layers read the whole prompt, with a readout over 255 answer codes. Every question is its own forward pass. Five sizes, 0.6B to 9B.',
+    publisher: { name: 'vLLM Semantic Router', url: 'https://huggingface.co/vllm-sr' },
+    capabilities: ['decision', 'fine-tuned'],
+    keywords: ['d3', 'decision', 'decision 3.0', 'edge', 'lite', 'nano', 'mini', 'flash', 'semantic router', 'vllm', 'qwen', 'qwen3.5', 'llm', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 26,
+    tags: {
+      latest: { summary: 'Same as d3:mini.' },
+      edge: { summary: `Qwen3.5-0.8B cut to 12 layers, the fastest: ${result('d3:edge', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+      lite: { summary: `Qwen3.5-0.8B: ${result('d3:lite', 'typed.accuracy', 3)} on typed decisions, zero-shot.` },
+      nano: { summary: `Qwen3.5-2B: ${result('d3:nano', 'typed.accuracy', 3)} on typed decisions, zero-shot.` },
+      mini: { summary: `Qwen3.5-4B, the most accurate size: ${result('d3:mini', 'typed.accuracy', 3)} on typed decisions, zero-shot; ${result('d3:mini', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+      flash: { summary: `Qwen3.5-9B: ${result('d3:flash', 'typed.accuracy', 3)} on typed decisions, no more accurate than d3:mini at twice the memory.` },
     },
   },
   decima: {

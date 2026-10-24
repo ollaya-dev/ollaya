@@ -23,6 +23,10 @@ dec/json_array                      # a long JSON array, floats, bools and null
 pplx/split
 pplx/one_too_long
 pplx/falsy
+d3/one_too_long
+d3/falsy
+d3/noul_upper_key
+d3/eleven_levels
 strands/long_question
 strands/cut_options
 strands/whitespace
