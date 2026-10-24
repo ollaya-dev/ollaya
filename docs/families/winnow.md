@@ -142,6 +142,8 @@ The runner must match every decision, with option logits within 1e-3. Measured o
 | e4b Q8_0 | CPU, Apple M4 Pro, macOS (2026-10-22) | 505 | 505/505 | 1.14e-5 | 2.6e-6 |
 | e4b Q8_0 | CPU, ARM64 Linux, DGX Spark (Cortex-X925; `ubuntu-arm64` of the same build; 2026-10-22) | 505 | 505/505 | 1.20e-5 | 2.6e-6 |
 | 12b Q8_0 | CPU, x86-64 Linux, Threadripper 3960X (2026-10-22) | 505 | 505/505 | 1.11e-5 | 2.1e-6 |
+| e2b Q8_0 | CUDA, RTX 5090, Linux (2026-10-24) | 505 | 505/505 | 1.08e-5 | 2.8e-6 |
+| e2b Q8_0 | CPU, x86-64 Linux, Threadripper 3960X (2026-10-24) | 505 | 505/505 | 9.8e-6 | 3.8e-6 |
 
 - **Windows.** The golden replay on Windows stopped on a text-encoding error in the Python tool
   (cp1252), so the native Windows check covered only the first 3 requests.

@@ -83,6 +83,7 @@ v2.1 (2026-10-24, hope; the 4B row above is still v2's):
 | 9b v2.1 Q8_0 | CUDA, RTX 5090 | 494/494 | 7.6e-6 | 2.8e-6 |
 | 27b v2.1 Q4_K_M | CUDA, RTX 5090 | 494/494 | 7.6e-6 | 2.8e-6 |
 | 9b v2.1 Q8_0 | CPU, Threadripper 3960X (smoke cases, goldens replayed on the CPU) | 21/21 | 5.6e-6 | 2.8e-6 |
+| 27b v2.1 Q4_K_M | CPU, Threadripper 3960X (smoke cases, goldens replayed on the CPU) | 21/21 | 7.5e-6 | 1.3e-6 |
 
 ```sh
 uv run python -m ollaya_convert.families.llm_common.export_llama jebadiah --server <b11146>/llama-server \
