@@ -1,9 +1,10 @@
-# strands (`strands-pointer-v1`)
+# strands (`strands-pointer-v1`, `strands-pointer-v2`)
 
 Strands Agents' **Strands Decider** is a decision model built from three parts:
-- a LoRA adapter (r=48, α=96) on `Qwen/Qwen3.5-2B-Base`;
-- a **pointer head**: a LayerNorm and two `Linear(2048→768)` projections, where option j's score is
-  `k(h_opt_j)·q(h_decide)/√768`;
+- a LoRA adapter (r=48, α=96) on a base decoder: `Qwen/Qwen3.5-2B-Base`, or Gemma 4 E2B / E4B (instruction-tuned)
+  since 2026-10-09;
+- a **pointer head**: a LayerNorm and two `Linear(hidden→768)` projections (hidden 2048, 1536 or 2560), where
+  option j's score is `k(h_opt_j)·q(h_decide)/√768`;
 - fitted temperatures per question type in `strands_decider_config.json`.
 
 It serves TypeSafe's `POST /v1/systemone`. The code is https://github.com/strands-labs/strands-decider, pinned
@@ -15,22 +16,37 @@ the config and a tokenizer. Ollama 0.40 lists the model as `strands-decider`, bu
 |---|---|---|---|---|
 | `StrandsAgents/strands-decider-2B-qwen3.5-v1-2610` | `216d1ccb` (2026-10) | Qwen/Qwen3.5-2B-Base @ `b1485b2f` (Apache-2.0), 1 shard | 0.863 / 1.834 / 1.070 | **converted, ONNX** (`strands-decider:2b`) |
 | `strands-decider-2B-hobson-v19`, `-v21` | | same base | | earlier recipe, same layout per upstream's docs; not converted |
-| Gemma 4 variants | | Gemma 4 | | different trunk; not converted |
+| `StrandsAgents/strands-decider-E2B-gemma4-v1-2610` | `d383ecf8` (2026-10-09) | google/gemma-4-E2B-it @ `3e22461f` (Apache-2.0), 1 file | 0.561 / 1.479 / 1.070 | **converted, ONNX** (`strands-decider:e2b`, layout v2) |
+| `StrandsAgents/strands-decider-E4B-gemma4-v1-2610` | `1344d443` (2026-10-09) | google/gemma-4-E4B-it @ `ee0ef602` (Apache-2.0), 1 file | 0.775 / 0.863 / 0.592 | **converted, ONNX** (`strands-decider:e4b`, layout v2) |
+| `strands-decider-12B-gemma4-v1-2610`, `-26B-A4B-gemma4-v1-2610` | | Gemma 4 12B (`gemma4_unified`), 26B-A4B (mixture of experts) | | not converted: the 12B is past the parity GPU in fp32, the MoE block is not in the trunk |
+
+The Gemma 4 models' `provenance.json` names the base revision upstream's loader resolved when they were made
+(the loader itself does not pin it); Ollaya pins that revision.
 
 ## Engine: ONNX (single forward per question)
 
-- **Export.** `families/strands/export.py` reuses `llm_common/qwen35.py` (the scan-based Gated-DeltaNet trunk,
-  see [decider.md](decider.md)) and adds the head. The graph has kev's contract, so the runner shares
-  `kev::pointer_scores`.
+- **Export.** `families/strands/export.py` picks the trunk by the base's model type: `llm_common/qwen35.py` (the
+  scan-based Gated-DeltaNet trunk, see [decider.md](decider.md)) or `llm_common/gemma4.py` (below), and adds the head.
+  The graph has kev's contract, so the runner shares `kev::pointer_scores`.
+- **Gemma 4 trunk.** `Gemma4Trunk` recomputes `Gemma4TextModel`'s forward from its own submodules with explicit
+  attention and no mask input: the scaled embedding plus the **per-layer embeddings** (a second table of
+  `num_layers × 256` per token, combined with a normalised projection of the embedding and added by every layer
+  through a gated projection after its MLP); sliding layers (window 512, head_dim 256, local RoPE) and full-attention
+  layers (head_dim 512, "proportional" partial RoPE, theta 1e6); **KV sharing** (the last 20 of 35 layers in E2B, 18 of
+  42 in E4B, have no K/V projections and reuse the last non-shared layer's keys and values of their type); q/k/v norms,
+  `layer_scalar`, the double-wide MLP of the shared layers. Half of the text weights are the two embedding tables
+  (262,144 × 1536 and 262,144 × 8960 in E2B), which the graph reads through Gathers, so `weights_in_memory` is `bf16`
+  and the tables are never widened whole.
 - **LoRA.** Not merged: each adapted Linear runs as `x·Wᵀ + 2.0·(x·Aᵀ)·Bᵀ`, so base and adapter weights stay
-  byte-referenced. The eager graph matches upstream's fp32 model to 1.8e-6 on the scores.
+  byte-referenced. The eager graph matches upstream's fp32 model to 1.8e-6 on the scores (Qwen 2B), 1.6e-6 (E2B)
+  and 1.2e-6 (E4B).
 
 ## Files (nothing re-hosted)
 
 | Layer | Source |
 |---|---|
-| `model.onnx` (graph, 10.1 MB) | derived, hosted by Ollaya |
-| base weights, BF16 | `Qwen/Qwen3.5-2B-Base`'s `model.safetensors-00001-of-00001.safetensors` (4.5 GB) at the pinned revision; the vision tower (312 tensors) and MTP tensors are unused |
+| `model.onnx` (graph, 10.1 MB; E2B 10.4 MB, E4B 13.1 MB) | derived, hosted by Ollaya |
+| base weights, BF16 | `Qwen/Qwen3.5-2B-Base`'s `model.safetensors-00001-of-00001.safetensors` (4.5 GB) at the pinned revision; the vision tower (312 tensors) and MTP tensors are unused. For the Gemma tags, `google/gemma-4-E2B-it`'s `model.safetensors` (10.2 GB) and `google/gemma-4-E4B-it`'s (16.0 GB), whose vision and audio towers and the K/V projections of the shared layers are unused |
 | LoRA adapter, F32 | the model repo's `lora/adapter_model.safetensors` (202 MB), every tensor used |
 | pointer head, F32 | same repo, `head.safetensors` (12.6 MB) |
 | `tokenizer.json` | same repo, as-is (byte-identical to what transformers 5.17 builds for the base) |
@@ -73,7 +89,12 @@ line_j   = "{j}. {name}"  or  "{j}. {name} — {collapse(description)}"
 
 ### Fitting the window
 
-Tokenizer: `tokenizer.json` with no special tokens. Questions are fitted in runs of `max_batch` = 32. With `L` the
+Tokenizer: `tokenizer.json`, the state with the tokenizer's special tokens and the questions without (upstream
+`_fit`). Qwen's tokenizer adds none; Gemma's prepends `<bos>` (upstream `force_bos`), so the Gemma tags declare
+`special_tokens.bos` and the layout **`strands-pointer-v2`**: the runtime prepends that token to the state, and it
+counts against the state's budget as upstream's truncation counts it. The runtime refuses a v2 manifest without
+`bos`, and an older runtime refuses v2 outright instead of building rows without the token. Questions are fitted in
+runs of `max_batch` = 32. With `L` the
 run's longest question, every question of the run keeps its **last** `min(L, int(4096 × 0.75))` tokens, and the
 state its **first** `4096 − that` tokens. A row is `state_ids + question_ids`; `decide_pos` is its last token
 (`<answer>`), and option j's position is the last token of line j that lies wholly inside the kept text. If a
@@ -118,6 +139,23 @@ cargo run --release -p ollaya-runner --example parity_strands -- \
 The CPU run takes 11.4 s per request on the i9-13900K (the goldens include 4,096-token rows); a CPU is not a
 practical target for this model.
 
+### Gemma 4 tags (2026-10-24)
+
+Same goldens recipe (`goldens.py`, the same 152 requests), upstream `strands_decider` at the same commit loading
+`Gemma4ForConditionalGeneration`'s text decoder with the LoRA unmerged, in fp32: E2B's reference on the RTX 4090,
+E4B's on the CPU (its fp32 text weights, 35 GB, do not fit the GPU). `parity_strands` through `parity_run`:
+
+| Tag | Device | rows | rejections | max \|Δ option logit\| | max \|Δ probability\| (p99) | answers vs upstream |
+|---|---|---|---|---|---|---|
+| `e2b` | CUDA | 650 / 650 identical (18 rejected, as upstream) | 0 mismatches | 1.8e-5 | 1.1e-5 (2.2e-6) | 0 differ (max 1.0e-4, the rounding) |
+| `e2b` | CPU (i9-13900K) | 650 / 650 identical | 0 mismatches | 2.1e-5 | 1.2e-5 (1.5e-6) | 0 differ (max 1.0e-4, the rounding) |
+| `e4b` | CUDA | 650 / 650 identical | 0 mismatches | 1.7e-5 | 3.6e-6 (2.3e-6) | 0 differ (max 1.0e-4, the rounding) |
+| `e4b` | CPU (i9-13900K) | 650 / 650 identical | 0 mismatches | 1.7e-5 | 5.2e-6 (1.5e-6) | 0 differ (max 1.0e-4, the rounding) |
+
+Forward on the 134 records: E2B 410 ms/request on CUDA and 16.4 s on the CPU; E4B 714 ms and 29.8 s.
+
+Records: `results/runs/2026-10-24-parity-rtx4090-{cuda,cpu}.json`.
+
 ## fp16 tag
 
 `strands-decider:2b-fp16` runs the same weights with the trunk in fp16 on NVIDIA GPUs ([ADR 0008](../decisions/0008-fp16-decoder-tags.md)).
@@ -141,11 +179,17 @@ the fp16 tag are on the model page and on bench.ollaya.dev. On a CPU an fp16 tag
 
 ## Upstream numbers (model card)
 
-JevBench public at window 4096: 180 / 231 tasks, Brier 0.280, ECE 0.072. Internal held-out short tasks 0.653
+Qwen 2B: JevBench public at window 4096: 180 / 231 tasks, Brier 0.280, ECE 0.072. Internal held-out short tasks 0.653
 (n = 6,000), ContractNLI 0.878, HotpotQA (held out) 0.832, MuSiQue 0.882.
+
+E2B: JevBench public at window 4096: 180 / 231 tasks (0.779), Brier 0.313, ECE 0.053. Held-out short tasks 0.652
+(n = 6,000), boardgame 0.793, ContractNLI 0.856, HotpotQA (held out) 0.734, MuSiQue 0.913.
+
+E4B: JevBench public at window 4096: 187 / 231 tasks (0.810), Brier 0.243, ECE 0.037. Held-out short tasks 0.684
+(n = 6,000), boardgame 0.844, ContractNLI 0.872, HotpotQA (held out) 0.829, MuSiQue 0.922.
 
 ## Attribution
 
 Strands Decider is by Strands Agents (also published as `amazon/strands-decider-2B-qwen3.5-v1-2610`), Apache-2.0.
-The base, Qwen3.5-2B-Base, is by the Qwen team (Apache-2.0). Training data sources carry their own licenses; see
+The bases are Qwen3.5-2B-Base by the Qwen team and Gemma 4 E2B / E4B by Google DeepMind, all Apache-2.0. Training data sources carry their own licenses; see
 the model card.

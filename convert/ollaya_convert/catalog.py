@@ -153,6 +153,15 @@ LICENSE_MIT_NLI = ("DeBERTa-v3-large zero-shot v2.0 by Moritz Laurer "
                    "(https://huggingface.co/MoritzLaurer/deberta-v3-large-zeroshot-v2.0), MIT License.\n"
                    "Note from the model card: part of the training data carries non-commercial licenses.\n")
 
+# The Gemma 4 tags' license layer; the Qwen tag keeps the family text, so its manifests do not change.
+_STRANDS_GEMMA_LICENSE = ("Strands Decider by Strands Agents "
+                          "(https://huggingface.co/StrandsAgents/strands-decider-E2B-gemma4-v1-2610, "
+                          "https://huggingface.co/StrandsAgents/strands-decider-E4B-gemma4-v1-2610)\n"
+                          "LoRA adapters and pointer heads: Apache-2.0 (LICENSE.md in the model repositories).\n"
+                          "Base models: Gemma 4 E2B and E4B (instruction-tuned) by Google DeepMind "
+                          "(https://huggingface.co/google/gemma-4-E2B-it, https://huggingface.co/google/gemma-4-E4B-it), "
+                          "Apache-2.0.\nLicensed under the Apache License, Version 2.0.\n\n") + LICENSE_APACHE
+
 CATALOG = {
     "d1": {
         "namespace": "library", "model": "d1", "family": "d1", "author": "Liquid AI",
@@ -505,13 +514,9 @@ CATALOG = {
         "author": "Strands Agents (adapter and pointer head), the Qwen team and Google DeepMind (base models)",
         "license": "Apache-2.0",
         "license_text": ("Strands Decider by Strands Agents "
-                         "(https://huggingface.co/StrandsAgents/strands-decider-2B-qwen3.5-v1-2610, "
-                         "https://huggingface.co/StrandsAgents/strands-decider-E2B-gemma4-v1-2610, "
-                         "https://huggingface.co/StrandsAgents/strands-decider-E4B-gemma4-v1-2610)\n"
-                         "LoRA adapters and pointer heads: Apache-2.0 (LICENSE.md in the model repositories).\n"
-                         "Base models: Qwen3.5-2B-Base by the Qwen team (https://huggingface.co/Qwen/Qwen3.5-2B-Base), "
-                         "Apache-2.0; Gemma 4 E2B and E4B (instruction-tuned) by Google DeepMind "
-                         "(https://huggingface.co/google/gemma-4-E2B-it, https://huggingface.co/google/gemma-4-E4B-it), "
+                         "(https://huggingface.co/StrandsAgents/strands-decider-2B-qwen3.5-v1-2610)\n"
+                         "LoRA adapter and pointer head: Apache-2.0 (LICENSE.md in the model repository).\n"
+                         "Base model: Qwen3.5-2B-Base by the Qwen team (https://huggingface.co/Qwen/Qwen3.5-2B-Base), "
                          "Apache-2.0.\nLicensed under the Apache License, Version 2.0.\n\n") + LICENSE_APACHE,
         "tags": {
             "2b": _wl("strands-decider-2b", "StrandsAgents/strands-decider-2B-qwen3.5-v1-2610",
@@ -536,6 +541,7 @@ CATALOG = {
                        "question type. Up to 255 options and 10 score levels, 4,096 tokens per row. Needs about 11 GB "
                        "of memory (BF16 weights in memory, widened per forward pass).",
                        "4.6B", 4096, ["en"], wl_dir=os.path.join(OUT, "strands-decider-e2b"),
+                       license_text=_STRANDS_GEMMA_LICENSE,
                        weights={"model.safetensors": ("google/gemma-4-E2B-it", "3e22461f65e89153144f8adb70e3b8c2cc9845a7",
                                                       "model.safetensors"),
                                 "adapter_model.safetensors": "lora/adapter_model.safetensors",
@@ -546,6 +552,7 @@ CATALOG = {
                        "the largest Strands Decider Ollaya runs. Up to 255 options and 10 score levels, 4,096 tokens per "
                        "row. Needs about 20 GB of memory (BF16 weights in memory, widened per forward pass).",
                        "8.9B", 4096, ["en"], wl_dir=os.path.join(OUT, "strands-decider-e4b"),
+                       license_text=_STRANDS_GEMMA_LICENSE,
                        weights={"model.safetensors": ("google/gemma-4-E4B-it", "ee0ef6023621cff504d758262d4e04895a5af4a2",
                                                       "model.safetensors"),
                                 "adapter_model.safetensors": "lora/adapter_model.safetensors",
