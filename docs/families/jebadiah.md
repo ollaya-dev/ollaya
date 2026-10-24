@@ -8,11 +8,22 @@ decision prompt, then applies a fitted temperature per question type. Requested 
 | Tag | Upstream file | Revision | Temperatures (choice / noul / score) |
 |---|---|---|---|
 | `jeb:4b` | `frontier-infra/jebadiah-4b-v2-GGUF` `jebadiah-4b-v2-Q8_0.gguf` | `7f671f9a` | 1.1167 / 1.3319 / 0.8312 |
-| `jeb:9b`, `jeb:latest` | `frontier-infra/jebadiah-9b-v2-GGUF` `jebadiah-9b-v2-Q8_0.gguf` | `adaec6b3` | 1.1863 / 1.0903 / 0.8329 |
-| `jeb:27b` | `frontier-infra/jebadiah-27b-GGUF` `jebadiah-27b-Q4_K_M.gguf` | `7451e611` | 1.2321 / 1.297 / 0.7558 |
+| `jeb:9b`, `jeb:latest` | `frontier-infra/jebadiah-9b-v2-1-GGUF` `jebadiah-9b-v2-1-Q8_0.gguf` (v2.1) | `2182dd8d` | 1.0467 / 1.0284 / 0.6805 |
+| `jeb:27b` | `frontier-infra/jebadiah-27b-v2-1-GGUF` `jebadiah-27b-v2-1-Q4_K_M.gguf` (v2.1) | `ed71f41b` | 1.0608 / 1.0405 / 0.6524 |
 
-Q8_0 is the file the authors checked against bf16 (4B 256/260, 9B 257/260 held-out answers the same).
+Q8_0 is the file the authors checked against bf16 (4B 256/260, 9B 257/260 held-out answers the same for v2).
 The 27B ships as Q4_K_M (17 GB) so it fits a 24 GB GPU; its Q8_0 is 29 GB.
+
+**v2.1 (COB-560).** The authors' v2 cards now say "This is an earlier version. For new work, use v2.1", so
+`jeb:9b` and `jeb:27b` moved to v2.1 (there is no 4B v2.1). Until then they were
+`frontier-infra/jebadiah-9b-v2-GGUF@adaec6b3` (`jebadiah-9b-v2-Q8_0.gguf`, temperatures 1.1863 / 1.0903 / 0.8329)
+and `frontier-infra/jebadiah-27b-GGUF@7451e611` (`jebadiah-27b-Q4_K_M.gguf`, 1.2321 / 1.297 / 0.7558); their
+manifests stay in the registry by digest. v2.1 is the same base, the same LoRA hyperparameters and the same prompt
+contract, trained on 21,190 questions from about 90 sources (v2: 15,813), still including typed-decisions' train
+split, with temperatures refit on a new calibration split. The tokenizer, the chat template and the 68 labels are
+v2's; the GGUFs were converted with llama.cpp build 11549 and load and match on the pinned b11146 (below). The
+authors' reported v2.1 results use their T1e recipe (the payload repeated in the prompt, and for choices the
+forward and reversed option orders blended), which neither their standalone scripts nor Ollaya run.
 
 ## Prompt
 
@@ -35,7 +46,10 @@ user   = "STATE:\n" + serialize_state(state) + "\n\nQUESTION: " + instructions.s
 - **Template.** Qwen's chat template with thinking off, the same bytes the authors' renderer produces.
 
 `python -m ollaya_convert.families.jebadiah.check <snapshot>` renders every question of the shared case
-set both ways: 1,349 prompts identical to the authors' `Renderer`, the same 33 rejections.
+set both ways: 1,349 prompts identical to the authors' `Renderer`, the same 33 rejections, for v2 and for both
+v2.1 snapshots. v2.1's renderer differs in one hunk: when a prompt is still over the budget after the state is cut
+away, it raises instead of returning it (one case, `edge/many_options_77`, whose 77 options alone pass 2,048
+tokens; Ollaya rejects it either way).
 
 ## Differences from upstream
 
@@ -61,6 +75,14 @@ questions.
 | 4b Q8_0 | CUDA, RTX 4090 | 494/494 | 7.6e-6 | 2.1e-6 | 91 ms |
 | 9b Q8_0 | CUDA, RTX 4090 | 494/494 | 7.7e-6 | 2.1e-6 | 118 ms |
 | 27b Q4_K_M | CUDA, RTX 4090 | 494/494 | 7.7e-6 | 2.4e-6 | 287 ms |
+
+v2.1 (2026-10-24, hope; the 4B row above is still v2's):
+
+| Model | Device | Decisions | Option logits max | Probabilities max |
+|---|---|---|---|---|
+| 9b v2.1 Q8_0 | CUDA, RTX 5090 | 494/494 | 7.6e-6 | 2.8e-6 |
+| 27b v2.1 Q4_K_M | CUDA, RTX 5090 | 494/494 | 7.6e-6 | 2.8e-6 |
+| 9b v2.1 Q8_0 | CPU, Threadripper 3960X (smoke cases, goldens replayed on the CPU) | 21/21 | 5.6e-6 | 2.8e-6 |
 
 ```sh
 uv run python -m ollaya_convert.families.llm_common.export_llama jebadiah --server <b11146>/llama-server \
