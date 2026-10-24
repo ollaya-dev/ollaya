@@ -104,11 +104,19 @@ through the goldens' path, `quality_llama.py`):
 | 4b Q8_0 | 0.801 | 0.137 |
 | 9b Q8_0 | 0.786 | 0.125 |
 | 27b Q4_K_M | 0.802 | 0.132 |
+| 9b v2.1 Q8_0 | 0.795 | 0.097 |
+| 27b v2.1 Q4_K_M | 0.802 | 0.105 |
+
+The v2.1 rows are Ollaya Bench's (2026-10-24, through the HTTP API on the RTX 5090), where v2 measured 0.787 (9b)
+and 0.803 (27b) on 2026-10-14. On the public benchmark v2.1's macro accuracy is 0.772 (9b) and 0.792 (27b),
+against v2's 0.766 and 0.788.
 
 **These are in-distribution numbers.** Jebadiah's training pool includes the typed-decisions train split
 (`data/convert_data.py` in getainode/jebadiah: "LocalLLaMA/typed-decisions train"), so, like
 `laya:typed-decisions`, its typed-decisions score is not comparable with the zero-shot models' and the
-catalog leaves it out of the comparison. The authors report held-out results on the Jevals sets, Nimble's
+catalog leaves it out of the comparison. v2.1's pool also takes civil_comments, HelpSteer2 and MASSIVE
+intents, so its Ollaya Bench score (edition 2026.10: 9b 66.0, 27b 69.1) leaves those
+tasks out too; v2's 64.9 and 67.8 left out typed-decisions only. The authors report held-out results on the Jevals sets, Nimble's
 public subsets and Kev's transfer-v4 in their repository.
 
 ## Limits

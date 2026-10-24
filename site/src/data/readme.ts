@@ -22,7 +22,7 @@ function bench(origin: string): string {
   const gpu = machine?.headline ?? ''
   const cpu = (machine?.cpu ?? '').replace(/^AMD Ryzen |\s*\(.*\)$/g, '')
   const top = rowsOf('score')
-    .map(([tag, r]) => ({ tag, score: r.score as number, trained: ((r.trained_on as string[] | undefined) ?? []).includes('typed-decisions') }))
+    .map(([tag, r]) => ({ tag, score: r.score as number, trained: (r.trained_on as string[] | undefined) ?? [] }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
   const fastest = top.reduce((a, b) => (value(a.tag, 'gpu.p50_ms') <= value(b.tag, 'gpu.p50_ms') ? a : b))
@@ -34,7 +34,7 @@ function bench(origin: string): string {
     `Edition ${id} ran Ollaya ${ollaya} on an ${machine?.label ?? gpu}${updates.length ? `, and ${list(updates)} added what ${updates.length > 1 ? 'they' : 'it'} changed` : ''}:`,
     '',
     `- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: ${list(
-      top.map((t) => `${code(t.tag)} ${t.score.toFixed(1)}${t.trained ? ' (scored without typed-decisions, which it was trained on)' : ''}`),
+      top.map((t) => `${code(t.tag)} ${t.score.toFixed(1)}${t.trained.length ? ` (scored without ${t.trained.length > 1 ? `the ${t.trained.length} tasks` : `${t.trained[0]}, which`} it was trained on)` : ''}`),
     )}. The fastest of these, ${code(fastest.tag)}, answers five questions in ${result(fastest.tag, 'gpu.p50_ms', 0)} ms on the ${gpu}.`,
     `- **Calibration.** The lowest calibration errors on the public benchmark are ${list(calibration)}.`,
     `- **Speed and memory.** Five-question requests through the HTTP API take ${range('gpu')} on the ${gpu} and ${range('cpu')} on its ${cpu}. Every model's VRAM and RAM are on its page.`,

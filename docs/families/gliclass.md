@@ -244,14 +244,20 @@ Apple M4 Pro, macOS 27, same goldens and gate as the CPU (label logits within 1e
   |---|---|---|---|---|
   | instruct-large | **0.477** | 0.427 | 0.403 | 0.627 |
   | instruct-edge | 0.258 | 0.187 | 0.129 | 0.500 |
+  | v4-edge | **0.507** | 0.477 | 0.466 | 0.590 |
 
-  For comparison, von 0.447 and `laya:en` 0.361. The gold labels have low annotator agreement,
+  v4-edge's row is Ollaya Bench's (2026-10-24, through the runtime on the RTX 5090), where large also
+  scores 0.477. For comparison, von 0.447 and `laya:en` 0.361. The gold labels have low annotator agreement,
   so read these as relative numbers. The mapping was chosen on this same set, so it is slightly
   optimistic.
-- **The edge model is not usable for typed decisions.** It is at or below chance on choice and
+- **The instruct-edge model is not usable for typed decisions.** It is at or below chance on choice and
   score. That matches its model card: average F1 0.49 vs 0.72 for large on 14 zero-shot
-  classification sets.
-- **Uncalibrated.** There is no temperature upstream.
+  classification sets. v4-edge is a different model, on large's DeBERTa-v3-large backbone.
+- **v4-edge is ahead of large on every Ollaya Bench measure** (edition 2026.10): public benchmark macro accuracy
+  0.714 against 0.434, score 55.8 against 15.3, typed-decisions calibration error 0.188 against 0.219. Both
+  reject 28 public-benchmark rows, over the 1,024-token window. `gliclass:latest` stays on large for now:
+  v4-edge runs only on the CPU on Apple silicon, where large runs on MLX.
+- **Uncalibrated** (instruct v1.0). There is no temperature upstream; v4's calibrator is Knowledgator's.
   - Single-label (sigmoid) noul scores lean low: "The user asks for a refund." scored 0.03 on a
     text that asks for one.
   - Softmax over label logits is a ranking, not a calibrated probability.
