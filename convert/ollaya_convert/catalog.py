@@ -537,7 +537,7 @@ CATALOG = {
                       weights={"model.safetensors": "model.safetensors",
                                "readout.safetensors": "readout.safetensors"}),
         },
-        "aliases": {"latest": "0.8b"},
+        "aliases": {"latest": "2b"},
         "parity": "Ollaya's Rust runtime matches upstream pplx_decider (the reference path, PyTorch fp32) on 696 "
                   "questions from 138 requests, for each tag: identical token sequences and marker positions, the same "
                   "5 rejected requests, the same decision on every question, option logits within 3.9e-5 (0.8b) and "
