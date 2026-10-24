@@ -32,7 +32,7 @@ tokens) until 2.3.
 **Decima-base-clean** is decima-base retrained "without any non-commercial data and without any data from the
 BTZSC benchmark": the author's `release/LICENSING.md` names ANLI and XNLI (CC BY-NC 4.0), AG News and SST-5 among
 base 2.0's training sources, and decima-agent inherits them. Use base-clean where that matters. It is not a
-replacement for base: the author reports it lower on every set (typed decisions 0.477 against 0.484), so
+replacement for base: the author reports it lower on every set (typed decisions 0.477 against 0.484; BTZSC, Kev's protocol, Laya's MASSIVE and XNLI sets and the author's own bench 8 to 21 points lower), so
 `decima:latest` stays on base. Its `decima.json` has `"choice_fit": true`, so it runs on
 `decima-late-interaction-v2`, with base's 512-token state window. Its `tokenizer_config.json` drops the padding and
 truncation keys the other pins carry; Ollaya reads only `tokenizer.json` (the same file as base's), and
@@ -168,6 +168,18 @@ long agent states (3,041, 5,986, 8,076 and 8,266 tokens), 18 rejected upstream. 
 | guard-small 1.0 preview | CUDA, RTX 4090 | 599 | 2,986 identical | 599/599 | 9.1e-6 | 4.8e-6 |
 
 The ordinal projections are within 9.9e-5, and every `/v1/systemone` answer matches upstream's to 4 decimals.
+
+**Decima-base-clean 1.0 (measured 2026-10-24, hope).** Upstream `v2.3.0`, the same 154 requests, 18 rejected upstream,
+7 with a cut state:
+
+| Model | Device | Questions | Rows | Decisions | Scores max | Probabilities max |
+|---|---|---|---|---|---|---|
+| base-clean 1.0 | x86-64 CPU (Threadripper 3960X) | 599 | 2,986 identical | 599/599 | 3.2e-5 | 3.7e-6 |
+| base-clean 1.0 | CUDA, RTX 5090 (Microsoft's ONNX Runtime 1.28.2) | 599 | 2,986 identical | 599/599 | 1.8e-5 | 7.0e-6 |
+
+The ordinal projections are within 4.5e-5, and every `/v1/systemone` answer matches upstream's to 4 decimals.
+`decima.check --model decima-base-clean`: 483 requests identical to upstream (11 with a cut state), 18 rejected by
+both, 3 by Ollaya's shared rules, no mismatch.
 
 **Decima-agent 2.2 (measured 2026-10-13).** Upstream `v2.2.0`: 150 requests, the 140 below and the 10
 `fit_cases`, 18 rejected upstream.

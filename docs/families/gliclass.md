@@ -1,22 +1,30 @@
 # gliclass (`gliclass-uni-v1`)
 
 GLiClass uni-encoder zero-shot classifiers by Knowledgator. The labels and the text share one
-sequence. Each label is pooled from its own span and scored against the `[CLS]` embedding by an
-MLP. GLiClass has no typed-question API, so the mapping from `choice` / `score` / `noul` onto its
+sequence. Each label is pooled (instruct v1.0: from its own span; v4: at its `<<LABEL>>` token) and
+scored against the `[CLS]` embedding by an MLP; v4 then rescales every label's logit with a small
+calibrator network. GLiClass has no typed-question API, so the mapping from `choice` / `score` / `noul` onto its
 `labels` / `prompt` / `text` call is Ollaya's. It was chosen on typed-decisions (see
 [Template choice](#template-choice)). Everything from the text string onward is upstream's own
 code path.
 
-| | `gliclass-instruct-large-v1.0` | `gliclass-instruct-edge-v1.0` |
-|---|---|---|
-| Upstream | [knowledgator/gliclass-instruct-large-v1.0](https://huggingface.co/knowledgator/gliclass-instruct-large-v1.0) @ `825e5478c1bf4bffbf297690517097ccbdb2e006` | [knowledgator/gliclass-instruct-edge-v1.0](https://huggingface.co/knowledgator/gliclass-instruct-edge-v1.0) @ `727be8a417f6a7718e591b025e07054c146d8139` |
-| Encoder | DeBERTa-v3-large (MIT) | Ettin-encoder-32M, ModernBERT architecture (MIT) |
-| Parameters | 438.7M, fp32 (1.75 GB) | 32.7M, fp32 (131 MB) |
-| License | Apache-2.0 (Knowledgator) | Apache-2.0 (Knowledgator) |
-| `<<LABEL>>` / `<<SEP>>` / `<<EXAMPLE>>` ids | 128001 / 128002 / 128003 | 50368 / 50369 / 50370 |
-| `[CLS]` / `[SEP]` / `[PAD]` | 1 / 2 / 0 | 50281 / 50282 / 50283 |
+| | `gliclass-instruct-large-v1.0` | `gliclass-instruct-edge-v1.0` | `gliclass-v4-edge` |
+|---|---|---|---|
+| Upstream | [knowledgator/gliclass-instruct-large-v1.0](https://huggingface.co/knowledgator/gliclass-instruct-large-v1.0) @ `825e5478c1bf4bffbf297690517097ccbdb2e006` | [knowledgator/gliclass-instruct-edge-v1.0](https://huggingface.co/knowledgator/gliclass-instruct-edge-v1.0) @ `727be8a417f6a7718e591b025e07054c146d8139` | [knowledgator/gliclass-v4-edge](https://huggingface.co/knowledgator/gliclass-v4-edge) @ `2486b93469dde357d2b8f675a6514959e3f0fc6e` |
+| Tag | `gliclass:large`, `gliclass:latest` | (not in the library) | `gliclass:v4-edge` |
+| Encoder | DeBERTa-v3-large (MIT) | Ettin-encoder-32M, ModernBERT architecture (MIT) | DeBERTa-v3-large (MIT) |
+| Parameters | 438.7M, fp32 (1.75 GB) | 32.7M, fp32 (131 MB) | 439.8M, bf16 with an fp32 calibrator (0.88 GB) |
+| Labels / segments / calibrator | span mean / yes / no | span mean / yes / no | `<<LABEL>>` token / no / yes |
+| License | Apache-2.0 (Knowledgator) | Apache-2.0 (Knowledgator) | Apache-2.0 (Knowledgator) |
+| `<<LABEL>>` / `<<SEP>>` / `<<EXAMPLE>>` ids | 128001 / 128002 / 128003 | 50368 / 50369 / 50370 | 128001 / 128002 / 128003 |
+| `[CLS]` / `[SEP]` / `[PAD]` | 1 / 2 / 0 | 50281 / 50282 / 50283 | 1 / 2 / 0 |
 
-- Upstream code: `gliclass==0.1.20` (PyPI), [github.com/Knowledgator/GLiClass](https://github.com/Knowledgator/GLiClass) @ `40baa67`.
+- Upstream code: `gliclass==0.1.20` (PyPI), [github.com/Knowledgator/GLiClass](https://github.com/Knowledgator/GLiClass) @ `40baa67`;
+  v4-edge needs `gliclass==0.1.21` (tag `v0.1.21`, `6a00f806`), whose `GLiClassUniEncoder` adds only a
+  `class_mask` output for instruct v1.0, so their graphs are unchanged (checked: the instruct-large export is
+  identical node for node).
+- The mapping from typed questions to labels is the same for every tag. The v4-edge card proposes its own (true
+  before false, every noul as two labels, the state as `key: value` lines); Ollaya keeps its measured one.
 - Contract: M (`markers`), one row per question.
 - Context: `max_len` 1024 tokens, the `ZeroShotClassificationPipeline` default.
 - Reference: `convert/ollaya_convert/families/gliclass/ref.py`.
@@ -27,7 +35,7 @@ code path.
 | Layer | Source |
 |---|---|
 | `model.onnx` (4.8 MB large, 1.2 MB edge; graph only) | derived, hosted by Ollaya (`convert/out/gliclass-instruct-{large,edge}-wl/`) |
-| weights | upstream `model.safetensors` @ the commit above, F32, referenced by offset. Large: 405/406 tensors external. Edge: 77/78. The one unused tensor is `model.logit_scale`, which this config does not use. |
+| weights | upstream `model.safetensors` @ the commit above, referenced by offset. Large: F32, 405/406 tensors external. Edge: F32, 77/78. v4-edge: 405 BF16 tensors (each read through a `Cast` to fp32) and the calibrator's 10 F32 ones, 414/415 external. The one unused tensor is `model.logit_scale`, which these configs do not use. |
 | `tokenizer.json` | upstream `tokenizer.json` @ the commit above, as is. **It has truncation `max_length` 4096 and `BatchLongest` padding baked in.** The runtime must set truncation to 1024 / right (see below) and turn padding off. |
 | `decision.json`, `calibration.json` | derived, hosted by Ollaya |
 
@@ -44,6 +52,8 @@ code path.
 - So the reference tokenizes with the file (`families/repo_tokenizer.py`), and the Rust runtime
   uses that same file. No derived tokenizer is needed.
 - The edge model (ModernBERT tokenizer) is unaffected: its file and transformers 5 agree.
+- v4-edge's file already has the transformers-5 normalizer (`Replace`, NFC, right strip), the one it was trained
+  with, so its file and transformers 5 agree too. Its Unigram pieces and added tokens are large's.
 
 ## Request → row
 
@@ -99,7 +109,7 @@ Example (typed-decisions `choice`):
 - Dynamic axes: n 1..1024, s 8..1024, k 1..255. Opset 20. `min_markers` is 1.
 - Pad rows with the pad id and `attention_mask` 0.
 
-The graph is `GLiClassUniEncoder.forward` for this configuration:
+The graph is `GLiClassUniEncoder.forward` for the instruct v1.0 configuration:
 
 1. `segment = 1` from the first `<<SEP>>` onward, `0` before it (upstream `argmax` semantics). It is
    added to the word embeddings before the encoder.
@@ -109,6 +119,18 @@ The graph is `GLiClassUniEncoder.forward` for this configuration:
    `_extract_class_features_averaged` with `extract_text_features=False`.
 3. The text embedding is the hidden state at 0, then `text_projector`. Labels go through
    `classes_projector`. Then `MLPScorer`.
+
+For v4-edge (`class_token_pooling: first`, `use_segment_embeddings: false`, `use_calibrator: true`), it is
+`GLiClassModel.forward`:
+
+1. No segment embeddings: the encoder reads the input ids as they are.
+2. Label k's embedding is the hidden state at marker k.
+3. The text embedding, the projectors and `MLPScorer` as above, giving logits `z`.
+4. The calibrator (`gliclass/calibration.py`): from the layer-normed text and label embeddings, their product, their
+   difference and six statistics of `z` over the question's labels, an MLP gives each (text, label) pair a
+   `beta = 3·sigmoid(o0)` and a bias `o1`. The logits are `beta·z + bias`, in fp32. Upstream's pipeline scores these
+   calibrated logits; so does Ollaya. Since beta differs per label, it cannot be a `calibration.json` temperature,
+   which stays `[1, 1, 1]`.
 
 Sigmoid and softmax stay out of the graph.
 
@@ -163,20 +185,26 @@ Logs: `convert/out/logs/parity-gliclass-instruct-{large,edge}-wl.log`.
 - The reference is fp32 on GPU with TF32 off, one unpadded row per question. ONNX ran as one padded
   batch per request on the CPU EP.
 
-| Check | large | edge |
-|---|---|---|
-| Tokenizer: Rust core (`tokenizer.json`, truncation 1024, padding off) vs reference | 882/882 | 882/882 |
-| Argmax, ONNX vs fp32 reference | 100.00% | 100.00% |
-| Max probability diff | 3.4e-6 | 7.5e-6 |
-| Max label-logit diff | 5.2e-5 | 8.6e-5 |
-| Reference vs the upstream `ZeroShotClassificationPipeline(...)` call itself | 100% argmax, max diff 1.1e-7 | 100% argmax, max diff 1.5e-7 |
+| Check | large | edge | v4-edge (gliclass 0.1.21, 2026-10-24) |
+|---|---|---|---|
+| Tokenizer: Rust core (`tokenizer.json`, truncation 1024, padding off) vs reference | 882/882 | 882/882 | 882/882 |
+| Argmax, ONNX vs fp32 reference | 100.00% | 100.00% | 100.00% |
+| Max probability diff | 3.4e-6 | 7.5e-6 | 1.1e-5 |
+| Max label-logit diff | 5.2e-5 | 8.6e-5 | 3.4e-5 |
+| Reference vs the upstream `ZeroShotClassificationPipeline(...)` call itself | 100% argmax, max diff 1.1e-7 | 100% argmax, max diff 1.5e-7 | 100% argmax, max diff 1.6e-7 |
 
 - Both are the weightless graphs (`-wl`), which reference the upstream safetensors.
-- Goldens: `convert/out/goldens-gliclass-instruct-{large,edge}.jsonl`. They have 97 cases (all
+- The Rust runtime against v4-edge's goldens (`parity_run`, hope, 2026-10-24): 482 questions (+1 rejected as
+  expected), identical texts, ids and markers, every decision the same, label logits within 1.0e-5 and probabilities
+  within 2.4e-6 on the CPU (ONNX Runtime 1.28.0); 1.4e-5 and 2.5e-6 on CUDA (RTX 5090, Microsoft's 1.28.2).
+- Goldens: `convert/out/goldens-gliclass-instruct-{large,edge}.jsonl` and `goldens-gliclass-v4-edge.jsonl`. They have 97 cases (all
   edge cases plus 20 typed-decisions rows). Each carries labels, prompt, text, ids, markers, fp32
   logits, option logits and probabilities, plus `rejected`.
 
 ## Metal parity (MLX)
+
+v4-edge has no `gliclass` arch layer: the MLX head implements neither its first-token pooling nor the calibrator, so on
+Apple silicon `gliclass:v4-edge` runs on ONNX Runtime's CPU path.
 
 The MLX engine ([decision record](../decisions/0001-mlx-engine.md)) implements the uni-encoder head
 (segment embeddings, label-span pooling, the two projectors and the MLP scorer) over either
@@ -248,6 +276,9 @@ uv run python -m ollaya_convert.families.weightless_ext out/$SLUG --out out/$SLU
 uv run --with gliclass==0.1.20 python -m ollaya_convert.families.gliclass.parity $V out/$SLUG-wl --td-limit 100
 uv run --with gliclass==0.1.20 python -m ollaya_convert.families.gliclass.goldens $V --out out/goldens-$SLUG.jsonl
 ```
+
+For v4-edge, the same steps with `gliclass==0.1.21`, `V=v4-edge`, `SLUG=gliclass-v4-edge` and the checkpoint
+`models--knowledgator--gliclass-v4-edge/snapshots/2486b93…/model.safetensors`.
 
 ## Attribution
 
