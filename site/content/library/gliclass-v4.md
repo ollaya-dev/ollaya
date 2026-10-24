@@ -25,7 +25,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `glic
 - **One row per question.** The prompt, the state and the labels form one decoder row; the label section is then read by a two-layer scorer that lets labels see each other and the text, with up to three refinement steps that stop once the scores settle.
 - **Calibrated by the model.** A learned calibrator predicts a temperature and a bias for every (text, label) pair from the representations and the logits; Ollaya applies no temperature of its own.
 - **Weights.** The author's `model.safetensors` from Hugging Face, pinned to a commit and verified by sha256; Ollaya hosts only the ONNX graph and reads the decoder, scorer and calibrator tensors in place, the vision tower untouched.
-- **Parity.** PARITY_SENTENCE
+- **Parity.** Ollaya's Rust runtime reproduces the `gliclass` package in fp32 on 483 test questions for `gliclass-v4:2b`: the same rows, markers and reasoning steps, the same decision on every question, calibrated logits within 5.7e-4 and probabilities within 1.5e-4 on CUDA (9.4e-5 and 2.5e-5 on the CPU). PARITY_9B
 
 ## Limits
 

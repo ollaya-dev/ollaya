@@ -79,11 +79,38 @@ identity (the calibrator is in the graph). `weights_in_memory` is `bf16`.
 
 ## Export parity
 
-EXPORT_PARITY_2B
+`families/gliclass_kv/parity.py` on choso (RTX 4090 for the reference, ONNX Runtime CPU for the graph), 2026-10-24: the
+shared edge cases plus 50 typed-decisions rows, JSON round-tripped.
+
+| | `gliclass-v4-2b` |
+|---|---|
+| requests / questions (one row each) | 127 / 633, none rejected |
+| rows, markers and label sections identical to upstream `prepare_inputs` | 633 / 633 |
+| halting steps identical to upstream | 633 / 633 |
+| argmax agreement, ONNX vs fp32 | **100 %** |
+| max \|Δ calibrated logit\| | 1.3e-4 (choice), 1.9e-4 (noul), 8.9e-5 (score); p99 ≤ 8.2e-5 |
+| max \|Δ probability\| | 3.0e-5 (choice), 4.8e-5 (noul), 1.6e-5 (score) |
+| vs the public pipeline (`upstream_scores`, every 4th case, 161 questions) | argmax **100 %**, probabilities within 1.0e-7 |
+
+Report: `convert/out/gliclass-v4-2b/parity.json`. The graph is 11.9 MB: 270 checkpoint tensors referenced (the embedding
+table through a Gather before its Cast), 142 small constants inline (528 KB, the DeBERTa position tables among them),
+412 vision-tower tensors unused. Goldens: `convert/out/goldens-gliclass-v4-2b.jsonl` (`goldens.py`, 97 requests, 20
+typed-decisions rows).
 
 ## Rust runtime parity
 
-RUNTIME_PARITY_2B
+`parity_gliclass_kv` on the goldens (97 requests, 483 questions), recorded by `parity_run` on 2026-10-24
+(`results/runs/2026-10-24-parity-rtx4090-{cuda,cpu}.json`):
+
+| Device | calls and rows | decisions | max \|Δ calibrated logit\| | max \|Δ probability\| (p99) | forward, 97 requests |
+|---|---|---|---|---|---|
+| RTX 4090, CUDA (TF32 off) | 483 / 483 identical | **100 %** | 5.7e-4 | 1.5e-4 (9.7e-6) | 8.5 s (88 ms/request) |
+| CPU (i9-13900K), fp32 | 483 / 483 identical | **100 %** | 9.4e-5 | 2.5e-5 (5.4e-6) | 310 s (3.2 s/request) |
+
+The CUDA maximum is one noul row whose three recurrent steps compound the fp32 differences of the DeltaNet scan
+and the calibrator; the gate (logits within 1e-3) holds, the decisions are identical and the p99 sits at 1e-5.
+
+RUNTIME_PARITY_9B
 
 ## Limits
 
