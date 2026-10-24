@@ -539,9 +539,9 @@ CATALOG = {
         },
         "aliases": {"latest": "0.8b"},
         "parity": "Ollaya's Rust runtime matches upstream pplx_decider (the reference path, PyTorch fp32) on 696 "
-                  "questions from 138 requests: identical token sequences and marker positions, the same 5 rejected "
-                  "requests, the same decision on every question, option logits within 3.9e-5 and probabilities "
-                  "within 5.1e-6 (CUDA).",
+                  "questions from 138 requests, for each tag: identical token sequences and marker positions, the same "
+                  "5 rejected requests, the same decision on every question, option logits within 3.9e-5 (0.8b) and "
+                  "1.4e-5 (2b) and probabilities within 5.1e-6 (0.8b) and 3.6e-6 (2b) on CUDA.",
     },
     "pplx-decider": {
         "namespace": "library",
