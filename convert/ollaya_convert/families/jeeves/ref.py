@@ -2,7 +2,7 @@
 run in fp32, in its no-thinking mode.
 
 The model repository holds the fused weights (Qwen3.5-9B with the LoRA merged), the pointer head
-(`head.pt`) and `export.json` (temperature 1.859, format `markers-v3-plainchains`). A question is the
+(`head.pt`) and `export.json` (temperature 1.522 for v2, format `markers-v3-plainchains`). A question is the
 upstream `Encoder`'s prompt with an empty thought, then the option block again and the decide marker:
 
     ids  = enc(chat(STATE + state + "\\n" + Q + instructions + "\\n" + options)) + enc("\\n")
@@ -24,7 +24,8 @@ import sys
 import torch
 
 REPO = "PostHog/jeeves"
-REVISION = "8622b7d1652a9dcb8629486b84dce9e8d690c5cd"
+# Jeeves v2 (main; the Hub has no v2 tag). v1 was 8622b7d1652a9dcb8629486b84dce9e8d690c5cd (Hub tag v1, README aside).
+REVISION = "04b9f87a79484fda54131de3b030b579d399e704"
 JEEVES_GIT = {"repo": "https://github.com/PostHog/jeeves", "commit": "6151619c14fcffb2406830f09fd4f09fdd22200e"}
 SHARDS = ["model-%05d-of-00005.safetensors" % i for i in range(1, 6)]
 MAX_LEN = 8192
