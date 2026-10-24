@@ -92,6 +92,9 @@ class ParityRecord(unittest.TestCase):
         self.assertEqual(cmd[-1], "--fp16")
         cmd, gate = parity_run.command("decider", "/x/out/decider-2b-vision", "cpu")
         self.assertEqual((gate, "parity_decider_vision" in cmd, "--features" in cmd), ("fp32", True, False))
+        cmd, _ = parity_run.command("decima", "/x/out/decima-base-clean", "cuda", "/pack/cuda_v13")
+        self.assertEqual(cmd[cmd.index("--features") + 1], "cuda-dynamic")
+        self.assertIn("--target-dir", cmd)
 
     def test_parse_and_merge(self):
         out = 'numbers: ...\nrecord: {"questions": 10, "decisions_same": 10, "max_logit_diff": 1e-5}\n'

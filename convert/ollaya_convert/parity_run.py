@@ -11,6 +11,9 @@ to find the parity result of a changed graph.
 
 Only the examples that print a `record:` line can be recorded (the Qwen3.5 families today); add the line to an
 example when its family is next touched. A CUDA run needs the CUDA libraries on LD_LIBRARY_PATH, as any CUDA parity run.
+On an RTX 50-series GPU (sm_120), which pyke's CUDA build has no kernels for, pass `--cuda-dynamic <pack dir>`: the
+example is built with `cuda-dynamic` and loads Microsoft's ONNX Runtime from a GPU pack's `cuda_v13`, as the release's
+CUDA runner does (docs/decisions/0004-cuda-onnxruntime-builds.md).
 """
 from __future__ import annotations
 
@@ -49,14 +52,16 @@ def wl_tags():
     return out
 
 
-def command(family, d, device):
+def command(family, d, device, cuda_dynamic=None):
     """The cargo command that runs the parity example of export directory `d`, and its gate."""
     name = os.path.basename(d)
     fp16 = name.endswith("-fp16")
     base = name[: -len("-fp16")] if fp16 else name
     example = "parity_" + EXAMPLE.get(family, family).replace("-", "_") + ("_vision" if base.endswith("-vision") else "")
     cmd = ["cargo", "run", "--release", "-q", "-p", "ollaya-runner", "--example", example]
-    if device == "cuda":
+    if device == "cuda" and cuda_dynamic:
+        cmd += ["--features", "cuda-dynamic", "--target-dir", os.path.join("target", "cuda-dynamic")]
+    elif device == "cuda":
         cmd += ["--features", "cuda"]
     cmd += ["--", d, os.path.join(OUT, "goldens-%s.jsonl" % base), device] + (["--fp16"] if fp16 else [])
     return cmd, "fp16" if fp16 else "fp32"
@@ -103,7 +108,13 @@ def main():
     ap.add_argument("tags", nargs="+")
     ap.add_argument("--machine", required=True, help="the machine's id in results/machines.json")
     ap.add_argument("--device", required=True, choices=["cuda", "cpu"])
+    ap.add_argument("--cuda-dynamic", metavar="DIR",
+                    help="a GPU pack's cuda_v13 directory: Microsoft's ONNX Runtime, for sm_120 GPUs")
     a = ap.parse_args()
+    env = dict(os.environ)
+    if a.cuda_dynamic:
+        env["ORT_DYLIB_PATH"] = os.path.join(a.cuda_dynamic, "libonnxruntime.so.1")
+        env["LD_LIBRARY_PATH"] = os.pathsep.join(p for p in (a.cuda_dynamic, env.get("LD_LIBRARY_PATH")) if p)
     known = wl_tags()
     unknown = [t for t in a.tags if t not in known]
     if unknown:
@@ -116,9 +127,9 @@ def main():
     failed = []
     for tag in a.tags:
         family, d = known[tag]
-        cmd, gate = command(family, d, a.device)
+        cmd, gate = command(family, d, a.device, a.cuda_dynamic)
         print("== %s: %s" % (tag, " ".join(cmd)), flush=True)
-        p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+        p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=env)
         print("\n".join(line for line in p.stdout.splitlines() if not line.startswith("record: ")))
         row = parse(tag, p.stdout, p.returncode)
         if row is None:

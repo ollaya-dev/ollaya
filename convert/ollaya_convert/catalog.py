@@ -956,13 +956,13 @@ CATALOG = {
         "family": "decima",
         "author": "A. M. Madani (amyrmahdy)",
         "license": "Apache-2.0",
-        "license_text": ("Decima-small, Decima-base, Decima-agent, Decima-guard and Decima-guard-small by "
+        "license_text": ("Decima-small, Decima-base, Decima-base-clean, Decima-agent, Decima-guard and Decima-guard-small by "
                          "A. M. Madani (https://huggingface.co/amyrmahdy, https://github.com/amyrmahdy/decima), "
                          "Apache-2.0.\n"
                          "Base models: multilingual-e5-small by intfloat "
                          "(https://huggingface.co/intfloat/multilingual-e5-small) for Decima-small, mmBERT-base "
-                         "by JHU CLSP (https://huggingface.co/jhu-clsp/mmBERT-base) for Decima-base, Decima-agent "
-                         "and Decima-guard, and mmBERT-small by JHU CLSP "
+                         "by JHU CLSP (https://huggingface.co/jhu-clsp/mmBERT-base) for Decima-base, Decima-base-clean, "
+                         "Decima-agent and Decima-guard, and mmBERT-small by JHU CLSP "
                          "(https://huggingface.co/jhu-clsp/mmBERT-small) for Decima-guard-small, all MIT License.\n"
                          "Licensed under the Apache License, Version 2.0.\n\n") + LICENSE_APACHE,
         # The fp32 PyTorch checkpoint under pytorch/ of each repository, the encoder and the late-interaction
@@ -979,6 +979,13 @@ CATALOG = {
                             "A. M. Madani's Decima-base 2.0: mmBERT-base with Decima's late-interaction scorer "
                             "and ordinal head, with the author's temperature. 321M parameters, multilingual.",
                             "321M", 512),
+            # HF tag v1.0, decima.json with choice_fit (decima-late-interaction-v2), 512-token states.
+            "base-clean": _decima("decima-base-clean", "35eb218bdeeb8c450baba4159ebc08b67c4d632c",
+                                  "A. M. Madani's Decima-base-clean 1.0: Decima-base's network (mmBERT-base, 321M) "
+                                  "trained without non-commercial data and without the BTZSC benchmark's, for "
+                                  "commercial use and honest zero-shot numbers; decima:base is stronger on routing, "
+                                  "intent and NLI questions.",
+                                  "321M", 512),
             # HF tag v2.3, decima.json with choice_fit (decima-late-interaction-v2) and 8,192-token states; v2.2
             # (2,048 tokens) was 5c14a460ff368b5bf3aaf086d1ab46292d668e32, v2.1 86a07aab1c340fa5869bdb754e57d3851a1d288a.
             "agent": _decima("decima-agent", "652d90ac9d33088edd730692c95f1da381cb9174",
