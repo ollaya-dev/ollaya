@@ -21,6 +21,9 @@ OUT_DIR is what `bench_run` writes on the bench machine:
     runs/<date>-typed-decisions-<machine>-cuda.json  typed-decisions
     editions/<edition>.json                          the edition: its runs, models, score and flags
 
+With --label, every run file name ends in `-<label>` (`<date>-latency-<machine>-cuda-<label>.json`), so a second
+release measured the same day does not overwrite the first one's files.
+
 The edition score of a model is the mean, over the 13 public subsets and typed-decisions (14 tasks, equal
 weight), of the chance-corrected accuracy (accuracy - chance) / (1 - chance), where chance is the mean of
 1/K over the task's questions (K options). 0 is guessing, 100 is every answer right; a rejected request is
@@ -166,8 +169,7 @@ def main():
     ap.add_argument("--models", nargs="+", required=True)
     ap.add_argument("--results", required=True)
     ap.add_argument("--update", metavar="RELEASE", help="add these runs to the existing edition (ADR 0009)")
-    ap.add_argument("--suffix", default="", help="added to the run files' names, when that day's files already exist "
-                    "(for example 2026-10-24-latency-rtx5090-cuda-cob560.json)")
+    ap.add_argument("--label", default="", help="appended to the run file names (a second update on the same date)")
     ap.add_argument("--note", default="", help="added to the public and typed run files' note (for example, rows "
                     "carried from an earlier build of the same graphs)")
     a = ap.parse_args()
@@ -176,7 +178,7 @@ def main():
     (results / "runs").mkdir(parents=True, exist_ok=True)
     (results / "editions").mkdir(parents=True, exist_ok=True)
     stem = "%s-%%s-%s" % (a.date, a.machine.replace("-", ""))
-    sfx = "-" + a.suffix if a.suffix else ""
+    label = "-" + a.label if a.label else ""
     files = []
 
     # Latency: the files as bench_latency.py wrote them, with the edition named.
@@ -191,7 +193,7 @@ def main():
         for r in run["results"]:
             if r.get("digest"):
                 digests.setdefault(r["model"], r["digest"])
-        name = "%s-%s%s.json" % (stem % "latency", device, sfx)
+        name = "%s-%s%s.json" % (stem % "latency", device, label)
         json.dump(run, open(results / "runs" / name, "w", encoding="utf-8"), indent=1)
         files.append(name)
 
@@ -244,7 +246,7 @@ def main():
 
     common = {"schema": 1, "date": a.date, "edition": a.edition, "machine": a.machine, "device": "cuda"}
     if public_results:
-        name = "%s-cuda%s.json" % (stem % "public-benchmark", sfx)
+        name = "%s-cuda%s.json" % (stem % "public-benchmark", label)
         prev = json.load(open(results / "runs" / "2026-09-30-public-benchmark-rtx5090-cuda.json", encoding="utf-8"))
         json.dump({**common, "suite": "public-benchmark", "servers": {"ollaya": version},
                    "protocol": prev["protocol"], "note": ("Ollaya Bench edition %s. %s" % (a.edition, a.note)).strip(),
@@ -252,7 +254,7 @@ def main():
                   open(results / "runs" / name, "w", encoding="utf-8"), indent=1)
         files.append(name)
     if typed_results:
-        name = "%s-cuda%s.json" % (stem % "typed-decisions", sfx)
+        name = "%s-cuda%s.json" % (stem % "typed-decisions", label)
         json.dump({**common, "suite": "typed-decisions", "ollaya": version, **({"note": a.note} if a.note else {}), "protocol": {
             "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each "
                          "(2,000 questions: 600 choice, 600 noul, 800 score)",
