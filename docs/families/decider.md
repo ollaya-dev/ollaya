@@ -349,13 +349,18 @@ the same gate as above (label and option logits within 1e-3, same decisions):
 | max \|Δ probability\| | 9.9e-6 (p99 5.8e-6) | 8.2e-6 (p99 6.7e-6) |
 | all 114 requests, in process | 78.1 s (781 ms per request) | 203.3 s (2,033 ms per request) |
 
-| decider-2b | MLX on Metal | ONNX Runtime CPU, same Mac |
+| decider-2b (v12) | MLX on Metal | ONNX Runtime CPU, same Mac |
 |---|---|---|
 | rejections, token rows and slots | 0 mismatches (114 cases, 479 questions, 902 rows) | 0 mismatches |
-| max \|Δ label logit\| | 4.1e-5 | 3.9e-5 |
+| max \|Δ label logit\| | 4.1e-5 | 5.3e-5 |
 | decisions agree | **100 %** | **100 %** |
-| max \|Δ probability\| | 8.9e-6 (p99 5.8e-6) | 7.0e-6 (p99 5.7e-6) |
-| all 114 requests, in process | 151.3 s (1,513 ms per request) | 278.7 s (2,787 ms per request) |
+| max \|Δ probability\| | 4.6e-5 (p99 2.8e-6) | 1.7e-5 (p99 3.6e-6) |
+| all 114 requests, in process | 150.4 s (1,504 ms per request) | 250.6 s (2,506 ms per request) |
+
+decider-2b was measured again on 2026-10-24 with the v12 weights, against goldens made the same day on the rtx-4090
+(`results/runs/2026-10-24-parity-macm4pro-metal-decider.json`). v10 on the same Mac: Metal logits 4.1e-5, probabilities
+8.9e-6, 1,513 ms per request. The larger probability maximum is the yes/no temperature of 0.05, which turns a
+4e-5 logit difference into about 1e-3 of the softmax argument.
 
 ## ONNX Runtime CUDA EP note (measured)
 

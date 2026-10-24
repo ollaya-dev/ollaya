@@ -195,7 +195,7 @@ weights file under its upstream name.
 | `gliclass:large` (phase 3) | 97 cases, 482 questions | label logits within 1e-3, same decisions | 100%, logits 8.8e-5, prob diff 1.1e-5 (p99 9.4e-6) | 100%, 6.1e-5, 7.1e-6 | yes |
 | `qwen3guard:0.6b` (phase 4) | 74 states, 148 rows, 296 questions | candidate and option logits within 1e-3, same decisions | 100%, logits 6.7e-5, prob diff 1.3e-5 (p99 1.1e-5) | 100%, 7.4e-5, 9.9e-6 | yes |
 | `decider:0.8b` (phase 4) | 114 cases (14 rejected upstream), 479 questions, 902 rows | label and option logits within 1e-3, same decisions | 100%, logits 3.8e-5, prob diff 9.9e-6 (p99 5.8e-6) | 100%, 3.8e-5, 8.2e-6 | yes |
-| `decider:2b` (phase 4) | same goldens, made with decider-2b | same | 100%, logits 4.1e-5, prob diff 8.9e-6 (p99 5.8e-6) | 100%, 3.9e-5, 7.0e-6 | yes |
+| `decider:2b` (phase 4; v12 weights, 2026-10-24) | same goldens, made with decider-2b v12 | same | 100%, logits 4.1e-5, prob diff 4.6e-5 (p99 2.8e-6) | 100%, 5.3e-5, 1.7e-5 | yes |
 | `decision:eos` (phase 4) | 117 cases (17 rejected by the author), 466 questions | option logits within 1e-3, same decisions | 100%, logits 2.6e-5, prob diff 4.0e-6 (p99 2.6e-6) | 100%, 2.8e-5, 5.1e-6 | yes |
 | `kev:0.8b` (phase 4, LoRA merged at load) | 117 cases (16 rejected upstream), 480 questions | option logits within 1e-3, same decisions | 100%, logits 3.1e-5, prob diff 2.7e-6 (p99 2.2e-6) | 100%, 4.5e-5, 3.8e-6 | yes |
 | `von:1.1` | 98 cases, 485 questions, 653 rows (float64 network) | row and option logits within 1e-3, same decisions | 100% decisions, prob diff 3.1e-5, **logits 2.0e-3 on one row** | **1.1e-3 on the same row** | **no** |
