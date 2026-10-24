@@ -2,14 +2,22 @@
 
 PostHog's **Jeeves-9B** ([PostHog/jeeves](https://huggingface.co/PostHog/jeeves), Apache-2.0; code at
 [github.com/PostHog/jeeves](https://github.com/PostHog/jeeves), MIT) is Qwen3.5-9B with a LoRA merged in and a
-Kev-style pointer head, trained with SFT and then CISPO. Upstream it writes a reasoning chain before the head
-reads the answer; with the chain skipped it still answers in one forward pass. Ollaya runs that
-**no-thinking** mode, which the authors report at 0.804 on their test split (0.840 with thinking), with a
-top-label calibration error of 0.021 at the fitted temperature. Requested in #36.
+Kev-style pointer head. Upstream it writes a reasoning chain before the head reads the answer when it is
+unsure; with the chain skipped it still answers in one forward pass. Ollaya runs that **no-thinking** mode,
+which the authors report at 0.812 on their test split for v2 (0.851 reasoning when unsure; v1: 0.804 and
+0.840). Requested in #36.
+
+**Jeeves v2** (2026-10-16, COB-562) is SFT only (one epoch, 16,867 steps) on public data, about 100 sources
+(`export.json`); v1 was SFT then CISPO. It has the same base, LoRA scheme, head shape, marker format and
+tokenizer files as v1: the shards' and `head.pt`'s layouts are byte-identical, only their values changed, and the
+authors' `Encoder`, request parsing and option texts did not change (GitHub `6151619c` → `8c6ab532`). The no-think
+temperature is 1.522; `think_temperature` (5.4195) applies only after a reasoning chain, which Ollaya does not run.
+v1 stays reachable as the Hub tag `v1` (`8622b7d1`, temperature 1.859); the Hub has no `v2` tag, so the pin is
+`main`.
 
 | Tag | Weights | Temperature |
 |---|---|---|
-| `jeeves:9b`, `jeeves:latest` | `PostHog/jeeves@8622b7d1`: five BF16 shards (the fused model) and `head.pt` | 1.859 (`export.json`) |
+| `jeeves:9b`, `jeeves:latest` | `PostHog/jeeves@04b9f87a` (v2): five BF16 shards (the fused model) and `head.pt` | 1.522 (`export.json`) |
 
 Thinking mode needs a generation loop in the runner (and the authors' drafters); Ollaya does not run it.
 
