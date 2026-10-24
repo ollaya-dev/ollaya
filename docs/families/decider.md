@@ -47,7 +47,7 @@ A decision is one prefill plus a 255-row matmul, with no generation, so option (
 For `decider-2b` the source is `Mapika/decider-2b@7614a6c7ea5a047aa7d7bcfb1a0015469381c3e3` (v12, 2026-10-20;
 `model.safetensors` 3.76 GB, sha256 `1265b014…`), and for `decider-4b`
 `Mapika/decider-4b@585473dec4fa93f0325c2bf02dda7273b61f44c1` (v3, 2026-10-20; `model.safetensors` 8.41 GB, sha256
-`87f0f1e2…`), with the same file names; both match the HF LFS oids. All three repos ship the same `tokenizer.json`.
+`e83c74cc…`), with the same file names; both match the HF LFS oids. All three repos ship the same `tokenizer.json`.
 Each export writes `files.json` with sizes and sha256 values. From these releases the two repos also carry `vision/`
 (the Qwen3.5 vision tower and the image-text config, 0.66 GB) and no longer ship the `decider/` package; Ollaya reads
 only the text files from them, and the image path is a separate layout (`docs/backlog.md`).

@@ -150,7 +150,7 @@ def export(slug: str, out_dir: str, root: str):
         "weights_in_memory": ox.weights_in_memory(report),
     }
     calibration = {"temperature": [t_choice, 1.0, t_noul], "temperature_by_options": {},
-                   "source": ("decider_config.json temperature_by_type (choice, noul; fitted upstream by NLL per answer type)"
+                   "source": ("decider_config.json temperature_by_type (choice, noul), as the authors ship it"
                               if by_type else "decider_config.json temperature (fitted upstream on in-task data)")
                              + "; score is 1.0 because the isolated-row temperature is applied inside the score option logits"}
     files = {
