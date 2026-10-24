@@ -233,6 +233,12 @@ not touch these numbers.
 | agent 2.2 | 0.461 (921) | 0.450 | 0.414 | 0.533 | 0.193 |
 | small | 0.432 (863) | 0.412 | 0.356 | 0.552 | 0.110 |
 
+**base-clean** (Ollaya Bench, through the HTTP API on the RTX 5090, 2026-10-24): 0.475 (choice 0.375, score
+0.463, noul 0.590, ECE 0.061), against 0.484 for base in the same bench (2026-10-14). The author reports 0.477
+against 0.484. On the public benchmark its macro accuracy is 0.492 against base's 0.550, and its edition score
+23.5 against 31.0. Both reject 301 public-benchmark rows (over the 512-token window) and 7 typed-decisions
+questions.
+
 The author reports 0.427 (95% interval 0.399 to 0.455) for small 1.1 and notes that every small model they
 tested was below this benchmark's majority-class baseline of 0.461; base and agent are above it. The author
 gives no typed-decisions figure for base or agent. Agent is trained for the decisions inside a coding agent's

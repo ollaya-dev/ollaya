@@ -164,7 +164,9 @@ The runner must match every decision, with option logits within 1e-3. Measured o
 - **Not run.** 12b on Metal, the Apple CPU and ARM64.
 - **Typed-decisions (measured here).** All 400 states, 2,000 decisions, argmax against the majority
   label: 12b 0.702 (ECE 0.155 at T 1, the shipped value), e4b 0.722 (ECE 0.022 with the shipped T
-  1.2574, 0.060 at T 1).
+  1.2574, 0.060 at T 1). e2b, in Ollaya Bench (2026-10-24, RTX 5090): 0.616 (choice 0.595, score 0.554, noul
+  0.720; ECE 0.146 at T 1), public benchmark macro accuracy 0.659 against e4b's 0.734, edition score 49.4
+  against 59.9.
 - **Latency (measured here, in the runner without HTTP, five questions, short state).** RTX 4090: 12b
   154 ms, e4b 96 ms at the median. x86-64 CPU (24 cores): e4b 5.1 s.
 
