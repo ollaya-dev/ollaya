@@ -800,8 +800,8 @@ CATALOG = {
         "aliases": {"latest": "9b"},
         "parity": "Ollaya's Rust runtime matches the authors' own code (their Qwen3.5 model and pointer head, fp32, no "
                   "thinking) on 430 questions from 107 requests, on CUDA: identical token rows and option positions, the "
-                  "same 16 rejected requests, the same decision on every question, scores within 1.9e-4 and "
-                  "probabilities within 1.4e-5.",
+                  "same 16 rejected requests, the same decision on every question, scores within 7.8e-5 and "
+                  "probabilities within 5.8e-6. On the CPU the smoke cases (44 questions) agree too.",
     },
     "clef": {
         "namespace": "library",

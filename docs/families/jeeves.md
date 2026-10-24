@@ -59,14 +59,18 @@ per `session.run`, as for `nimble`.
 - **Strict questions.** As upstream, a question with fields other than `type`, `instructions` and `criteria`
   is rejected, and choice criteria must be an object.
 
-## Parity (measured 2026-09-30)
+## Parity (v2, measured 2026-10-24)
 
-Goldens: the authors' own model code (`export.load_export`) in fp32 on the CPU, with their Encoder, over the
-shared case set (10 typed-decisions rows and the edge cases): 107 requests, 16 rejected upstream, 430 questions.
+Goldens: the authors' own model code (`export.load_export`, PostHog/jeeves at `8c6ab532`) in fp32 on the CPU, with
+their Encoder, over the shared case set (10 typed-decisions rows and the edge cases): 107 requests, 16 rejected
+upstream, 430 questions. The CPU runs the 18 smoke cases (K2 for a 9B model).
 
-| | rows | decisions | scores max | probabilities max (p99) | five questions (runner, p50) |
+| | rows | decisions | scores max | probabilities max (p99) | per request (runner, mean) |
 |---|---|---|---|---|---|
-| CUDA, RTX 4090 | 430 / 430 identical, 0 rejection mismatches | 100 % | 1.9e-4 | 1.4e-5 (8.0e-6) | 673 ms on the fixtures |
+| CUDA, RTX 5090 | 430 / 430 identical, 0 rejection mismatches | 100 % | 7.8e-5 | 5.8e-6 (2.6e-6) | 422 ms on the fixtures |
+| CPU, Threadripper 3960X (smoke) | 44 / 44 identical, 0 rejection mismatches | 100 % | 4.8e-5 | 3.0e-6 | 40.8 s on the fixtures |
+
+v1 (2026-09-30, RTX 4090): the same 430 questions, scores within 1.9e-4, probabilities within 1.4e-5.
 
 ## Quality
 
