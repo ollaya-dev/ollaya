@@ -39,6 +39,8 @@ fn listed(line: &str) -> bool {
     let id = rec["id"].as_str().unwrap_or_default();
     // parity_decider_vision's goldens carry the shared cases as `text/<id>`.
     let id = id.strip_prefix("text/").unwrap_or(id);
+    // A rejected request's `<id>#valid` (the questions upstream accepts on their own) goes with its case.
+    let id = id.strip_suffix("#valid").unwrap_or(id);
     CASES
         .lines()
         .filter_map(|l| l.split('#').next().map(str::trim))
