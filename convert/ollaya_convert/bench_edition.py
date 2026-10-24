@@ -53,6 +53,10 @@ TRAINED_ON = {
     **{"coba:" + t: ["vitaminc-dev", "massive-en-US", "massive-de-DE", "boolq", "squad2", "paws", "multinli",
                      "civil_comments", "aegis2", "helpsteer2", "pubmedqa"]
        for t in ("400m-ternary", "150m-ternary", "68m-ternary")},
+    # Jeeves v2's export.json sources: typed_decisions, boolq, mnli, paws, and decider_* sets built from
+    # civil_comments, HelpSteer2 and MASSIVE intents.
+    "jeeves:9b": ["typed-decisions", "boolq", "multinli", "paws", "civil_comments", "helpsteer2", "massive-en-US",
+                  "massive-de-DE"],
 }
 
 

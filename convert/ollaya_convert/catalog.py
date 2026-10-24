@@ -787,8 +787,9 @@ CATALOG = {
                          "Base model: Qwen3.5-9B by the Qwen team, Apache-2.0.\n"
                          "Licensed under the Apache License, Version 2.0.\n\n") + LICENSE_APACHE,
         "tags": {
-            # No-thinking mode: the pointer head reads the option markers after an empty thought.
-            "9b": dict(_wl("jeeves-9b", "PostHog/jeeves", "8622b7d1652a9dcb8629486b84dce9e8d690c5cd",
+            # No-thinking mode: the pointer head reads the option markers after an empty thought. Jeeves v2 since
+            # COB-562; v1 was PostHog/jeeves@8622b7d1652a9dcb8629486b84dce9e8d690c5cd.
+            "9b": dict(_wl("jeeves-9b", "PostHog/jeeves", "04b9f87a79484fda54131de3b030b579d399e704",
                            "PostHog's Jeeves-9B without its reasoning chain: Qwen3.5-9B (LoRA merged) and a pointer head "
                            "that scores every option at its own marker, calibrated. Needs about 18 GB of memory.",
                            "9B", 8192, ["en"], wl_dir=os.path.join(OUT, "jeeves-9b"),
