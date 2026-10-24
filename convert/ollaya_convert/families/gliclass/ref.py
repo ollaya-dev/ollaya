@@ -1,10 +1,13 @@
 """The PyTorch reference for GLiClass uni-encoder models, driven through the `gliclass` package.
 
     uv run --with gliclass==0.1.20 python -m ollaya_convert.families.gliclass.ref [large|edge]
+    uv run --with gliclass==0.1.21 python -m ollaya_convert.families.gliclass.ref v4-edge
 
-Upstream (Apache-2.0): the `gliclass` package 0.1.20 (PyPI; github.com/Knowledgator/GLiClass @ 40baa67),
-checkpoints `knowledgator/gliclass-instruct-large-v1.0` (DeBERTa-v3-large) and
-`knowledgator/gliclass-instruct-edge-v1.0` (Ettin-32M, ModernBERT architecture).
+Upstream (Apache-2.0): the `gliclass` package (PyPI; github.com/Knowledgator/GLiClass), 0.1.20 (@ 40baa67) for
+`knowledgator/gliclass-instruct-large-v1.0` (DeBERTa-v3-large) and `knowledgator/gliclass-instruct-edge-v1.0`
+(Ettin-32M, ModernBERT architecture), 0.1.21 (@ 6a00f80, the first with the calibrator) for
+`knowledgator/gliclass-v4-edge` (DeBERTa-v3-large: first-token label pooling, no segment embeddings, and a
+calibrator that rescales every label logit).
 
 GLiClass is a classifier, not a typed-decision model, so the question mapping below is Ollaya's. The
 model call itself is upstream's `ZeroShotClassificationPipeline(texts=state, labels, prompt=...)`:
@@ -12,7 +15,8 @@ model call itself is upstream's `ZeroShotClassificationPipeline(texts=state, lab
   * tokenization   `tokenizer(inputs, truncation=True, max_length=1024, padding="longest")`, with the
                    tokenizer the checkpoint was trained with: the repo's tokenizer.json verbatim
                    (transformers 5 rebuilds DeBERTa's normalizer; see families/repo_tokenizer.py)
-  * network        GLiClassModel.forward(**inputs, max_num_classes=len(labels))
+  * network        GLiClassModel.forward(**inputs, max_num_classes=len(labels)), in fp32; with a calibrator its
+                   `logits` are the calibrated ones, as the pipeline scores them
   * scoring        single-label = softmax over the label logits, multi-label = per-label sigmoid
                    (BaseZeroShotClassificationPipeline._postprocess_logits)
 
@@ -39,8 +43,9 @@ from .. import repo_tokenizer
 VARIANTS = {
     "large": ("knowledgator/gliclass-instruct-large-v1.0", "825e5478c1bf4bffbf297690517097ccbdb2e006"),
     "edge": ("knowledgator/gliclass-instruct-edge-v1.0", "727be8a417f6a7718e591b025e07054c146d8139"),
+    "v4-edge": ("knowledgator/gliclass-v4-edge", "2486b93469dde357d2b8f675a6514959e3f0fc6e"),
 }
-UPSTREAM = "gliclass==0.1.20"
+UPSTREAM = {"large": "gliclass==0.1.20", "edge": "gliclass==0.1.20", "v4-edge": "gliclass==0.1.21"}
 MAX_LEN = 1024  # ZeroShotClassificationPipeline default max_length
 MARKERS = ("<<LABEL>>", "<<SEP>>", "<<EXAMPLE>>")
 QTYPES = {"choice": 0, "score": 1, "noul": 2}
@@ -52,7 +57,9 @@ class Model:
 
         self.variant = variant
         self.repo, self.revision = VARIANTS[variant]
-        self.model = GLiClassModel.from_pretrained(self.repo, revision=self.revision).to(device).eval()
+        # fp32: v4-edge stores bf16 and transformers 5 would load it as such (the graph widens the same values).
+        self.model = GLiClassModel.from_pretrained(self.repo, revision=self.revision,
+                                                   dtype=torch.float32).to(device).eval()
         # The repo's tokenizer.json verbatim (training-time behaviour; see families/repo_tokenizer.py).
         self.tok, _ = repo_tokenizer.load(self.repo, self.revision)
         self.device = device
@@ -65,8 +72,11 @@ class Model:
             if self.tok.convert_tokens_to_ids(tok_text) != idx:
                 raise RuntimeError("%s is not token %d in %s" % (tok_text, idx, self.repo))
         assert cfg.architecture_type == "uni-encoder" and cfg.prompt_first
-        assert cfg.class_token_pooling == "average" and cfg.embed_class_token and not cfg.extract_text_features
-        assert cfg.pooling_strategy == "first" and cfg.scorer_type == "mlp" and cfg.use_segment_embeddings
+        assert cfg.class_token_pooling in ("average", "first") and cfg.embed_class_token
+        assert not cfg.extract_text_features and cfg.pooling_strategy == "first" and cfg.scorer_type == "mlp"
+        # The recurrent_* keys only drive the decoder-kv architecture; the uni-encoder scores once.
+        assert (getattr(self.model, "calibrator", None) is not None) == bool(getattr(cfg, "use_calibrator", False))
+        assert all(p.dtype == torch.float32 for p in self.model.parameters())
         assert not (cfg.normalize_features or cfg.use_lstm or cfg.squeeze_layers or cfg.layer_wise)
         assert cfg.encoder_layer_id == -1
 

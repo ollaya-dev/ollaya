@@ -314,6 +314,15 @@ CATALOG = {
                 "825e5478c1bf4bffbf297690517097ccbdb2e006",
                 "Instruction-following zero-shot classifier: all options scored in one pass.",
                 "439M", 1024, ["en"], arch={"family": "gliclass", "config": "config.json"}),
+            # GLiClass v4's 0.4B release: first-token label pooling and a calibrator in the graph (gliclass 0.1.21).
+            # No arch layer: the MLX head has neither.
+            "v4-edge": _wl(
+                "gliclass-v4-edge", "knowledgator/gliclass-v4-edge", "2486b93469dde357d2b8f675a6514959e3f0fc6e",
+                "Knowledgator's GLiClass v4 Edge: instruction-following zero-shot classifier on DeBERTa-v3-large "
+                "with a calibrator that rescales every label's logit; all options scored in one pass.",
+                "440M", 1024, ["en"],
+                license_text="GLiClass v4 Edge by Knowledgator (https://huggingface.co/knowledgator/gliclass-v4-edge)\n"
+                             "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE),
         },
         "aliases": {"latest": "large"},
         "parity": "Ollaya's Rust runtime matches the Python reference exactly on 482 questions. "
@@ -761,6 +770,12 @@ CATALOG = {
                          "Winnow-E4B (Gemma 4 E4B IT fine-tune), Q8_0 GGUF on llama.cpp: option-label logits "
                          "after Winnow's own prompt, with the author's fitted temperature.",
                          "7.5B", ["multilingual"], notice="NOTICE"),
+            # The author fitted no temperature for E2B (its direct scores are read at T = 1).
+            "e2b": _gguf("winnow-e2b-q8_0", "EldanRing/Winnow-E2B", "00b4d4ea1412bebe1ff22e4875e580acdf150769",
+                         "gguf/Winnow-E2B-Q8_0.gguf",
+                         "Winnow-E2B (Gemma 4 E2B IT fine-tune), Q8_0 GGUF on llama.cpp: option-label logits "
+                         "after Winnow's own prompt, uncalibrated. The smallest Winnow (5 GB).",
+                         "4.6B", ["multilingual"], notice="NOTICE"),
             # Opt-in images: each text tag's GGUF, decision and calibration plus its matching projector from the
             # same revision, read through libmtmd. The text tags keep their downloads and inference path.
             "12b-vision": dict(_gguf("winnow-12b-q8_0", "EldanRing/Winnow-12B", "b6ac22b0d51b69b18200acacb3fbdd98073fffe8",
@@ -904,20 +919,23 @@ CATALOG = {
                         "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
         "tags": {
             # The authors' own GGUF files, pinned; Q8_0 for 4b and 9b (the files they checked against bf16:
-            # 256/260 and 257/260), Q4_K_M for 27b so it fits a 24 GB GPU (29 GB at Q8_0).
+            # 256/260 and 257/260 for v2), Q4_K_M for 27b so it fits a 24 GB GPU (29 GB at Q8_0). 9b and 27b are v2.1,
+            # which the authors' v2 cards now name as the version to use; there is no 4B v2.1. Until then 9b was
+            # frontier-infra/jebadiah-9b-v2-GGUF@adaec6b3d1f0421706deb49fa275ab49093982ff (jebadiah-9b-v2-Q8_0.gguf)
+            # and 27b frontier-infra/jebadiah-27b-GGUF@7451e611a20ce3f56dd7d87f78c8a25b736c08f5 (jebadiah-27b-Q4_K_M.gguf).
             "4b": _gguf("jebadiah-4b-q8_0", "frontier-infra/jebadiah-4b-v2-GGUF", "7f671f9a31827257c26401000484e154b39417e6",
                         "jebadiah-4b-v2-Q8_0.gguf",
                         "Jebadiah 4B v2 (Qwen3.5-4B, LoRA merged), Q8_0 GGUF on llama.cpp: the option letters' logits "
                         "after AINode's decision prompt, with the authors' per-type temperatures.",
                         "4B", ["en"]),
-            "9b": _gguf("jebadiah-9b-q8_0", "frontier-infra/jebadiah-9b-v2-GGUF", "adaec6b3d1f0421706deb49fa275ab49093982ff",
-                        "jebadiah-9b-v2-Q8_0.gguf",
-                        "Jebadiah 9B v2 (Qwen3.5-9B, LoRA merged), Q8_0 GGUF: the authors' recommended local model.",
+            "9b": _gguf("jebadiah-9b-v2-1-q8_0", "frontier-infra/jebadiah-9b-v2-1-GGUF",
+                        "2182dd8d70b09ffdce5b68b0ddf6c4591bf38810", "jebadiah-9b-v2-1-Q8_0.gguf",
+                        "Jebadiah 9B v2.1 (Qwen3.5-9B, LoRA merged), Q8_0 GGUF: the authors' recommended local model.",
                         "9B", ["en"]),
-            "27b": _gguf("jebadiah-27b-q4_k_m", "frontier-infra/jebadiah-27b-GGUF", "7451e611a20ce3f56dd7d87f78c8a25b736c08f5",
-                         "jebadiah-27b-Q4_K_M.gguf",
-                         "Jebadiah 27B (Qwen3.8-27B, LoRA merged), Q4_K_M GGUF (17 GB, fits a 24 GB GPU): the most "
-                         "accurate Jebadiah.",
+            "27b": _gguf("jebadiah-27b-v2-1-q4_k_m", "frontier-infra/jebadiah-27b-v2-1-GGUF",
+                         "ed71f41b8b59e8832c53982cd26e0879824e979c", "jebadiah-27b-v2-1-Q4_K_M.gguf",
+                         "Jebadiah 27B v2.1 (Qwen3.8-27B, LoRA merged), Q4_K_M GGUF (17 GB, fits a 24 GB GPU): the "
+                         "most accurate Jebadiah.",
                          "27B", ["en"]),
         },
         "aliases": {"latest": "9b"},
@@ -956,13 +974,13 @@ CATALOG = {
         "family": "decima",
         "author": "A. M. Madani (amyrmahdy)",
         "license": "Apache-2.0",
-        "license_text": ("Decima-small, Decima-base, Decima-agent, Decima-guard and Decima-guard-small by "
+        "license_text": ("Decima-small, Decima-base, Decima-base-clean, Decima-agent, Decima-guard and Decima-guard-small by "
                          "A. M. Madani (https://huggingface.co/amyrmahdy, https://github.com/amyrmahdy/decima), "
                          "Apache-2.0.\n"
                          "Base models: multilingual-e5-small by intfloat "
                          "(https://huggingface.co/intfloat/multilingual-e5-small) for Decima-small, mmBERT-base "
-                         "by JHU CLSP (https://huggingface.co/jhu-clsp/mmBERT-base) for Decima-base, Decima-agent "
-                         "and Decima-guard, and mmBERT-small by JHU CLSP "
+                         "by JHU CLSP (https://huggingface.co/jhu-clsp/mmBERT-base) for Decima-base, Decima-base-clean, "
+                         "Decima-agent and Decima-guard, and mmBERT-small by JHU CLSP "
                          "(https://huggingface.co/jhu-clsp/mmBERT-small) for Decima-guard-small, all MIT License.\n"
                          "Licensed under the Apache License, Version 2.0.\n\n") + LICENSE_APACHE,
         # The fp32 PyTorch checkpoint under pytorch/ of each repository, the encoder and the late-interaction
@@ -979,6 +997,13 @@ CATALOG = {
                             "A. M. Madani's Decima-base 2.0: mmBERT-base with Decima's late-interaction scorer "
                             "and ordinal head, with the author's temperature. 321M parameters, multilingual.",
                             "321M", 512),
+            # HF tag v1.0, decima.json with choice_fit (decima-late-interaction-v2), 512-token states.
+            "base-clean": _decima("decima-base-clean", "35eb218bdeeb8c450baba4159ebc08b67c4d632c",
+                                  "A. M. Madani's Decima-base-clean 1.0: Decima-base's network (mmBERT-base, 321M) "
+                                  "trained without non-commercial data and without the BTZSC benchmark's, for "
+                                  "commercial use and honest zero-shot numbers; decima:base is stronger on routing, "
+                                  "intent and NLI questions.",
+                                  "321M", 512),
             # HF tag v2.3, decima.json with choice_fit (decima-late-interaction-v2) and 8,192-token states; v2.2
             # (2,048 tokens) was 5c14a460ff368b5bf3aaf086d1ab46292d668e32, v2.1 86a07aab1c340fa5869bdb754e57d3851a1d288a.
             "agent": _decima("decima-agent", "652d90ac9d33088edd730692c95f1da381cb9174",

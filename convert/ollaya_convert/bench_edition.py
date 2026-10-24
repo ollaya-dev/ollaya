@@ -5,7 +5,8 @@
 
 With --update RELEASE, the runs go into the existing edition instead (ADR 0009, a rolling edition): only the models
 a release changed are measured (`bench_plan`), their run files are added to the edition's runs, where a later run's
-row replaces an earlier one of the same model, their scores replace the old ones, and `updates` records the release.
+row replaces an earlier one of the same model, their scores replace the old ones, and `updates` records the release
+(once: a second update of the same release joins the first).
 `-fp16` tags are not added to the edition's models: the site shows them under their base tag, unranked.
 
 OUT_DIR is what `bench_run` writes on the bench machine:
@@ -49,8 +50,10 @@ TRAINED_ON = {
     "laya:typed-decisions": ["typed-decisions"],
     "largha:150m": ["typed-decisions"],
     "jeb:4b": ["typed-decisions"],
-    "jeb:9b": ["typed-decisions"],
-    "jeb:27b": ["typed-decisions"],
+    # jeb:9b and jeb:27b are v2.1, whose 90 training sources (the card's table) add civil_comments, HelpSteer2 and
+    # MASSIVE intents, parallel across languages, to typed-decisions.
+    **{"jeb:" + t: ["typed-decisions", "civil_comments", "helpsteer2", "massive-en-US", "massive-de-DE"]
+       for t in ("9b", "27b")},
     # The in-domain coba tags saw the train splits of ten public tasks (DATA_SOURCES.tsv, indomain/*). MASSIVE
     # is parallel across languages, so its German subset is not held out either.
     **{"coba:" + t: ["vitaminc-dev", "massive-en-US", "massive-de-DE", "boolq", "squad2", "paws", "multinli",
@@ -293,7 +296,14 @@ def merge_update(edition, release, date, files, models, scores):
     new = {s["model"] for s in scores}
     edition["score"]["results"] = sorted([r for r in edition["score"]["results"] if r["model"] not in new] + scores,
                                          key=lambda r: -r["score"])
-    edition.setdefault("updates", []).append({"release": release, "date": date, "runs": files, "models": models})
+    updates = edition.setdefault("updates", [])
+    same = next((u for u in updates if u["release"] == release), None)  # a second update for the same release
+    if same:
+        same["date"] = max(same["date"], date)
+        same["runs"] += [f for f in files if f not in same["runs"]]
+        same["models"] += [m for m in models if m not in same["models"]]
+    else:
+        updates.append({"release": release, "date": date, "runs": files, "models": models})
     return edition
 
 

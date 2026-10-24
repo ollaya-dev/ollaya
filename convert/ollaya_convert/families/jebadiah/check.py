@@ -6,8 +6,9 @@ For every case of the shared set (Laya's edge cases, the decoder edge cases, typ
 and every question on its own: the author's `jebadiah_prompt.Renderer.render(state, q).prompt`
 (AINode's renderer and the repo's chat template through transformers, thinking off) must equal
 `PRE + user_message + POST`, the candidate labels must match, and a question the author rejects
-must be rejected by the port. Prompts over the author's 2,048-token budget (cut upstream, rejected
-by Ollaya) and the port's own extensions (a list of choice labels) are counted separately.
+must be rejected by the port. Prompts over the author's 2,048-token budget (cut upstream, or for v2.1
+an error when no state is left to cut; rejected by Ollaya) and the port's own extensions (a list of
+choice labels) are counted separately.
 """
 from __future__ import annotations
 
@@ -48,6 +49,8 @@ def main():
                 ours, our_err = None, e
             if up_err is not None and our_err is not None:
                 rejected += 1
+            elif up_err is not None and "exceed max sequence length" in str(up_err):
+                cut += 1  # v2.1 raises where v2 cut the state away; over the budget, which Ollaya rejects, either way
             elif up_err is not None:
                 crit = q.get("criteria") if isinstance(q, dict) else None
                 if q.get("type") == "choice" and isinstance(crit, list):

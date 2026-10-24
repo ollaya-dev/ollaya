@@ -2,6 +2,8 @@
 
     uv run --with gliclass==0.1.20 python -m ollaya_convert.families.gliclass.goldens large \
         --out out/goldens-gliclass-instruct-large.jsonl [--all]
+    uv run --with gliclass==0.1.21 python -m ollaya_convert.families.gliclass.goldens v4-edge \
+        --out out/goldens-gliclass-v4-edge.jsonl [--all]
 
 One JSON line per case (requests JSON round-tripped first):
     {"id", "state", "questions", "state_text", "rejected",     # rejected: {qid: reason}, answered 400

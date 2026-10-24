@@ -3,19 +3,19 @@
   "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
   "config": {
     "mediaType": "application/vnd.ollaya.config.v1+json",
-    "digest": "sha256:1e8df6480ac80fdebb60ce7005cf80717b1b88e06f48f365f5bc65d03a9f2c83",
-    "size": 475,
+    "digest": "sha256:2f90cb200d061453bbba72b67e7fb0b5a9f645aaa3a67a98d0fecdc9ca8d2bc0",
+    "size": 485,
     "urls": [
-      "https://ollaya.dev/blobs/sha256-1e8df6480ac80fdebb60ce7005cf80717b1b88e06f48f365f5bc65d03a9f2c83"
+      "https://ollaya.dev/blobs/sha256-2f90cb200d061453bbba72b67e7fb0b5a9f645aaa3a67a98d0fecdc9ca8d2bc0"
     ]
   },
   "layers": [
     {
       "mediaType": "application/vnd.ollaya.weights.gguf",
-      "digest": "sha256:91b4c7ab57ce90a57f9cafeb447cde0b68d2c68e874a065616319676d29ea672",
-      "size": 16810714560,
+      "digest": "sha256:f508eb3ad7b0bee0c9d7460288e0f56b764e5ad01d7bfba7d58c6a347cee4a3a",
+      "size": 16810714688,
       "urls": [
-        "https://huggingface.co/frontier-infra/jebadiah-27b-GGUF/resolve/7451e611a20ce3f56dd7d87f78c8a25b736c08f5/jebadiah-27b-Q4_K_M.gguf"
+        "https://huggingface.co/frontier-infra/jebadiah-27b-v2-1-GGUF/resolve/ed71f41b8b59e8832c53982cd26e0879824e979c/jebadiah-27b-v2-1-Q4_K_M.gguf"
       ],
       "annotations": {
         "org.ollaya.quantization": "Q4_K - Medium"
@@ -23,18 +23,18 @@
     },
     {
       "mediaType": "application/vnd.ollaya.decision",
-      "digest": "sha256:055dcab50720d404dc9b41e8330e71ce5aba13e64ded09a45f6f2870d9165eb5",
-      "size": 6859,
+      "digest": "sha256:5b27f21311a394d63f27bd88d838f72d69892ba0bcc618842b612c6d3f94c701",
+      "size": 6879,
       "urls": [
-        "https://ollaya.dev/blobs/sha256-055dcab50720d404dc9b41e8330e71ce5aba13e64ded09a45f6f2870d9165eb5"
+        "https://ollaya.dev/blobs/sha256-5b27f21311a394d63f27bd88d838f72d69892ba0bcc618842b612c6d3f94c701"
       ]
     },
     {
       "mediaType": "application/vnd.ollaya.calibration",
-      "digest": "sha256:4940c922a8079fa3c883e8744121c2b354d3a0e37f4c9e4737e0a3a7ae368f3d",
-      "size": 162,
+      "digest": "sha256:8960a25653086d93a8d4c787768be27ed95c7dbc294d4f42c06596b879d66def",
+      "size": 163,
       "urls": [
-        "https://ollaya.dev/blobs/sha256-4940c922a8079fa3c883e8744121c2b354d3a0e37f4c9e4737e0a3a7ae368f3d"
+        "https://ollaya.dev/blobs/sha256-8960a25653086d93a8d4c787768be27ed95c7dbc294d4f42c06596b879d66def"
       ]
     },
     {

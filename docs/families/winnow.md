@@ -1,10 +1,10 @@
 # winnow (`winnow-v1`)
 
-**EldanRing/Winnow-12B** and **EldanRing/Winnow-E4B** are Gemma 4 12B IT and Gemma 4 E4B IT with a LoRA
-(r=32, α=64) merged into the weights, released only as GGUF. They read option-label logits after a
+**EldanRing/Winnow-12B**, **EldanRing/Winnow-E4B** and **EldanRing/Winnow-E2B** are Gemma 4 12B IT, E4B IT
+and E2B IT with a LoRA merged into the weights, released only as GGUF. They read option-label logits after a
 Gemma-4-specific prompt. Their own server (https://github.com/EldanRing/winnow-inference) is a patched
-llama.cpp with `/v1/systemone`. Ollaya ships them as `winnow:12b` (also `winnow:latest`) and
-`winnow:e4b`.
+llama.cpp with `/v1/systemone`. Ollaya ships them as `winnow:12b` (also `winnow:latest`), `winnow:e4b` and
+`winnow:e2b`.
 
 ### Winnow-12B
 
@@ -27,6 +27,19 @@ llama.cpp with `/v1/systemone`. Ollaya ships them as `winnow:12b` (also `winnow:
 | Inference code | `winnow-inference@77d14580c6732ca2f3745750c1dc1fd446d8bcee` (`inference_source_commit` in `release-manifest.json`). `native/` is unchanged from 6c2b3c04, so the prompt is the same. |
 | Temperature | `1.2574172017327816`, fitted by the author for the Q8_0 GGUF on 778 calibration questions (`release-manifest.json`, `decision_calibration`). The author's server defaults to 1.0; Ollaya ships the fitted value in `calibration.json`. |
 | Template | Its chat template has no empty-thought marker, so the prompt has none (`decision.json`: `"thought": false`). |
+
+### Winnow-E2B
+
+| | |
+|---|---|
+| Repo / commit | `EldanRing/Winnow-E2B@00b4d4ea1412bebe1ff22e4875e580acdf150769` (the GGUFs are the same bytes as at `f0f9931c`, the commit winnow-inference's release manifest names) |
+| Files | `gguf/Winnow-E2B-Q8_0.gguf` 4.95 GB, sha256 `cb37414b46b5c4ac54ea9a44f71bb6147991c34e6be414a8cdd359cc10f0dfb1`; `gguf/Winnow-E2B-BF16.gguf` 9.31 GB, which the author did not evaluate; `gguf/mmproj-Winnow-E2B.gguf` 986 MB (vision, not shipped yet) |
+| Base | `google/gemma-4-E2B-it@3e22461f65e89153144f8adb70e3b8c2cc9845a7` |
+| License | Apache-2.0, with the author's `LICENSE` and `NOTICE`, as for 12B |
+| Inference code | `winnow-inference@ee6bd37d34ae35d2e69ebb0c4b0957a10c727357`, the evaluated source. `native/protocol.h` is byte-identical to 77d14580 and 6c2b3c04, so the prompt is the same. The E2B-specific code (reasoning, a 0.99 maxP gate, a 50:50 blend) is all in the Python adaptive client, which Ollaya does not run. |
+| Temperature | 1.0: the author fitted none, and scores every E2B number at T = 1 (`docs/EVALUATION.md`). |
+| Template | Byte-identical to E4B's chat template, so `"thought": false`. The tokenizer and the 64 label ids are E4B's too. |
+| Quality (author's, direct path) | JevBench public 75.8 %, Kev v9 clean 69.6 %, typed teacher agreement 61.9 %, against E4B's 79.2 %, 72.8 % and 72.3 % in the same run (`docs/EVALUATION.md`, Q8_0, RTX 5070 Ti). The card's headline numbers are the adaptive client's. |
 
 ## Engine: llama.cpp in the runner
 
@@ -129,6 +142,8 @@ The runner must match every decision, with option logits within 1e-3. Measured o
 | e4b Q8_0 | CPU, Apple M4 Pro, macOS (2026-10-22) | 505 | 505/505 | 1.14e-5 | 2.6e-6 |
 | e4b Q8_0 | CPU, ARM64 Linux, DGX Spark (Cortex-X925; `ubuntu-arm64` of the same build; 2026-10-22) | 505 | 505/505 | 1.20e-5 | 2.6e-6 |
 | 12b Q8_0 | CPU, x86-64 Linux, Threadripper 3960X (2026-10-22) | 505 | 505/505 | 1.11e-5 | 2.1e-6 |
+| e2b Q8_0 | CUDA, RTX 5090, Linux (2026-10-24) | 505 | 505/505 | 1.08e-5 | 2.8e-6 |
+| e2b Q8_0 | CPU, x86-64 Linux, Threadripper 3960X (2026-10-24) | 505 | 505/505 | 9.8e-6 | 3.8e-6 |
 
 - **Windows.** The golden replay on Windows stopped on a text-encoding error in the Python tool
   (cp1252), so the native Windows check covered only the first 3 requests.
@@ -149,7 +164,9 @@ The runner must match every decision, with option logits within 1e-3. Measured o
 - **Not run.** 12b on Metal, the Apple CPU and ARM64.
 - **Typed-decisions (measured here).** All 400 states, 2,000 decisions, argmax against the majority
   label: 12b 0.702 (ECE 0.155 at T 1, the shipped value), e4b 0.722 (ECE 0.022 with the shipped T
-  1.2574, 0.060 at T 1).
+  1.2574, 0.060 at T 1). e2b, in Ollaya Bench (2026-10-24, RTX 5090): 0.616 (choice 0.595, score 0.554, noul
+  0.720; ECE 0.146 at T 1), public benchmark macro accuracy 0.659 against e4b's 0.734, edition score 49.4
+  against 59.9.
 - **Latency (measured here, in the runner without HTTP, five questions, short state).** RTX 4090: 12b
   154 ms, e4b 96 ms at the median. x86-64 CPU (24 cores): e4b 5.1 s.
 

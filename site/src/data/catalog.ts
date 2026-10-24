@@ -277,6 +277,7 @@ const overlays: Record<string, ModelOverlay> = {
       latest: { summary: 'Same as winnow:12b.' },
       '12b': { summary: `Winnow-12B, Q8_0 GGUF: ${result('winnow:12b', 'typed.accuracy', 3)} on typed decisions, 85.7 % on the author's JevBench set; a 16 GB GPU holds it.` },
       e4b: { summary: `Winnow-E4B, Q8_0 GGUF, with the author's fitted temperature: ${result('winnow:e4b', 'typed.accuracy', 3)} on typed decisions in ${result('winnow:e4b', 'gpu.p50_ms', 0)} ms on an ${benchGpu}. Ollaya's recommended model.` },
+      e2b: { summary: `Winnow-E2B, Q8_0 GGUF (5 GB), uncalibrated: the smallest Winnow, ${result('winnow:e2b', 'typed.accuracy', 3)} on typed decisions in ${result('winnow:e2b', 'gpu.p50_ms', 0)} ms on an ${benchGpu}.` },
     },
   },
   nimble: {
@@ -334,8 +335,8 @@ const overlays: Record<string, ModelOverlay> = {
     tags: {
       latest: { summary: 'Same as jeb:9b.' },
       '4b': { summary: 'Jebadiah 4B v2, Q8_0 GGUF: the smallest and fastest Jeb.' },
-      '9b': { summary: "Jebadiah 9B v2, Q8_0 GGUF: the authors' recommended local model." },
-      '27b': { summary: 'Jebadiah 27B (Qwen3.8), Q4_K_M GGUF, 17 GB: the largest Jeb, for a 24 GB GPU.' },
+      '9b': { summary: "Jebadiah 9B v2.1, Q8_0 GGUF: the authors' recommended local model." },
+      '27b': { summary: 'Jebadiah 27B v2.1 (Qwen3.8), Q4_K_M GGUF, 17 GB: the largest Jeb, for a 24 GB GPU.' },
     },
   },
   cygnet: {
@@ -385,7 +386,7 @@ const overlays: Record<string, ModelOverlay> = {
     stats: stats('gliclass:large'),
     title: 'GLiClass',
     description:
-      'Instruction-following zero-shot classifier by Knowledgator: all options of a question are scored in one pass, so on a GPU the cost barely grows with the number of options; on a CPU it grows with them.',
+      'Instruction-following zero-shot classifiers by Knowledgator: all options of a question are scored in one pass, so on a GPU the cost barely grows with the number of options; on a CPU it grows with them.',
     publisher: { name: 'Knowledgator', url: 'https://huggingface.co/knowledgator' },
     capabilities: ['zero-shot'],
     keywords: ['gliclass', 'zero-shot', 'classification', 'classifier', 'labels', 'typesafe', 'jev'],
@@ -393,6 +394,7 @@ const overlays: Record<string, ModelOverlay> = {
     tags: {
       latest: { summary: 'Same as gliclass:large.' },
       large: { summary: 'GLiClass instruct large v1.0 (DeBERTa-v3-large backbone), Apache-2.0.' },
+      'v4-edge': { summary: `GLiClass v4 Edge (DeBERTa-v3-large backbone, a calibrator on every label's score), Apache-2.0: ${result('gliclass:v4-edge', 'typed.accuracy', 3)} on typed decisions.` },
     },
   },
   arbiter: {
@@ -465,6 +467,7 @@ const overlays: Record<string, ModelOverlay> = {
     tags: {
       latest: { summary: 'Same as decima:base.' },
       base: { summary: `Decima-base 2.0 (mmBERT-base, 321M), fp32: ${result('decima:base', 'typed.accuracy', 3)} on typed decisions; ${result('decima:base', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+      'base-clean': { summary: `Decima-base-clean 1.0: decima-base retrained without non-commercial data, for commercial use; ${result('decima:base-clean', 'typed.accuracy', 3)} on typed decisions.` },
       agent: { summary: "Decima-agent 2.3: decima-base fine-tuned for coding-agent decisions (secret and command gates, tool and model choice) and knowledge-graph judgments; states up to 8,192 tokens, options kept whole beside long questions." },
       guard: { summary: 'Decima-guard 1.0 preview (mmBERT-base, 321M): prompt injection, jailbreaks, leaks and harmful content in user messages, tool results and model replies (OWASP Top 10 for LLM applications). English, Arabic and Persian.' },
       'guard-small': { summary: 'Decima-guard-small 1.0 preview (mmBERT-small, 140M): the same checks, faster, a few points lower.' },

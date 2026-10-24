@@ -191,16 +191,30 @@ fn main() -> Result<()> {
     }
 
     let compared = questions - enc_bad;
+    let (logit_max, prob_max) = (
+        logit_diffs.iter().copied().fold(0.0, f64::max),
+        prob_diffs.iter().copied().fold(0.0, f64::max),
+    );
+    let (logit_p99, prob_p99) = (p99(&mut logit_diffs), p99(&mut prob_diffs));
     println!(
         "{cases} cases, {questions} questions (+{rejected} rejected, {reject_bad} wrong) | call/text mismatches: {call_bad} \
-         | encoding mismatches: {enc_bad} | logit diff max {:.1e} p99 {:.1e} ({logit_bad} > {LOGIT_TOL:.0e}) \
-         | decisions agree: {:.2}% ({disagree} differ) | prob diff max {:.1e} p99 {:.1e} | run {:.2}s",
-        logit_diffs.iter().copied().fold(0.0, f64::max),
-        p99(&mut logit_diffs),
+         | encoding mismatches: {enc_bad} | logit diff max {logit_max:.1e} p99 {logit_p99:.1e} ({logit_bad} > {LOGIT_TOL:.0e}) \
+         | decisions agree: {:.2}% ({disagree} differ) | prob diff max {prob_max:.1e} p99 {prob_p99:.1e} | run {:.2}s",
         100.0 * (compared - disagree) as f64 / compared.max(1) as f64,
-        prob_diffs.iter().copied().fold(0.0, f64::max),
-        p99(&mut prob_diffs),
         run_time.as_secs_f64(),
+    );
+    // One JSON line for `ollaya_convert.parity_run`, which records it in results/runs/.
+    println!(
+        "record: {}",
+        serde_json::json!({
+            "questions": questions,
+            "rejected_questions": rejected,
+            "decisions_same": compared - disagree,
+            "encoding_mismatches": enc_bad,
+            "max_logit_diff": logit_max,
+            "max_prob_diff": prob_max,
+            "p99_prob_diff": prob_p99,
+        })
     );
     if call_bad + enc_bad + reject_bad + logit_bad + disagree > 0 {
         bail!("gliclass parity failed");

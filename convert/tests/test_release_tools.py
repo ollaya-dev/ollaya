@@ -72,6 +72,9 @@ class EditionUpdate(unittest.TestCase):
         self.assertEqual(out["models"], ["kev:4b", "d1:3b", "strands-decider:2b"])  # -fp16 stays off the leaderboard
         self.assertEqual([r["model"] for r in out["score"]["results"]], ["d1:3b", "strands-decider:2b", "kev:4b"])
         self.assertEqual(out["updates"][0]["release"], "0.14.0")
+        out = bench_edition.merge_update(out, "0.14.0", "2026-10-21", ["c.json"], ["d3:mini"], [])
+        self.assertEqual(len(out["updates"]), 1)  # the same release again: one entry
+        self.assertEqual((out["updates"][0]["date"], out["updates"][0]["runs"]), ("2026-10-21", ["b.json", "c.json"]))
 
 
 class Run(unittest.TestCase):
@@ -92,6 +95,11 @@ class ParityRecord(unittest.TestCase):
         self.assertEqual(cmd[-1], "--fp16")
         cmd, gate = parity_run.command("decider", "/x/out/decider-2b-vision", "cpu")
         self.assertEqual((gate, "parity_decider_vision" in cmd, "--features" in cmd), ("fp32", True, False))
+        cmd, _ = parity_run.command("gliclass", "/x/out/gliclass-v4-edge-wl", "cpu")
+        self.assertTrue(cmd[cmd.index("--") + 2].endswith("goldens-gliclass-v4-edge.jsonl"))
+        cmd, _ = parity_run.command("decima", "/x/out/decima-base-clean", "cuda", "/pack/cuda_v13")
+        self.assertEqual(cmd[cmd.index("--features") + 1], "cuda-dynamic")
+        self.assertIn("--target-dir", cmd)
 
     def test_parse_and_merge(self):
         out = 'numbers: ...\nrecord: {"questions": 10, "decisions_same": 10, "max_logit_diff": 1e-5}\n'
