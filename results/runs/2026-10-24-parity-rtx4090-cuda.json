@@ -1,0 +1,54 @@
+{
+ "schema": 1,
+ "suite": "parity",
+ "date": "2026-10-24",
+ "machine": "rtx-4090",
+ "device": "cuda",
+ "ollaya": "0.17.0 at b97e96a (decider rows, PR #144) and at b37b867 (d1-omni:600m)",
+ "protocol": {
+  "reference": "goldens from each family's goldens.py: the authors' code in PyTorch fp32 (TF32 off) on the checkpoint the manifest names",
+  "gate": "fp32 tags: identical encodings and decisions, option logits within 1e-3, wire answers as the authors' code; -fp16 tags (docs/decisions/0008-fp16-decoder-tags.md): identical encodings, at least 99.5 % of decisions the same, differences reported",
+  "runner": "convert/ollaya_convert/parity_run.py with crates/ollaya-runner/examples/parity_<family>.rs"
+ },
+ "results": [
+  {
+   "model": "decider:2b",
+   "questions": 479,
+   "decisions_same": 479,
+   "max_logit_diff": 3.814697265447364e-05,
+   "max_prob_diff": 7.461986231571682e-05,
+   "p99_prob_diff": 3.797235976488178e-06,
+   "pass": true,
+   "device": "cuda",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "9aaf0a5a45a7419d447a82cf9532d3f187163d30fb53f65567dc67cb34ef7e7a"
+  },
+  {
+   "model": "decider:4b",
+   "questions": 479,
+   "decisions_same": 479,
+   "max_logit_diff": 4.482269286931739e-05,
+   "max_prob_diff": 0.00020279301252523751,
+   "p99_prob_diff": 5.291610535640423e-06,
+   "pass": true,
+   "device": "cuda",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "b7ffca6f95269b6a8ecaa600a2092ade7a20d55d342d89915199cb49962c29c0"
+  },
+  {
+   "model": "d1-omni:600m",
+   "questions": 456,
+   "decisions_same": 456,
+   "max_logit_diff": 8.606910705566406e-05,
+   "max_prob_diff": 1.1498346962124373e-05,
+   "p99_prob_diff": 7.244427759622862e-06,
+   "pass": true,
+   "device": "cuda",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "fd603c73eba7dcc33648e155efc8fe4dc14a7f8aeca0737efc2be3ea29a03e7f"
+  }
+ ]
+}

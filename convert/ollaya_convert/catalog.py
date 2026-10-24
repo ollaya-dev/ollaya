@@ -175,6 +175,26 @@ CATALOG = {
                   "55 image questions on the CPU, an RTX 4090 and an RTX 5090 (29 and 24 on the contributor's CPU "
                   "and RTX 4070), every decision the same, option log-probabilities within 7.7e-6.",
     },
+    # d1-omni-600M: the same LFM Open License v1.0 text as d1-3B (the repo's LICENSE differs in blank lines only).
+    "d1-omni": {
+        "namespace": "library", "model": "d1-omni", "family": "d1-omni", "author": "Liquid AI",
+        "license": "LFM Open License v1.0",
+        "license_text": "d1-omni-600M by Liquid AI (https://huggingface.co/LiquidAI/d1-omni-600M).\n\n" +
+            open(os.path.join(os.path.dirname(__file__), "families", "d1", "LICENSE"), encoding="utf-8").read(),
+        "tags": {
+            # Text path only: the trunk (LFM2.5-Encoder-350M, bidirectional) and the decision head; the vision and
+            # audio encoders in the same checkpoint are not referenced (docs/families/d1-omni.md).
+            "600m": _wl("d1-omni-600m", "LiquidAI/d1-omni-600M", "02b55d7076f15129e59ab3f94783f32c4b088674",
+                        "Liquid AI's d1-omni-600M, text questions: an LFM2.5 encoder with a decision head that scores "
+                        "every option at its own marker, calibrated per question type and option count; 16k-token "
+                        "context. Images and audio are not served.",
+                        "587M", 16384, ["en", "de", "es", "fr", "it", "nl", "pl", "pt", "ar", "hi", "ja", "ru", "tr",
+                                        "vi", "zh"],
+                        wl_dir=os.path.join(OUT, "d1-omni-600m")),
+        },
+        "aliases": {"latest": "600m"},
+        "hf_license": ("lfm1.0", "https://huggingface.co/LiquidAI/d1-omni-600M/blob/02b55d7076f15129e59ab3f94783f32c4b088674/LICENSE"),
+    },
     "laya": {
         "namespace": "library",
         "model": "laya",
@@ -318,14 +338,16 @@ CATALOG = {
         "license_text": "decider by Mapika (https://huggingface.co/Mapika/decider-2b)\n"
                         "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
         "tags": {
-            # v2.1: temperature_by_type (choice 1.110, noul 1.560, score 1.287) in decision.json/calibration.json.
-            "4b": _wl("decider-4b", "Mapika/decider-4b", "eb5fbdfc9448473ec25e399882912863afbdb70e",
-                      "Largest decider (Qwen3.5-4B base, v2.1): reads option-letter logits at an answer slot, with one "
+            # v3 and v12 (2026-10-20): temperature_by_type in decision.json/calibration.json (4b: choice 2.098, noul 0.05,
+            # score 3.152; 2b: choice 2.465, noul 0.05, score 2.833). The yes/no temperature is upstream's choice for
+            # JevBench's 0.2-0.8 band rule, so yes/no probabilities come out near 0 or 1.
+            "4b": _wl("decider-4b", "Mapika/decider-4b", "585473dec4fa93f0325c2bf02dda7273b61f44c1",
+                      "Largest decider (Qwen3.5-4B base, v3): reads option-letter logits at an answer slot, with one "
                       "fitted temperature per answer type. Needs about 9 GB of memory.",
                       "4.2B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-4b")),
-            "2b": _wl("decider-2b", "Mapika/decider-2b", "9839cc9d908be16c5988c0d041034b5fdf82c7a2",
-                      "Decoder decision model (Qwen3.5-2B base): reads option-letter logits at an answer slot. "
-                      "Highest accuracy of the open models Ollaya ships.",
+            "2b": _wl("decider-2b", "Mapika/decider-2b", "7614a6c7ea5a047aa7d7bcfb1a0015469381c3e3",
+                      "Decoder decision model (Qwen3.5-2B base, v12): reads option-letter logits at an answer slot, with one "
+                      "fitted temperature per answer type.",
                       "1.9B", 32768, ["en"], wl_dir=os.path.join(OUT, "decider-2b"),
                       arch={"family": "tied-rows", "config": "config.json"}),
             # v5 text weights in the Qwen3.5-2B vision-language model: `decider-vision-v1`, two graphs
@@ -579,6 +601,46 @@ CATALOG = {
                   "questions from 138 requests: identical token sequences and marker positions, the same 5 rejected "
                   "requests, the same decision on every question, option logits within 8.2e-5 and probabilities "
                   "within 6.8e-6 (CUDA).",
+    },
+    "d3": {
+        "namespace": "library",
+        "model": "d3",
+        "family": "d3",
+        "author": "the vLLM Semantic Router contributors",
+        "license": "Apache-2.0",
+        "license_text": "Decision 3.0 (d3) by the vLLM Semantic Router contributors (https://huggingface.co/vllm-sr)\n"
+                        "Model, readout and code: Apache-2.0 (LICENSE and NOTICE in each model repository).\n"
+                        "A fine-tune of Qwen3.5 by the Qwen team (https://huggingface.co/Qwen), Apache-2.0.\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        # Upstream's AutoTokenizer is transformers 5's rebuild of the vocabulary, which equals Nimble v2's file
+        # (families/d3/export.py); the repositories' own tokenizer.json splits combining marks differently.
+        "tags": {tag: dict(_wl("d3-" + tag, "vllm-sr/d3-" + tag, commit,
+                               "d3-%s (Decision 3.0): a fine-tuned %s with a 255-code readout. Every question is its own "
+                               "sequence, read at its last token; the full-attention layers see the whole prompt. Up to "
+                               "255 options, 2 to 10 score levels, 8,192 tokens per question. Text only in Ollaya.%s"
+                               % (tag, base, memory),
+                               params, 8192, ["en"], wl_dir=os.path.join(OUT, "d3-" + tag),
+                               weights={**{f: f for f in shards}, "readout.safetensors": "readout.safetensors"}),
+                           tokenizer=("bespokelabs/Bespoke-Nimble-9B-v2", "4b8c04d1ac2cea3e41e5e3c4d2130bcead2c0abe",
+                                      "tokenizer.json"))
+                 for tag, commit, base, params, memory, shards in [
+                     ("edge", "c454ee39b862248d70abd7f84195d2f54ffe6d43", "Qwen3.5-0.8B (12 of its layers)", "0.6B",
+                      "", ["model-00001-of-00001.safetensors"]),
+                     ("lite", "03560c26f5199c3c04129a2ccb38960c913635e0", "Qwen3.5-0.8B", "0.8B",
+                      "", ["model-00001-of-00001.safetensors"]),
+                     ("nano", "462efc366229ea268cf4eed3738b3fc4415e4817", "Qwen3.5-2B", "2B",
+                      "", ["model.safetensors"]),
+                     ("mini", "bd0090dd758d32ba59ef5c749910a8e87fc4391f", "Qwen3.5-4B", "4B",
+                      " Needs about 9 GB of memory.",
+                      ["model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors"]),
+                     ("flash", "13dc1cc8ef23caefa765907e1d764751e5629f7d", "Qwen3.5-9B", "9B",
+                      " Needs about 18 GB of memory; best on a 24 GB GPU.",
+                      ["model-0000%d-of-00004.safetensors" % i for i in range(1, 5)]),
+                 ]},
+        "aliases": {"latest": "mini"},
+        "parity": "Ollaya's Rust runtime matches upstream d3_runtime (PyTorch fp32) on 696 questions from 151 requests, "
+                  "for each tag: identical token sequences, the same 10 rejected requests, the same decision on every "
+                  "question, option logits within 1.1e-4 and probabilities within 2.4e-5, on CUDA and on the CPU.",
     },
     "decision": {
         "namespace": "library",

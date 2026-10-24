@@ -23,12 +23,16 @@ import torch
 MODELS = {
     "decider-0.8b": {"repo": "Mapika/decider-0.8b", "revision": "a0a01d6f8135298f400a8c856b355793012ae971",
                      "base": "Qwen/Qwen3.5-0.8B-Base"},
-    "decider-2b": {"repo": "Mapika/decider-2b", "revision": "9839cc9d908be16c5988c0d041034b5fdf82c7a2",
-                   "base": "Qwen/Qwen3.5-2B-Base"},
-    # v2.1: one temperature per answer type (decider_config.json "temperature_by_type", decider-ai 1.4.0).
-    "decider-4b": {"repo": "Mapika/decider-4b", "revision": "eb5fbdfc9448473ec25e399882912863afbdb70e",
-                   "base": "Qwen/Qwen3.5-4B-Base"},
+    # v12 (2026-10-20) and v3: text and image decisions, one temperature per answer type (noul 0.05 on purpose, see the
+    # cards). Their decider_config.json "version" was not bumped ("2b-v11", "4b-v2.1"), so the version is pinned here.
+    "decider-2b": {"repo": "Mapika/decider-2b", "revision": "7614a6c7ea5a047aa7d7bcfb1a0015469381c3e3",
+                   "base": "Qwen/Qwen3.5-2B-Base", "version": "2b-v12"},
+    "decider-4b": {"repo": "Mapika/decider-4b", "revision": "585473dec4fa93f0325c2bf02dda7273b61f44c1",
+                   "base": "Qwen/Qwen3.5-4B-Base", "version": "4b-v3"},
 }
+# The repos stopped shipping `decider/` with these releases; the reference is decider-ai 1.10.0 (the version the cards
+# name), pinned by its commit on GitHub. A repo that still carries `decider/` (decider-0.8b) keeps using its own copy.
+CODE = ("Mapika/decider", "ab45f9147de7a2da974f68c77cc8ed60908b379c")
 
 
 def snapshot(slug: str) -> str:
@@ -41,11 +45,44 @@ def snapshot(slug: str) -> str:
     return snapshot_download(m["repo"], revision=m["revision"])
 
 
+def code_root(root: str) -> str:
+    """The directory whose `decider/` package is the reference for the snapshot at `root`: the repo's own copy when it
+    ships one, else decider-ai at CODE, downloaded once into ~/.cache/ollaya-convert (DECIDER_CODE_ROOT overrides)."""
+    if os.path.isdir(os.path.join(root, "decider")):
+        return root
+    env = os.environ.get("DECIDER_CODE_ROOT")
+    if env:
+        return env
+    repo, sha = CODE
+    cache = os.path.join(os.path.expanduser("~/.cache/ollaya-convert"), "%s-%s" % (repo.split("/")[1], sha))
+    if not os.path.isdir(os.path.join(cache, "decider")):
+        import io
+        import shutil
+        import tarfile
+        import tempfile
+        import urllib.request
+
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        tmp = tempfile.mkdtemp(dir=os.path.dirname(cache))
+        with urllib.request.urlopen("https://github.com/%s/archive/%s.tar.gz" % (repo, sha)) as r:
+            data = r.read()
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
+            tf.extractall(tmp, filter="data")  # one top-level directory, <name>-<sha>
+        try:
+            os.rename(os.path.join(tmp, os.path.basename(cache)), cache)
+        except OSError:  # a parallel export won the race
+            if not os.path.isdir(os.path.join(cache, "decider")):
+                raise
+        shutil.rmtree(tmp, ignore_errors=True)
+    return cache
+
+
 def load(root: str, device: str = "cpu"):
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    code = code_root(root)
+    if code not in sys.path:
+        sys.path.insert(0, code)
     from decider.infer import Decider
 
     return Decider(root, device=device, dtype=torch.float32, use_graphs=False)

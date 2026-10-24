@@ -38,6 +38,8 @@ PROTOCOL = {
             "decisions the same, differences reported",
     "runner": "convert/ollaya_convert/parity_run.py with crates/ollaya-runner/examples/parity_<family>.rs",
 }
+# Families that run on another family's engine, and so on its parity example.
+EXAMPLE = {"d3": "pplx"}
 
 
 def wl_tags():
@@ -55,7 +57,7 @@ def command(family, d, device, cuda_dynamic=None):
     name = os.path.basename(d)
     fp16 = name.endswith("-fp16")
     base = (name[: -len("-fp16")] if fp16 else name).removesuffix("-wl")  # gliclass: out/gliclass-<model>-wl
-    example = "parity_" + family + ("_vision" if base.endswith("-vision") else "")
+    example = "parity_" + EXAMPLE.get(family, family).replace("-", "_") + ("_vision" if base.endswith("-vision") else "")
     cmd = ["cargo", "run", "--release", "-q", "-p", "ollaya-runner", "--example", example]
     if device == "cuda" and cuda_dynamic:
         cmd += ["--features", "cuda-dynamic", "--target-dir", os.path.join("target", "cuda-dynamic")]

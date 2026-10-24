@@ -129,19 +129,21 @@ The [FAQ](https://ollaya.dev/docs/faq) compares Ollaya and Ollama in more detail
 | `qwen3guard` | Qwen3Guard-Gen-0.6B safety guard with built-in questions: safe, controversial or unsafe, and the category |
 | `nli`, `nli:modernbert-large` | Moritz Laurer's zero-shot NLI classifiers (DeBERTa-v3-large, ModernBERT-large) |
 | `gliclass` | Knowledgator's instruction-following zero-shot classifier (DeBERTa-v3-large) |
-| `von` | Victor Hugo Panisa's Von 1.1 (ModernBERT-large): every option scored at its own marker, 8k-token context |
+| `von` | Victor Hugo Panisa's Von 1.1 (ModernBERT-large): every option scored at its own marker, 8k-token context. Archived upstream on 2026-10-19; `d1-omni` is its successor |
 | `winnow` | EldanRing's Winnow-12B, the larger sibling of `winnow:e4b` |
 | `clm` | Contrastive-LM's CLM-v0.1-8B: the Qwen3-8B encoder and two projection heads score options by similarity, with questions and options cached. Built for agent, game and tool-calling states |
 | `jevk5` | alibiserikbay's JevK5 v0.3, a Qwen3.5-4B fine-tune run from the author's Q8_0 GGUF on llama.cpp, up to 16 options |
 | `nimble`, `nimble:9b-v3` | Bespoke Labs' Nimble v2: a LoRA on Qwen3.5-9B that reads the whole request as a JSON schema and scores option codes, with the author's temperature, up to 255 options. `nimble:9b-v3` is v3 (non-commercial license) as the author's Decision Index engine serves it |
 | `strands-decider` | Strands Agents' Strands Decider: a LoRA and a pointer head on Qwen3.5-2B base, every option scored at the end of its own line, calibrated per question type; up to 255 options |
 | `pplx-decider` | Perplexity's pplx-decider-flash v1.2: Qwen3.5-4B distilled from its 27B decision models, every question in one sequence and read at its own marker, calibrated; up to 255 options |
+| `d3`, `d3:edge`, `d3:lite`, `d3:nano`, `d3:flash` | Decision 3.0 by the vLLM Semantic Router contributors: Qwen3.5 fine-tunes (0.6B to 9B, 4B by default) with a 255-code readout, every question its own forward pass. Images and videos are not served |
 | `jeb`, `jeb:4b`, `jeb:27b` | Jason Brashear's Jebadiah (AINode): LoRAs merged into Qwen3.5 (9B by default, 4B) and Qwen3.8-27B, run from the authors' GGUF on llama.cpp with their per-type temperatures |
 | `jeeves` | PostHog's Jeeves-9B without its reasoning chain: Qwen3.5-9B (LoRA merged) and a pointer head |
 | `clef` | Cloudflare's Clef-Flash: Qwen3.5-9B, fully post-trained, with a joint schema head that scores every question's options in one forward pass, with no fitted temperature |
 | `cygnet` | blockbrain-ai's Cygnet: frozen Gemma 4 12B IT (Q8_0 GGUF) with a letter-readout prompt and temperature 3.4 |
 | `snap` | logitlab's snap1-2b: MiniCPM5-2B fine-tuned on the prompt of emnlmn's snap engine, run from the author's Q8_0 GGUF on llama.cpp with snap's own prompt, up to 26 options |
 | `d1`, `d1:3b-vision` | Liquid AI's d1-3B, on LFM2.5-VL-3B: typed text and image decisions from the author's Q8_0 GGUF and projector, with max-pooled answer forms and temperature 1.0 |
+| `d1-omni` | Liquid AI's d1-omni-600M, text questions: an LFM2.5 encoder with a decision head that scores every option at its own marker, calibrated per question type and option count; 16k-token context. Its image and audio paths are not served |
 | `decima`, `decima:agent`, `decima:small` | A. M. Madani's Decima: multilingual encoders with a late-interaction scorer that reads every option against the state. `decima:base` is mmBERT-base (321M); `decima:agent` (2.2) is fine-tuned for coding-agent decisions and knowledge-graph judgments; `decima:small` (122M) is the smallest |
 | `largha` | Phocinae's Largha: Laya's decision network on mmBERT-small (144M), fine-tuned on the typed-decisions workflows; runs on the CPU, CUDA and the Apple GPU |
 | `arbiter` | Codekins' Arbiter v3.3 (Zyot Lab): a LoRA and a fixed 24-slot head on Gemma 3 4B IT, one forward pass per question. It answers noul, choices of up to 16 options and scores of exactly 6 levels |
@@ -167,8 +169,8 @@ memory on a GPU and a CPU.
 <!-- results:bench -->
 Edition 2026.10 ran Ollaya 0.13.0 on an RTX 5090 desktop, and 0.14.0, 0.15.0, 0.17.0 and 0.18.0 added what they changed:
 
-- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: `pplx-decider:flash` 73.7, `jeb:27b` 69.1 (scored without the 5 tasks it was trained on), `jeb:9b` 66.0 (scored without the 5 tasks it was trained on), `winnow:12b` 65.7 and `clef:flash` 65.1. The fastest of these, `jeb:9b`, answers five questions in 111 ms on the RTX 5090.
-- **Calibration.** The lowest calibration errors on the public benchmark are 0.016 (`pplx-decider:flash`), 0.020 (`jeb:9b`) and 0.022 (`laya:typed-decisions`, `nimble:9b`).
+- **Score.** Chance-corrected accuracy over 14 tasks, with 95 % intervals: `pplx-decider:flash` 73.7, `d3:mini` 68.0, `jeb:27b` 67.8 (scored without typed-decisions, which it was trained on), `d3:flash` 67.8 and `winnow:12b` 65.7. The fastest of these, `pplx-decider:flash`, answers five questions in 127 ms on the RTX 5090.
+- **Calibration.** The lowest calibration errors on the public benchmark are 0.016 (`pplx-decider:flash`), 0.022 (`laya:typed-decisions`, `nimble:9b`) and 0.024 (`jeb:27b`).
 - **Speed and memory.** Five-question requests through the HTTP API take 14 ms to 1.0 s on the RTX 5090 and 314 ms to 62.0 s on its Threadripper 3960X. Every model's VRAM and RAM are on its page.
 - **Parity.** Before a model ships, its runtime is checked question by question against the authors' code (or llama.cpp's own server, for GGUF models) on each device it runs on.
 

@@ -1,5 +1,7 @@
 Von is an open decision model by Victor Hugo Panisa, built on ModernBERT-large and released under Apache-2.0. It reads a question's instructions and the state, then every option with its own `[MASK]` marker, all in one sequence, and scores each option at its marker. Every question is one forward pass, whatever its number of options.
 
+> **Archived upstream.** On 2026-10-19 the author archived Von: the weights and `von-sdk` stay available, but they will not be updated, and the card points new projects to [d1-omni](/library/d1-omni), which Ollaya serves as `d1-omni`. `von:1.1` keeps working as it is.
+
 ## Models
 
 | Tag | Backbone | Params | Context | Typed-decisions accuracy |
