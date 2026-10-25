@@ -16,16 +16,31 @@
 //! `cand_pos[j]` is the last token of option j and `query_pos` the last token of the row. The head
 //! scores every option from its endpoint and the query; those logits are the option logits of every
 //! question type. `payload` is a string verbatim and anything else [`pyjson::dumps_canonical`].
+//!
+//! `decision2-endpoint-v1` (Decision 2.0, prompt version [`PROMPT_VERSION_2`],
+//! `ollaya_convert.families.decision2.layout`) builds the same rows. Its options and checks are the
+//! author's `question_to_row` and `system_one`: the state is text, an object or an array; the
+//! instructions are nonempty text, an object or an array; a missing noul side is "No" / "Yes", and
+//! noul options given on both sides keep the caller's order; option descriptions are text, an
+//! object or an array (choice also null). Kai adds per-level offsets to its score logits
+//! (`score_bias`).
+
+use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use crate::layout::TokenEncoder;
-use crate::question::{Criteria, Question};
+use crate::question::{Criteria, QType, Question};
 use crate::{Error, pyjson};
 
 /// The prompt this layout builds; `decision.json` must name the same one.
 pub const PROMPT_VERSION: &str = "structured-segmented-candidate-endpoints-global-query-v2";
+/// Decision 2.0's prompt: the same text, its own option rules.
+pub const PROMPT_VERSION_2: &str = "decision2-segmented-options-global-query-v1";
+/// Decision 2.0's descriptions of a missing noul side.
+const NOUL_FALSE_2: &str = "No";
+const NOUL_TRUE_2: &str = "Yes";
 const OPTION_OPEN: &str = "\n<option>\n";
 const OPTION_CLOSE: &str = "\n</option>";
 const SUFFIX: &str =
@@ -57,6 +72,10 @@ pub struct DecisionLayout {
     pub choice_null_description: NullDescription,
     /// Right-padding id.
     pub pad: u32,
+    /// Decision 2.0: offsets added to a score question's logits, by its level count (Kai's
+    /// `score_bias.json`).
+    #[serde(default)]
+    pub score_bias: BTreeMap<usize, Vec<f64>>,
 }
 
 /// One question's row.
@@ -67,15 +86,34 @@ pub struct DecisionRow {
     pub query: usize,
     /// Position of each option segment's last token, in option order.
     pub cands: Vec<usize>,
+    /// Added to the option logits (a score question's `score_bias`); empty for none.
+    pub offsets: Vec<f64>,
+    /// The noul options run as [true, false] (the caller's order); the option logits are
+    /// returned as [false, true].
+    pub true_first: bool,
 }
 
 impl DecisionLayout {
+    fn v2(&self) -> bool {
+        self.prompt_version == PROMPT_VERSION_2
+    }
+
     /// Reject configurations this layout cannot run.
     pub fn validate(&self) -> Result<(), Error> {
-        if self.prompt_version != PROMPT_VERSION {
+        if self.prompt_version != PROMPT_VERSION && !self.v2() {
             return Err(Error::invalid(format!(
-                "prompt_version {:?} is not {PROMPT_VERSION:?}",
+                "prompt_version {:?} is not {PROMPT_VERSION:?} or {PROMPT_VERSION_2:?}",
                 self.prompt_version
+            )));
+        }
+        if let Some((n, b)) = self
+            .score_bias
+            .iter()
+            .find(|(n, b)| !self.v2() || b.len() != **n)
+        {
+            return Err(Error::invalid(format!(
+                "score_bias for {n} levels has {} offsets (Decision 2.0 only)",
+                b.len()
             )));
         }
         if self.max_row_tokens == 0 {
@@ -95,6 +133,9 @@ impl DecisionLayout {
 
     /// One question's options as (key, description), validated as the author's `question_row`.
     pub fn options(&self, qid: &str, q: &Question) -> Result<Vec<(String, Value)>, Error> {
+        if self.v2() {
+            return self.options_v2(qid, q);
+        }
         let bad = |msg: String| Error::invalid(format!("question {qid:?}: {msg}"));
         let criteria = q.definition.get("criteria").filter(|c| !c.is_null());
         let range = |n: usize, max: usize, what: &str| {
@@ -169,6 +210,93 @@ impl DecisionLayout {
         }
     }
 
+    /// Decision 2.0's `question_to_row` options.
+    fn options_v2(&self, qid: &str, q: &Question) -> Result<Vec<(String, Value)>, Error> {
+        let bad = |msg: String| Error::invalid(format!("question {qid:?}: {msg}"));
+        let instructions = q.definition.get("instructions").unwrap_or(&Value::Null);
+        if !json_payload(instructions, false, true) {
+            return Err(bad(
+                "instructions must be nonempty text, an object or an array".into(),
+            ));
+        }
+        let criteria = q.definition.get("criteria").unwrap_or(&Value::Null);
+        if q.qtype == QType::Score {
+            let levels = criteria.as_array().ok_or_else(|| {
+                bad("this model takes score criteria as a list of level descriptions".into())
+            })?;
+            if levels.len() < self.min_options || levels.len() > self.max_score_levels {
+                return Err(bad(format!(
+                    "this model takes {}..{} score levels, got {}",
+                    self.min_options,
+                    self.max_score_levels,
+                    levels.len()
+                )));
+            }
+            if !levels.iter().all(|l| json_payload(l, false, false)) {
+                return Err(bad(
+                    "each score level must be text, an object or an array".into()
+                ));
+            }
+            return Ok(levels
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i.to_string(), v.clone()))
+                .collect());
+        }
+        let noul = q.qtype == QType::Noul;
+        let mut map = match criteria {
+            Value::Object(m) => m.clone(),
+            Value::Null if noul => Map::new(),
+            _ => {
+                return Err(bad(
+                    "this model takes criteria as an object of label -> description".into(),
+                ));
+            }
+        };
+        if noul {
+            if let Some(k) = map.keys().find(|k| *k != "true" && *k != "false") {
+                return Err(bad(format!(
+                    "noul criteria may contain only \"true\" and \"false\", got {k:?}"
+                )));
+            }
+            if map.len() < 2 {
+                let side = |k: &str, default: &str| {
+                    map.get(k)
+                        .cloned()
+                        .unwrap_or_else(|| Value::String(default.to_owned()))
+                };
+                map = Map::from_iter([
+                    ("false".to_owned(), side("false", NOUL_FALSE_2)),
+                    ("true".to_owned(), side("true", NOUL_TRUE_2)),
+                ]);
+            }
+        } else if map.len() > self.max_options {
+            return Err(Error::TooManyOptions {
+                question: qid.to_owned(),
+                options: map.len(),
+                head_max_len: self.max_options,
+            });
+        }
+        if map.len() < self.min_options {
+            return Err(bad(format!(
+                "this model takes {}..{} choice options, got {}",
+                self.min_options,
+                self.max_options,
+                map.len()
+            )));
+        }
+        if let Some((k, _)) = map
+            .iter()
+            .find(|(k, v)| k.is_empty() || !json_payload(v, !noul, false))
+        {
+            return Err(bad(format!(
+                "option {k:?} needs a nonempty label and a description that is text, an object or an array{}",
+                if noul { "" } else { " (or null)" }
+            )));
+        }
+        Ok(map.into_iter().collect())
+    }
+
     /// Encode one question's row.
     pub fn encode(
         &self,
@@ -177,6 +305,11 @@ impl DecisionLayout {
         qid: &str,
         q: &Question,
     ) -> Result<DecisionRow, Error> {
+        if self.v2() && (qid.is_empty() || !json_payload(state, false, false)) {
+            return Err(Error::invalid(
+                "this model takes a nonempty question id, and the state as text, an object or an array",
+            ));
+        }
         let options = self.options(qid, q)?;
         let instructions = q.definition.get("instructions").unwrap_or(&Value::Null);
         let prefix = format!(
@@ -206,11 +339,32 @@ impl DecisionLayout {
                 self.max_row_tokens
             )));
         }
+        let offsets = match q.qtype {
+            QType::Score => self
+                .score_bias
+                .get(&options.len())
+                .cloned()
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
         Ok(DecisionRow {
             query: ids.len() - 1,
             ids,
             cands,
+            offsets,
+            true_first: q.qtype == QType::Noul && options[0].0 == "true",
         })
+    }
+}
+
+/// Decision 2.0's `_api_json_payload`: text, an object or an array (null when `nullable`). Nested
+/// values need no check: a parsed JSON value has only finite numbers.
+fn json_payload(v: &Value, nullable: bool, nonempty_text: bool) -> bool {
+    match v {
+        Value::Null => nullable,
+        Value::String(s) => !(nonempty_text && s.is_empty()),
+        Value::Array(_) | Value::Object(_) => true,
+        Value::Bool(_) | Value::Number(_) => false,
     }
 }
 
@@ -251,7 +405,83 @@ mod tests {
             max_score_levels: 3,
             choice_null_description: null,
             pad: 0,
+            score_bias: BTreeMap::new(),
         }
+    }
+
+    fn layout2() -> DecisionLayout {
+        DecisionLayout {
+            prompt_version: PROMPT_VERSION_2.into(),
+            score_bias: BTreeMap::from([(2, vec![0.5, -0.5])]),
+            ..layout(NullDescription::Null)
+        }
+    }
+
+    #[test]
+    fn decision2_options_offsets_and_noul_order() {
+        let l = layout2();
+        l.validate().unwrap();
+        let opts = |def: Value| l.options("q", &question(def));
+        assert_eq!(
+            opts(json!({"type": "noul", "instructions": "ok?", "criteria": {"true": "y"}}))
+                .unwrap(),
+            vec![
+                ("false".to_owned(), json!(NOUL_FALSE_2)),
+                ("true".to_owned(), json!("y"))
+            ]
+        );
+        // Both sides given: the caller's order, returned as [false, true] by the engine.
+        let swapped = question(
+            json!({"type": "noul", "instructions": "ok?", "criteria": {"true": "y", "false": "n"}}),
+        );
+        let row = l.encode(&Chars, &json!("s"), "q", &swapped).unwrap();
+        assert!(row.true_first && row.offsets.is_empty());
+        assert!(text(&row.ids).contains("{\"description\":\"y\",\"key\":\"true\"}"));
+        let score =
+            question(json!({"type": "score", "instructions": "rate", "criteria": ["lo", "hi"]}));
+        assert_eq!(
+            l.encode(&Chars, &json!({}), "q", &score).unwrap().offsets,
+            vec![0.5, -0.5]
+        );
+        let choice = question(
+            json!({"type": "choice", "instructions": ["x"], "criteria": {"b": null, "a": {}}}),
+        );
+        assert_eq!(
+            l.options("q", &choice).unwrap()[0],
+            ("b".into(), Value::Null)
+        );
+    }
+
+    #[test]
+    fn decision2_rejects_like_the_author() {
+        let l = layout2();
+        for def in [
+            json!({"type": "noul", "instructions": ""}),
+            json!({"type": "noul", "instructions": null}),
+            json!({"type": "noul", "instructions": 3}),
+            json!({"type": "noul", "instructions": "x", "criteria": {"false": null}}),
+            json!({"type": "noul", "instructions": "x", "criteria": {"true": 1}}),
+            json!({"type": "score", "instructions": "x", "criteria": [1, 2]}),
+            json!({"type": "score", "instructions": "x", "criteria": ["a", null]}),
+            json!({"type": "choice", "instructions": "x", "criteria": {"a": 1, "b": "two"}}),
+            json!({"type": "choice", "instructions": "x", "criteria": {"": "x", "b": "y"}}),
+            json!({"type": "choice", "instructions": "x", "criteria": ["a", "b"]}),
+        ] {
+            assert!(l.options("q", &question(def.clone())).is_err(), "{def}");
+        }
+        let ok = question(json!({"type": "noul", "instructions": "x"}));
+        for state in [Value::Null, json!(7), json!(true)] {
+            assert!(l.encode(&Chars, &state, "q", &ok).is_err(), "{state}");
+        }
+        assert!(l.encode(&Chars, &json!(""), "", &ok).is_err());
+        assert!(l.encode(&Chars, &json!(""), "q", &ok).is_ok());
+        // Offsets belong to Decision 2.0 and must match their level count.
+        let mut bad = layout(NullDescription::Null);
+        bad.score_bias = BTreeMap::from([(2, vec![0.5, -0.5])]);
+        assert!(bad.validate().is_err());
+        bad.prompt_version = PROMPT_VERSION_2.into();
+        bad.score_bias = BTreeMap::from([(3, vec![0.5])]);
+        assert!(bad.validate().is_err());
     }
 
     fn question(def: Value) -> Question {

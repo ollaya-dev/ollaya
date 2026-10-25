@@ -116,6 +116,7 @@ pub const LAYOUTS: &[&str] = &[
     "qwen3guard-gen-v1",
     "von-option-marker-v1",
     "decision-endpoint-v1",
+    "decision2-endpoint-v1",
     "clm-v1",
     "decider-vision-v1",
     "nimble-codes-v1",
@@ -170,9 +171,9 @@ pub fn load(
         "von-option-marker-v1" => Ok(Box::new(crate::von::VonModel::load_files(
             files, device, threads,
         )?)),
-        "decision-endpoint-v1" => Ok(Box::new(crate::decision::DecisionModel::load_files(
-            files, device, threads,
-        )?)),
+        "decision-endpoint-v1" | "decision2-endpoint-v1" => Ok(Box::new(
+            crate::decision::DecisionModel::load_files(files, device, threads)?,
+        )),
         "clm-v1" => Ok(Box::new(crate::clm::ClmModel::load_files(
             files, device, threads,
         )?)),

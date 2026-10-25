@@ -1,11 +1,12 @@
-//! ONNX Runtime engine for vllm-sr's Decision 1.0 models (layout
-//! `decision-endpoint-v1`).
+//! ONNX Runtime engine for vllm-sr's Decision 1.0 and 2.0 models (layouts `decision-endpoint-v1`
+//! and `decision2-endpoint-v1`, the same graph contract).
 //!
 //! Every question is one row: the context, question and options, then the decision suffix. The
 //! graph maps `input_ids` [rows, seq] (right-padded to a multiple of 64, positions implicit, no
 //! mask: every layer is causal), `query_pos` [rows] and `cand_pos` [rows, k] (shorter rows padded
 //! with 0) to the endpoint head's raw `logits` [rows, k]. A row's first `k_row` logits are its
-//! option logits. Rows come from `ollaya_decision::decision`.
+//! option logits, plus the row's score offsets and with a noul row's [true, false] swapped back to
+//! [false, true] (Decision 2.0). Rows come from `ollaya_decision::decision`.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -16,9 +17,10 @@ use ollaya_decision::{Calibration, CalibrationFile, Questions, TokenEncoder};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::decider::WeightsInMemory;
 use crate::engine::Engine;
 use crate::net::{Decoder, Head};
-use crate::onnx::{Device, ModelFiles, load_tokenizer, session_with};
+use crate::onnx::{CudaArena, Device, ModelFiles, load_tokenizer, session_for};
 use crate::{Error, Output, QuestionOutput};
 
 /// Rows per `session.run`: the export's row axis is 1..=4096.
@@ -41,9 +43,14 @@ struct DecisionConfig {
     engine: String,
     layout: String,
     contract: Contract,
+    #[serde(default)]
+    weights_in_memory: WeightsInMemory,
     #[serde(flatten)]
     decision: DecisionLayout,
 }
+
+/// The layouts this engine serves.
+const LAYOUTS: [&str; 2] = ["decision-endpoint-v1", "decision2-endpoint-v1"];
 
 /// Rows for one request, one per question.
 #[derive(Debug, Clone)]
@@ -97,9 +104,9 @@ impl DecisionModel {
         intra_threads: Option<usize>,
     ) -> Result<Self, Error> {
         let config: DecisionConfig = read_json(&files.decision)?;
-        if config.engine != "onnx" || config.layout != "decision-endpoint-v1" {
+        if config.engine != "onnx" || !LAYOUTS.contains(&config.layout.as_str()) {
             return Err(Error::Model(format!(
-                "unsupported engine/layout {}/{}; this engine serves onnx/decision-endpoint-v1",
+                "unsupported engine/layout {}/{}; this engine serves onnx/{LAYOUTS:?}",
                 config.engine, config.layout
             )));
         }
@@ -114,13 +121,26 @@ impl DecisionModel {
         };
         let tokenizer = load_tokenizer(&files.tokenizer)?;
 
+        let weights = config.weights_in_memory;
         let net = match device {
+            // MLX runs Decision 1.0's Qwen3.5 backbone only.
+            Device::Metal if config.layout != LAYOUTS[0] => {
+                return Err(Error::Model(format!(
+                    "layout {} does not run on Metal yet",
+                    config.layout
+                )));
+            }
             Device::Metal => Decoder::metal(files, Head::Endpoint)?,
-            _ => Decoder::Ort(Mutex::new(session_with(
+            _ => Decoder::Ort(Mutex::new(session_for(
                 &files.graph,
                 device,
                 intra_threads,
-                |b| crate::decider::configure(b, device),
+                // BF16 weights widen a layer per run: exact growth, as for decider.
+                match weights {
+                    WeightsInMemory::Bf16 => CudaArena::SameAsRequested,
+                    WeightsInMemory::Fp32 => CudaArena::Default,
+                },
+                |b| weights.configure(crate::decider::configure(b, device)?),
             )?)),
         };
         if let Some(session) = net.session() {
@@ -166,8 +186,8 @@ impl DecisionModel {
         Ok(self.output(&encoding, logits))
     }
 
-    /// Each row's option logits (its first `k_row` graph outputs). Rows run shortest first, in
-    /// batches padded to a multiple of `seq_multiple`.
+    /// Each row's option logits (its first `k_row` graph outputs, plus its offsets, a noul row's as
+    /// [false, true]). Rows run shortest first, in batches padded to a multiple of `seq_multiple`.
     pub fn logits(&self, encoding: &DecisionEncoding) -> Result<Vec<Vec<f32>>, Error> {
         let rows = &encoding.rows;
         let mut order: Vec<usize> = (0..rows.len()).collect();
@@ -227,7 +247,15 @@ impl DecisionModel {
                 )));
             }
             for (&i, row) in batch.iter().zip(out.rows()) {
-                logits[i] = row.iter().take(rows[i].cands.len()).copied().collect();
+                let r = &rows[i];
+                let mut l: Vec<f32> = row.iter().take(r.cands.len()).copied().collect();
+                for (x, b) in l.iter_mut().zip(&r.offsets) {
+                    *x = (f64::from(*x) + b) as f32;
+                }
+                if r.true_first {
+                    l.swap(0, 1);
+                }
+                logits[i] = l;
             }
         }
         Ok(logits)
