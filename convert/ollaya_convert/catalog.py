@@ -730,6 +730,41 @@ CATALOG = {
                   "positions are identical, and so is the decision on every question. Probabilities are within "
                   "3.2e-6, on CPU and CUDA, and the TypeSafe answers equal the author's up to 4-decimal rounding.",
     },
+    "decision2": {
+        "namespace": "library",
+        "model": "decision2",
+        "family": "decision2",
+        "author": "the vLLM Semantic Router contributors",
+        "license": "Apache-2.0",
+        "license_text": "Decision 2.0 by the vLLM Semantic Router contributors (https://huggingface.co/vllm-sr)\n"
+                        "Model and code: Apache-2.0 (LICENSE in each model repository).\n"
+                        "A fine-tune of Qwen3 and Qwen3.5 by the Qwen team (https://huggingface.co/Qwen), Apache-2.0.\n"
+                        "Licensed under the Apache License, Version 2.0.\n\n" + LICENSE_APACHE,
+        # Decision 1.0's graph and engine (layout decision2-endpoint-v1); the backbone and the head are read in place
+        # from the author's safetensors.
+        "tags": {tag: _wl("decision2-" + tag, "vllm-sr/Decision-2.0-" + name, commit,
+                          "Decision 2.0 %s (a fully fine-tuned %s) with an endpoint head: every option is scored at "
+                          "its own last token against the question, in one forward pass per question. Up to 255 "
+                          "options, 2 to 10 score levels, %s tokens per question.%s"
+                          % (name.split("-")[0], base, "{:,}".format(ctx), memory),
+                          params, ctx, ["en"], wl_dir=os.path.join(OUT, "decision2-" + tag),
+                          weights={**{os.path.basename(f): f for f in shards},
+                                   "decision_head.safetensors": "decision_head.safetensors"})
+                 for tag, name, commit, base, params, ctx, memory, shards in [
+                     ("kai", "Kai-0.6B", "cc7f30cda9e7c7b28c5f71ef33f01e09385f1c4b", "Qwen3-0.6B-Base", "0.60B", 8192,
+                      "", ["backbone/model.safetensors"]),
+                     ("eos", "Eos-0.8B", "52cad37ef21f598302fe964cbfa164739cb965d5", "Qwen3.5-0.8B", "0.75B", 16384,
+                      "", ["backbone/model.safetensors"]),
+                     ("sol", "Sol-2B", "df30237f9c1ced5765fdbb499dd1f2c7dca478ad", "Qwen3.5-2B", "1.88B", 16384,
+                      "", ["backbone/model-0000%d-of-00002.safetensors" % i for i in range(1, 3)]),
+                     ("nox", "Nox-4B", "ae269ecf34a0b3a89026bc1afd9c995279212fad", "Qwen3.5-4B-Base", "4.21B", 16384,
+                      "", ["backbone/model-0000%d-of-00005.safetensors" % i for i in range(1, 6)]),
+                     ("lux", "Lux-9B", "1dcd1e7f240eab37ac09a6d0b0f77654b59411f9", "Qwen3.5-9B", "7.94B", 16384,
+                      "", ["backbone/model-0000%d-of-00009.safetensors" % i for i in range(1, 10)]),
+                 ]},
+        "aliases": {"latest": "nox"},
+        "parity": "",
+    },
     "qwen3guard": {
         "namespace": "library",
         "model": "qwen3guard",

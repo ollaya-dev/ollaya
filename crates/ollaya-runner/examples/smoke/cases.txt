@@ -27,6 +27,12 @@ d3/one_too_long
 d3/falsy
 d3/noul_upper_key
 d3/eleven_levels
+decision2/noul_order                # noul options in the caller's order, and the "No" / "Yes" defaults
+decision2/five_levels               # Kai's 5-level score offsets; object and list levels
+decision2/falsy
+decision2/one_too_long
+decision2/instructions_empty        # refused: empty instructions
+decision2/state_null                # refused: a null state
 strands/long_question
 strands/cut_options
 strands/whitespace

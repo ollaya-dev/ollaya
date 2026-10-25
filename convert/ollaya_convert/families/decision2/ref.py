@@ -9,6 +9,8 @@ cannot drift from what the author serves, and replicates the exact path of `deci
   * `collate` pads the request's questions into one batch, as `system_one` does on the CPU;
   * `DecisionModel.from_checkpoint` holds every tensor in fp32 (upstream's CPU path; its GPU path runs the
     backbone under BF16 autocast), TF32 off, SDPA on its exact math kernel;
+  * Lux in fp32 (32 GB) does not fit a 32 GB GPU: with `DECISION_REF_GPU_LAYERS=N` the first N decoder layers,
+    the final norm and the head run on the GPU and the rest on the CPU, still in fp32 (`decision.ref.split`);
   * Kai's per-level score offsets (`score_bias.json`, bound to the weights' fingerprint) are added, and answers
     are the author's `product_answer` at temperature 1 (no package has a calibration file).
 
@@ -82,7 +84,14 @@ class Reference:
 
         if load_model:
             self.model, self.tok = _without_remote_code_prompt(decision_model.DecisionModel.from_checkpoint)(Path(root))
-            self.model = self.model.float().to(device).eval()
+            gpu_layers = os.environ.get("DECISION_REF_GPU_LAYERS")
+            if gpu_layers and device != "cpu":
+                # from_checkpoint loads every tensor in fp32 (the checkpoint mixes BF16 and F32), so split only moves.
+                from ..decision.ref import split
+
+                self.model = split(self.model, device, int(gpu_layers)).eval()
+            else:
+                self.model = self.model.float().to(device).eval()
         else:
             from transformers import AutoTokenizer
 

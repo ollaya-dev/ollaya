@@ -39,7 +39,7 @@ PROTOCOL = {
     "runner": "convert/ollaya_convert/parity_run.py with crates/ollaya-runner/examples/parity_<family>.rs",
 }
 # Families that run on another family's engine, and so on its parity example.
-EXAMPLE = {"d3": "pplx"}
+EXAMPLE = {"d3": "pplx", "decision2": "decision"}
 
 
 def wl_tags():
