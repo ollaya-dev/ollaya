@@ -36,7 +36,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `winn
 - **Labels.** Up to 64 options per question: `A` to `Z`, then two-letter labels, each a single token.
 - **Calibration.** `winnow:12b` uses temperature 1, the author's default: the author fitted no calibration for it. `winnow:e4b` uses 1.2574, the temperature the author fitted for its Q8_0 file on 778 held-out questions. `winnow:e2b` uses temperature 1, at which the author scores it: no calibration was fitted.
 - **Engine.** llama.cpp v0.5.0, ggml-org's own release build, runs inside Ollaya's runner process. It uses an NVIDIA GPU (CUDA) or an Apple silicon GPU (Metal) when the model fits, and the CPU otherwise.
-- **Parity.** Ollaya's runner matches stock `llama-server` of the same build on the same file: the same decision on all 505 test questions, probabilities within 3.0e-6, on CUDA (all three models) and an x86-64 CPU (`e4b` and `e2b`). Against the author's own server, `e4b` agrees on all 503 decisions. Not checked yet: Metal, the Apple CPU, Linux on ARM and the full `12b` text suite on the CPU.
+- **Parity.** Ollaya's runner matches stock `llama-server` of the same build on the same file: the same decision on all 505 test questions, probabilities within 3.8e-6, on CUDA (all three models) and an x86-64 CPU (`e4b` and `e2b`). Against the author's own server, `e4b` agrees on all 503 decisions. Not checked yet: Metal, the Apple CPU, Linux on ARM and the full `12b` text suite on the CPU.
 
 ## Limits
 

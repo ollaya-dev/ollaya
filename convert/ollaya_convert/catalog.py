@@ -940,9 +940,9 @@ CATALOG = {
         },
         "aliases": {"latest": "9b"},
         "parity": "Ollaya's runner matches stock llama-server of the pinned build (b11146) on the same GGUF, CUDA "
-                  "(RTX 4090): 494 questions per model, every decision the same, option logits within 7.7e-6 and "
-                  "probabilities within 2.4e-6. The prompts are identical to the authors' jebadiah_prompt.Renderer "
-                  "on 1,349 test prompts.",
+                  "(RTX 5090, v2.1; 4b on an RTX 4090): 494 questions per model, every decision the same, option "
+                  "logits within 7.7e-6 and probabilities within 2.8e-6. The prompts are identical to the authors' "
+                  "jebadiah_prompt.Renderer on 1,349 test prompts.",
     },
     "jevk5": {
         "namespace": "library",

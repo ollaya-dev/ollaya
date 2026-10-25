@@ -87,11 +87,11 @@ v2.1 (2026-10-24, hope; the 4B row above is still v2's):
 
 ```sh
 uv run python -m ollaya_convert.families.llm_common.export_llama jebadiah --server <b11146>/llama-server \
-    --gguf <snapshot>/jebadiah-9b-v2-Q8_0.gguf --slug 9b-q8_0 --repo frontier-infra/jebadiah-9b-v2-GGUF \
-    --revision adaec6b3d1f0421706deb49fa275ab49093982ff --file jebadiah-9b-v2-Q8_0.gguf \
+    --gguf <snapshot>/jebadiah-9b-v2-1-Q8_0.gguf --slug 9b-v2-1-q8_0 --repo frontier-infra/jebadiah-9b-v2-1-GGUF \
+    --revision 2182dd8d70b09ffdce5b68b0ddf6c4591bf38810 --file jebadiah-9b-v2-1-Q8_0.gguf \
     --temperatures <snapshot>/temperatures.json --n-ctx 4096
 OLLAYA_LIBRARY_PATH=/usr/local/lib/ollaya cargo run --release -p ollaya-runner --features ollaya-runner/cuda \
-    --example parity_llama -- convert/out/jebadiah-9b-q8_0 convert/out/jebadiah-9b-q8_0/goldens-cuda.jsonl cuda --latency
+    --example parity_llama -- convert/out/jebadiah-9b-v2-1-q8_0 convert/out/jebadiah-9b-v2-1-q8_0/goldens-cuda.jsonl cuda --latency
 ```
 
 ## Quality
