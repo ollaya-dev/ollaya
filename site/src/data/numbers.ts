@@ -11,7 +11,8 @@
  *   public.<field>                    Bespoke Labs' public benchmark (macro_accuracy, pooled_ece, median_ms, …)
  *   gpu.<field>, cpu.<field>          latency-triage on the edition's machine (p50_ms, vram_mb, ram_peak_mb, load_ms, …)
  *   parity.<device>.<field>           the newest runtime parity row (max_logit_diff, max_prob_diff, decisions_same, …)
- * A tag written `ollama/<tag>` reads Ollama's newest runs instead (typed and public). `digits` fixes the decimals.
+ * A tag written `ollama/<tag>` reads Ollama's newest runs instead (typed and public). `digits` fixes the decimals;
+ * `e<digits>` writes an exponent instead (`e1`: 5.8e-6).
  * An unknown tag or path throws, so the build fails rather than print a missing number.
  */
 import { editionsRaw } from '../generated/results'
@@ -77,8 +78,8 @@ export function result(tag: string, path: string, digits?: number): string {
 
 /** Fills in the {{result <tag> <path> [digits]}} references of rendered Markdown. */
 export const withResults = (html: string) =>
-  html.replace(/\{\{result ([^\s}]+) ([^\s}]+)(?: (\d+))?\}\}/g, (_, tag: string, path: string, d?: string) =>
-    result(tag, path, d === undefined ? undefined : Number(d)),
+  html.replace(/\{\{result ([^\s}]+) ([^\s}]+)(?: (e?)(\d+))?\}\}/g, (_, tag: string, path: string, e?: string, d?: string) =>
+    e ? value(tag, path).toExponential(Number(d)) : result(tag, path, d === undefined ? undefined : Number(d)),
   )
 
 /** The value, or undefined when results/ has no such row (a model the suite does not apply to). */

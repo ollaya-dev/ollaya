@@ -306,7 +306,7 @@ const overlays: Record<string, ModelOverlay> = {
     rank: 15,
     tags: {
       latest: { summary: 'Same as jeeves:9b.' },
-      '9b': { summary: 'Jeeves-9B without thinking, with the fitted temperature 1.86. Needs a 24 GB GPU.' },
+      '9b': { summary: "Jeeves v2 (9B) without thinking, with the authors' temperature 1.522. Needs a 24 GB GPU." },
     },
   },
   clef: {

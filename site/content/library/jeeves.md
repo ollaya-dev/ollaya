@@ -24,7 +24,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `jeev
 - **No thinking.** Jeeves' reasoning mode generates a chain first, which Ollaya's one-pass runtime does not do. Without it the authors report 0.812 against 0.851 on their test split for v2, at a fraction of the latency.
 - **Calibrated.** One fitted temperature, 1.522, from the model's `export.json` (the authors fit a second one for answers after a reasoning chain, which Ollaya does not write).
 - **Weights.** PostHog's five BF16 shards and `head.pt` download from Hugging Face, pinned to a commit and verified by sha256. Ollaya hosts only the ONNX graph (11 MB).
-- **Parity.** Ollaya's Rust runtime matches the authors' own code in fp32 on CUDA: identical token rows and the same decision on all 430 test questions, probabilities within 5.8e-6. On the CPU the 44 smoke questions agree too.
+- **Parity.** Ollaya's Rust runtime matches the authors' own code in fp32 on CUDA: identical token rows and the same decision on all {{result jeeves:9b parity.cuda.questions 0}} test questions, probabilities within {{result jeeves:9b parity.cuda.max_prob_diff e1}}. On the CPU the {{result jeeves:9b parity.cpu.questions 0}} smoke questions agree too.
 
 ## Limits
 
