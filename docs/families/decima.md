@@ -153,6 +153,30 @@ Goldens: `python -m ollaya_convert.families.decima.goldens out/<slug>` runs the 
 outputs, the decisions and the `/v1/systemone` answers against upstream's `system_one`. On CPU the ONNX Runtime is
 pyke's 1.28.0, linked statically; on CUDA it is Microsoft's 1.28.2 from the CUDA 13 pack.
 
+**Ordinal choices (measured 2026-10-25).** The goldens add six requests (`check.ordinal_cases`): the
+`decima-guard-web` questions on three web inputs, an ordinal choice with descriptions next to the same choice
+without the flag, ten labels, and eleven (rejected, as at `bc02983b`). 160 requests per model, 19 rejected
+upstream, 608 questions, 3,052 rows, all identical, every decision the same. The graphs are the published ones (the
+digests in the manifests). On choso (RTX 4090, i9-13900K), recorded in
+`results/runs/2026-10-25-parity-rtx4090-{cuda,cpu}.json`:
+
+| Model | Device | Scores max | Ordinal projections max | Probabilities max (p99) |
+|---|---|---|---|---|
+| small 1.1 | CUDA | 1.5e-5 | 6.2e-6 | 1.9e-6 (1.3e-6) |
+| small 1.1 | CPU | 1.4e-5 | 5.5e-6 | 2.1e-6 (1.7e-6) |
+| base 2.0 | CUDA | 1.0e-5 | 1.8e-5 | 3.4e-6 (2.2e-6) |
+| base 2.0 | CPU | 1.8e-5 | 2.0e-5 | 4.4e-6 (2.7e-6) |
+| agent 2.3 | CUDA | 2.0e-5 | 2.9e-5 | 3.5e-6 (2.9e-6) |
+| agent 2.3 | CPU | 4.1e-5 | 6.9e-5 | 7.1e-6 (4.4e-6) |
+| guard 1.0 preview | CUDA | 1.6e-5 | 1.4e-4 | 1.4e-5 (3.3e-6) |
+| guard 1.0 preview | CPU | 2.1e-5 | 1.9e-4 | 1.1e-5 (4.4e-6) |
+| guard-small 1.0 preview | CUDA | 4.7e-5 | 1.4e-4 | 6.2e-6 (2.7e-6) |
+| guard-small 1.0 preview | CPU | 2.3e-5 | 7.7e-5 | 3.7e-6 (2.6e-6) |
+
+The Apple M4 Pro CPU gives the same decisions for small, base, guard and guard-small, probabilities within 1.6e-5
+(`2026-10-25-parity-macm4pro-cpu.json`). Every `/v1/systemone` answer matches upstream's to 4 decimals, the ordinal
+choices included.
+
 **Decima 2.3 (measured 2026-10-20).** Upstream `v2.3.0` (`1b07634e`): 154 requests per model, the 150 below and four
 long agent states (3,041, 5,986, 8,076 and 8,266 tokens), 18 rejected upstream. Cut states: 7 for small and base,
 1 for agent (the 8,266-token one), 4 for guard and guard-small.

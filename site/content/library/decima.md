@@ -34,7 +34,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `deci
 - **Rows.** Each question becomes one state row (the question with the state) and one row per option (the question with the option), exactly as the author's `decima/systemone.py`, `model.py` and `render.py` build them.
 - **Scores.** The options of every question are scored in one pass. Choice and yes/no answers are a softmax of the scores at the author's fitted temperature; score questions use the author's cumulative-link ordinal head, and so does a choice asked with `"ordinal": true` (2 to 10 labels in order), an extension only Decima takes.
 - **Engine.** ONNX Runtime, fp32, on an NVIDIA GPU (CUDA) or the CPU. The graph reads the author's own checkpoint files, unmodified.
-- **Parity.** Ollaya's runtime matches the author's own code at v2.3.0 (fp32) on 599 questions per model, states up to 8,266 tokens included, on the CPU and on CUDA: identical token rows, the same decision on every question, probabilities within 8.2e-6.
+- **Parity.** Ollaya's runtime matches the author's own code at v2.3.0 (fp32) on {{result decima:agent parity.cuda.questions 0}} questions per model, ordinal choices and states up to 8,266 tokens included, on an RTX 4090 and on the CPU: identical token rows, the same decision on every question, probabilities within {{result decima:guard parity.cuda.max_prob_diff e1}} on CUDA and {{result decima:guard parity.cpu.max_prob_diff e1}} on the CPU.
 
 ## Limits
 
