@@ -1558,14 +1558,64 @@
   "laya:typed-decisions": [
    "typed-decisions"
   ],
+  "largha:150m": [
+   "typed-decisions"
+  ],
   "jeb:4b": [
    "typed-decisions"
   ],
   "jeb:9b": [
-   "typed-decisions"
+   "typed-decisions",
+   "civil_comments",
+   "helpsteer2",
+   "massive-en-US",
+   "massive-de-DE"
   ],
   "jeb:27b": [
-   "typed-decisions"
+   "typed-decisions",
+   "civil_comments",
+   "helpsteer2",
+   "massive-en-US",
+   "massive-de-DE"
+  ],
+  "coba:400m-ternary": [
+   "vitaminc-dev",
+   "massive-en-US",
+   "massive-de-DE",
+   "boolq",
+   "squad2",
+   "paws",
+   "multinli",
+   "civil_comments",
+   "aegis2",
+   "helpsteer2",
+   "pubmedqa"
+  ],
+  "coba:150m-ternary": [
+   "vitaminc-dev",
+   "massive-en-US",
+   "massive-de-DE",
+   "boolq",
+   "squad2",
+   "paws",
+   "multinli",
+   "civil_comments",
+   "aegis2",
+   "helpsteer2",
+   "pubmedqa"
+  ],
+  "coba:68m-ternary": [
+   "vitaminc-dev",
+   "massive-en-US",
+   "massive-de-DE",
+   "boolq",
+   "squad2",
+   "paws",
+   "multinli",
+   "civil_comments",
+   "aegis2",
+   "helpsteer2",
+   "pubmedqa"
   ]
  },
  "updates": [
