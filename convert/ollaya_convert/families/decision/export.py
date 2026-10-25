@@ -41,9 +41,9 @@ LAYOUT = "decision-endpoint-v1"
 
 
 class DecisionGraph(torch.nn.Module):
-    def __init__(self, backbone, head):
+    def __init__(self, backbone, head, trunk=Qwen35Trunk):
         super().__init__()
-        self.trunk = Qwen35Trunk(backbone)
+        self.trunk = trunk(backbone)
         self.head = head
         self.scale = 1.0 / math.sqrt(head.head_dim)
 

@@ -88,9 +88,11 @@ class DecisionLayout:
             raise LayoutError("each question must be an object")
         if "instructions" not in q:
             raise LayoutError("instructions is required")
-        opts = options(q, self.choice_null)
-        prefix = "Context:\n%s\n\nTask type: %s\nQuestion:\n%s\nOptions:" % (payload(state), q["type"],
-                                                                              payload(q["instructions"]))
+        return self.build(state, q["type"], q["instructions"], options(q, self.choice_null))
+
+    def build(self, state, kind: str, instructions, opts: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """The row of one question from its options (shared with decision2, whose prompt is the same)."""
+        prefix = "Context:\n%s\n\nTask type: %s\nQuestion:\n%s\nOptions:" % (payload(state), kind, payload(instructions))
         ids = self.enc(prefix)
         cand = []
         for o in opts:
