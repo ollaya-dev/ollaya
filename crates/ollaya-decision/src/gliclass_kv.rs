@@ -104,8 +104,24 @@ impl GliclassKvLayout {
     ) -> Result<Row, Error> {
         let call = Call::new(q);
         let labels = enc.encode(&self.label_text(&call))?;
+        // The window must hold the whole label section and at least one context token; a longer
+        // section would exceed the graph's section axis as well.
+        if labels.len() >= self.max_len {
+            return Err(Error::TooManyOptions {
+                question: String::new(),
+                options: q.num_options(),
+                head_max_len: self.max_len,
+            });
+        }
+        let sep = Some(&self.special_tokens.sep);
+        if labels.first() != sep || labels.last() != sep {
+            return Err(Error::invalid(format!(
+                "question {qid:?}: the label section does not start and end with the {} marker",
+                self.special_tokens.sep_text
+            )));
+        }
         let context = enc.encode(&format!("{}{state_text}", self.sanitize(&call.prompt)))?;
-        let budget = self.max_len.saturating_sub(labels.len()).max(1);
+        let budget = self.max_len - labels.len();
         let kept = context.len().min(budget);
         let mut ids = Vec::with_capacity(kept + labels.len());
         ids.extend_from_slice(&context[..kept]);
@@ -247,17 +263,23 @@ mod tests {
         assert_eq!(row.ids.len(), 20);
         assert_eq!(row.section_start, 15);
         assert!(row.state_truncated);
-        // a label section longer than the window keeps one context token
-        let l = layout(4);
-        let row = l
-            .encode(
-                &Chars,
-                &state,
-                "q",
-                &q(json!({"type": "noul", "instructions": "ok?"})),
-            )
-            .unwrap();
+    }
+
+    #[test]
+    fn a_label_section_that_fills_the_window_is_too_many_options() {
+        // labels = <S> o k ? <L> <S> = 6 tokens: a 7-token window keeps one context token, a
+        // 6-token window has no room for the context
+        let question = q(json!({"type": "noul", "instructions": "ok?"}));
+        let row = layout(7).encode(&Chars, "state", "q", &question).unwrap();
         assert_eq!(row.ids.len(), 7);
         assert_eq!(row.section_start, 2);
+        assert!(matches!(
+            layout(6).encode(&Chars, "state", "q", &question),
+            Err(Error::TooManyOptions {
+                options: 2,
+                head_max_len: 6,
+                ..
+            })
+        ));
     }
 }

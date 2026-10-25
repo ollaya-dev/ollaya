@@ -123,7 +123,7 @@ and the calibrator; the gate (logits within 1e-3) holds, the decisions are ident
 ## Limits
 
 - **Text only.** The vision path (images in the context through the Qwen3.5 vision tower) is not ported.
-- **Context.** 8,192 tokens per row; the context (prompt, then state) is cut from the right, the labels are kept whole.
+- **Context.** 8,192 tokens per row; the context (prompt, then state) is cut from the right, the labels are kept whole. A request whose label section alone fills the window is refused as too many options, like the uni-encoder family; the reference would run it as one row longer than the window.
 - **Labels.** Upstream's `max_num_classes` is 25 in the config but the pipeline does not enforce it; the export's label
   axis allows 255.
 - **Halting.** The recurrent cell's stopping rule depends on the probabilities, so a row's cost is one to three scorer
