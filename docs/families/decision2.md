@@ -113,7 +113,36 @@ Decision 1.0's ([decision.md](decision.md#onnx-contract)): `input_ids` [rows, se
 
 ## Measured parity
 
-<!-- filled from results/runs -->
+**Goldens.** `families/decision2/goldens.py` runs the author's code in fp32 (TF32 off, SDPA on its
+exact math kernel, each request's questions in one `collate` batch as `system_one` does) on 107
+records: the shared edge and typed-decisions cases (20 rows) and 13 cases of its own (noul order and
+defaults, Kai's five-level offsets, object and list levels and descriptions, every rejection rule, a
+question over every limit, a 5,000-token state). For every record the Python port must reproduce the
+author's token rows, positions and option order before the record is written. Lux in fp32 (32 GB)
+does not fit the 32 GB GPU with its attention transients, so its reference runs the first 16 decoder
+layers on the GPU and the rest on the CPU, still in fp32 (`DECISION_REF_GPU_LAYERS`).
+
+**Runtime.** `crates/ollaya-runner/examples/parity_decision.rs` against the goldens, the same gate
+as Decision 1.0 (rejections, rows and positions identical, option logits within 1e-3, the same
+decision, the wire answers equal the author's up to Ollaya's 4-decimal rounding). Two of the
+author's answer conventions differ from Ollaya's `/v1/systemone` by design, and the check reads them
+in the author's form: the entropy confidence, and a non-text score level written into the legend as
+canonical JSON text (Ollaya returns it verbatim).
+
+hope (RTX 5090, CUDA 13; Threadripper 3960X), ONNX Runtime 1.28.2 from the GPU pack (`cuda-dynamic`):
+132 cases (25 rejected by the author, each question on its own too), 463 questions.
+
+| Tag | rejections, rows, positions | decisions agree | max \|Δ option logit\| CUDA / CPU | max \|Δ probability\| CUDA / CPU |
+|---|---|---|---|---|
+| `decision2:kai` | 0 mismatches | **100 %** | 3.0e-5 / 2.7e-5 | 1.5e-6 / 2.1e-6 |
+| `decision2:eos` | 0 mismatches | **100 %** | 1.3e-5 / 2.0e-5 | 2.5e-6 / 4.8e-6 |
+| `decision2:sol` | 0 mismatches | **100 %** | 1.0e-5 / 8.4e-6 | 2.4e-6 / 2.1e-6 |
+| `decision2:nox` | 0 mismatches | **100 %** | 1.6e-5 / 1.1e-5 | 4.6e-6 / 2.6e-6 |
+| `decision2:lux` | 0 mismatches | **100 %** | 4.2e-5 / 5.0e-5 (smoke) | 5.2e-6 / 2.9e-6 (smoke) |
+
+On the CPU, Lux runs the `--smoke` cases (26 cases, 45 questions), as K2 asks of models of 9B and over.
+The wire answers equal the author's on every question (max difference 5.1e-5, the rounding).
+The records are in `results/runs/2026-10-25-parity-rtx5090-{cuda,cpu}-cob561.json`.
 
 ## Limits
 

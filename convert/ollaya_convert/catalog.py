@@ -763,7 +763,11 @@ CATALOG = {
                       " Needs about 18 GB of memory; best on a 24 GB GPU.", ["backbone/model-0000%d-of-00009.safetensors" % i for i in range(1, 10)]),
                  ]},
         "aliases": {"latest": "nox"},
-        "parity": "",
+        "parity": "Ollaya's Rust runtime matches the author's code (each repo's decision2 runtime, PyTorch fp32) on "
+                  "463 questions from 132 requests, and rejects the same 25 requests the author rejects. The token "
+                  "rows and option positions are identical, and so is the decision on every question. "
+                  "Probabilities are within 5.2e-6 on CUDA and the CPU (Lux on the CPU: the smoke cases), and the "
+                  "TypeSafe answers equal the author's up to 4-decimal rounding.",
     },
     "qwen3guard": {
         "namespace": "library",

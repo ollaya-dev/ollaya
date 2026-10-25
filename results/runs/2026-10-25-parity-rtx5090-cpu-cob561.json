@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "suite": "parity",
+ "date": "2026-10-25",
+ "machine": "rtx-5090",
+ "device": "cpu",
+ "ollaya": "0.18.0 at 61deec2",
+ "protocol": {
+  "reference": "goldens from each family's goldens.py: the authors' code in PyTorch fp32 (TF32 off) on the checkpoint the manifest names",
+  "gate": "fp32 tags: identical encodings and decisions, option logits within 1e-3, wire answers as the authors' code; -fp16 tags (docs/decisions/0008-fp16-decoder-tags.md): identical encodings, at least 99.5 % of decisions the same, differences reported",
+  "runner": "convert/ollaya_convert/parity_run.py with crates/ollaya-runner/examples/parity_<family>.rs"
+ },
+ "results": [
+  {
+   "model": "decision2:eos",
+   "questions": 463,
+   "decisions_same": 463,
+   "max_logit_diff": 2.002716064453125e-05,
+   "max_prob_diff": 4.76796204940122e-06,
+   "p99_prob_diff": 2.007414086568904e-06,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "5f69473d975d1be32a97a2d20698bbdddc16208fa14e8dce4a50fa6026d9b384"
+  },
+  {
+   "model": "decision2:kai",
+   "questions": 463,
+   "decisions_same": 463,
+   "max_logit_diff": 2.7418136596679688e-05,
+   "max_prob_diff": 2.130464874350313e-06,
+   "p99_prob_diff": 1.1615897653749485e-06,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "b8b0f131e679e5106e3216ef6dd57df45ba4d7ca7ce2fd892077c8d2ab20e68b"
+  },
+  {
+   "model": "decision2:nox",
+   "questions": 463,
+   "decisions_same": 463,
+   "max_logit_diff": 1.0967254638671875e-05,
+   "max_prob_diff": 2.6139063775687532e-06,
+   "p99_prob_diff": 1.4922909069570167e-06,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "02cc032d729fd4091b710274552d61d432d001ccffa8b6a7ea2abcebb43897ae"
+  },
+  {
+   "model": "decision2:sol",
+   "questions": 463,
+   "decisions_same": 463,
+   "max_logit_diff": 8.404254913330078e-06,
+   "max_prob_diff": 2.05360775351604e-06,
+   "p99_prob_diff": 1.4345508467239476e-06,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "145d34f904222dbc666cf26f250e65e1e996dfe7e78efda7ee567f1c26c2afdd"
+  }
+ ]
+}
