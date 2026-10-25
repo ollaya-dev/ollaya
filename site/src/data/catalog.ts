@@ -471,6 +471,24 @@ const overlays: Record<string, ModelOverlay> = {
       flash: { summary: `Qwen3.5-9B: ${result('d3:flash', 'typed.accuracy', 3)} on typed decisions, no more accurate than d3:mini at twice the memory.` },
     },
   },
+  decision2: {
+    stats: stats('decision2:nox'),
+    title: 'Decision 2.0',
+    description:
+      'Decision 2.0 by the vLLM Semantic Router contributors: a fully fine-tuned Qwen3 or Qwen3.5 backbone plus an endpoint head that scores every option at its own last token against the question, in one forward pass per question. Five sizes, 0.6B to 9B.',
+    publisher: { name: 'vLLM Semantic Router', url: 'https://huggingface.co/vllm-sr' },
+    capabilities: ['decision', 'long-context', 'fine-tuned'],
+    keywords: ['decision2', 'decision', 'decision 2.0', 'kai', 'eos', 'sol', 'nox', 'lux', 'semantic router', 'vllm', 'qwen', 'qwen3', 'qwen3.5', 'llm', 'endpoint', 'classification', 'typesafe', 'jev', 'system one'],
+    rank: 27,
+    tags: {
+      latest: { summary: 'Same as decision2:nox.' },
+      kai: { summary: `Qwen3-0.6B-Base, the fastest: ${result('decision2:kai', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}; 8k-token rows.` },
+      eos: { summary: `Qwen3.5-0.8B: ${result('decision2:eos', 'typed.accuracy', 3)} on typed decisions.` },
+      sol: { summary: `Qwen3.5-2B: ${result('decision2:sol', 'typed.accuracy', 3)} on typed decisions.` },
+      nox: { summary: `Qwen3.5-4B-Base: ${result('decision2:nox', 'typed.accuracy', 3)} on typed decisions; ${result('decision2:nox', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
+      lux: { summary: `Qwen3.5-9B, the largest: ${result('decision2:lux', 'typed.accuracy', 3)} on typed decisions.` },
+    },
+  },
   decima: {
     stats: stats('decima:base'),
     title: 'Decima',
