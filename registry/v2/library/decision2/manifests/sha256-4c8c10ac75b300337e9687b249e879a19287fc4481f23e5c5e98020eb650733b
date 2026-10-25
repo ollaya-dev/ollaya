@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+  "config": {
+    "mediaType": "application/vnd.ollaya.config.v1+json",
+    "digest": "sha256:318e5244fce3640444f996adf124118b03b392f7d48127593b364f2569303bc7",
+    "size": 564,
+    "urls": [
+      "https://ollaya.dev/blobs/sha256-318e5244fce3640444f996adf124118b03b392f7d48127593b364f2569303bc7"
+    ]
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.ollaya.graph.onnx",
+      "digest": "sha256:1a3f71afd9f0228fd6aa17df5f60322d34e8d211ec95d0b93795a0202a36ada2",
+      "size": 8664547,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-1a3f71afd9f0228fd6aa17df5f60322d34e8d211ec95d0b93795a0202a36ada2"
+      ],
+      "annotations": {
+        "org.ollaya.precision": "fp32"
+      }
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:049651c32f178a352fbb61e92b612aa682097330d1b3227842a082336df15e5f",
+      "size": 2014377424,
+      "urls": [
+        "https://huggingface.co/vllm-sr/Decision-2.0-Eos-0.8B/resolve/52cad37ef21f598302fe964cbfa164739cb965d5/backbone/model.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.weights",
+      "digest": "sha256:1cfc3523da9cadcc75027553194be105a1668e13a22c7cc167dfcae1d75fb394",
+      "size": 4213584,
+      "urls": [
+        "https://huggingface.co/vllm-sr/Decision-2.0-Eos-0.8B/resolve/52cad37ef21f598302fe964cbfa164739cb965d5/decision_head.safetensors"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.tokenizer",
+      "digest": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+      "size": 19989325,
+      "urls": [
+        "https://huggingface.co/vllm-sr/Decision-2.0-Eos-0.8B/resolve/52cad37ef21f598302fe964cbfa164739cb965d5/tokenizer.json"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.decision",
+      "digest": "sha256:d191029b927ce48c020156654d16976c6948f643ce9d98081497281e21b52ddc",
+      "size": 4624,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-d191029b927ce48c020156654d16976c6948f643ce9d98081497281e21b52ddc"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.calibration",
+      "digest": "sha256:bf756c46be45976f7adaf29bfd0fe7bd1de95869a2fa49cb4686dd1da406d1c4",
+      "size": 187,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-bf756c46be45976f7adaf29bfd0fe7bd1de95869a2fa49cb4686dd1da406d1c4"
+      ]
+    },
+    {
+      "mediaType": "application/vnd.ollaya.license",
+      "digest": "sha256:1314ad54d94f93448e62b74dbd8aa83e9638ed7974606e06bb08e04d02b1a40e",
+      "size": 10465,
+      "urls": [
+        "https://ollaya.dev/blobs/sha256-1314ad54d94f93448e62b74dbd8aa83e9638ed7974606e06bb08e04d02b1a40e"
+      ]
+    }
+  ]
+}
