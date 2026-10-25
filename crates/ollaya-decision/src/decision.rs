@@ -73,9 +73,10 @@ pub struct DecisionLayout {
     /// Right-padding id.
     pub pad: u32,
     /// Decision 2.0: offsets added to a score question's logits, by its level count (Kai's
-    /// `score_bias.json`).
+    /// `score_bias.json`). Keyed by the count as text, as in JSON (a flattened struct cannot
+    /// read number keys).
     #[serde(default)]
-    pub score_bias: BTreeMap<usize, Vec<f64>>,
+    pub score_bias: BTreeMap<String, Vec<f64>>,
 }
 
 /// One question's row.
@@ -109,7 +110,7 @@ impl DecisionLayout {
         if let Some((n, b)) = self
             .score_bias
             .iter()
-            .find(|(n, b)| !self.v2() || b.len() != **n)
+            .find(|(n, b)| !self.v2() || n.parse() != Ok(b.len()))
         {
             return Err(Error::invalid(format!(
                 "score_bias for {n} levels has {} offsets (Decision 2.0 only)",
@@ -342,7 +343,7 @@ impl DecisionLayout {
         let offsets = match q.qtype {
             QType::Score => self
                 .score_bias
-                .get(&options.len())
+                .get(&options.len().to_string())
                 .cloned()
                 .unwrap_or_default(),
             _ => Vec::new(),
@@ -412,7 +413,7 @@ mod tests {
     fn layout2() -> DecisionLayout {
         DecisionLayout {
             prompt_version: PROMPT_VERSION_2.into(),
-            score_bias: BTreeMap::from([(2, vec![0.5, -0.5])]),
+            score_bias: BTreeMap::from([("2".into(), vec![0.5, -0.5])]),
             ..layout(NullDescription::Null)
         }
     }
@@ -477,10 +478,10 @@ mod tests {
         assert!(l.encode(&Chars, &json!(""), "q", &ok).is_ok());
         // Offsets belong to Decision 2.0 and must match their level count.
         let mut bad = layout(NullDescription::Null);
-        bad.score_bias = BTreeMap::from([(2, vec![0.5, -0.5])]);
+        bad.score_bias = BTreeMap::from([("2".into(), vec![0.5, -0.5])]);
         assert!(bad.validate().is_err());
         bad.prompt_version = PROMPT_VERSION_2.into();
-        bad.score_bias = BTreeMap::from([(3, vec![0.5])]);
+        bad.score_bias = BTreeMap::from([("3".into(), vec![0.5])]);
         assert!(bad.validate().is_err());
     }
 

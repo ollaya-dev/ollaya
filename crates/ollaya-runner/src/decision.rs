@@ -277,3 +277,24 @@ impl DecisionModel {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_reads_score_bias_through_flatten() {
+        let config: DecisionConfig = serde_json::from_value(serde_json::json!({
+            "engine": "onnx", "layout": "decision2-endpoint-v1", "contract": {"seq_multiple": 8},
+            "weights_in_memory": "bf16",
+            "prompt_version": ollaya_decision::decision::PROMPT_VERSION_2, "max_row_tokens": 8192,
+            "min_options": 2, "max_options": 255, "max_score_levels": 10,
+            "choice_null_description": "null", "pad": 0,
+            "score_bias": {"5": [0.1, 0.2, 0.0, -0.1, -0.2]}
+        }))
+        .unwrap();
+        config.decision.validate().unwrap();
+        assert_eq!(config.decision.score_bias["5"].len(), 5);
+        assert!(matches!(config.weights_in_memory, WeightsInMemory::Bf16));
+    }
+}
