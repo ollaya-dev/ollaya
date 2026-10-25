@@ -25,7 +25,7 @@ from ..llm_common import cases
 from . import ref
 from .layout import Decision2Layout, LayoutError
 
-LONG = "Read the whole policy below before you answer. " * 1800          # about 18,000 tokens: over every limit
+LONG = "Read the whole policy below before you answer. " * 2000  # about 18,000 tokens: over every limit (16,384)
 EXTRA_CASES = [
     ("decision2/noul_order", "The parcel arrived on time, but the box was crushed.",
      {"swapped": {"type": "noul", "instructions": "Was the box damaged?",
