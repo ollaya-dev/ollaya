@@ -1,4 +1,4 @@
-//! Compare the `strands-pointer-v1` runtime against golden fixtures from
+//! Compare the `strands-pointer-v1` and `strands-pointer-v2` runtime against golden fixtures from
 //! `ollaya_convert.families.strands.goldens` (upstream strands_decider in fp32, LoRA unmerged, TF32 off).
 //!
 //!     cargo run --release -p ollaya-runner --example parity_strands -- <model-dir> <goldens.jsonl> [cpu|cuda] [--latency] [--fp16] [--smoke]

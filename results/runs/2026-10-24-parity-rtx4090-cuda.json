@@ -4,7 +4,7 @@
  "date": "2026-10-24",
  "machine": "rtx-4090",
  "device": "cuda",
- "ollaya": "0.17.0 at b97e96a (decider rows, PR #144) and at b37b867 (d1-omni:600m) and at aafd610 (strands-decider:e2b, :e4b)",
+ "ollaya": "0.17.0 at b97e96a (decider rows, PR #144) and at b37b867 (d1-omni:600m) and at d4ea37f (strands-decider:e2b, :e4b)",
  "protocol": {
   "reference": "goldens from each family's goldens.py: the authors' code in PyTorch fp32 (TF32 off) on the checkpoint the manifest names",
   "gate": "fp32 tags: identical encodings and decisions, option logits within 1e-3, wire answers as the authors' code; -fp16 tags (docs/decisions/0008-fp16-decoder-tags.md): identical encodings, at least 99.5 % of decisions the same, differences reported",
