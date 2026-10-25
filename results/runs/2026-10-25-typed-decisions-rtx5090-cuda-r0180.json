@@ -1,0 +1,275 @@
+{
+ "schema": 1,
+ "date": "2026-10-25",
+ "edition": "2026.10",
+ "machine": "rtx-5090",
+ "device": "cuda",
+ "suite": "typed-decisions",
+ "ollaya": "0.18.0",
+ "protocol": {
+  "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each (2,000 questions: 600 choice, 600 noul, 800 score)",
+  "source": "https://huggingface.co/datasets/LocalLLaMA/typed-decisions",
+  "runner": "convert/ollaya_convert/bench_typed.py",
+  "client": "one request (one state, its five questions) at a time over HTTP to /v1/systemone, timed by the client",
+  "accuracy": "argmax of the returned probabilities against the gold label, over all 2,000 questions; a rejected request counts as wrong on its five questions; 95 % bootstrap interval over states",
+  "ece": "ten-bin expected calibration error of the top probability, pooled over the answered questions"
+ },
+ "results": [
+  {
+   "model": "strands-decider:e4b",
+   "digest": "b923eec149f21f2b2cc2a294c9b1da22c52cbbdb72b0f6d044e63054765809c3",
+   "answered_by": [
+    "strands-decider:e4b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.699,
+   "accuracy_ci": [
+    0.6725,
+    0.724
+   ],
+   "by_type": {
+    "choice": 0.7083,
+    "noul": 0.7717,
+    "score": 0.6375
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.59,
+    "customer_service": 0.786,
+    "invoice_processing": 0.764,
+    "security_incidents": 0.656
+   },
+   "ece": 0.0818,
+   "brier": 0.4336,
+   "soft_ce": 1.0218,
+   "median_ms": 503.6,
+   "p95_ms": 689.4,
+   "trained_on_split": false
+  },
+  {
+   "model": "decider:4b",
+   "digest": "b4e1276b55eda06fad7af9536a996fc132a1229bb866755cd6f07778dbe98963",
+   "answered_by": [
+    "decider:4b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.678,
+   "accuracy_ci": [
+    0.6545,
+    0.7015
+   ],
+   "by_type": {
+    "choice": 0.6583,
+    "noul": 0.7633,
+    "score": 0.6288
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.616,
+    "customer_service": 0.74,
+    "invoice_processing": 0.684,
+    "security_incidents": 0.672
+   },
+   "ece": 0.118,
+   "brier": 0.4892,
+   "soft_ce": 3.254,
+   "median_ms": 781.9,
+   "p95_ms": 1160.6,
+   "trained_on_split": false
+  },
+  {
+   "model": "gliclass-v4:9b",
+   "digest": "0e5bbb07b002e136f66bd57e8dd5bf42613df06dfbb55c80ebd016019e737529",
+   "answered_by": [
+    "gliclass-v4:9b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.65,
+   "accuracy_ci": [
+    0.6265,
+    0.673
+   ],
+   "by_type": {
+    "choice": 0.6333,
+    "noul": 0.7833,
+    "score": 0.5625
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.516,
+    "customer_service": 0.696,
+    "invoice_processing": 0.696,
+    "security_incidents": 0.692
+   },
+   "ece": 0.047,
+   "brier": 0.4691,
+   "soft_ce": 1.0975,
+   "median_ms": 596.7,
+   "p95_ms": 761.5,
+   "trained_on_split": false
+  },
+  {
+   "model": "strands-decider:e2b",
+   "digest": "76e87da292235d224abe1f24f19596c5280c9d9eabe4e0ff3278697de088d438",
+   "answered_by": [
+    "strands-decider:e2b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.646,
+   "accuracy_ci": [
+    0.6225,
+    0.6705
+   ],
+   "by_type": {
+    "choice": 0.6483,
+    "noul": 0.74,
+    "score": 0.5737
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.488,
+    "customer_service": 0.682,
+    "invoice_processing": 0.756,
+    "security_incidents": 0.658
+   },
+   "ece": 0.0862,
+   "brier": 0.4939,
+   "soft_ce": 1.0526,
+   "median_ms": 262.5,
+   "p95_ms": 358.5,
+   "trained_on_split": false
+  },
+  {
+   "model": "decider:2b",
+   "digest": "6b81ac65a337f2888699e594e1f325aefe7e9718ce0fba8d6da4a3492aba1982",
+   "answered_by": [
+    "decider:2b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.608,
+   "accuracy_ci": [
+    0.5845,
+    0.63
+   ],
+   "by_type": {
+    "choice": 0.5333,
+    "noul": 0.7367,
+    "score": 0.5675
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.516,
+    "customer_service": 0.67,
+    "invoice_processing": 0.644,
+    "security_incidents": 0.602
+   },
+   "ece": 0.1203,
+   "brier": 0.5592,
+   "soft_ce": 3.1664,
+   "median_ms": 260.6,
+   "p95_ms": 353.0,
+   "trained_on_split": false
+  },
+  {
+   "model": "gliclass-v4:2b",
+   "digest": "e2575bb26e1362f95d78049e2988ba36973ebb95f308b7d3c94aa277dd05a870",
+   "answered_by": [
+    "gliclass-v4:2b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.589,
+   "accuracy_ci": [
+    0.5655,
+    0.6155
+   ],
+   "by_type": {
+    "choice": 0.5933,
+    "noul": 0.66,
+    "score": 0.5325
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.478,
+    "customer_service": 0.636,
+    "invoice_processing": 0.6,
+    "security_incidents": 0.642
+   },
+   "ece": 0.0616,
+   "brier": 0.5324,
+   "soft_ce": 1.1309,
+   "median_ms": 128.7,
+   "p95_ms": 165.1,
+   "trained_on_split": false
+  },
+  {
+   "model": "d1-omni:600m",
+   "digest": "53dfa4be304b8ab233617f432ed655050d6d459a48f89dae94a574f75414f139",
+   "answered_by": [
+    "d1-omni:600m"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.5745,
+   "accuracy_ci": [
+    0.553,
+    0.5965
+   ],
+   "by_type": {
+    "choice": 0.6067,
+    "noul": 0.7083,
+    "score": 0.45
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.56,
+    "customer_service": 0.626,
+    "invoice_processing": 0.562,
+    "security_incidents": 0.55
+   },
+   "ece": 0.0661,
+   "brier": 0.5366,
+   "soft_ce": 1.1203,
+   "median_ms": 29.6,
+   "p95_ms": 43.4,
+   "trained_on_split": false
+  },
+  {
+   "model": "sura:0.8b",
+   "digest": "473fa350466df82396f2a19152bdc15abaa79a6e57fc99f867c3e0dd280ae18a",
+   "answered_by": [
+    "sura:0.8b"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.56,
+   "accuracy_ci": [
+    0.536,
+    0.587
+   ],
+   "by_type": {
+    "choice": 0.5517,
+    "noul": 0.5867,
+    "score": 0.5463
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.53,
+    "customer_service": 0.67,
+    "invoice_processing": 0.494,
+    "security_incidents": 0.546
+   },
+   "ece": 0.0547,
+   "brier": 0.5457,
+   "soft_ce": 1.1128,
+   "median_ms": 86.1,
+   "p95_ms": 127.6,
+   "trained_on_split": false
+  }
+ ]
+}

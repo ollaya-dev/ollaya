@@ -1,0 +1,537 @@
+{
+ "schema": 1,
+ "date": "2026-10-25",
+ "edition": "2026.10",
+ "machine": "rtx-5090",
+ "device": "cuda",
+ "suite": "public-benchmark",
+ "servers": {
+  "ollaya": "0.18.0"
+ },
+ "protocol": {
+  "benchmark": "Bespoke Labs' public decision benchmark: 13 subsets of 11 human-labeled public datasets, 3,880 questions",
+  "source": "https://github.com/bespokelabsai/nimble/blob/main/docs/PUBLIC_BENCHMARKS.md",
+  "runner": "Bespoke's own evaluate_public_jev, through convert/ollaya_convert/bench_public.py",
+  "client": "one request (one question) at a time over HTTP to /v1/systemone, timed by the client",
+  "accuracy": "macro: the mean of the 13 subsets; a rejected request counts as wrong",
+  "ece": "ten-bin expected calibration error of the top probability; pooled over all 3,880 questions"
+ },
+ "note": "Ollaya Bench edition 2026.10.",
+ "results": [
+  {
+   "server": "ollaya",
+   "model": "decision2:lux",
+   "digest": "4148abeac890bfcf50bab4fdae636336468b21a9291f9a3f42ae526b17fd32a8",
+   "records": 3880,
+   "errors": 0,
+   "macro_accuracy": 0.7559,
+   "macro_accuracy_ci": [
+    0.7429,
+    0.768
+   ],
+   "micro_accuracy": 0.7657,
+   "macro_ece": 0.096,
+   "pooled_ece": 0.0555,
+   "brier": 0.3252,
+   "median_ms": 200.0,
+   "p95_ms": 422.8,
+   "by_type": {
+    "choice": 0.8221,
+    "noul": 0.8211,
+    "score": 0.5369
+   },
+   "per_subset": {
+    "vitaminc-dev": {
+     "n": 599,
+     "errors": 0,
+     "accuracy": 0.783,
+     "ece": 0.1077
+    },
+    "massive-en-US": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.8429,
+     "ece": 0.0633
+    },
+    "massive-de-DE": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.8343,
+     "ece": 0.0594
+    },
+    "boolq": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.8667,
+     "ece": 0.0584
+    },
+    "squad2": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.8629,
+     "ece": 0.0455
+    },
+    "paws": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.808,
+     "ece": 0.1093
+    },
+    "multinli": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.9064,
+     "ece": 0.0257
+    },
+    "civil_comments": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.7,
+     "ece": 0.0853
+    },
+    "aegis2": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.868,
+     "ece": 0.0825
+    },
+    "helpsteer2": {
+     "n": 249,
+     "errors": 0,
+     "accuracy": 0.3454,
+     "ece": 0.1244
+    },
+    "summeval-relevance": {
+     "n": 240,
+     "errors": 0,
+     "accuracy": 0.4458,
+     "ece": 0.105
+    },
+    "summeval-consistency": {
+     "n": 144,
+     "errors": 0,
+     "accuracy": 0.8194,
+     "ece": 0.3173
+    },
+    "pubmedqa": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.744,
+     "ece": 0.0642
+    }
+   }
+  },
+  {
+   "server": "ollaya",
+   "model": "decision2:nox",
+   "digest": "d81d2a4fe5cad9b1e0e6a8c44d9108732a129328a9e595c935c4b6083b5e9133",
+   "records": 3880,
+   "errors": 0,
+   "macro_accuracy": 0.7462,
+   "macro_accuracy_ci": [
+    0.7325,
+    0.7589
+   ],
+   "micro_accuracy": 0.7567,
+   "macro_ece": 0.0985,
+   "pooled_ece": 0.0499,
+   "brier": 0.3437,
+   "median_ms": 190.6,
+   "p95_ms": 397.3,
+   "by_type": {
+    "choice": 0.8201,
+    "noul": 0.7933,
+    "score": 0.5444
+   },
+   "per_subset": {
+    "vitaminc-dev": {
+     "n": 599,
+     "errors": 0,
+     "accuracy": 0.7629,
+     "ece": 0.1115
+    },
+    "massive-en-US": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.86,
+     "ece": 0.0327
+    },
+    "massive-de-DE": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.8571,
+     "ece": 0.0481
+    },
+    "boolq": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.8333,
+     "ece": 0.055
+    },
+    "squad2": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.7525,
+     "ece": 0.0968
+    },
+    "paws": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.764,
+     "ece": 0.1225
+    },
+    "multinli": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.8963,
+     "ece": 0.0477
+    },
+    "civil_comments": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.7767,
+     "ece": 0.026
+    },
+    "aegis2": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.84,
+     "ece": 0.0675
+    },
+    "helpsteer2": {
+     "n": 249,
+     "errors": 0,
+     "accuracy": 0.3775,
+     "ece": 0.0976
+    },
+    "summeval-relevance": {
+     "n": 240,
+     "errors": 0,
+     "accuracy": 0.4708,
+     "ece": 0.1447
+    },
+    "summeval-consistency": {
+     "n": 144,
+     "errors": 0,
+     "accuracy": 0.7847,
+     "ece": 0.3599
+    },
+    "pubmedqa": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.724,
+     "ece": 0.0708
+    }
+   }
+  },
+  {
+   "server": "ollaya",
+   "model": "decision2:sol",
+   "digest": "85d3edf9e8bcf7cb39f0907c504781fd2f57a6c0725a24aa4f202dbe103f28a9",
+   "records": 3880,
+   "errors": 0,
+   "macro_accuracy": 0.678,
+   "macro_accuracy_ci": [
+    0.6628,
+    0.6916
+   ],
+   "micro_accuracy": 0.6936,
+   "macro_ece": 0.1166,
+   "pooled_ece": 0.053,
+   "brier": 0.4119,
+   "median_ms": 115.0,
+   "p95_ms": 186.9,
+   "by_type": {
+    "choice": 0.7589,
+    "noul": 0.7262,
+    "score": 0.4627
+   },
+   "per_subset": {
+    "vitaminc-dev": {
+     "n": 599,
+     "errors": 0,
+     "accuracy": 0.7446,
+     "ece": 0.096
+    },
+    "massive-en-US": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.7686,
+     "ece": 0.0393
+    },
+    "massive-de-DE": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.7543,
+     "ece": 0.0673
+    },
+    "boolq": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.7733,
+     "ece": 0.0592
+    },
+    "squad2": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.6856,
+     "ece": 0.137
+    },
+    "paws": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.636,
+     "ece": 0.2421
+    },
+    "multinli": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.903,
+     "ece": 0.0658
+    },
+    "civil_comments": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.8,
+     "ece": 0.053
+    },
+    "aegis2": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.736,
+     "ece": 0.059
+    },
+    "helpsteer2": {
+     "n": 249,
+     "errors": 0,
+     "accuracy": 0.3936,
+     "ece": 0.1936
+    },
+    "summeval-relevance": {
+     "n": 240,
+     "errors": 0,
+     "accuracy": 0.2583,
+     "ece": 0.1327
+    },
+    "summeval-consistency": {
+     "n": 144,
+     "errors": 0,
+     "accuracy": 0.7361,
+     "ece": 0.3093
+    },
+    "pubmedqa": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.624,
+     "ece": 0.0615
+    }
+   }
+  },
+  {
+   "server": "ollaya",
+   "model": "decision2:eos",
+   "digest": "4c8c10ac75b300337e9687b249e879a19287fc4481f23e5c5e98020eb650733b",
+   "records": 3880,
+   "errors": 0,
+   "macro_accuracy": 0.6612,
+   "macro_accuracy_ci": [
+    0.6478,
+    0.6756
+   ],
+   "micro_accuracy": 0.6789,
+   "macro_ece": 0.1367,
+   "pooled_ece": 0.0932,
+   "brier": 0.447,
+   "median_ms": 96.7,
+   "p95_ms": 155.7,
+   "by_type": {
+    "choice": 0.7249,
+    "noul": 0.7296,
+    "score": 0.441
+   },
+   "per_subset": {
+    "vitaminc-dev": {
+     "n": 599,
+     "errors": 0,
+     "accuracy": 0.7713,
+     "ece": 0.0779
+    },
+    "massive-en-US": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.7457,
+     "ece": 0.0932
+    },
+    "massive-de-DE": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.7229,
+     "ece": 0.0765
+    },
+    "boolq": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.7467,
+     "ece": 0.1319
+    },
+    "squad2": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.7659,
+     "ece": 0.0517
+    },
+    "paws": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.584,
+     "ece": 0.3125
+    },
+    "multinli": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.8528,
+     "ece": 0.0276
+    },
+    "civil_comments": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.8233,
+     "ece": 0.0273
+    },
+    "aegis2": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.728,
+     "ece": 0.053
+    },
+    "helpsteer2": {
+     "n": 249,
+     "errors": 0,
+     "accuracy": 0.3494,
+     "ece": 0.1486
+    },
+    "summeval-relevance": {
+     "n": 240,
+     "errors": 0,
+     "accuracy": 0.1542,
+     "ece": 0.4348
+    },
+    "summeval-consistency": {
+     "n": 144,
+     "errors": 0,
+     "accuracy": 0.8194,
+     "ece": 0.1693
+    },
+    "pubmedqa": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.532,
+     "ece": 0.1723
+    }
+   }
+  },
+  {
+   "server": "ollaya",
+   "model": "decision2:kai",
+   "digest": "c1f010e05fb8fab53826338931bbd5b5cb7b10ad8410fdf5bf1c344bd6e097f5",
+   "records": 3880,
+   "errors": 0,
+   "macro_accuracy": 0.6081,
+   "macro_accuracy_ci": [
+    0.5939,
+    0.6223
+   ],
+   "micro_accuracy": 0.6242,
+   "macro_ece": 0.1257,
+   "pooled_ece": 0.0463,
+   "brier": 0.4847,
+   "median_ms": 43.4,
+   "p95_ms": 62.1,
+   "by_type": {
+    "choice": 0.6906,
+    "noul": 0.6368,
+    "score": 0.4226
+   },
+   "per_subset": {
+    "vitaminc-dev": {
+     "n": 599,
+     "errors": 0,
+     "accuracy": 0.6511,
+     "ece": 0.0449
+    },
+    "massive-en-US": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.7857,
+     "ece": 0.0853
+    },
+    "massive-de-DE": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.7457,
+     "ece": 0.1177
+    },
+    "boolq": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.71,
+     "ece": 0.0729
+    },
+    "squad2": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.7458,
+     "ece": 0.0778
+    },
+    "paws": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.504,
+     "ece": 0.3688
+    },
+    "multinli": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.8027,
+     "ece": 0.1332
+    },
+    "civil_comments": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.6,
+     "ece": 0.0447
+    },
+    "aegis2": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.624,
+     "ece": 0.0392
+    },
+    "helpsteer2": {
+     "n": 249,
+     "errors": 0,
+     "accuracy": 0.3735,
+     "ece": 0.0683
+    },
+    "summeval-relevance": {
+     "n": 240,
+     "errors": 0,
+     "accuracy": 0.2,
+     "ece": 0.1001
+    },
+    "summeval-consistency": {
+     "n": 144,
+     "errors": 0,
+     "accuracy": 0.6944,
+     "ece": 0.3653
+    },
+    "pubmedqa": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.468,
+     "ece": 0.1164
+    }
+   }
+  }
+ ]
+}
