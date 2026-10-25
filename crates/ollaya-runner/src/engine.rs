@@ -36,6 +36,11 @@ pub trait Engine: Send + Sync {
         false
     }
 
+    /// The model has an ordinal head, so it answers choices asked with `"ordinal": true` (Decima).
+    fn ordinal(&self) -> bool {
+        false
+    }
+
     /// Answer a request that may come with images (encoded files, as the caller sent them).
     /// Only vision models read them; the others answer text-only requests.
     fn run_images(

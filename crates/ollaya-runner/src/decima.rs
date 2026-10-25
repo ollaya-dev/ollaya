@@ -138,6 +138,10 @@ impl Engine for DecimaModel {
             state_truncated: request.questions.iter().any(|q| q.state_truncated),
         })
     }
+
+    fn ordinal(&self) -> bool {
+        true
+    }
 }
 
 impl DecimaModel {

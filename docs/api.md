@@ -350,6 +350,15 @@ A one-option question carries no decision: its confidence formula divides by K â
 also an asymmetry between the two directions of change. Relaxing a limit later is additive;
 tightening one would break clients. Starting strict keeps both directions open.
 
+**Ordinal choices (Decima extension).** A `choice` may carry `"ordinal": true` when its labels are in
+order (none, low, high; benign, suspicious, attack). The model then reads them with its ordinal
+head, the one score questions use, and the answer is still a `choice`. Only models with an ordinal
+head (Decima) take it; every other model refuses the request with a 400, so the flag is never
+ignored. An ordinal choice takes 2â€“10 labels, the range the head was trained on. Any other value
+than `true`, `false` or `null` is a `bool_type` error, and `"ordinal": true` on a `score` or `noul`
+question is refused. The built-in preset `decima-guard-web` uses it, as Decima's own `/v1/systemone`
+does.
+
 **Types follow TypeSafe, not laya.** laya also accepts numbers and booleans as criteria and
 instructions, rendering them with `json.dumps`. TypeSafe rejects them, and so does this API
 (`json_type`). The engine keeps laya's rendering for parity; the boundary is the stricter of the
@@ -1191,8 +1200,8 @@ Safe to retry.
 ### 7.11 Presets
 
 A preset is a named question set: `/api/decide` takes `preset` in place of `questions`, and
-`ollaya run --preset` takes its name. Seven presets are built in (`triage`, `email`, `guard`,
-`moderation`, `router`, `agent`, `decima-guard`); they cannot be changed or deleted. Custom presets live in the
+`ollaya run --preset` takes its name. Eight presets are built in (`triage`, `email`, `guard`,
+`moderation`, `router`, `agent`, `decima-guard`, `decima-guard-web`); they cannot be changed or deleted. Custom presets live in the
 model store (`$OLLAYA_MODELS/presets/<name>.json`), so every client of the daemon sees the same
 ones. A custom preset is not a model: unlike a Modelfile's `QUESTIONS`, it works with any model.
 

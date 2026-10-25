@@ -111,6 +111,7 @@ pub struct DecimaLayout {
 /// `[yes, no]`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DecimaQuestion {
+    /// The head that answers it ([`Question::head`]): an ordinal choice reads the score head.
     pub qtype: QType,
     pub state_ids: Vec<u32>,
     pub option_ids: Vec<Vec<u32>>,
@@ -265,6 +266,14 @@ impl DecimaLayout {
                     let [lo, hi] = self.limits.choices;
                     return Err(bad(format!(
                         "this model takes {lo} to {hi} choices, got {}",
+                        m.len()
+                    )));
+                }
+                // The ordinal head was trained on at most 10 levels (decima bc02983).
+                if q.ordinal && !within(m.len(), self.limits.levels) {
+                    let [lo, hi] = self.limits.levels;
+                    return Err(bad(format!(
+                        "an ordinal choice takes {lo} to {hi} labels, got {}",
                         m.len()
                     )));
                 }
@@ -437,7 +446,7 @@ impl DecimaLayout {
                 })
                 .collect::<Result<_, _>>()?;
             out.push(DecimaQuestion {
-                qtype: q.qtype,
+                qtype: q.head(),
                 state_ids,
                 option_ids,
                 state_truncated,
@@ -741,6 +750,25 @@ mod tests {
             assert!(encode(&l, state, noul.clone()).is_err());
         }
         assert!(encode(&l, json!([1, "a"]), noul).is_ok());
+    }
+
+    #[test]
+    fn ordinal_choices_read_the_score_head() {
+        let l = layout(512, 64);
+        let labels: Vec<String> = (0..10).map(|i| format!("c{i}")).collect();
+        let ten = json!({"q": {"type": "choice", "instructions": "x", "criteria": labels, "ordinal": true}});
+        let r = encode(&l, json!("s"), ten).unwrap();
+        assert_eq!(r.questions[0].qtype, QType::Score);
+        assert_eq!(r.questions[0].option_ids.len(), 10);
+        // The rows are a choice's: only the head differs.
+        let plain = json!({"q": {"type": "choice", "instructions": "x", "criteria": labels}});
+        assert_eq!(
+            encode(&l, json!("s"), plain).unwrap().questions[0].option_ids,
+            r.questions[0].option_ids
+        );
+        let labels: Vec<String> = (0..11).map(|i| format!("c{i}")).collect();
+        let eleven = json!({"q": {"type": "choice", "instructions": "x", "criteria": labels, "ordinal": true}});
+        assert!(encode(&l, json!("s"), eleven).is_err());
     }
 
     #[test]

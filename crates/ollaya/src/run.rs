@@ -46,7 +46,7 @@ pub struct RunArgs {
     /// An image file (PNG) to decide about, for vision models such as decider:2b-vision.
     #[arg(long, value_name = "FILE")]
     pub image: Option<std::path::PathBuf>,
-    /// A preset: built-in (triage, email, guard, moderation, router, agent, decima-guard) or custom
+    /// A preset: built-in (triage, email, guard, moderation, router, agent, decima-guard, decima-guard-web) or custom
     /// (`ollaya preset list`).
     #[arg(long)]
     pub preset: Option<String>,
@@ -357,7 +357,7 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
 
 const HELP: &str = "Available commands:
   /set questions <file|@file|json>   Use the questions in a JSON file, or inline JSON
-  /preset <name>          Use a preset: built-in (triage, email, guard, moderation, router, agent, decima-guard) or custom
+  /preset <name>          Use a preset: built-in (triage, email, guard, moderation, router, agent, decima-guard, decima-guard-web) or custom
   /show                   Show the model and the current questions
   /clear                  Clear the screen
   /bye                    Exit

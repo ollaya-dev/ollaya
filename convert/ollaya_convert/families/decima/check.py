@@ -88,7 +88,28 @@ def extra_cases():
         ("decima/255_choices", "hi", wire({"q": {"type": "choice", "instructions": "x",
                                                  "criteria": ["c%d" % i for i in range(255)]}})),
         ("decima/empty_instructions_state", "", wire({"q": {"type": "noul", "instructions": ""}})),
-    ] + long_cases()
+    ] + ordinal_cases() + long_cases()
+
+
+def ordinal_cases():
+    """Choices read by the ordinal head (systemone's "ordinal": true): decima-guard's guard-web preset, labels with
+    descriptions, the limit of 10 labels, and the flag off."""
+    web = json.load(open(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "crates", "ollaya-api", "src",
+                                      "presets", "decima-guard-web.json"), encoding="utf-8"))
+    severity = {"type": "choice", "ordinal": True, "instructions": "How severe is the incident?",
+                "criteria": {"none": "", "low": "a cosmetic issue", "high": "customers are blocked",
+                             "critical": {"data_loss": True, "outage": "full"}}}
+    return [
+        ("decima/ordinal/web_sqli", "GET /search?q=' OR 1=1 -- HTTP/1.1\nHost: shop.example", wire(web)),
+        ("decima/ordinal/web_benign", "GET /products?page=2&sort=price HTTP/1.1", wire(web)),
+        ("decima/ordinal/web_traversal", wire({"method": "GET", "path": "/static/../../etc/passwd"}), wire(web)),
+        ("decima/ordinal/severity", "Checkout fails for every customer since the 14:00 deploy.",
+         wire({"severity": severity, "plain": {**severity, "ordinal": False}})),
+        ("decima/ordinal/ten_labels", "a mild complaint",
+         wire({"q": {"type": "choice", "ordinal": True, "instructions": "Level?", "criteria": [str(i) for i in range(10)]}})),
+        ("decima/ordinal/eleven_labels", "a mild complaint",
+         wire({"q": {"type": "choice", "ordinal": True, "instructions": "Level?", "criteria": [str(i) for i in range(11)]}})),
+    ]
 
 
 def agent_log(steps):

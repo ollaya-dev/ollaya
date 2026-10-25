@@ -610,6 +610,11 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
     let result = s
         .thread
         .run(move || -> Result<Value, Error> {
+            if let Some(qid) = ordinal_unsupported(state.model.as_ref(), &req.questions) {
+                return Err(Error::Decision(ollaya_decision::Error::invalid(format!(
+                    "question {qid:?}: this model has no ordinal head; ask it without \"ordinal\""
+                ))));
+            }
             let images = req
                 .images
                 .iter()
@@ -647,6 +652,18 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
         Err(Error::Image(e)) => error(StatusCode::BAD_REQUEST, "INVALID_IMAGE", &e.to_string()),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, "RUNNER_ERROR", &e.to_string()),
     }
+}
+
+/// The first question asked with `"ordinal": true` of a model without an ordinal head.
+fn ordinal_unsupported(model: &dyn Engine, questions: &Value) -> Option<String> {
+    if model.ordinal() {
+        return None;
+    }
+    let (qid, _) = questions
+        .as_object()?
+        .iter()
+        .find(|(_, q)| q.get("ordinal") == Some(&Value::Bool(true)))?;
+    Some(qid.clone())
 }
 
 fn error(status: StatusCode, code: &str, message: &str) -> Response {
@@ -841,6 +858,23 @@ mod tests {
         fn preset(&self) -> Option<&Questions> {
             self.preset.as_ref()
         }
+    }
+
+    #[test]
+    fn ordinal_needs_an_ordinal_head() {
+        let model = Recorder {
+            preset: None,
+            asked: Mutex::default(),
+        };
+        let q = json!({
+            "a": {"type": "choice", "instructions": "x", "criteria": ["lo", "hi"], "ordinal": false},
+            "b": {"type": "choice", "instructions": "x", "criteria": ["lo", "hi"], "ordinal": true},
+        });
+        assert_eq!(super::ordinal_unsupported(&model, &q).as_deref(), Some("b"));
+        assert_eq!(
+            super::ordinal_unsupported(&model, &json!({"a": q["a"]})),
+            None
+        );
     }
 
     #[test]

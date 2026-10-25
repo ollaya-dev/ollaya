@@ -44,7 +44,7 @@ churn_risk        yes                                   ████████
 
 No NVIDIA GPU? Start with `laya`, which answers in a fraction of a second on a CPU. It is a router: it sends English text to `laya:en` and other languages, Turkish for example, to `laya:multilingual`, and pulling `laya` pulls both. [Models](/search) compares the accuracy and speed of every model.
 
-- `--preset NAME` asks a built-in question set: `triage`, `email`, `guard`, `moderation`, `router`, `agent` or `decima-guard`. Without it, a model that has no questions of its own answers `triage`.
+- `--preset NAME` asks a built-in question set: `triage`, `email`, `guard`, `moderation`, `router`, `agent`, `decima-guard` or `decima-guard-web`. Without it, a model that has no questions of its own answers `triage`.
 - `--verbose` adds every option's probability, the routing decision and timings.
 - `--format json` prints the full API response.
 - Without a state, `ollaya run` reads piped stdin, or opens a prompt on a terminal.

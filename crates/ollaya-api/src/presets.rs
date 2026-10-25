@@ -1,6 +1,6 @@
-//! Presets: named question sets. Seven are built in: the five that `laya.presets` ships,
+//! Presets: named question sets. Eight are built in: the five that `laya.presets` ships,
 //! Ollaya's own `agent`, which reviews a command an AI agent is about to run, and Decima's
-//! `decima-guard` (its `guard` preset at v2.3.0). The CLI (`--preset`),
+//! `decima-guard` and `decima-guard-web` (its `guard` and `guard-web` presets at v2.3.0). The CLI (`--preset`),
 //! the MCP server and the desktop app all use these. Custom presets live in the daemon's model
 //! store (`presets/<name>.json`) and are managed through `/api/presets` (`docs/api.md` §7.11).
 
@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::decide::Questions;
 
-pub const NAMES: [&str; 7] = [
+pub const NAMES: [&str; 8] = [
     "triage",
     "email",
     "guard",
@@ -18,6 +18,7 @@ pub const NAMES: [&str; 7] = [
     "router",
     "agent",
     "decima-guard",
+    "decima-guard-web",
 ];
 
 /// One line on what each built-in set decides.
@@ -32,6 +33,7 @@ pub fn describe(name: &str) -> Option<&'static str> {
         "decima-guard" => {
             "OWASP LLM checks on a user message: injection, harmful, toxic, OWASP risk"
         }
+        "decima-guard-web" => "Web input: is it an attack (benign to attack), and which class",
         _ => return None,
     })
 }
@@ -107,6 +109,7 @@ pub fn get(name: &str) -> Option<Value> {
         "router" => include_str!("presets/router.json"),
         "agent" => include_str!("presets/agent.json"),
         "decima-guard" => include_str!("presets/decima-guard.json"),
+        "decima-guard-web" => include_str!("presets/decima-guard-web.json"),
         _ => return None,
     };
     Some(serde_json::from_str(text).expect("presets are valid JSON"))

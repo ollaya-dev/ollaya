@@ -34,6 +34,9 @@ von/over_max_len
 decima/255_choices
 decima/256_choices
 decima/eleven_levels
+decima/ordinal/web_sqli
+decima/ordinal/severity
+decima/ordinal/eleven_labels
 v3/blank_state
 v3/long_state
 guard/bomb

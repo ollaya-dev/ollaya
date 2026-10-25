@@ -135,7 +135,7 @@ It only accepts loopback hosts by default.
 | URI | Contents |
 |---|---|
 | `ollaya://models` | The installed models |
-| `ollaya://presets/<name>` | The questions of a built-in preset: `triage`, `email`, `guard`, `moderation`, `router`, `agent`, `decima-guard` |
+| `ollaya://presets/<name>` | The questions of a built-in preset: `triage`, `email`, `guard`, `moderation`, `router`, `agent`, `decima-guard`, `decima-guard-web` |
 
 ## Agent skill
 

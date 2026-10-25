@@ -22,7 +22,7 @@ agent 2.1 were exported and checked against `v1.1.1` (`2df60942`), whose `decima
 `v2.1.0` added `decima/render.py` (unchanged at `v2.2.0`), which changes their option rows only when the old cut
 makes two of a question's options identical (below). Against `v2.2.0` (`efaefe2a`), `v2.3.0` changes one line of
 `render.py` (an option's full text is kept when its token count fits, without the character shortcut) and adds an
-opt-in `"ordinal"` choice to `systemone.py`, which Ollaya does not take yet. Decima-agent 2.2 is the first
+opt-in `"ordinal"` choice to `systemone.py` (below), which `bc02983b` limits to 10 labels. Decima-agent 2.2 is the first
 checkpoint whose `decima.json` has `"choice_fit": true`, so it runs on its own layout id,
 `decima-late-interaction-v2`: an Ollaya without the fitted rendering refuses it instead of cutting its options.
 Agent 2.3, guard and guard-small have it too. `decima:agent` pointed at 2.1 (`86a07aab`, Hub tag `v2.1`,
@@ -121,6 +121,9 @@ budget. Against upstream's PyTorch modules, on 295 questions, the scores are wit
 
 - **Choice and noul.** A softmax of the scores over the temperature. Upstream's noul order is `[yes, no]`; the
   runner turns it into the `[false, true]` order answers use.
+- **Ordinal choice** (`"ordinal": true`, 2–10 labels). The rows of a choice, read by the ordinal head as a score
+  question is, so its probabilities come from the score slot; the answer is a choice. Models of other families
+  refuse the flag.
 - **Score.** The ordinal head, on the scores over the same temperature, so the score slot of
   `calibration.json` is 1:
 

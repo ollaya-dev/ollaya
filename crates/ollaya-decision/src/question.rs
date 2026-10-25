@@ -59,6 +59,9 @@ pub struct Question {
     /// Instructions as the model reads them: strings verbatim, anything else as `json.dumps`.
     pub instructions: String,
     pub criteria: Criteria,
+    /// A choice read by the model's ordinal head (`"ordinal": true`, Decima's extension), for
+    /// options with an order; models without one refuse it.
+    pub ordinal: bool,
     /// The definition as the caller sent it, for layouts that read the raw values (`kev`
     /// renders instructions and criteria its own way, and its noul keys are case-sensitive).
     pub definition: Value,
@@ -175,12 +178,35 @@ impl Question {
                 }
             },
         };
+        let ordinal = match def.get("ordinal") {
+            None | Some(Value::Null) | Some(Value::Bool(false)) => false,
+            Some(Value::Bool(true)) if qtype == QType::Choice => true,
+            Some(Value::Bool(true)) => {
+                return Err(bad("'ordinal' applies to choice questions only".into()));
+            }
+            Some(other) => {
+                return Err(bad(format!(
+                    "'ordinal' must be true or false, got {}",
+                    kind(other)
+                )));
+            }
+        };
         Ok(Question {
             qtype,
             instructions,
             criteria,
+            ordinal,
             definition: Value::Object(def.clone()),
         })
+    }
+
+    /// The head that answers the question: an ordinal choice is read like a score question.
+    pub fn head(&self) -> QType {
+        if self.ordinal {
+            QType::Score
+        } else {
+            self.qtype
+        }
     }
 
     /// Number of answer options the model scores.
@@ -285,6 +311,30 @@ mod tests {
         )
         .unwrap();
         assert_eq!(l.render_options(), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn ordinal_choices() {
+        let def = |extra: Value| {
+            let mut d = json!({"type": "choice", "instructions": "x", "criteria": ["lo", "hi"]});
+            d.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            Question::parse("q", &d)
+        };
+        let q = def(json!({"ordinal": true})).unwrap();
+        assert!(q.ordinal);
+        assert_eq!((q.qtype, q.head()), (QType::Choice, QType::Score));
+        for off in [
+            json!({}),
+            json!({"ordinal": false}),
+            json!({"ordinal": null}),
+        ] {
+            assert_eq!(def(off).unwrap().head(), QType::Choice);
+        }
+        assert!(def(json!({"ordinal": "yes"})).is_err());
+        let score = json!({"type": "score", "instructions": "x", "criteria": ["lo", "hi"], "ordinal": true});
+        assert!(Question::parse("q", &score).is_err());
     }
 
     #[test]

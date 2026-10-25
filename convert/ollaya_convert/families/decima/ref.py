@@ -33,11 +33,13 @@ Delegated to upstream code, so it cannot drift:
   * request checks         decima.systemone (to_question, system_one's own checks)
   * answers                decima.systemone.system_one (rounding, confidence, noul = P(yes), expected score)
 Re-stated here, cited against decima/serve.py at v2.3.0 (`do_POST`, without its opt-in "long" and
-"min_confidence" request fields):
+"min_confidence" request fields) and the commit after it that limits ordinal choices (`to_question`):
   * the state as text      `state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)`
   * STATE_TRUNCATED        a question whose state row is over max_state_tokens tokens is a 422, checked in
                            question order before anything is answered. model.py itself truncates (keeps the
                            first max_state_tokens tokens), which is what Ollaya's /api/decide answers with.
+  * ordinal choices        bc02983b ("Ordinal choices take at most 10 labels, the range the ordinal head was
+                           trained on"): to_question rejects an `"ordinal": true` choice of more than 10 labels.
 """
 from __future__ import annotations
 
@@ -168,12 +170,22 @@ class _Null:
         return Decision(probs=[1.0 / len(q.choices)] * len(q.choices), choices=list(q.choices))
 
 
+def to_question(qid, spec):
+    """decima.systemone.to_question at v2.3.0 with bc02983b's limit on ordinal choices."""
+    from decima.systemone import MAX_LEVELS, SystemOneError, to_question as upstream
+
+    t, q, keys = upstream(qid, spec)
+    if q.kind == "score" and t == "choice" and len(keys) > MAX_LEVELS:
+        raise SystemOneError(f"questions.{qid}: an ordinal choice takes 2–{MAX_LEVELS} labels")
+    return t, q, keys
+
+
 def verdict(d, state, questions):
     """serve.py do_POST after the body is parsed: (None, None) for a 200, else (code, message) of its 422.
 
     Its order: the state as text; per question in order, to_question (INVALID_REQUEST) and the state row's length
     (STATE_TRUNCATED); then system_one, whose own checks (1-256 questions, the state's JSON type) come first."""
-    from decima.systemone import SystemOneError, system_one, to_question
+    from decima.systemone import SystemOneError, system_one
 
     try:
         s = state_string(state)
@@ -190,7 +202,7 @@ def verdict(d, state, questions):
 def encode(d, state, questions):
     """Every question's texts and token ids, as Decima.logits builds them. Raises RequestError for a question
     to_question rejects. A state row over max_state_tokens keeps its first tokens (model.py's truncation)."""
-    from decima.systemone import SystemOneError, to_question
+    from decima.systemone import SystemOneError
 
     s = state_string(state)
     items = []

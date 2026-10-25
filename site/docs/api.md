@@ -272,7 +272,7 @@ A decision has no side effect on stored data, so it is safe to retry.
 
 ## Presets
 
-A preset is a named question set. Seven are built in (`triage`, `email`, `guard`, `moderation`, `router`, `agent`, `decima-guard`), and you can save your own. Send `"preset": "NAME"` to `/api/decide` in place of `questions`.
+A preset is a named question set. Eight are built in (`triage`, `email`, `guard`, `moderation`, `router`, `agent`, `decima-guard`, `decima-guard-web`), and you can save your own. Send `"preset": "NAME"` to `/api/decide` in place of `questions`.
 
 ```shell
 curl http://localhost:11435/api/presets/create -d '{

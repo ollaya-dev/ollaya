@@ -30,6 +30,10 @@ pub struct ChoiceQuestion {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<Value>,
     pub criteria: ChoiceCriteria,
+    /// Decima extension: read the options in order with the model's ordinal head (2 to 10
+    /// labels). Models without one refuse it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ordinal: Option<bool>,
 }
 
 /// Choice criteria: TypeSafe's label -> description map, or (laya extension) a list of labels.

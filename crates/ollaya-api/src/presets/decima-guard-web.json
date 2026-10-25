@@ -1,0 +1,28 @@
+{
+  "attack": {
+    "type": "score",
+    "instructions": "Is this HTTP request or input an attack?",
+    "criteria": [
+      "benign",
+      "suspicious",
+      "attack"
+    ]
+  },
+  "attack_class": {
+    "type": "choice",
+    "ordinal": true,
+    "instructions": "Which attack class is this input?",
+    "criteria": [
+      "none",
+      "sql injection",
+      "cross-site scripting",
+      "command injection",
+      "path traversal",
+      "server-side request forgery",
+      "xml external entity",
+      "template injection",
+      "ldap or nosql injection",
+      "other attack"
+    ]
+  }
+}

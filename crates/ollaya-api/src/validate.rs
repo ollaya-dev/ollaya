@@ -370,12 +370,24 @@ fn question(id: &str, def: &Value, base: &[Loc], issues: &mut Issues) -> Option<
     let cloc = at(&tloc, ["criteria".into()]);
     let criteria = q.get("criteria").filter(|c| !c.is_null());
     let question = match tag {
-        "choice" => choice_criteria(criteria, &cloc, issues).map(|criteria| {
-            Question::Choice(ChoiceQuestion {
-                instructions,
-                criteria,
+        "choice" => {
+            let ordinal = match q.get("ordinal") {
+                None | Some(Value::Null) => None,
+                Some(Value::Bool(b)) => Some(*b),
+                Some(_) => {
+                    let loc = at(&tloc, ["ordinal".into()]);
+                    issues.push(ValidationIssue::wrong_type(loc, "bool_type"));
+                    None
+                }
+            };
+            choice_criteria(criteria, &cloc, issues).map(|criteria| {
+                Question::Choice(ChoiceQuestion {
+                    instructions,
+                    criteria,
+                    ordinal,
+                })
             })
-        }),
+        }
         "score" => score_criteria(criteria, &cloc, issues).map(|criteria| {
             Question::Score(ScoreQuestion {
                 instructions,

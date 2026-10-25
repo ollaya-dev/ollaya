@@ -50,7 +50,7 @@ ollaya run laya --preset triage "Your app crashed during checkout and I was char
 
 | Flag | Effect |
 |---|---|
-| `--preset NAME` | Use a preset: built-in (`triage`, `email`, `guard`, `moderation`, `router`, `agent` or `decima-guard`) or one you saved with [`ollaya preset create`](#ollaya-preset) |
+| `--preset NAME` | Use a preset: built-in (`triage`, `email`, `guard`, `moderation`, `router`, `agent`, `decima-guard` or `decima-guard-web`) or one you saved with [`ollaya preset create`](#ollaya-preset) |
 | `--questions FILE\|@FILE\|JSON` | Use these questions (question id → question), overriding the model's own: a file path, `@file` (`@-` for stdin), or inline JSON starting with `{` |
 | `--ask TEXT` | Ask a question; repeat for more. Alone it is a yes/no question; the `--choice` or `--level` flags after it make it a choice or a score. The questions are `q1`, `q2`, … in order |
 | `--choice LABEL[=DESC]` | An option of the `--ask` before it, with an optional description |

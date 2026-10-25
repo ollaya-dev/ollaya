@@ -39,7 +39,7 @@ impl Answer {
         let act_probability = act_logits.map(|a| softmax(a.iter().map(|&v| f64::from(v)))[0]);
         Answer {
             qtype: q.qtype,
-            probabilities: calibration.probabilities(q.qtype, logits, state_tokens),
+            probabilities: calibration.probabilities(q.head(), logits, state_tokens),
             act_probability,
         }
     }
