@@ -353,8 +353,8 @@ tightening one would break clients. Starting strict keeps both directions open.
 **Ordinal choices (Decima extension).** A `choice` may carry `"ordinal": true` when its labels are in
 order (none, low, high; benign, suspicious, attack). The model then reads them with its ordinal
 head, the one score questions use, and the answer is still a `choice`. Only models with an ordinal
-head (Decima) take it; every other model refuses the request with a 400, so the flag is never
-ignored. An ordinal choice takes 2–10 labels, the range the head was trained on. Any other value
+head (Decima) take it; every other model refuses the request (`422 INVALID_REQUEST`), so the flag is
+never ignored. An ordinal choice takes 2–10 labels, the range the head was trained on. Any other value
 than `true`, `false` or `null` is a `bool_type` error, and `"ordinal": true` on a `score` or `noul`
 question is refused. The built-in preset `decima-guard-web` uses it, as Decima's own `/v1/systemone`
 does.

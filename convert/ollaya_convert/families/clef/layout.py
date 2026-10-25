@@ -57,7 +57,7 @@ def ollaya_rule(qid, q):
         return "unknown type"
     if "instructions" not in q:
         return "no 'instructions'"
-    if q.get("ordinal") not in (None, True, False) or (q.get("ordinal") is True and t != "choice"):
+    if not isinstance(q.get("ordinal", False), (bool, type(None))) or (q.get("ordinal") is True and t != "choice"):
         return "'ordinal' is a boolean, on choice questions only"
     c = q.get("criteria")
     if t == "choice":

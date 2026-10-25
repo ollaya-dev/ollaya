@@ -369,25 +369,31 @@ fn question(id: &str, def: &Value, base: &[Loc], issues: &mut Issues) -> Option<
     };
     let cloc = at(&tloc, ["criteria".into()]);
     let criteria = q.get("criteria").filter(|c| !c.is_null());
-    let question = match tag {
-        "choice" => {
-            let ordinal = match q.get("ordinal") {
-                None | Some(Value::Null) => None,
-                Some(Value::Bool(b)) => Some(*b),
-                Some(_) => {
-                    let loc = at(&tloc, ["ordinal".into()]);
-                    issues.push(ValidationIssue::wrong_type(loc, "bool_type"));
-                    None
-                }
-            };
-            choice_criteria(criteria, &cloc, issues).map(|criteria| {
-                Question::Choice(ChoiceQuestion {
-                    instructions,
-                    criteria,
-                    ordinal,
-                })
-            })
+    let oloc = at(&tloc, ["ordinal".into()]);
+    let ordinal = match q.get("ordinal") {
+        None | Some(Value::Null) => None,
+        Some(Value::Bool(true)) if tag != "choice" => {
+            issues.push(ValidationIssue::new(
+                oloc,
+                "value_error",
+                "'ordinal' applies to choice questions only",
+            ));
+            None
         }
+        Some(Value::Bool(b)) => Some(*b),
+        Some(_) => {
+            issues.push(ValidationIssue::wrong_type(oloc, "bool_type"));
+            None
+        }
+    };
+    let question = match tag {
+        "choice" => choice_criteria(criteria, &cloc, issues).map(|criteria| {
+            Question::Choice(ChoiceQuestion {
+                instructions,
+                criteria,
+                ordinal,
+            })
+        }),
         "score" => score_criteria(criteria, &cloc, issues).map(|criteria| {
             Question::Score(ScoreQuestion {
                 instructions,
@@ -858,6 +864,37 @@ mod tests {
                 when_true: Some(json!("Ads")),
                 when_false: None
             })
+        );
+    }
+
+    #[test]
+    fn ordinal_is_a_choice_flag() {
+        let req = decide_request(obj(json!({
+            "model": "decima", "state": "s",
+            "questions": {"q": {"type": "choice", "ordinal": true, "criteria": ["lo", "hi"]}},
+        })))
+        .unwrap();
+        let Question::Choice(q) = &req.questions.unwrap()["q"] else {
+            panic!()
+        };
+        assert_eq!(q.ordinal, Some(true));
+        let err = decide_request(obj(json!({
+            "model": "decima", "state": "s",
+            "questions": {
+                "a": {"type": "choice", "ordinal": 1, "criteria": ["lo", "hi"]},
+                "b": {"type": "score", "ordinal": true, "criteria": ["lo", "hi"]},
+                "c": {"type": "noul", "ordinal": "yes"},
+                "d": {"type": "noul", "ordinal": false},
+            },
+        })))
+        .unwrap_err();
+        assert_eq!(
+            kinds(&err),
+            pairs(&[
+                ("questions.a.choice.ordinal", "bool_type"),
+                ("questions.b.score.ordinal", "value_error"),
+                ("questions.c.noul.ordinal", "bool_type"),
+            ])
         );
     }
 

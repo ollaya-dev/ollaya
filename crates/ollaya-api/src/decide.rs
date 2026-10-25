@@ -138,6 +138,13 @@ impl Question {
         if let Some(c) = criteria {
             obj.insert("criteria".into(), c);
         }
+        if let Question::Choice(ChoiceQuestion {
+            ordinal: Some(true),
+            ..
+        }) = self
+        {
+            obj.insert("ordinal".into(), Value::Bool(true));
+        }
         Value::Object(obj)
     }
 }
@@ -448,6 +455,18 @@ mod tests {
                 "true: Advertising"
             ]
         );
+    }
+
+    #[test]
+    fn ordinal_reaches_the_engine() {
+        let qs: Questions = serde_json::from_value(json!({
+            "severity": {"type": "choice", "ordinal": true, "criteria": ["low", "high"]},
+            "plain": {"type": "choice", "ordinal": false, "criteria": ["low", "high"]},
+        }))
+        .unwrap();
+        let parsed = ollaya_decision::parse_questions(&engine_questions(&qs)).unwrap();
+        assert!(parsed["severity"].ordinal);
+        assert!(!parsed["plain"].ordinal);
     }
 
     #[test]

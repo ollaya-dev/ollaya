@@ -83,8 +83,8 @@ FILES = ["LICENSE", "pytorch/decima.json", "pytorch/head.safetensors", "pytorch/
          "pytorch/encoder/model.safetensors", "pytorch/encoder/tokenizer.json", "pytorch/encoder/tokenizer_config.json"]
 # The release of decima-agent 2.3 and decima-guard (the annotated tag object 6e3d2b92 on this commit). Against v2.2.0
 # (efaefe2a), under decima/ only render.py's choice_texts changed (the token count alone decides whether an option's
-# full text fits; the 62-character shortcut is gone) and systemone.py's opt-in "ordinal" choice, which no request
-# here sends. v2.2.0's render.py was v2.1.0's (097d9eb3); the rest of what this reference runs gives v1.1.1's
+# full text fits; the 62-character shortcut is gone) and systemone.py's opt-in "ordinal" choice (`check.ordinal_cases`
+# sends it). v2.2.0's render.py was v2.1.0's (097d9eb3); the rest of what this reference runs gives v1.1.1's
 # (2df60942) rows and numbers, with which small, base and agent 2.1 were exported. system_one batches a request's
 # questions (Decima.decide_many), which upstream states gives the same numbers as one by one.
 CODE = {"repo": "https://github.com/amyrmahdy/decima", "tag": "v2.3.0",

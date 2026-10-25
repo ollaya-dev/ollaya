@@ -150,6 +150,15 @@ impl Model {
         // The daemon's engine form: a question without instructions reads its id in their place.
         let questions = parse_questions(&engine_questions(questions))
             .map_err(|e| fail(ErrorBody::new(ErrorCode::InvalidRequest, e.to_string())))?;
+        // The web runtime runs laya, which has no ordinal head (the runner's ordinal_unsupported).
+        if let Some((qid, _)) = questions.iter().find(|(_, q)| q.ordinal) {
+            return Err(fail(ErrorBody::new(
+                ErrorCode::InvalidRequest,
+                format!(
+                    "question {qid:?}: this model has no ordinal head; ask it without \"ordinal\""
+                ),
+            )));
+        }
         let state = req.state.clone().unwrap_or(Value::Null);
         let state_ids = self
             .layout
