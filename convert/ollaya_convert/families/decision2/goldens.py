@@ -107,7 +107,8 @@ def main():
     path = a.out or os.path.join(os.path.dirname(os.path.abspath(a.model_dir)),
                                  "goldens-%s.jsonl" % os.path.basename(os.path.abspath(a.model_dir)))
     n = 0
-    with open(path, "w", encoding="utf-8") as f:
+    # Written aside and moved into place at the end: a run that dies leaves no partial goldens to pass parity on.
+    with open(path + ".part", "w", encoding="utf-8") as f:
         for cid, state, questions in list(cases.all_cases(a.td_limit)) + EXTRA_CASES:
             try:
                 rec = record(d, lay, cid, state, questions)
@@ -128,6 +129,7 @@ def main():
             n += 1
             if n % 20 == 0:
                 print("%d records" % n, flush=True)
+    os.replace(path + ".part", path)
     print("wrote %d records to %s (%.1f MB)" % (n, path, os.path.getsize(path) / 2**20))
 
 
