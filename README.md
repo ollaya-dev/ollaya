@@ -7,9 +7,9 @@
 
 <h1 align="center">ollaya</h1>
 
-<p align="center"><strong>Run open decision models locally, the way Ollama runs LLMs.</strong></p>
+<p align="center"><strong>The decision layer for AI agents.</strong></p>
 
-<p align="center">System 1 for AI agents: fast, typed, calibrated decisions for routing, guardrails, triage and tool approval.</p>
+<p align="center">Ollaya runs open decision models on your own hardware, the way Ollama runs LLMs. Typed questions in, calibrated answers out, in milliseconds: routing, guardrails, triage and tool approval without an LLM call.</p>
 
 <p align="center">
   <a href="https://ollaya.dev">Website</a> ·
