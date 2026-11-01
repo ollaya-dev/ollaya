@@ -99,6 +99,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/api/version", get(version))
+        .route("/metrics", get(metrics))
         .route("/api/tags", get(tags))
         .route("/api/ps", get(ps))
         .route("/api/activity", get(activity))
@@ -297,6 +298,17 @@ async fn root() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         ollaya_api::RUNNING_MESSAGE,
+    )
+}
+
+async fn metrics(State(s): State<Arc<AppState>>) -> impl IntoResponse {
+    let body = s.ollaya.metrics.render(&s.ollaya.scheduler.running());
+    (
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
+        body,
     )
 }
 
@@ -614,6 +626,8 @@ async fn run_decision(
         error: out.as_ref().err().map(|e| error_body(e, false).code),
     };
     s.decisions.fetch_add(1, Ordering::Relaxed);
+    let code = entry.error.as_ref().map_or("OK", ErrorCode::as_str);
+    s.ollaya.metrics.decided(&entry.model, code);
     let mut log = s.activity.lock().expect("activity lock");
     if log.len() == ACTIVITY_LEN {
         log.pop_front();

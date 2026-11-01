@@ -32,6 +32,8 @@ pub struct Ollaya {
     /// Manifest files a create is writing ([`ModelName::stored`]). Lock order: `pulls`, then
     /// `creating`.
     creating: Mutex<HashSet<String>>,
+    /// What `GET /metrics` reports.
+    pub metrics: crate::metrics::Metrics,
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +115,7 @@ impl Ollaya {
             scheduler,
             pulls: Mutex::new(HashMap::new()),
             creating: Mutex::new(HashSet::new()),
+            metrics: crate::metrics::Metrics::default(),
         }))
     }
 
@@ -169,6 +172,8 @@ impl Ollaya {
             parse_questions(&questions_json).map_err(|e| Error::InvalidRequest(e.to_string()))?;
         check_limits(&questions)?;
 
+        let label = model.name.to_string();
+        let _in_flight = self.metrics.in_flight(&label);
         let (lease, load_duration) = self.scheduler.acquire(&model, input.keep_alive).await?;
         if input
             .cancel
@@ -178,16 +183,18 @@ impl Ollaya {
             return Err(Error::Cancelled);
         }
         let eval_started = Instant::now();
+        let forwarded = self.metrics.forwarded(&label);
         let raw = lease
             .decide(&input.state, &questions_json, &input.images)
             .await?;
-        drop(lease);
+        drop((forwarded, lease));
         let state_tokens = raw["state_tokens"].as_u64().unwrap_or(0) as usize;
         if state_tokens > ollaya_api::MAX_STATE_TOKENS {
             return Err(Error::InputTooLong(state_tokens));
         }
         let answers = answers_from(&model, &questions, &raw, state_tokens)?;
         let eval_duration = eval_started.elapsed();
+        self.metrics.timings(&label, load_duration, eval_duration);
         Ok(DecideOutput {
             requested: name.to_string(),
             model: model.name.to_string(),
