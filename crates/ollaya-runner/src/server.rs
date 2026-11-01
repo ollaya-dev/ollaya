@@ -112,6 +112,9 @@ struct DecideRequest {
     /// Base64 images, for vision models.
     #[serde(default)]
     images: Vec<String>,
+    /// Milliseconds the caller still waits; a request queued longer is dropped unanswered.
+    #[serde(default)]
+    timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -525,6 +528,22 @@ impl ModelThread {
         Ok(ModelThread { jobs })
     }
 
+    /// [`ModelThread::run`], unless `deadline` has passed by the time `f` would start: queued work
+    /// nobody waits for any more never costs a forward pass.
+    async fn run_before<T: Send + 'static>(
+        &self,
+        deadline: Option<std::time::Instant>,
+        f: impl FnOnce() -> Result<T, Error> + Send + 'static,
+    ) -> Result<T, Error> {
+        self.run(move || {
+            if deadline.is_some_and(|d| std::time::Instant::now() >= d) {
+                return Err(Error::DeadlineExceeded);
+            }
+            f()
+        })
+        .await?
+    }
+
     /// Run `f` on the model thread, after the calls queued before it. A panic in `f` comes back
     /// as an error, as it did from `spawn_blocking`, and the thread goes on to the next call.
     async fn run<T: Send + 'static>(
@@ -610,9 +629,12 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<Value> {
 
 async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) -> Response {
     let state = Arc::clone(&s);
+    let deadline = req
+        .timeout_ms
+        .map(|ms| std::time::Instant::now() + std::time::Duration::from_millis(ms));
     let result = s
         .thread
-        .run(move || -> Result<Value, Error> {
+        .run_before(deadline, move || -> Result<Value, Error> {
             if let Some(qid) = ordinal_unsupported(state.model.as_ref(), &req.questions) {
                 return Err(Error::Decision(ollaya_decision::Error::invalid(format!(
                     "question {qid:?}: this model has no ordinal head; ask it without \"ordinal\""
@@ -638,8 +660,7 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
                 "state_truncated": out.state_truncated,
             }))
         })
-        .await
-        .and_then(|r| r);
+        .await;
     match result {
         Ok(body) => Json(body).into_response(),
         Err(Error::Decision(ollaya_decision::Error::TooManyOptions { question, options, head_max_len })) => (
@@ -653,6 +674,7 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
             .into_response(),
         Err(Error::Decision(e)) => error(StatusCode::BAD_REQUEST, "INVALID_REQUEST", &e.to_string()),
         Err(Error::Image(e)) => error(StatusCode::BAD_REQUEST, "INVALID_IMAGE", &e.to_string()),
+        Err(Error::DeadlineExceeded) => error(StatusCode::GATEWAY_TIMEOUT, "DEADLINE_EXCEEDED", &Error::DeadlineExceeded.to_string()),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, "RUNNER_ERROR", &e.to_string()),
     }
 }
@@ -679,6 +701,37 @@ fn error(status: StatusCode, code: &str, message: &str) -> Response {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn work_queued_past_its_deadline_never_runs() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::{Duration, Instant};
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let thread = super::ModelThread::spawn().unwrap();
+            let ran = Arc::new(AtomicBool::new(false));
+            let flag = Arc::clone(&ran);
+            let busy = thread.run(|| std::thread::sleep(Duration::from_millis(200)));
+            let late = thread.run_before(
+                Some(Instant::now() + Duration::from_millis(50)),
+                move || {
+                    flag.store(true, Ordering::SeqCst);
+                    Ok(())
+                },
+            );
+            let waited_for =
+                thread.run_before(Some(Instant::now() + Duration::from_secs(10)), || Ok(7));
+            let (busy, late, waited_for) = tokio::join!(busy, late, waited_for);
+            busy.unwrap();
+            assert!(
+                matches!(late, Err(super::Error::DeadlineExceeded)),
+                "{late:?}"
+            );
+            assert!(!ran.load(Ordering::SeqCst), "the expired work never ran");
+            assert_eq!(waited_for.unwrap(), 7);
+        });
+    }
+
     #[test]
     fn projector_failure_drops_gpu_before_cpu_retry() {
         use std::cell::Cell;
@@ -969,6 +1022,7 @@ mod tests {
                     state: json!("s"),
                     questions: json!({"x": {"type": "noul", "instructions": "Is it?"}}),
                     images: Vec::new(),
+                    timeout_ms: None,
                 };
                 let response = decide(State(state.clone()), Json(request)).await;
                 assert_eq!(response.status(), axum::http::StatusCode::OK);

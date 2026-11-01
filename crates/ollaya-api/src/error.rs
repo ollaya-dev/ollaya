@@ -32,6 +32,7 @@ pub enum ErrorCode {
     OperationInProgress,
     RequestTooLarge,
     QueueFull,
+    DeadlineExceeded,
     ModelLoadFailed,
     InferenceFailed,
     StorageError,
@@ -46,7 +47,7 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Every code this version defines, in the order of the table in `docs/api.md` §4.2.
-    pub const ALL: [ErrorCode; 21] = [
+    pub const ALL: [ErrorCode; 22] = [
         ErrorCode::InvalidJson,
         ErrorCode::InvalidRequest,
         ErrorCode::TooManyOptions,
@@ -60,6 +61,7 @@ impl ErrorCode {
         ErrorCode::OperationInProgress,
         ErrorCode::RequestTooLarge,
         ErrorCode::QueueFull,
+        ErrorCode::DeadlineExceeded,
         ErrorCode::ModelLoadFailed,
         ErrorCode::InferenceFailed,
         ErrorCode::StorageError,
@@ -85,6 +87,7 @@ impl ErrorCode {
             ErrorCode::OperationInProgress => "OPERATION_IN_PROGRESS",
             ErrorCode::RequestTooLarge => "REQUEST_TOO_LARGE",
             ErrorCode::QueueFull => "QUEUE_FULL",
+            ErrorCode::DeadlineExceeded => "DEADLINE_EXCEEDED",
             ErrorCode::ModelLoadFailed => "MODEL_LOAD_FAILED",
             ErrorCode::InferenceFailed => "INFERENCE_FAILED",
             ErrorCode::StorageError => "STORAGE_ERROR",
@@ -126,6 +129,7 @@ impl ErrorCode {
             ErrorCode::UnsupportedModel | ErrorCode::NotImplemented => 501,
             ErrorCode::RegistryError | ErrorCode::DigestMismatch => 502,
             ErrorCode::QueueFull => 503,
+            ErrorCode::DeadlineExceeded => 504,
         }
     }
 
@@ -143,6 +147,7 @@ impl ErrorCode {
             501 => ErrorCode::NotImplemented,
             502 => ErrorCode::RegistryError,
             503 => ErrorCode::QueueFull,
+            504 => ErrorCode::DeadlineExceeded,
             _ => ErrorCode::Internal,
         }
     }
