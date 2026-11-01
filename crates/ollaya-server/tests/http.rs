@@ -661,6 +661,13 @@ async fn systemone_is_typesafe_shaped() {
     .await;
     assert_eq!(status, 200, "{body}");
     assert!(headers.contains_key("x-typesafe-request-id"));
+    let nanos = |name: &str| -> u64 { headers[name].to_str().unwrap().parse().unwrap() };
+    let (eval, load, total) = (
+        nanos("x-ollaya-eval-duration"),
+        nanos("x-ollaya-load-duration"),
+        nanos("x-ollaya-total-duration"),
+    );
+    assert!(eval > 0 && total >= eval + load, "{eval} {load} {total}");
     let keys: Vec<&String> = body.as_object().unwrap().keys().collect();
     assert_eq!(keys, ["model", "answers", "usage"]);
     assert_eq!(body["model"], "laya:en");

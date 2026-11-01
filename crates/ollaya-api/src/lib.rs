@@ -72,3 +72,9 @@ pub const NDJSON_CONTENT_TYPE: &str = "application/x-ndjson";
 pub const REQUEST_ID_HEADER: &str = "x-request-id";
 /// The same ID on `/v1/*` responses, where the TypeSafe SDK reads it.
 pub const TYPESAFE_REQUEST_ID_HEADER: &str = "x-typesafe-request-id";
+/// On `/v1/*` decision responses: nanoseconds in the runner, as the native `eval_duration`.
+pub const EVAL_DURATION_HEADER: &str = "x-ollaya-eval-duration";
+/// On `/v1/*` decision responses: nanoseconds spent waiting for the model to load.
+pub const LOAD_DURATION_HEADER: &str = "x-ollaya-load-duration";
+/// On `/v1/*` decision responses: nanoseconds from receiving the request to the response.
+pub const TOTAL_DURATION_HEADER: &str = "x-ollaya-total-duration";

@@ -706,7 +706,7 @@ async fn systemone(
     State(s): State<Arc<AppState>>,
     uri: Uri,
     body: Body,
-) -> ApiResult<Json<ollaya_api::SystemOneResponse>> {
+) -> ApiResult<(HeaderMap, Json<ollaya_api::SystemOneResponse>)> {
     let req = parse(body, validate::system_one_request).await?;
     names([("model", &req.model)])?;
     let _slot = slot(&s)?;
@@ -728,7 +728,19 @@ async fn systemone(
         return Err(ErrorBody::state_truncated(&out.model).into());
     }
     let resp = views::decide_response(out, false).map_err(|e| api_error(&e))?;
-    Ok(Json(resp.into_system_one()))
+    Ok((timing_headers(&resp), Json(resp.into_system_one())))
+}
+
+/// `/v1/*` bodies must stay TypeSafe's, so the native durations travel as headers.
+fn timing_headers(resp: &DecideResponse) -> HeaderMap {
+    [
+        (ollaya_api::EVAL_DURATION_HEADER, resp.eval_duration),
+        (ollaya_api::LOAD_DURATION_HEADER, resp.load_duration),
+        (ollaya_api::TOTAL_DURATION_HEADER, resp.total_duration),
+    ]
+    .into_iter()
+    .map(|(name, nanos)| (HeaderName::from_static(name), HeaderValue::from(nanos)))
+    .collect()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -852,7 +864,8 @@ fn admit(s: &AppState, req: &Request, origin: Option<&str>) -> ApiResult<Admit> 
 }
 
 const CORS_ALLOW_HEADERS: &str = "Authorization, Content-Type, Accept, User-Agent, X-Requested-With, X-Request-Id, X-TypeSafe-SDK, X-TypeSafe-Runtime, X-TypeSafe-Retry-Count";
-const CORS_EXPOSE_HEADERS: &str = "X-Request-Id, x-typesafe-request-id, Retry-After";
+const CORS_EXPOSE_HEADERS: &str = "X-Request-Id, x-typesafe-request-id, Retry-After, \
+    X-Ollaya-Eval-Duration, X-Ollaya-Load-Duration, X-Ollaya-Total-Duration";
 
 async fn guard(State(s): State<Arc<AppState>>, req: Request, next: Next) -> Response {
     let started = Instant::now();
