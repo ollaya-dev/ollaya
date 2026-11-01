@@ -54,6 +54,8 @@ pub struct AppState {
     activity: Mutex<VecDeque<Activity>>,
     /// Decision requests since the server started.
     decisions: AtomicU64,
+    /// `OLLAYA_PRELOAD` models are still loading: `GET /api/ready` answers 503.
+    preloading: AtomicBool,
 }
 
 impl AppState {
@@ -62,6 +64,7 @@ impl AppState {
         origins.extend(config.origins.iter().cloned());
         Arc::new(AppState {
             loopback: binds_loopback(&config),
+            preloading: AtomicBool::new(!config.preload.is_empty()),
             ollaya,
             config,
             origins,
@@ -99,6 +102,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/api/version", get(version))
+        .route("/api/ready", get(ready))
         .route("/api/tags", get(tags))
         .route("/api/ps", get(ps))
         .route("/api/activity", get(activity))
@@ -298,6 +302,32 @@ async fn root() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         ollaya_api::RUNNING_MESSAGE,
     )
+}
+
+/// Readiness, apart from liveness on `/`: the CLI reads `/` to find a running daemon.
+async fn ready(State(s): State<Arc<AppState>>) -> impl IntoResponse {
+    let (status, text) = if s.preloading.load(Ordering::Acquire) {
+        (StatusCode::SERVICE_UNAVAILABLE, "Ollaya is loading models")
+    } else {
+        (StatusCode::OK, "Ollaya is ready")
+    };
+    (
+        status,
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        text,
+    )
+}
+
+/// Load each `OLLAYA_PRELOAD` model to stay loaded, in order. A failure is logged and the model
+/// loads on its first request; readiness turns true once every model was tried.
+async fn preload(state: Arc<AppState>) {
+    for model in &state.config.preload {
+        match state.ollaya.preload(model, Some(KeepAlive::Forever)).await {
+            Ok(took) => tracing::info!(%model, ms = took.as_millis() as u64, "preloaded"),
+            Err(e) => tracing::error!(%model, error = %e, "preload failed"),
+        }
+    }
+    state.preloading.store(false, Ordering::Release);
 }
 
 async fn version() -> Json<VersionResponse> {
@@ -1036,6 +1066,9 @@ pub async fn serve_on(
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
     let scheduler = state.ollaya.scheduler.clone();
+    if !state.config.preload.is_empty() {
+        tokio::spawn(preload(state.clone()));
+    }
     let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
     let server = axum::serve(listeners.into(), router(state))
         .with_graceful_shutdown(async {
