@@ -9,7 +9,7 @@ import { benchGpu, result } from '../data/numbers'
 import stats from '../data/stats.json'
 import { asset, hasAsset } from '../lib/assets'
 import { benchUrl } from '../lib/bench'
-import { githubStars } from '../lib/stars'
+import { githubStarCount } from '../lib/stars'
 import { GITHUB_URL, LOCAL_API } from '../site'
 import { hero, heroOf, type HeroQuestion } from '../data/hero'
 import heroExamples from '../data/hero-examples.json'
@@ -37,11 +37,11 @@ const PUBLISHERS: { name: string; path?: string; png?: string }[] = [
 function Mark({ p }: { p: (typeof PUBLISHERS)[number] }) {
   if (p.path)
     return (
-      <svg viewBox="0 0 24 24" class="size-9 shrink-0" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 24 24" class="size-7 shrink-0" fill="currentColor" aria-hidden="true">
         <path d={p.path} />
       </svg>
     )
-  return <img src={asset(`logos/${p.png}.png`)} class="size-9 shrink-0 rounded-[4px] brightness-150 grayscale" alt="" width="36" height="36" loading="lazy" decoding="async" />
+  return <img src={asset(`logos/${p.png}.png`)} class="size-7 shrink-0 rounded-[4px] brightness-150 grayscale" alt="" width="28" height="28" loading="lazy" decoding="async" />
 }
 
 export const JEV = { acc: 0.738, text: '236–276 ms' }
@@ -147,7 +147,7 @@ function Install({ origin }: { origin: string }) {
       <span class="text-muted select-none" aria-hidden="true">
         $
       </span>
-      <pre class="whitespace-pre-wrap break-all">{INSTALL}</pre>
+      <pre class="whitespace-pre-wrap wrap-anywhere text-left">{INSTALL}</pre>
       <CopyButton class="rounded-md" />
     </div>
   )
@@ -166,7 +166,7 @@ function Hero({ origin }: { origin: string }) {
       <div class="frame relative px-5 pt-32 pb-16 text-center md:pt-40">
         <h1 id="rd-hero" class="mx-auto max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
           The decision layer <br class="hidden md:block" />
-          for AI agents.
+          for AI agents
         </h1>
         <p class="mx-auto mt-6 max-w-[38rem] text-lg leading-relaxed text-body md:text-xl">
           Ollaya runs open decision models on your own hardware. Typed questions in, calibrated answers out, in
@@ -282,9 +282,10 @@ function DecisionDemo() {
 }
 
 function Proof() {
-  const stars = githubStars()
+  // In full, like the strip's other figures; the header's star button keeps the short "1.4k".
+  const stars = githubStarCount()
   const items = [
-    [stars ?? '—', 'GitHub stars'],
+    [stars === undefined ? '—' : fmt(stars), 'GitHub stars'],
     [fmt(lastWeek.pulls), 'model pulls last week'],
     [String(catalog.length), 'open decision models'],
     ['3,880', 'human-labeled questions in the bench'],
@@ -301,16 +302,14 @@ function Proof() {
       </dl>
       <div class="rule grid items-center md:grid-cols-[10rem_minmax(0,1fr)]">
         <p class="px-6 pt-7 text-[15px] text-muted md:py-9">Models by</p>
-        <div class="marquee py-7 md:py-9" aria-label={PUBLISHERS.map((p) => p.name).join(', ')}>
-          <div class="marquee-track" aria-hidden="true">
-            {[...PUBLISHERS, ...PUBLISHERS].map((p) => (
-              <span class="inline-flex shrink-0 items-center gap-3.5 text-[22px] font-medium whitespace-nowrap text-body">
-                <Mark p={p} />
-                {p.name}
-              </span>
-            ))}
-          </div>
-        </div>
+        <ul class="flex flex-wrap items-center gap-x-10 gap-y-5 px-6 py-7 md:py-9" role="list">
+          {PUBLISHERS.map((p) => (
+            <li class="inline-flex items-center gap-3 text-lg font-medium whitespace-nowrap text-body">
+              <Mark p={p} />
+              {p.name}
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   )
@@ -320,7 +319,7 @@ function Title({ kicker, children, lead }: { kicker: string; children: Child; le
   return (
     <div class="rule px-6 py-14 md:px-10 md:py-20">
       <div class="max-w-3xl">
-        <p class="text-[13px] tracking-[0.14em] text-muted uppercase">{kicker}</p>
+        <p class="text-sm text-muted">{kicker}</p>
         <h2 class={`mt-3 ${h2}`}>{children}</h2>
         {lead ? <p class="mt-5 max-w-2xl text-base text-body md:text-lg">{lead}</p> : null}
       </div>
@@ -330,17 +329,14 @@ function Title({ kicker, children, lead }: { kicker: string; children: Child; le
 
 const why = [
   {
-    icon: 'adjustments' as const,
     title: 'Calibrated, not generated',
     text: 'Every option of every question gets a probability you can put a threshold on. No parsing, no hallucinated labels.',
   },
   {
-    icon: 'computer' as const,
     title: 'One forward pass',
     text: `No token-by-token generation: ${result('laya:en', 'gpu.p50_ms', 0)} ms for five questions with laya:en on a GPU, and small models run well on a CPU.`,
   },
   {
-    icon: 'banknotes' as const,
     title: 'Yours, for free',
     text: 'Weights from their authors, pinned by sha256. Your tickets and messages never leave the machine, and there is no per-token bill.',
   },
@@ -350,13 +346,12 @@ function Why() {
   return (
     <section class="frame" aria-labelledby="rd-why">
       <Title kicker="Why decision models" lead="A decision model answers typed questions about a text or a JSON: a choice, a score, a yes or no. It is the fast, reliable half of an agent.">
-        <span id="rd-why">System 1 for your agents.</span>
+        <span id="rd-why">System 1 for your agents</span>
       </Title>
       <ul class="rule grid gap-px bg-line md:grid-cols-3" role="list">
         {why.map((w) => (
           <li class="bg-canvas p-8">
-            <Icon name={w.icon} class="size-6 text-fg" />
-            <h3 class="mt-5 text-lg font-semibold text-fg">{w.title}</h3>
+            <h3 class="text-lg font-semibold text-fg">{w.title}</h3>
             <p class="mt-2 text-[15px] text-body">{w.text}</p>
           </li>
         ))}
@@ -520,7 +515,7 @@ function Compare() {
         kicker="Measured"
         lead={`${OLLAMA}'s nine decision models and Ollaya's, on the same ${benchGpu} and Bespoke Labs' 3,880 human-labeled questions. Ollaya runs the most accurate model and more of them, with each author's temperature. On the same weights Ollama is ${speedup()} times faster: it runs Q8_0 GGUFs where Ollaya computes the authors' BF16 weights.`}
       >
-        <span id="rd-compare">Against Ollama and hosted Jev.</span>
+        <span id="rd-compare">Against Ollama and hosted Jev</span>
       </Title>
       <div class="rule">
         <table class="block w-full border-collapse text-[15px] md:table md:table-fixed">
@@ -594,7 +589,7 @@ function Api() {
   return (
     <section class="frame" aria-labelledby="rd-api">
       <Title kicker="Drop-in" lead="Ollaya serves TypeSafe's request and response shapes. Point the official SDK at localhost and nothing else changes.">
-        <span id="rd-api">Jev-compatible, self-hosted.</span>
+        <span id="rd-api">Jev-compatible, self-hosted</span>
       </Title>
       <div class="rule grid gap-px bg-line xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         {[
@@ -642,7 +637,7 @@ function Models() {
   return (
     <section class="frame" aria-labelledby="rd-models">
       <Title kicker="Open models" lead={`${catalog.length} families from their authors, pulled by name. Every number here is from Ollaya Bench on an ${benchGpu}.`}>
-        <span id="rd-models">Open weights, ready to pull.</span>
+        <span id="rd-models">Open weights, ready to pull</span>
       </Title>
       <ul class="rule grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-3" role="list">
         {top.map((m) => (
@@ -670,7 +665,7 @@ function Closer({ origin }: { origin: string }) {
       <div class="frame rule relative px-5 py-28 text-center">
         <LogoMark class="mx-auto size-14 text-fg" />
         <h2 id="rd-closer" class={`mt-6 ${h2} md:text-6xl`}>
-          Up and running in a minute.
+          Up and running in a minute
         </h2>
         <p class="mx-auto mt-5 max-w-md text-body">macOS, Windows, Linux and Docker. CPU, NVIDIA and Apple GPUs.</p>
         <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -756,7 +751,7 @@ function PlatformsSection() {
   return (
     <section class="frame" aria-labelledby="platforms">
       <Title kicker="Platforms" lead="A desktop app and a command line for macOS, Windows and Linux, and a Docker image for servers. Every model runs on the CPU; an NVIDIA GPU on Linux, Windows, WSL 2 or Docker takes a request down to milliseconds.">
-        <span id="platforms">Runs where you work.</span>
+        <span id="platforms">Runs where you work</span>
       </Title>
       <div class="rule">
         <table class="block w-full border-collapse md:table md:table-fixed">
