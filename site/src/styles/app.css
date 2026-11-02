@@ -58,10 +58,22 @@
     scroll-padding-top: 5rem;
     overflow-x: clip;
   }
+  /* Safari on iOS 26 and later fills the strip behind the status bar with the body's background
+     colour, flat: no page can draw its fields or grain there. So the body carries the canvas as
+     the grain makes it look (#1a1a1a, measured on a phone), and the canvas itself is a layer
+     under the content. */
   body {
-    background-color: var(--color-canvas);
+    isolation: isolate;
+    background-color: #1a1a1a;
     color: var(--color-body);
     overflow-x: clip;
+  }
+  body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--color-canvas);
   }
   :focus-visible {
     outline: 2px solid var(--color-fg);

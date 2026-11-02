@@ -76,7 +76,7 @@ export function Layout({ origin, path, meta, children }: LayoutProps) {
           </>
         ) : null}
       </head>
-      <body class="relative flex min-h-screen flex-col bg-canvas font-sans text-body antialiased">
+      <body class="relative flex min-h-screen flex-col font-sans text-body antialiased">
         <div class="grain" aria-hidden="true"></div>
         <a
           href="#main"
