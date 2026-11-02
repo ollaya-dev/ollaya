@@ -158,7 +158,7 @@ export function BenchLayout({
         <link rel="stylesheet" href={asset('app.css')} />
         <script src={asset('bench.js')} defer></script>
       </head>
-      <body class="flex min-h-screen flex-col bg-canvas font-sans text-body antialiased">
+      <body class="relative flex min-h-screen flex-col bg-canvas font-sans text-body antialiased">
         <div class="grain" aria-hidden="true"></div>
         <a
           href="#main"

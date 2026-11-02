@@ -390,16 +390,17 @@
 /* A panel: a surface with a hairline, blurred over whatever colour sits behind it. */
 .panel { background: rgb(255 255 255 / 0.03); border: 1px solid var(--color-line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 .panel-strong { background: rgb(12 12 12 / 0.78); }
-/* The grain: an SVG noise tile over everything, blended so it only breaks up the flat colour. */
-.grain { position: fixed; top: -20vh; right: 0; bottom: -20vh; left: 0; z-index: 50; pointer-events: none; opacity: 0.14;
+/* The grain: an SVG noise tile over the whole page (the body is its box), blended so it only
+   breaks up the flat colour. It scrolls with the page rather than staying fixed: Safari on iOS 26
+   and later draws the page under its floating toolbar but not fixed layers, which left a flat
+   black band at the foot of the screen. */
+.grain { position: absolute; inset: 0; z-index: 50; pointer-events: none; opacity: 0.14;
   /* A noise tile rendered at 256px and shown at 128px: on a 3x phone the grain is still fine
      (no pixelated upscale, which read as mud), on a 1x screen it is a touch softer. Plain
      overlay, no blend mode: over a near-black canvas it looks the same and costs the compositor
-     nothing per frame. It overshoots the viewport so a phone's address bar can slide without
-     uncovering it. */
+     nothing per frame. */
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 128px 128px; }
-@supports (height: 100dvh) { .grain { top: 0; bottom: 0; height: 120dvh; } }
 /* Blurred colour fields behind the hero and the closer: what the panels blur. */
 .field { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .field i { position: absolute; display: block; border-radius: 9999px; filter: blur(110px); opacity: 0.6; }
