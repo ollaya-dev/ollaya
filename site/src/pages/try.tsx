@@ -247,7 +247,7 @@ export function TryPage() {
       </div>
 
       <section class="rule mt-16 px-6 py-14 md:px-10 md:py-20" aria-labelledby="use-title">
-        <h2 id="use-title" class="text-[13px] tracking-[0.14em] text-muted uppercase">
+        <h2 id="use-title" class="text-sm text-muted">
           Use it in your app
         </h2>
         <p class="mt-3 max-w-2xl text-3xl leading-[1.05] font-semibold tracking-[-0.03em] text-fg md:text-4xl">

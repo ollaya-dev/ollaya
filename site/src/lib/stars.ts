@@ -5,6 +5,11 @@ export function setGithubStars(n: number | undefined): void {
   stars = n
 }
 
+/** The exact count, for places that print it in full; undefined when the build could not read it. */
+export function githubStarCount(): number | undefined {
+  return stars
+}
+
 /** "495", "1.2k", "12k"; undefined when the build could not read the count. */
 export function githubStars(): string | undefined {
   if (stars === undefined) return undefined

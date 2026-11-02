@@ -11,7 +11,7 @@ export const btnSecondary =
 export function PageHead({ title, lead, children, kicker }: { title: Child; lead?: Child; children?: Child; kicker?: string }) {
   return (
     <header class="rule px-6 py-12 md:px-10 md:py-16">
-      {kicker ? <p class="text-[13px] tracking-[0.14em] text-muted uppercase">{kicker}</p> : null}
+      {kicker ? <p class="text-sm text-muted">{kicker}</p> : null}
       <h1 class={`max-w-3xl text-4xl font-semibold leading-[1.05] tracking-[-0.03em] text-fg md:text-5xl ${kicker ? 'mt-3' : ''}`}>{title}</h1>
       {lead ? <p class="mt-5 max-w-2xl text-lg text-body">{lead}</p> : null}
       {children}

@@ -78,7 +78,7 @@ function deviceTone(s: DeviceSeries): Tone {
 function Section({ id, title, lead, body, children }: { id: string; title: string; lead: string; body?: Child; children: Child }) {
   return (
     <section id={id} aria-labelledby={`${id}-title`} class="scroll-mt-24" data-section>
-      <p class="text-[13px] tracking-[0.14em] text-muted uppercase">{title}</p>
+      <p class="text-sm text-muted">{title}</p>
       <h2 id={`${id}-title`} class="mt-3 max-w-3xl text-3xl leading-[1.05] font-semibold tracking-[-0.03em] text-fg md:text-4xl">
         {lead}
       </h2>
