@@ -1,6 +1,7 @@
 // Ollaya site — small progressive enhancements. No dependencies.
 // Every page works without this file; it adds search filtering, the navbar typeahead,
-// tabs, copy buttons, relative dates, the mobile menu scroll lock and the home page rail.
+// tabs, copy buttons, relative dates, the mobile menu scroll lock, the home page rail and its
+// looping demo.
 ;(() => {
   'use strict'
 
@@ -341,4 +342,45 @@
       if (section) observer.observe(section)
     })
   }
+
+  // --- Looping demos: play the one on screen, pause it off screen -----------------------------
+  // Each video ships with only its poster (the finished frame), so without this file the still
+  // shows. Under reduced motion it starts paused; the button pauses and plays it either way.
+  $$('[data-loops]').forEach((fig) => {
+    const videos = $$('video[data-loop]', fig)
+    // One button per cut, each on its own video; they share one state
+    const toggles = $$('[data-loops-toggle]', fig)
+    if (!videos.length || !toggles.length || !('IntersectionObserver' in window)) return
+    let paused = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let onScreen = false
+    const sync = () => {
+      // Only the cut the layout shows ever loads: the other stays display:none and preload="none"
+      videos.forEach((v) => {
+        if (!paused && onScreen && isVisible(v)) v.play().catch(() => {})
+        else v.pause()
+      })
+      toggles.forEach((toggle) => {
+        $('[data-when="playing"]', toggle).hidden = paused
+        $('[data-when="paused"]', toggle).hidden = !paused
+        $('[data-loops-label]', toggle).textContent = paused ? 'Play the animation' : 'Pause the animation'
+      })
+    }
+    new IntersectionObserver((entries) => {
+      onScreen = entries[entries.length - 1].isIntersecting
+      sync()
+    }).observe(fig)
+    // A cut that the layout shows or hides changes size, so this follows the breakpoint
+    if ('ResizeObserver' in window) {
+      const sizes = new ResizeObserver(sync)
+      videos.forEach((v) => sizes.observe(v))
+    }
+    toggles.forEach((toggle) => {
+      toggle.addEventListener('click', () => {
+        paused = !paused
+        sync()
+      })
+      toggle.hidden = false
+    })
+    sync()
+  })
 })()

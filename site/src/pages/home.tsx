@@ -163,7 +163,7 @@ function Hero({ origin }: { origin: string }) {
         <i class="b"></i>
         <i class="c"></i>
       </div>
-      <div class="frame relative px-5 pt-32 pb-16 text-center md:pt-40">
+      <div class="frame relative px-5 pt-32 text-center md:pt-40">
         <h1 id="rd-hero" class="mx-auto max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-[-0.04em] text-fg md:text-7xl">
           The decision layer <br class="hidden md:block" />
           for AI agents
@@ -178,15 +178,13 @@ function Hero({ origin }: { origin: string }) {
             {hasAsset('try.js') ? 'Try it in the browser' : 'Download'} <Icon name="arrowRight" class="size-4" />
           </a>
         </div>
-        <div class="mx-auto mt-16 max-w-4xl text-left">
-          <DecisionDemo />
-        </div>
+        <InboxTriage />
       </div>
     </section>
   )
 }
 
-// The hero's example: the real recording in hero.json (a message, the triage preset, the model's
+// The recorded examples: the real recording in hero.json (a message, the triage preset, the model's
 // answers) shown as the request reads to a person: the message, then each question in the preset's
 // own words with the answer the model gave and how sure it was.
 const QUESTION_TEXT: Record<string, string> = Object.fromEntries(
@@ -262,7 +260,7 @@ function ExamplePanel({ ex, hidden }: { ex: Recording; hidden: boolean }) {
 
 function DecisionDemo() {
   return (
-    <figure class="panel panel-strong overflow-hidden rounded-lg" style="--fold-at:3.4s" data-ui data-demo>
+    <figure class="overflow-hidden" style="--fold-at:3.4s" data-ui data-demo>
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3 text-[13px] text-muted">
         <span>{examples.length} recorded examples, the same model and preset.</span>
         <span class="flex gap-2">
@@ -315,15 +313,105 @@ function Proof() {
   )
 }
 
-function Title({ kicker, children, lead }: { kicker: string; children: Child; lead?: Child }) {
-  return (
-    <div class="rule px-6 py-14 md:px-10 md:py-20">
-      <div class="max-w-3xl">
-        <p class="text-sm text-muted">{kicker}</p>
-        <h2 class={`mt-3 ${h2}`}>{children}</h2>
-        {lead ? <p class="mt-5 max-w-2xl text-base text-body md:text-lg">{lead}</p> : null}
-      </div>
+function Title({ kicker, children, lead, aside }: { kicker: string; children: Child; lead?: Child; aside?: Child }) {
+  const text = (
+    <div class="max-w-3xl">
+      <p class="text-sm text-muted">{kicker}</p>
+      <h2 class={`mt-3 ${h2}`}>{children}</h2>
+      {lead ? <p class="mt-5 max-w-2xl text-base text-body md:text-lg">{lead}</p> : null}
     </div>
+  )
+  if (!aside) return <div class="rule px-6 py-14 md:px-10 md:py-20">{text}</div>
+  // The aside takes the right column on a wide screen and goes under the text below it
+  return (
+    <div class="rule grid lg:grid-cols-[minmax(0,1fr)_calc(34rem+1px)]">
+      <div class="px-6 pt-14 pb-6 md:px-10 md:pt-20 lg:self-center lg:pb-20">{text}</div>
+      {aside}
+    </div>
+  )
+}
+
+// A recorded Stageshow loop (the scenes live in Cobanov's stageshow skill,
+// examples/ollaya-*): two cuts, one for wide screens and one designed for a
+// phone, each with its finished frame as the poster. app.js plays the cut on
+// screen unless the reader asked for less motion; without it the poster shows.
+// `pause` is where the cut's pause button centres, in the scene's own pixels
+// (the middle of a title bar, the content's right inset), so it stays on
+// that spot however the video is scaled.
+type Cut = { name: string; width: number; height: number; class: string; pause: [y: number, right: number] }
+
+const pct = (n: number, of: number) => `${((n / of) * 100).toFixed(3)}%`
+
+function Loop({ cuts, caption, class: cls }: { cuts: Cut[]; caption: string; class: string }) {
+  return (
+    <figure class={`relative ${cls}`} data-loops>
+      {cuts.map((c) => (
+        <div class={`relative w-full ${c.class}`}>
+          <video
+            class="block h-auto w-full"
+            width={c.width}
+            height={c.height}
+            poster={asset(`${c.name}.webp`)}
+            muted
+            loop
+            playsinline
+            preload="none"
+            data-loop
+            aria-hidden="true"
+          >
+            <source src={asset(`${c.name}.mp4`)} type="video/mp4" />
+          </video>
+          <button
+            type="button"
+            class="absolute grid size-6 -translate-y-1/2 place-items-center rounded-md border border-line bg-canvas/80 text-muted transition-colors hover:text-fg focus-visible:text-fg"
+            style={`top:${pct(c.pause[0], c.height)};right:${pct(c.pause[1], c.width)}`}
+            data-loops-toggle
+            hidden
+          >
+            <span data-when="playing"><Icon name="pause" class="size-3.5" /></span>
+            <span data-when="paused" hidden><Icon name="play" class="size-3.5" /></span>
+            <span class="sr-only" data-loops-label>Pause the animation</span>
+          </button>
+        </div>
+      ))}
+      <figcaption class="sr-only">{caption}</figcaption>
+    </figure>
+  )
+}
+
+// An agent asked to fix a failing test reaches for `rm -rf tests/`; Ollaya
+// blocks it, then lets the test run. Real laya:en output on an Apple M4 Pro.
+// The pause button sits on the terminal's 38px title bar, which starts 44px
+// down in the wide cut and 20px down in the phone cut.
+function AgentGuard() {
+  return (
+    <Loop
+      class="flex items-end justify-end lg:border-l lg:border-line"
+      cuts={[
+        { name: 'agent-guard-compact', width: 390, height: 352, class: 'block max-w-[27rem] min-[34rem]:hidden', pause: [39, 16] },
+        { name: 'agent-guard', width: 544, height: 400, class: 'hidden max-w-[34rem] min-[34rem]:block', pause: [63, 16] },
+      ]}
+      caption="An AI agent asked to fix a failing login test tries to run rm -rf tests/. Ollaya answers block, 0.93, in 69 ms, and the command doesn't run. The agent edits the code instead, and Ollaya lets npm test run: run, 0.92, in 64 ms. 12 tests pass."
+    />
+  )
+}
+
+// The hero's product shot: a support inbox where Ollaya triages each message
+// as it lands, with the recordings in hero-examples.json (winnow:e4b, the
+// triage preset). The video is the window itself, edge to edge; the page
+// rounds it, draws its hairline and fades its foot into the colour field.
+// The pause button sits on the window's 38px title bar, its right edge on the
+// list's 16px inset.
+function InboxTriage() {
+  return (
+    <Loop
+      class="mx-auto mt-16 max-w-[22rem] overflow-hidden rounded-t-xl border border-b-0 border-line [mask-image:linear-gradient(#000_80%,transparent)] md:max-w-[calc(56rem+2px)] md:[mask-image:linear-gradient(#000_72%,transparent)]"
+      cuts={[
+        { name: 'inbox-triage-compact', width: 350, height: 350, class: 'block md:hidden', pause: [19, 16] },
+        { name: 'inbox-triage', width: 896, height: 540, class: 'hidden md:block', pause: [19, 16] },
+      ]}
+      caption="A support inbox where Ollaya triages each message as it lands, in under a second. Dana asks for a refund after a double charge: refund, urgent, very angry, churn risk, sent to Refunds. Marco asks about SSO and invoices: a calm billing question, sent to Billing. Priya reports failing exports: technical help, urgent, sent to Technical. Sam asks where data is hosted: information, sent to General. Lena cancels her subscription: cancellation, urgent, churn risk, sent to Retention. Tom says thanks for the new dashboard: other, sent to Feedback. Each ticket shows its five answers with their probabilities."
+    />
   )
 }
 
@@ -342,10 +430,25 @@ const why = [
   },
 ]
 
+// The hero's panel of recorded examples, moved under "System 1" when the hero
+// got its inbox loop: the same recordings, with every option one click away
+function Examples() {
+  return (
+    <section class="frame" aria-labelledby="rd-examples">
+      <Title kicker="Recorded examples" lead={`The triage preset asks ${examples[0]!.model} five questions about each support message. These are its real answers, with every option's probability one click away.`}>
+        <span id="rd-examples">One message, five answers</span>
+      </Title>
+      <div class="rule text-left">
+        <DecisionDemo />
+      </div>
+    </section>
+  )
+}
+
 function Why() {
   return (
     <section class="frame" aria-labelledby="rd-why">
-      <Title kicker="Why decision models" lead="A decision model answers typed questions about a text or a JSON: a choice, a score, a yes or no. It is the fast, reliable half of an agent.">
+      <Title kicker="Why decision models" lead="A decision model answers typed questions about a text or a JSON: a choice, a score, a yes or no. It is the fast, reliable half of an agent." aside={<AgentGuard />}>
         <span id="rd-why">System 1 for your agents</span>
       </Title>
       <ul class="rule grid gap-px bg-line md:grid-cols-3" role="list">
@@ -801,6 +904,7 @@ export function HomePage({ origin }: { origin: string }) {
       <Hero origin={origin} />
       <Proof />
       <Why />
+      <Examples />
       <Compare />
       <Api />
       <Models />
