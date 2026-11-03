@@ -1349,7 +1349,7 @@ the model that answers (a router's target).
 | `ollaya_requests_queued{model}` | gauge | Of those, the ones waiting: for a load, a slot, or the forward pass running ahead of them. A runner computes one pass at a time, so this is in-flight minus one while a pass runs |
 | `ollaya_model_loaded{model, device}` | gauge | `1` for each loaded model |
 | `ollaya_model_memory_bytes{model}` | gauge | Size of each loaded model, as `/api/ps` reports it |
-| `ollaya_decisions_total{model, code}` | counter | Decision requests that reached a model, by [error code](#42-error-codes), `OK` for an answer. A failed request counts under the model asked for. |
+| `ollaya_decisions_total{model, code}` | counter | Decision requests by [error code](#42-error-codes), `OK` for an answer. A failed request counts under the installed model it named, or under `model=""` when no installed model has that name, so request names cannot add series. |
 | `ollaya_eval_duration_seconds{model}` | histogram | Time in the runner per answered decision (`eval_duration`) |
 | `ollaya_load_duration_seconds{model}` | histogram | Time an answered decision waited for its model to load (`load_duration`); `0` when it was warm |
 

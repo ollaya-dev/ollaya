@@ -617,6 +617,10 @@ async fn run_decision(
         .await
         .map_err(|e| Error::Runner(format!("decision task failed: {e}")))
         .and_then(|r| r);
+    let label = match &out {
+        Ok(o) => o.model.clone(),
+        Err(_) => installed(&s.ollaya.store, &asked).unwrap_or_default(),
+    };
     let entry = Activity {
         at: chrono::Utc::now(),
         endpoint: endpoint.to_owned(),
@@ -627,13 +631,24 @@ async fn run_decision(
     };
     s.decisions.fetch_add(1, Ordering::Relaxed);
     let code = entry.error.as_ref().map_or("OK", ErrorCode::as_str);
-    s.ollaya.metrics.decided(&entry.model, code);
+    s.ollaya.metrics.decided(&label, code);
     let mut log = s.activity.lock().expect("activity lock");
     if log.len() == ACTIVITY_LEN {
         log.pop_front();
     }
     log.push_back(entry);
     out
+}
+
+/// The canonical name of the installed model `asked` names, if any: the metrics label of a failed
+/// decision, so the names clients make up all count under one series.
+fn installed(store: &Store, asked: &str) -> Option<String> {
+    let name = ModelName::parse(asked).ok()?;
+    store
+        .read_manifest(&name)
+        .ok()
+        .flatten()
+        .map(|_| name.to_string())
 }
 
 /// The `type` of question `id` in a request, for `TOO_MANY_OPTIONS` locations.

@@ -699,14 +699,20 @@ async fn metrics_show_queue_depth_decisions_and_timings() {
         ))
         .await
         .unwrap();
-    let _ = d
-        .client
-        .decide(&DecideRequest::new("nope", json!("hi"), None))
-        .await;
+    for unknown in ["nope", "nope-too"] {
+        let _ = d
+            .client
+            .decide(&DecideRequest::new(unknown, json!("hi"), None))
+            .await;
+    }
     let text = metrics().await;
+    assert!(
+        !text.contains("nope"),
+        "a made-up name became a series:\n{text}"
+    );
     for line in [
         "ollaya_decisions_total{model=\"laya:en\",code=\"OK\"} 1",
-        "ollaya_decisions_total{model=\"nope\",code=\"MODEL_NOT_FOUND\"} 1",
+        "ollaya_decisions_total{model=\"\",code=\"MODEL_NOT_FOUND\"} 2",
         "ollaya_eval_duration_seconds_count{model=\"laya:en\"} 1",
         "ollaya_model_loaded{model=\"laya:en\",device=\"cpu\"} 1",
         "ollaya_requests_queued{model=\"slow:latest\"} 0",
