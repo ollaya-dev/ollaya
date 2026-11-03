@@ -871,9 +871,9 @@ fn admit(s: &AppState, req: &Request, origin: Option<&str>) -> ApiResult<Admit> 
         return Ok(Admit::Preflight);
     }
     if let Some(key) = &s.config.api_key {
-        let liveness =
-            req.uri().path() == "/" && matches!(*req.method(), Method::GET | Method::HEAD);
-        if !liveness && !bearer_ok(req.headers(), key) {
+        let probe = matches!(req.uri().path(), "/" | "/api/ready")
+            && matches!(*req.method(), Method::GET | Method::HEAD);
+        if !probe && !bearer_ok(req.headers(), key) {
             return Err(ApiError::from(ErrorBody::unauthorized())
                 .with_header(header::WWW_AUTHENTICATE, "Bearer"));
         }

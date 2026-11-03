@@ -899,6 +899,16 @@ async fn auth_origin_and_host() {
     .await;
     // Liveness needs no key.
     assert_eq!(http().get(d.url("/")).send().await.unwrap().status(), 200);
+    assert_eq!(
+        http()
+            .get(d.url("/api/ready"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200,
+        "a health check reads readiness without the key"
+    );
     let r = http().get(d.url("/api/tags")).send().await.unwrap();
     assert_eq!(r.status(), 401);
     assert_eq!(r.headers()["www-authenticate"], "Bearer");
