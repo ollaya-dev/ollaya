@@ -107,67 +107,75 @@ impl Metrics {
             .or_default() += 1;
     }
 
+    /// Each metric family as one group: its `# HELP` and `# TYPE`, then its samples.
     pub fn render(&self, running: &[RunningInfo]) -> String {
         let s = self.0.lock().unwrap();
         let mut out = String::new();
-        let mut family = |name: &str, kind: &str, help: &str| {
-            let _ = writeln!(out, "# HELP {name} {help}\n# TYPE {name} {kind}");
-        };
         family(
+            &mut out,
             "ollaya_requests_in_flight",
             "gauge",
             "Decision requests waiting or running, by model.",
         );
+        for (model, n) in &s.in_flight {
+            let _ = writeln!(
+                out,
+                "ollaya_requests_in_flight{{model=\"{}\"}} {n}",
+                label(model)
+            );
+        }
         family(
+            &mut out,
             "ollaya_requests_queued",
             "gauge",
             "Decision requests waiting: for a load, a slot, or the runner's current forward pass.",
         );
-        family(
-            "ollaya_model_loaded",
-            "gauge",
-            "1 for each loaded model, with the device it runs on.",
-        );
-        family(
-            "ollaya_model_memory_bytes",
-            "gauge",
-            "Size of each loaded model.",
-        );
-        family(
-            "ollaya_decisions_total",
-            "counter",
-            "Answered decision requests by model and error code (OK for an answer).",
-        );
-        let mut lines = String::new();
         for (model, n) in &s.in_flight {
             let running = u64::from(s.forwarded.get(model).is_some_and(|f| *f > 0));
             let _ = writeln!(
-                lines,
-                "ollaya_requests_in_flight{{model=\"{}\"}} {n}",
-                label(model)
-            );
-            let _ = writeln!(
-                lines,
+                out,
                 "ollaya_requests_queued{{model=\"{}\"}} {}",
                 label(model),
                 n.saturating_sub(running)
             );
         }
+        family(
+            &mut out,
+            "ollaya_model_loaded",
+            "gauge",
+            "1 for each loaded model, with the device it runs on.",
+        );
         for r in running {
-            let (model, device) = (label(&r.name), label(&r.device));
             let _ = writeln!(
-                lines,
-                "ollaya_model_loaded{{model=\"{model}\",device=\"{device}\"}} 1"
+                out,
+                "ollaya_model_loaded{{model=\"{}\",device=\"{}\"}} 1",
+                label(&r.name),
+                label(&r.device)
             );
+        }
+        family(
+            &mut out,
+            "ollaya_model_memory_bytes",
+            "gauge",
+            "Size of each loaded model.",
+        );
+        for r in running {
             let _ = writeln!(
-                lines,
-                "ollaya_model_memory_bytes{{model=\"{model}\"}} {}",
+                out,
+                "ollaya_model_memory_bytes{{model=\"{}\"}} {}",
+                label(&r.name),
                 r.size
             );
         }
+        family(
+            &mut out,
+            "ollaya_decisions_total",
+            "counter",
+            "Decision requests by model and error code (OK for an answer).",
+        );
         for ((model, code), n) in &s.decisions {
             let _ = writeln!(
-                lines,
+                out,
                 "ollaya_decisions_total{{model=\"{}\",code=\"{}\"}} {n}",
                 label(model),
                 label(code)
@@ -185,26 +193,30 @@ impl Metrics {
                 &s.load,
             ),
         ] {
-            family(name, "histogram", help);
+            family(&mut out, name, "histogram", help);
             for (model, h) in series {
                 let model = label(model);
                 for (count, bound) in h.counts.iter().zip(BUCKETS) {
                     let _ = writeln!(
-                        lines,
+                        out,
                         "{name}_bucket{{model=\"{model}\",le=\"{bound}\"}} {count}"
                     );
                 }
                 let _ = writeln!(
-                    lines,
+                    out,
                     "{name}_bucket{{model=\"{model}\",le=\"+Inf\"}} {}",
                     h.count
                 );
-                let _ = writeln!(lines, "{name}_sum{{model=\"{model}\"}} {}", h.sum);
-                let _ = writeln!(lines, "{name}_count{{model=\"{model}\"}} {}", h.count);
+                let _ = writeln!(out, "{name}_sum{{model=\"{model}\"}} {}", h.sum);
+                let _ = writeln!(out, "{name}_count{{model=\"{model}\"}} {}", h.count);
             }
         }
-        out + &lines
+        out
     }
+}
+
+fn family(out: &mut String, name: &str, kind: &str, help: &str) {
+    let _ = writeln!(out, "# HELP {name} {help}\n# TYPE {name} {kind}");
 }
 
 /// A label value, escaped as the text format requires.
@@ -251,5 +263,41 @@ mod tests {
             m.render(&[])
                 .contains("ollaya_requests_queued{model=\"m:1\"} 3")
         );
+    }
+
+    #[test]
+    fn each_family_is_one_group() {
+        let m = Metrics::default();
+        let (_a, _b) = (m.in_flight("a:1"), m.in_flight("b:1"));
+        m.timings("a:1", Duration::ZERO, Duration::from_millis(5));
+        m.decided("a:1", "OK");
+        let running = [RunningInfo {
+            name: "a:1".into(),
+            digest: String::new(),
+            device: "cpu".into(),
+            precision: String::new(),
+            size: 1,
+            loaded_at: std::time::UNIX_EPOCH,
+            expires_at: None,
+        }];
+        let mut seen = Vec::new();
+        let mut current = "";
+        let text = m.render(&running);
+        for line in text.lines() {
+            if let Some(name) = line.strip_prefix("# TYPE ") {
+                current = name.split(' ').next().unwrap();
+                assert!(!seen.contains(&current), "{current} split in two");
+                seen.push(current);
+            } else if !line.starts_with('#') {
+                let sample = line.split('{').next().unwrap();
+                let family = ["_bucket", "_sum", "_count"]
+                    .iter()
+                    .find_map(|s| sample.strip_suffix(s))
+                    .filter(|f| f.ends_with("_seconds"))
+                    .unwrap_or(sample);
+                assert_eq!(family, current, "{line} outside its family");
+            }
+        }
+        assert_eq!(seen.len(), 7);
     }
 }
