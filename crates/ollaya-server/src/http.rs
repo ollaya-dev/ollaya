@@ -321,6 +321,15 @@ async fn ready(State(s): State<Arc<AppState>>) -> impl IntoResponse {
 /// Load each `OLLAYA_PRELOAD` model to stay loaded, in order. A failure is logged and the model
 /// loads on its first request; readiness turns true once every model was tried.
 async fn preload(state: Arc<AppState>) {
+    let (listed, max) = (state.config.preload.len(), state.config.max_loaded);
+    if listed > max {
+        tracing::warn!(
+            listed,
+            max,
+            "OLLAYA_PRELOAD lists more models than OLLAYA_MAX_LOADED_MODELS: each load evicts the \
+             oldest idle model, so not all of them stay loaded"
+        );
+    }
     for model in &state.config.preload {
         match state.ollaya.pin(model).await {
             Ok(took) => tracing::info!(%model, ms = took.as_millis() as u64, "preloaded"),
