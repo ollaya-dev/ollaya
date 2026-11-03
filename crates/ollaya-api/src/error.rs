@@ -147,7 +147,6 @@ impl ErrorCode {
             501 => ErrorCode::NotImplemented,
             502 => ErrorCode::RegistryError,
             503 => ErrorCode::QueueFull,
-            504 => ErrorCode::DeadlineExceeded,
             _ => ErrorCode::Internal,
         }
     }
@@ -797,6 +796,12 @@ mod tests {
         assert_eq!(ErrorCode::QueueFull.status(), 503);
         assert_eq!(ErrorCode::InvalidRequest.status(), 422);
         assert_eq!(ErrorCode::InvalidJson.status(), 400);
+    }
+
+    #[test]
+    fn a_bare_504_is_not_a_deadline() {
+        assert_eq!(ErrorCode::DeadlineExceeded.status(), 504);
+        assert_eq!(ErrorCode::from_status(504), ErrorCode::Internal);
     }
 
     #[test]
