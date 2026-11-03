@@ -693,6 +693,11 @@ async fn preload_loads_models_before_ready() {
         .await
         .unwrap();
     assert_eq!(r.load_duration, 0, "warm right after ready");
+    let kept = d.client.ps().await.unwrap();
+    assert_eq!(
+        kept.models[0].expires_at, None,
+        "a request without keep_alive leaves a preloaded model loaded: {kept:?}"
+    );
     d.stop().await;
 }
 

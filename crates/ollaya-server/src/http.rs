@@ -322,7 +322,7 @@ async fn ready(State(s): State<Arc<AppState>>) -> impl IntoResponse {
 /// loads on its first request; readiness turns true once every model was tried.
 async fn preload(state: Arc<AppState>) {
     for model in &state.config.preload {
-        match state.ollaya.preload(model, Some(KeepAlive::Forever)).await {
+        match state.ollaya.pin(model).await {
             Ok(took) => tracing::info!(%model, ms = took.as_millis() as u64, "preloaded"),
             Err(e) => tracing::error!(%model, error = %e, "preload failed"),
         }
