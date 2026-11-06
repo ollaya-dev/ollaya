@@ -1356,7 +1356,10 @@ Rules for `/v1/*`:
 - Errors: the [error body](#41-error-body). `extract_message` shows `error`, and `422` carries
   TypeSafe's `detail` list. A decision that would drop part of `state` returns
   `422 STATE_TRUNCATED`.
-- Headers: `x-typesafe-request-id` on every response.
+- Headers: `x-typesafe-request-id` on every response. A decision's `200` also carries the native
+  durations of [`POST /api/decide`](#73-post-apidecide) as integer nanoseconds, since the body cannot:
+  `X-Ollaya-Eval-Duration` (`eval_duration`), `X-Ollaya-Load-Duration` (`load_duration`) and
+  `X-Ollaya-Total-Duration` (`total_duration`).
 
 ### 8.1 `POST /v1/systemone`
 
@@ -1699,7 +1702,8 @@ Therefore:
   - Allowed request headers: `Authorization`, `Content-Type`, `Accept`, `User-Agent`,
     `X-Requested-With`, `X-Request-Id`, `X-TypeSafe-SDK`, `X-TypeSafe-Runtime` and
     `X-TypeSafe-Retry-Count`.
-  - Exposed headers: `X-Request-Id`, `x-typesafe-request-id` and `Retry-After`.
+  - Exposed headers: `X-Request-Id`, `x-typesafe-request-id`, `Retry-After`,
+    `X-Ollaya-Eval-Duration`, `X-Ollaya-Load-Duration` and `X-Ollaya-Total-Duration`.
 - **Host check.** When bound to a loopback address, the server rejects a `Host` header that is not
   one of these (`403 FORBIDDEN`):
   - empty;
