@@ -210,6 +210,20 @@ impl Ollaya {
         model: &str,
         keep_alive: Option<KeepAlive>,
     ) -> Result<Duration, Error> {
+        self.load(model, keep_alive, false).await
+    }
+
+    /// Load a model for `OLLAYA_PRELOAD`: it stays loaded whatever later requests leave unsaid.
+    pub async fn pin(&self, model: &str) -> Result<Duration, Error> {
+        self.load(model, Some(KeepAlive::Forever), true).await
+    }
+
+    async fn load(
+        &self,
+        model: &str,
+        keep_alive: Option<KeepAlive>,
+        pin: bool,
+    ) -> Result<Duration, Error> {
         let name = ModelName::parse(model)?;
         let targets: Vec<Box<Loadable>> = match resolve(&self.store, &name)? {
             Resolved::Model(m) => vec![m],
@@ -229,6 +243,9 @@ impl Ollaya {
                 self.scheduler.unload(&m.digest).await;
             } else {
                 let (lease, took) = self.scheduler.acquire(&m, keep_alive).await?;
+                if pin {
+                    lease.pin();
+                }
                 drop(lease);
                 loading += took;
             }

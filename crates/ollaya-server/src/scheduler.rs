@@ -8,7 +8,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -132,6 +132,8 @@ pub struct Runner {
     /// When an idle runner may be unloaded; `None` while leased or when kept forever.
     expires: Mutex<Option<Instant>>,
     keep_forever: Mutex<bool>,
+    /// Loaded by `OLLAYA_PRELOAD`: a request without its own `keep_alive` leaves it loaded.
+    pinned: AtomicBool,
     last_used: Mutex<Instant>,
 }
 
@@ -194,6 +196,14 @@ impl Runner {
     async fn kill(&self) {
         let mut child = self.child.lock().await;
         let _ = child.kill().await;
+    }
+}
+
+impl Runner {
+    /// Keep this runner loaded until it is unloaded explicitly or evicted to make room.
+    pub fn pin(&self) {
+        self.pinned.store(true, Ordering::SeqCst);
+        *self.keep_forever.lock().unwrap() = true;
     }
 }
 
@@ -281,12 +291,18 @@ impl Scheduler {
         model: &Loadable,
         keep_alive: Option<KeepAlive>,
     ) -> Result<(Lease, Duration), Error> {
-        let keep_alive = keep_alive.unwrap_or(self.config.keep_alive);
+        let keep_alive = |r: &Runner| {
+            keep_alive.unwrap_or(if r.pinned.load(Ordering::SeqCst) {
+                KeepAlive::Forever
+            } else {
+                self.config.keep_alive
+            })
+        };
         if let Some(r) = self.lease_existing(&model.digest) {
             return Ok((
                 Lease {
+                    keep_alive: keep_alive(&r),
                     runner: r,
-                    keep_alive,
                 },
                 Duration::ZERO,
             ));
@@ -295,8 +311,8 @@ impl Scheduler {
         if let Some(r) = self.lease_existing(&model.digest) {
             return Ok((
                 Lease {
+                    keep_alive: keep_alive(&r),
                     runner: r,
-                    keep_alive,
                 },
                 Duration::ZERO,
             ));
@@ -312,7 +328,13 @@ impl Scheduler {
         tracing::info!(model = %model.name, device = %runner.device, precision = %runner.precision,
             engine = %runner.engine, threads = self.config.threads,
             load_ms = started.elapsed().as_millis() as u64, "loaded model");
-        Ok((Lease { runner, keep_alive }, started.elapsed()))
+        Ok((
+            Lease {
+                keep_alive: keep_alive(&runner),
+                runner,
+            },
+            started.elapsed(),
+        ))
     }
 
     fn lease_existing(&self, digest: &str) -> Option<Arc<Runner>> {
@@ -623,6 +645,7 @@ impl Scheduler {
             leases: AtomicUsize::new(0),
             expires: Mutex::new(None),
             keep_forever: Mutex::new(false),
+            pinned: AtomicBool::new(false),
             last_used: Mutex::new(Instant::now()),
         })
     }

@@ -39,6 +39,7 @@ through the matching type in `ollaya-api`, and request examples pass boundary va
 |---|---|---|---|
 | `GET`, `HEAD` | `/` | Liveness: `Ollaya is running` | no |
 | `GET` | `/api/version` | Server version | no |
+| `GET` | `/api/ready` | Readiness: `503` while `OLLAYA_PRELOAD` models load, then `200` | no |
 | `POST` | `/api/decide` | Answer typed questions about a state; also load and unload a model | no |
 | `GET` | `/api/tags` | Models on this machine | no |
 | `POST` | `/api/show` | One model's details | no |
@@ -1674,8 +1675,9 @@ can:
 
 Therefore:
 
-- **`OLLAYA_API_KEY`.** When set, every request except `GET /`, `HEAD /` and CORS preflight
-  (`OPTIONS`) must carry `Authorization: Bearer <key>`. Otherwise the response is
+- **`OLLAYA_API_KEY`.** When set, every request except `GET /`, `HEAD /`, `GET /api/ready`,
+  `HEAD /api/ready` and CORS preflight (`OPTIONS`) must carry `Authorization: Bearer <key>`.
+  Otherwise the response is
   `401 UNAUTHORIZED` with `WWW-Authenticate: Bearer`. The key is compared in constant time. The
   TypeSafe SDK already sends `Bearer $TYPESAFE_API_KEY`, and the `ollaya` CLI and `ollaya-api`
   client send `$OLLAYA_API_KEY`. This keeps the protection laya-app has today (`LAYA_TOKEN`) for
@@ -1745,6 +1747,7 @@ These are the variables that change API behaviour.
 | `HF_TOKEN` | unset | Used when `OLLAYA_HF_TOKEN` is unset, so a token already set for Python tools works. Sent only to `huggingface.co` itself, never to a mirror (`OLLAYA_HF_ENDPOINT`), so a token shared with other tools is not handed to a third party. |
 | `OLLAYA_LOG` | `info` | Log levels, a [tracing filter](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html): `debug` logs every request with its status and duration |
 | `OLLAYA_LOG_DIR` | unset | Log to `<dir>/server.log` instead of stderr (created if missing; appended, never rotated) |
+| `OLLAYA_PRELOAD` | unset | Models to load with `keep_alive: -1` right after start, in order, comma-separated (`laya:en,laya:multilingual`), so a restarted daemon is warm without a request. Until every one was tried, `GET /api/ready` answers `503` `Ollaya is loading models`; then `200` `Ollaya is ready`. A preloaded model stays loaded: a request without its own `keep_alive` does not start its unload clock, while an explicit `keep_alive`, `ollaya stop`, or room for another model at `OLLAYA_MAX_LOADED_MODELS` still unloads it; listing more models than that limit logs a warning at start. A model that fails to load is logged and loads on its first request instead. `GET /` stays the liveness check throughout, since the CLI uses it to find a running daemon. `GET /api/ready` needs no API key, so a load balancer's health check can read it. An invalid name stops the daemon at start. |
 
 The daemon reads these at startup. The packaged systemd service and the desktop app start `ollaya serve` with their own environment, so set them in the service's `Environment=` lines (or the app's launcher) rather than your shell.
 

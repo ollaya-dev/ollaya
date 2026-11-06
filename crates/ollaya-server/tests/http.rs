@@ -649,6 +649,58 @@ async fn decide_routes_answers_and_unloads() {
     d.stop().await;
 }
 
+async fn preload_loads_models_before_ready() {
+    let ready = |d: &Daemon| {
+        let url = d.url("/api/ready");
+        async move { http().get(url).send().await.unwrap().status().as_u16() }
+    };
+    let plain = Daemon::laya().await;
+    assert_eq!(
+        ready(&plain).await,
+        200,
+        "nothing to preload: ready at once"
+    );
+    plain.stop().await;
+
+    let d = Daemon::start(
+        |dir| {
+            let store = Store::open(dir).unwrap();
+            add_model(&store, "slow:latest", &["en"], json!({"load_ms": 500}));
+        },
+        |c| c.preload = vec!["slow".into(), "nope:missing".into()],
+    )
+    .await;
+    let mut statuses = vec![ready(&d).await];
+    while statuses.last() != Some(&200) && statuses.len() < 300 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        statuses.push(ready(&d).await);
+    }
+    assert_eq!(statuses.first(), Some(&503), "{statuses:?}");
+    assert_eq!(
+        statuses.last(),
+        Some(&200),
+        "a failed preload does not block readiness"
+    );
+    let loaded = d.client.ps().await.unwrap();
+    assert_eq!(loaded.models.len(), 1, "{loaded:?}");
+    let r = d
+        .client
+        .decide(&DecideRequest::new(
+            "slow",
+            json!("Refund me, please."),
+            Some(serde_json::from_value(triage()).unwrap()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(r.load_duration, 0, "warm right after ready");
+    let kept = d.client.ps().await.unwrap();
+    assert_eq!(
+        kept.models[0].expires_at, None,
+        "a request without keep_alive leaves a preloaded model loaded: {kept:?}"
+    );
+    d.stop().await;
+}
+
 async fn systemone_is_typesafe_shaped() {
     let d = Daemon::laya().await;
     let (status, headers, body) = post_raw(
@@ -854,6 +906,16 @@ async fn auth_origin_and_host() {
     .await;
     // Liveness needs no key.
     assert_eq!(http().get(d.url("/")).send().await.unwrap().status(), 200);
+    assert_eq!(
+        http()
+            .get(d.url("/api/ready"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200,
+        "a health check reads readiness without the key"
+    );
     let r = http().get(d.url("/api/tags")).send().await.unwrap();
     assert_eq!(r.status(), 401);
     assert_eq!(r.headers()["www-authenticate"], "Bearer");
@@ -1727,6 +1789,7 @@ fn main() {
         unknown_models_are_404_with_ollama_text,
         tags_show_ps_and_v1_models,
         decide_routes_answers_and_unloads,
+        preload_loads_models_before_ready,
         systemone_is_typesafe_shaped,
         systemone_rejects_truncated_state,
         model_specific_errors,

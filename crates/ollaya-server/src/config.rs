@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use ollaya_api::KeepAlive;
 use ollaya_api::host::{Host, InvalidHost};
+use ollaya_registry::ModelName;
 
 /// The version `/api/version` reports: the release build's, else the crate's.
 pub const VERSION: &str = match option_env!("OLLAYA_BUILD_VERSION") {
@@ -37,6 +38,8 @@ pub struct ServerConfig {
     pub origins: Vec<String>,
     /// `OLLAYA_LOG_DIR`: when set, the daemon logs to `<dir>/server.log` instead of stderr.
     pub log_dir: Option<PathBuf>,
+    /// `OLLAYA_PRELOAD`: models to load with `keep_alive: -1` right after start, in order.
+    pub preload: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -99,6 +102,24 @@ impl ServerConfig {
         let count = |name: &'static str, default: usize| -> Result<usize, ConfigError> {
             Ok(positive(name)?.unwrap_or(default))
         };
+        let list = |name: &str| -> Vec<String> {
+            var(name)
+                .map(|v| {
+                    v.split(',')
+                        .map(|item| item.trim().to_owned())
+                        .filter(|item| !item.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let preload = list("OLLAYA_PRELOAD");
+        if let Some(bad) = preload.iter().find(|m| ModelName::parse(m).is_err()) {
+            return Err(invalid(
+                "OLLAYA_PRELOAD",
+                bad,
+                "expected model names separated by commas".into(),
+            ));
+        }
         let host = Host::parse(&var("OLLAYA_HOST").unwrap_or_default())?;
         let models = var("OLLAYA_MODELS")
             .map(PathBuf::from)
@@ -149,15 +170,9 @@ impl ServerConfig {
             device,
             threads: positive("OLLAYA_THREADS")?,
             api_key: var("OLLAYA_API_KEY"),
-            origins: var("OLLAYA_ORIGINS")
-                .map(|v| {
-                    v.split(',')
-                        .map(|o| o.trim().to_owned())
-                        .filter(|o| !o.is_empty())
-                        .collect()
-                })
-                .unwrap_or_default(),
+            origins: list("OLLAYA_ORIGINS"),
             log_dir: var("OLLAYA_LOG_DIR").map(PathBuf::from),
+            preload,
         })
     }
 }
@@ -187,6 +202,14 @@ mod tests {
         assert_eq!(c.threads, None);
         assert!(c.api_key.is_none() && c.origins.is_empty());
         assert!(c.log_dir.is_none());
+        assert!(c.preload.is_empty());
+    }
+
+    #[test]
+    fn preload_is_a_list_of_model_names() {
+        let c = with(&[("OLLAYA_PRELOAD", " laya:en , laya:multilingual,")]).unwrap();
+        assert_eq!(c.preload, ["laya:en", "laya:multilingual"]);
+        assert!(with(&[("OLLAYA_PRELOAD", "laya:en,Not A Name!")]).is_err());
     }
 
     #[test]
