@@ -42,7 +42,7 @@ The TypeSafe SDK retries `429` and `503` after `Retry-After`, and `5xx` answers,
 
 ## Deadlines
 
-Send `X-Ollaya-Timeout-Ms: <milliseconds>` with a decision to say how long you will wait. Ollaya Cloud refuses at once (`503 QUEUE_FULL`) a request it could not answer in time, and cuts each attempt to the time left, instead of answering after you have given up.
+Send `X-Ollaya-Timeout-Ms: <milliseconds>` with a decision to say how long you will wait. Ollaya Cloud refuses at once (`503 QUEUE_FULL`) a request it could not answer in time, and cuts each attempt to that many milliseconds, instead of answering after you have given up.
 
 ## Tags
 
