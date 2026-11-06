@@ -39,6 +39,26 @@
       "install_ps1": 122,
       "stars": 1382,
       "release_downloads": 14452
+    },
+    {
+      "end": "2026-10-30",
+      "pulls": 5160,
+      "pulls_by_model": {
+        "laya": 2887,
+        "winnow": 656,
+        "kev": 360,
+        "decima": 249,
+        "gliclass": 160,
+        "nli": 159,
+        "decider": 158,
+        "pplx-decider": 96,
+        "d3": 53,
+        "d1": 51
+      },
+      "install_sh": 346,
+      "install_ps1": 178,
+      "stars": 1420,
+      "release_downloads": 15901
     }
   ]
 }
