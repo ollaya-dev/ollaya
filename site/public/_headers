@@ -6,14 +6,14 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://oa-c.cobanov.run; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://oa-c.cobanov.run; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://oa-c.cobanov.run https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://oa-c.cobanov.run; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 # /try runs a model in the page (src/pages/try.tsx): WebAssembly needs 'wasm-unsafe-eval', the model's files come
 # from Hugging Face (huggingface.co redirects LFS and Xet downloads to its CDN hosts), and cross-origin isolation
 # (COOP + COEP) gives onnxruntime-web SharedArrayBuffer for its threads.
 /try
   ! Content-Security-Policy
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://oa-c.cobanov.run; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://oa-c.cobanov.run https://huggingface.co https://*.huggingface.co https://*.hf.co; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://oa-c.cobanov.run https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://oa-c.cobanov.run https://huggingface.co https://*.huggingface.co https://*.hf.co; worker-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
 
