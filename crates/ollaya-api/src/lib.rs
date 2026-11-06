@@ -78,3 +78,6 @@ pub const EVAL_DURATION_HEADER: &str = "x-ollaya-eval-duration";
 pub const LOAD_DURATION_HEADER: &str = "x-ollaya-load-duration";
 /// On `/v1/*` decision responses: nanoseconds from receiving the request to the response.
 pub const TOTAL_DURATION_HEADER: &str = "x-ollaya-total-duration";
+/// On decision requests: milliseconds the client will wait. Work still queued when they have
+/// passed is dropped with `504 DEADLINE_EXCEEDED` instead of running.
+pub const TIMEOUT_HEADER: &str = "x-ollaya-timeout-ms";

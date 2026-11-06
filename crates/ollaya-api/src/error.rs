@@ -32,6 +32,7 @@ pub enum ErrorCode {
     OperationInProgress,
     RequestTooLarge,
     QueueFull,
+    DeadlineExceeded,
     ModelLoadFailed,
     InferenceFailed,
     StorageError,
@@ -46,7 +47,7 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Every code this version defines, in the order of the table in `docs/api.md` §4.2.
-    pub const ALL: [ErrorCode; 21] = [
+    pub const ALL: [ErrorCode; 22] = [
         ErrorCode::InvalidJson,
         ErrorCode::InvalidRequest,
         ErrorCode::TooManyOptions,
@@ -60,6 +61,7 @@ impl ErrorCode {
         ErrorCode::OperationInProgress,
         ErrorCode::RequestTooLarge,
         ErrorCode::QueueFull,
+        ErrorCode::DeadlineExceeded,
         ErrorCode::ModelLoadFailed,
         ErrorCode::InferenceFailed,
         ErrorCode::StorageError,
@@ -85,6 +87,7 @@ impl ErrorCode {
             ErrorCode::OperationInProgress => "OPERATION_IN_PROGRESS",
             ErrorCode::RequestTooLarge => "REQUEST_TOO_LARGE",
             ErrorCode::QueueFull => "QUEUE_FULL",
+            ErrorCode::DeadlineExceeded => "DEADLINE_EXCEEDED",
             ErrorCode::ModelLoadFailed => "MODEL_LOAD_FAILED",
             ErrorCode::InferenceFailed => "INFERENCE_FAILED",
             ErrorCode::StorageError => "STORAGE_ERROR",
@@ -126,6 +129,7 @@ impl ErrorCode {
             ErrorCode::UnsupportedModel | ErrorCode::NotImplemented => 501,
             ErrorCode::RegistryError | ErrorCode::DigestMismatch => 502,
             ErrorCode::QueueFull => 503,
+            ErrorCode::DeadlineExceeded => 504,
         }
     }
 
@@ -792,6 +796,12 @@ mod tests {
         assert_eq!(ErrorCode::QueueFull.status(), 503);
         assert_eq!(ErrorCode::InvalidRequest.status(), 422);
         assert_eq!(ErrorCode::InvalidJson.status(), 400);
+    }
+
+    #[test]
+    fn a_bare_504_is_not_a_deadline() {
+        assert_eq!(ErrorCode::DeadlineExceeded.status(), 504);
+        assert_eq!(ErrorCode::from_status(504), ErrorCode::Internal);
     }
 
     #[test]

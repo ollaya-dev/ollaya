@@ -46,6 +46,9 @@ pub enum Error {
     /// The client went away before the decision ran.
     #[error("request cancelled")]
     Cancelled,
+    /// The client's `X-Ollaya-Timeout-Ms` passed before the model could run the decision.
+    #[error("the request's deadline passed before the model could answer it")]
+    DeadlineExceeded,
     #[error("corrupt model: {0}")]
     Corrupt(String),
     /// No built-in or custom preset has this name.
