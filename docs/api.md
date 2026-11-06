@@ -44,6 +44,7 @@ through the matching type in `ollaya-api`, and request examples pass boundary va
 | `POST` | `/api/show` | One model's details | no |
 | `GET` | `/api/ps` | Models loaded in memory | no |
 | `GET` | `/api/activity` | The latest decision requests | no |
+| `GET` | `/metrics` | Prometheus metrics: queue depth, loaded models, decisions, timings | no |
 | `POST` | `/api/pull` | Download a model from a registry | yes (default) |
 | `DELETE` | `/api/delete` | Remove a local model | no |
 | `POST` | `/api/copy` | Copy a local model to a new name | no |
@@ -1334,6 +1335,29 @@ curl http://localhost:11435/api/activity
 ```
 
 Safe to retry.
+
+### 7.14 `GET /metrics`
+
+Metrics in the Prometheus text format (`text/plain; version=0.0.4`), for a scraper or a load
+balancer that routes by queue depth. Always on, and behind `OLLAYA_API_KEY` like every route but
+`/`. Counters and histograms start at zero when the server starts. `model` is the canonical name of
+the model that answers (a router's target).
+
+| Series | Type | Meaning |
+|---|---|---|
+| `ollaya_requests_in_flight{model}` | gauge | Decision requests past model resolution and not yet answered: waiting or running |
+| `ollaya_requests_queued{model}` | gauge | Of those, the ones waiting: for a load, a slot, or the forward pass running ahead of them. A runner computes one pass at a time, so this is in-flight minus one while a pass runs |
+| `ollaya_model_loaded{model, device}` | gauge | `1` for each loaded model |
+| `ollaya_model_memory_bytes{model}` | gauge | Size of each loaded model, as `/api/ps` reports it |
+| `ollaya_decisions_total{model, code}` | counter | Decision requests by [error code](#42-error-codes), `OK` for an answer. A failed request counts under the installed model it named, or under `model=""` when no installed model has that name, so request names cannot add series. |
+| `ollaya_eval_duration_seconds{model}` | histogram | Time in the runner per answered decision (`eval_duration`) |
+| `ollaya_load_duration_seconds{model}` | histogram | Time an answered decision waited for its model to load (`load_duration`); `0` when it was warm |
+
+Buckets: 5 ms to 120 s. No request body. Safe to retry.
+
+```shell
+curl -H "Authorization: Bearer $OLLAYA_API_KEY" http://localhost:11435/metrics
+```
 
 ---
 

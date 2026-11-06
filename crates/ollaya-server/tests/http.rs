@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Duration;
 
-use ollaya_api::{Client, ClientError, DecideRequest, ErrorCode, KeepAlive, PullRequest};
+use ollaya_api::{
+    Client, ClientError, DecideRequest, ErrorCode, KeepAlive, PullRequest, Questions,
+};
 use ollaya_registry::manifest::{
     ANNOTATION_GRAPH, ANNOTATION_PRECISION, Descriptor, MANIFEST_V2, Manifest, media,
 };
@@ -646,6 +648,80 @@ async fn decide_routes_answers_and_unloads() {
     let r = d.client.load("laya:en", None).await.unwrap();
     assert_eq!(r.done_reason, ollaya_api::DoneReason::Load);
     assert!(r.load_duration > 0 && r.answers.is_empty());
+    d.stop().await;
+}
+
+async fn metrics_show_queue_depth_decisions_and_timings() {
+    let d = Daemon::start(
+        |dir| {
+            laya_store(dir);
+            let store = Store::open(dir).unwrap();
+            add_model(&store, "slow:latest", &["en"], json!({"load_ms": 600}));
+        },
+        |_| {},
+    )
+    .await;
+    let metrics = || {
+        let url = d.url("/metrics");
+        async move { http().get(url).send().await.unwrap().text().await.unwrap() }
+    };
+    let questions: Questions = serde_json::from_value(triage()).unwrap();
+    let slow = {
+        let (client, questions) = (d.client.clone(), questions.clone());
+        tokio::spawn(async move {
+            client
+                .decide(&DecideRequest::new(
+                    "slow",
+                    json!("Refund me."),
+                    Some(questions),
+                ))
+                .await
+        })
+    };
+    let mut seen = String::new();
+    for _ in 0..40 {
+        seen = metrics().await;
+        if seen.contains("ollaya_requests_queued{model=\"slow:latest\"} 1") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        seen.contains("ollaya_requests_queued{model=\"slow:latest\"} 1"),
+        "waiting for its load counts as queued:\n{seen}"
+    );
+    slow.await.unwrap().unwrap();
+    d.client
+        .decide(&DecideRequest::new(
+            "laya:en",
+            json!("Refund me."),
+            Some(questions),
+        ))
+        .await
+        .unwrap();
+    for unknown in ["nope", "nope-too"] {
+        let _ = d
+            .client
+            .decide(&DecideRequest::new(unknown, json!("hi"), None))
+            .await;
+    }
+    let text = metrics().await;
+    assert!(
+        !text.contains("nope"),
+        "a made-up name became a series:\n{text}"
+    );
+    for line in [
+        "ollaya_decisions_total{model=\"laya:en\",code=\"OK\"} 1",
+        "ollaya_decisions_total{model=\"\",code=\"MODEL_NOT_FOUND\"} 2",
+        "ollaya_eval_duration_seconds_count{model=\"laya:en\"} 1",
+        "ollaya_model_loaded{model=\"laya:en\",device=\"cpu\"} 1",
+        "ollaya_requests_queued{model=\"slow:latest\"} 0",
+    ] {
+        assert!(
+            text.lines().any(|l| l == line),
+            "missing {line:?} in\n{text}"
+        );
+    }
     d.stop().await;
 }
 
@@ -1727,6 +1803,7 @@ fn main() {
         unknown_models_are_404_with_ollama_text,
         tags_show_ps_and_v1_models,
         decide_routes_answers_and_unloads,
+        metrics_show_queue_depth_decisions_and_timings,
         systemone_is_typesafe_shaped,
         systemone_rejects_truncated_state,
         model_specific_errors,

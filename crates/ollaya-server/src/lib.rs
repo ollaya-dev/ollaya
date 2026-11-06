@@ -3,6 +3,7 @@
 pub mod config;
 pub mod http;
 pub mod launch;
+pub mod metrics;
 pub mod models;
 pub mod presets;
 pub mod scheduler;
