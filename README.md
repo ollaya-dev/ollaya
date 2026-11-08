@@ -200,6 +200,10 @@ Configuration is through environment variables: `OLLAYA_HOST`, `OLLAYA_MODELS`,
 `OLLAYA_KEEP_ALIVE`, `OLLAYA_DEVICE`, `OLLAYA_API_KEY` and others, listed in
 [docs/api.md §15](docs/api.md).
 
+## One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/Ollaya/)
+
 ## Repository
 
 | Path | What |
