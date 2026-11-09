@@ -138,6 +138,29 @@ The special-token ids come from `decision.json.special_tokens` (`state`, `questi
 - **Precision.** Opset 20; fp32 compute on the BF16 base weights, widened at load (0.8b) or per forward pass
   (4b, 9b; `weights_in_memory`).
 
+### Fork form
+
+Every row of a request starts with the same state, so a graph in the fork form (`contract.form` `"fork"` in
+`decision.json`) computes that shared start once and continues it into each question
+([ADR 0010](../decisions/0010-state-forking.md); `Qwen35Trunk.fork` in `llm_common/qwen35.py`,
+`crates/ollaya-runner/src/fork.rs`). Row `b` is `prefix_ids[branch_job[b]] ++ branch_ids[b]`:
+
+| Tensor | dtype | shape | meaning |
+|---|---|---|---|
+| `prefix_ids` | int64 | `[jobs, prefix]` | shared row starts; **`prefix` a multiple of 64** |
+| `branch_ids` | int64 | `[rows, seq]` | the rest of each row; **`seq` a multiple of 64**; right-pad with any id |
+| `branch_job` | int64 | `[rows]` | the prefix each row continues |
+| `decide_pos`, `opt_pos`, `scores` | | | as above; positions count from the start of the row |
+
+- **Same numbers.** A branch starts from its prefix's Gated DeltaNet state and conv window and attends to its
+  prefix's keys. The prefix is a whole number of 64-token chunks, so every chunk of the recurrence is the row
+  form's: in eager fp32 the hidden states are bit-identical, and the goldens are unchanged.
+- **The split.** Rows that share 64 tokens or more fork at their longest common prefix, rounded down to 64 and
+  short of every row's end (one job). Otherwise each row is its own job, cut one chunk before the end of the longest
+  row: a shorter row sits whole in its prefix, padded, and the run costs what the row form costs. A run carries the
+  prefix once and as many branches as the token budget leaves room for.
+- **Old graphs.** The runner reads both forms: a graph with `input_ids` runs as rows.
+
 ## Measured parity
 
 `families/kev/parity.py`: ONNX Runtime CPU with the LoRA unmerged, against upstream `kev` in fp32

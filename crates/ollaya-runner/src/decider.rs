@@ -6,6 +6,9 @@
 //! causal) and `slot_pos` [rows] to `label_logits` [rows, labels], the tied LM head at the slot
 //! restricted to the option-label tokens. Rows and their readout come from
 //! `ollaya_decision::decider`.
+//!
+//! A graph in the fork form takes the rows as a shared prefix and one branch per row instead of
+//! `input_ids` ([`crate::fork`]): the context runs once per request, with the same numbers.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -28,6 +31,8 @@ const MAX_ROWS: usize = 4096;
 /// so decoders take a smaller budget than encoders.
 const TOKEN_BUDGET: usize = 8192;
 const INPUTS: [&str; 2] = ["input_ids", "slot_pos"];
+/// The same graph in the fork form ([`crate::fork`]).
+const FORK_INPUTS: [&str; 4] = ["prefix_ids", "branch_ids", "branch_job", "slot_pos"];
 const OUTPUT: &str = "label_logits";
 
 #[derive(Debug, Clone, Deserialize)]
@@ -166,12 +171,15 @@ impl DeciderModel {
         if let Some(session) = net.session() {
             let session = session.lock().expect("session mutex poisoned");
             let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
-            if inputs.len() != INPUTS.len()
-                || !INPUTS.iter().all(|n| inputs.contains(n))
+            let is = |want: &[&str]| {
+                inputs.len() == want.len() && want.iter().all(|n| inputs.contains(n))
+            };
+            if !(is(&INPUTS) || is(&FORK_INPUTS))
                 || !session.outputs().iter().any(|o| o.name() == OUTPUT)
             {
                 return Err(Error::Model(format!(
-                    "graph inputs {inputs:?} do not match the decider contract ({INPUTS:?} -> {OUTPUT:?})"
+                    "graph inputs {inputs:?} do not match the decider contract ({INPUTS:?} or \
+                     {FORK_INPUTS:?} -> {OUTPUT:?})"
                 )));
             }
         }
@@ -218,6 +226,28 @@ impl DeciderModel {
             .max()
             .unwrap_or(0)
             .max(2);
+        if let Decoder::Ort(session) = &self.net
+            && crate::fork::is_fork(session)
+        {
+            let slots = |run: &[usize]| -> Result<Vec<crate::fork::Input>, Error> {
+                let slot_pos: Array1<i64> = run.iter().map(|&i| rows[i].len() as i64 - 1).collect();
+                Ok(vec![(
+                    "slot_pos".into(),
+                    ort::value::Tensor::from_array(slot_pos)?.into(),
+                )])
+            };
+            let pad = self.layout.special_tokens.pad;
+            let runs = crate::fork::runs(&rows, self.seq_multiple, pad, TOKEN_BUDGET, MAX_ROWS);
+            let logits =
+                crate::fork::outputs(session, runs, TOKEN_BUDGET, self.device, OUTPUT, slots)?;
+            if let Some(short) = logits.iter().find(|l| l.len() < width) {
+                return Err(Error::Model(format!(
+                    "{OUTPUT} has {} labels for up to {width} options",
+                    short.len()
+                )));
+            }
+            return Ok(logits);
+        }
         let mut order: Vec<usize> = (0..rows.len()).collect();
         order.sort_by_key(|&i| rows[i].len());
         let padded: Vec<usize> = order

@@ -24,38 +24,45 @@ import sys
 import torch
 
 from ..llm_common import onnx_export as ox
-from ..llm_common.qwen35 import CHUNK, Qwen35Trunk
+from ..llm_common.qwen35 import CHUNK, Qwen35Trunk, fork_rows, fork_shapes, fork_trace, gather_hidden
 from ...weightless_sharded import safetensors_source
 from . import ref
 from .layout import ISOLATED
 
-INPUT_NAMES = ["input_ids", "slot_pos"]
+INPUT_NAMES = ["prefix_ids", "branch_ids", "branch_job", "slot_pos"]
 OUTPUT_NAMES = ["label_logits"]
 
 
 class DeciderGraph(torch.nn.Module):
+    """The fork form (`Qwen35Trunk.fork`): a row is its prefix, then its branch; slot_pos counts from the row's start."""
+
     def __init__(self, lm, label_ids):
         super().__init__()
         self.trunk = Qwen35Trunk(lm.model)
         self.register_buffer("label_ids", torch.tensor(label_ids, dtype=torch.long), persistent=False)
 
-    def forward(self, input_ids, slot_pos):
-        h = self.trunk(input_ids)
-        rows = torch.arange(h.shape[0], device=h.device)
-        hs = h[rows, slot_pos]
+    def forward(self, prefix_ids, branch_ids, branch_job, slot_pos):
+        hp, hb = self.trunk.fork(prefix_ids, branch_ids, branch_job)
+        hs = gather_hidden(hp, hb, branch_job, slot_pos)
         w = self.trunk.m.embed_tokens.weight[self.label_ids]      # tied LM head rows of the labels
         return hs @ w.transpose(0, 1)
 
 
-def sample_inputs(tok):
-    """Two rows of 128/192 tokens: every dynamic axis > 1 so nothing is specialised."""
-    a = tok.encode("Context:\n" + "The customer was charged twice and wants a refund. " * 12, add_special_tokens=False)[:150]
-    b = tok.encode("Context:\n" + "Checkout fails after the deploy. " * 20, add_special_tokens=False)[:100]
-    T = 192
-    ids = torch.full((2, T), tok.pad_token_id, dtype=torch.long)
-    ids[0, :len(a)] = torch.tensor(a)
-    ids[1, :len(b)] = torch.tensor(b)
-    return ids, torch.tensor([len(a) - 1, len(b) - 1])
+def check(graph, tok):
+    """The fork graph against the row trunk on two rows that share their context: the largest label logit gap."""
+    ctx = tok.encode("Context:\n" + "The customer was charged twice and wants a refund. " * 12, add_special_tokens=False)
+    rows = [ctx + tok.encode("\n\nQuestion: %s\nAnswer: (" % q, add_special_tokens=False)
+            for q in ("Which team should handle this?", "Is the customer angry?")]
+    T = -(-max(map(len, rows)) // CHUNK) * CHUNK
+    ids = torch.full((len(rows), T), tok.pad_token_id, dtype=torch.long)
+    for i, r in enumerate(rows):
+        ids[i, :len(r)] = torch.tensor(r)
+    slot = torch.tensor([len(r) - 1 for r in rows])
+    with torch.no_grad():
+        h = graph.trunk(ids)[torch.arange(len(rows)), slot]
+        want = h @ graph.trunk.m.embed_tokens.weight[graph.label_ids].transpose(0, 1)
+        got = graph(*map(torch.tensor, fork_rows(rows, tok.pad_token_id)), slot)
+    return float((got - want).abs().max())
 
 
 def export(slug: str, out_dir: str, root: str):
@@ -74,12 +81,13 @@ def export(slug: str, out_dir: str, root: str):
     names, label_ids, open_ids = label_table(tok)
     graph = DeciderGraph(lm, label_ids).eval()
 
-    R = torch.export.Dim("rows", min=1, max=4096)
-    N = torch.export.Dim("chunks", min=1, max=4096)
-    dyn = {"input_ids": {0: R, 1: CHUNK * N}, "slot_pos": {0: R}}
+    print("fork graph vs row trunk: %.2e" % check(graph, tok))
+    dyn, B = fork_shapes()
+    dyn["slot_pos"] = {0: B}
     tmp = ox.scratch_dir("decider-export-")
     full = os.path.join(tmp, "model.onnx")
-    secs = ox.export_graph(graph, sample_inputs(tok), INPUT_NAMES, OUTPUT_NAMES, dyn, full)
+    args = (*fork_trace(graph.trunk.m.embed_tokens.num_embeddings), torch.tensor([575, 300, 100]))
+    secs = ox.export_graph(graph, args, INPUT_NAMES, OUTPUT_NAMES, dyn, full)
     print("exported in %.0fs" % secs)
     del graph, lm
 
@@ -104,17 +112,22 @@ def export(slug: str, out_dir: str, root: str):
                      "code": ("decider/ in the model repo (inference subset of github.com/Mapika/decider)"
                               if ref.code_root(root) == root else "github.com/%s at %s (decider-ai 1.10.0)" % ref.CODE)},
         "contract": {
+            "form": "fork",
             "inputs": {
-                "input_ids": {"dtype": "int64", "shape": ["rows", "seq"],
-                              "note": "one row per scoring row; seq a multiple of 64; right-pad with any id (pad_id)"},
-                "slot_pos": {"dtype": "int64", "shape": ["rows"], "note": "position of the row's answer-slot token"},
+                "prefix_ids": {"dtype": "int64", "shape": ["jobs", "prefix"],
+                               "note": "shared row prefixes; prefix a multiple of 64"},
+                "branch_ids": {"dtype": "int64", "shape": ["rows", "seq"],
+                               "note": "each scoring row after its prefix; seq a multiple of 64; right-pad with any id (pad_id)"},
+                "branch_job": {"dtype": "int64", "shape": ["rows"], "note": "the prefix each row continues"},
+                "slot_pos": {"dtype": "int64", "shape": ["rows"],
+                             "note": "position of the row's answer-slot token, from the row's start"},
             },
             "outputs": {
                 "label_logits": {"dtype": "float32", "shape": ["rows", 255],
                                  "note": "logits of labels[j] as the next token after the slot; use the first k"},
             },
             "seq_multiple": CHUNK,
-            "positions": "0..seq-1, implicit",
+            "positions": "0..prefix+seq-1, implicit: a row is its prefix, then its branch",
             "attention": "causal; no mask input (right padding cannot reach earlier positions)",
         },
         "max_ctx_tokens": int(cfg.get("max_state_tokens", 32768)),

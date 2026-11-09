@@ -17,6 +17,10 @@ three sections, so it reduces to plain partial RoPE on the first `rotary_dim` ch
 
 Rows are right-padded. Every layer is causal, so tokens after a readout position never influence it:
 no attention mask is needed, and pad ids may be anything.
+
+`Qwen35Trunk.fork` is the same function for rows that share a prefix: the prefix runs once and each branch
+continues it from the DeltaNet state, the conv window and the attention keys at the prefix's end ("exact state
+forking", docs/decisions/0010-state-forking.md). The prefix length is a multiple of CHUNK, so every chunk is the row's.
 """
 from __future__ import annotations
 
@@ -65,9 +69,10 @@ def _chunk_step(state, xs):
     return state, out
 
 
-def gated_delta_rule(q, k, v, g, beta, masks, strict_upper):
+def gated_delta_rule(q, k, v, g, beta, masks, strict_upper, initial_state=None, final_state=False):
     """Same contract as transformers' torch_chunk_gated_delta_rule(use_qk_l2norm_in_kernel=True,
-    initial_state=None, output_final_state=False). q, k [B,T,H,dk]; v [B,T,H,dv]; g, beta [B,T,H].
+    initial_state, output_final_state). q, k [B,T,H,dk]; v [B,T,H,dv]; g, beta [B,T,H]; the state
+    [B,H,dk,dv] is float32. With `final_state`, returns (out, state at the end).
 
     T must be a multiple of CHUNK. HF pads to that multiple internally; padding in-graph would put
     `T % 64` arithmetic on the dynamic axis, which torch.export cannot keep symbolic, so the caller pads
@@ -95,10 +100,11 @@ def gated_delta_rule(q, k, v, g, beta, masks, strict_upper):
     k = k * (cum[..., -1:] - cum).exp().unsqueeze(-1)
     chunk_decay = cum[..., -1].exp()[..., None, None]
     xs = [x.movedim(2, 0) for x in (new_v, k_cumdecay, q, intra, k, chunk_decay)]
-    state0 = q.new_zeros((B, H, dk, dv))
-    _, out = scan(_chunk_step, state0, xs)  # [N, B, H, CHUNK, dv]
+    state0 = q.new_zeros((B, H, dk, dv)) if initial_state is None else initial_state
+    last, out = scan(_chunk_step, state0, xs)  # [N, B, H, CHUNK, dv]
     out = out.movedim(0, 2).reshape(B, H, T, dv)
-    return out.transpose(1, 2).to(in_dtype)
+    out = out.transpose(1, 2).to(in_dtype)
+    return (out, last) if final_state else out
 
 
 def _rotate_half(x):
@@ -131,11 +137,19 @@ class Qwen35Trunk(nn.Module):
         self.register_buffer("masks", _doubling_masks(CHUNK), persistent=False)
         self.register_buffer("strict_upper", torch.ones(CHUNK, CHUNK, dtype=torch.bool).triu(1), persistent=False)
 
-    def _deltanet(self, mod, h):
+    def _deltanet(self, mod, h, before=None, state=None, carry=False):
+        """`before` [B, C, K-1]: the conv inputs of the K-1 tokens ahead of the row (zeros when None); `state`: the
+        recurrent state at the row's start. With `carry`, also returns the row's own last K-1 conv inputs and its
+        final state, for rows that continue it."""
         B, T, _ = h.shape
         mixed = mod.in_proj_qkv(h).transpose(1, 2)
-        mixed = F.conv1d(mixed, mod.conv1d.weight, mod.conv1d.bias, padding=mod.conv_kernel_size - 1,
-                         groups=mixed.shape[1])[:, :, :T]
+        tail = mixed[:, :, 1 - mod.conv_kernel_size:] if carry else None
+        if before is None:
+            mixed = F.conv1d(mixed, mod.conv1d.weight, mod.conv1d.bias, padding=mod.conv_kernel_size - 1,
+                             groups=mixed.shape[1])[:, :, :T]
+        else:
+            mixed = F.conv1d(torch.cat([before, mixed], dim=2), mod.conv1d.weight, mod.conv1d.bias,
+                             groups=mixed.shape[1])
         mixed = F.silu(mixed).transpose(1, 2)
         z = mod.in_proj_z(h).reshape(B, T, -1, mod.head_v_dim)
         b = mod.in_proj_b(h)
@@ -150,11 +164,17 @@ class Qwen35Trunk(nn.Module):
         if rep > 1:
             q = q.repeat_interleave(rep, dim=2)
             k = k.repeat_interleave(rep, dim=2)
-        core = gated_delta_rule(q, k, v, g, beta, self.masks, self.strict_upper)
+        core = gated_delta_rule(q, k, v, g, beta, self.masks, self.strict_upper, initial_state=state,
+                                final_state=carry)
+        if carry:
+            core, last = core
         core = mod.norm(core.reshape(-1, mod.head_v_dim), z.reshape(-1, mod.head_v_dim))
-        return mod.out_proj(core.reshape(B, T, -1))
+        out = mod.out_proj(core.reshape(B, T, -1))
+        return (out, tail, last) if carry else out
 
-    def _attention(self, mod, h, cos, sin, bias):
+    def _attention(self, mod, h, cos, sin, bias, past=None, keep=False):
+        """`past`: keys and values [B, kv heads, P, head_dim] ahead of the row, which `bias` [T, P + T] covers.
+        With `keep`, also returns the row's own keys and values."""
         B, T, _ = h.shape
         hd = mod.head_dim
         q, gate = torch.chunk(mod.q_proj(h).view(B, T, -1, hd * 2), 2, dim=-1)
@@ -165,6 +185,10 @@ class Qwen35Trunk(nn.Module):
         rd = cos.shape[-1]
         q = torch.cat([q[..., :rd] * cos + _rotate_half(q[..., :rd]) * sin, q[..., rd:]], dim=-1)
         k = torch.cat([k[..., :rd] * cos + _rotate_half(k[..., :rd]) * sin, k[..., rd:]], dim=-1)
+        own = (k, v)
+        if past is not None:
+            k = torch.cat([past[0], k], dim=2)
+            v = torch.cat([past[1], v], dim=2)
         rep = mod.num_key_value_groups
         if rep > 1:
             k = k.repeat_interleave(rep, dim=1)
@@ -173,7 +197,14 @@ class Qwen35Trunk(nn.Module):
         w = torch.softmax(w.float(), dim=-1).to(q.dtype)
         o = (w @ v).transpose(1, 2).reshape(B, T, -1)
         o = o * torch.sigmoid(gate)
-        return mod.o_proj(o)
+        out = mod.o_proj(o)
+        return (out, own) if keep else out
+
+    def _rope(self, T, dtype, device):
+        pos = torch.arange(T, device=device, dtype=torch.float32)
+        freqs = pos[:, None] * self.inv_freq[None, :]
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos().to(dtype), emb.sin().to(dtype)
 
     def forward(self, input_ids, bias=None):
         """`bias`: the full-attention layers' additive mask, broadcast to [B, heads, T, T]; causal when None.
@@ -181,10 +212,7 @@ class Qwen35Trunk(nn.Module):
         m = self.m
         x = m.embed_tokens(input_ids)
         T = input_ids.shape[1]
-        pos = torch.arange(T, device=input_ids.device, dtype=torch.float32)
-        freqs = pos[:, None] * self.inv_freq[None, :]
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos, sin = emb.cos().to(x.dtype), emb.sin().to(x.dtype)
+        cos, sin = self._rope(T, x.dtype, input_ids.device)
         if bias is None:
             bias = torch.full((T, T), float("-inf"), device=x.device, dtype=x.dtype).triu(1)
         for layer, kind in zip(m.layers, self.layer_types):
@@ -196,3 +224,90 @@ class Qwen35Trunk(nn.Module):
             x = x + h
             x = x + layer.mlp(layer.post_attention_layernorm(x))
         return m.norm(x)
+
+    def fork(self, prefix_ids, branch_ids, branch_job):
+        """prefix_ids [J, P], branch_ids [B, S], branch_job [B] -> (prefix hidden [J, P, hidden], branch hidden
+        [B, S, hidden]), after the final norm.
+
+        Branch b is the row prefix_ids[branch_job[b]] ++ branch_ids[b] of `forward`, at positions P..P+S-1: it starts
+        from its prefix's DeltaNet state and conv window and attends to its prefix's keys, so every prefix runs once.
+        P and S must be multiples of CHUNK, so every chunk of the recurrence is the row's. Branches are right-padded."""
+        m = self.m
+        xp, xb = m.embed_tokens(prefix_ids), m.embed_tokens(branch_ids)
+        P, S = prefix_ids.shape[1], branch_ids.shape[1]
+        dev = prefix_ids.device
+        cos, sin = self._rope(P + S, xp.dtype, dev)
+        cos_p, sin_p, cos_b, sin_b = cos[:P], sin[:P], cos[P:], sin[P:]
+        bias_p = torch.full((P, P), float("-inf"), device=dev, dtype=xp.dtype).triu(1)
+        # query s sits at P + s; it sees every prefix key and the branch keys up to itself
+        later = torch.arange(P + S, device=dev)[None, :] > (torch.arange(S, device=dev)[:, None] + P)
+        bias_b = torch.zeros((S, P + S), device=dev, dtype=xp.dtype).masked_fill(later, float("-inf"))
+        for layer, kind in zip(m.layers, self.layer_types):
+            hp, hb = layer.input_layernorm(xp), layer.input_layernorm(xb)
+            if kind == "linear_attention":
+                mod = layer.linear_attn
+                hp, tail, state = self._deltanet(mod, hp, carry=True)
+                hb = self._deltanet(mod, hb, before=tail[branch_job], state=state[branch_job])
+            else:
+                mod = layer.self_attn
+                hp, (k, v) = self._attention(mod, hp, cos_p, sin_p, bias_p, keep=True)
+                hb = self._attention(mod, hb, cos_b, sin_b, bias_b, past=(k[branch_job], v[branch_job]))
+            xp = xp + hp
+            xp = xp + layer.mlp(layer.post_attention_layernorm(xp))
+            xb = xb + hb
+            xb = xb + layer.mlp(layer.post_attention_layernorm(xb))
+        return m.norm(xp), m.norm(xb)
+
+
+def fork_rows(rows, pad):
+    """A request's rows (token lists) as `fork` inputs: (prefixes [J][P], branches [B][S], branch_job [B]), as the
+    runner splits them (`crates/ollaya-runner/src/fork.rs`). Rows that share CHUNK tokens or more fork at their longest
+    common prefix, rounded down to CHUNK and short of every row's end (J = 1). Otherwise each row is its own prefix,
+    cut one chunk before the end of the longest row (a shorter row sits whole in its prefix, padded, and its branch is
+    unread padding), which costs what the row form costs; rows of one chunk or less run in a one-chunk prefix."""
+    shortest = min(len(r) for r in rows)
+    common = shortest
+    for i in range(shortest):
+        if any(r[i] != rows[0][i] for r in rows):
+            common = i
+            break
+    up = lambda n: -(-n // CHUNK) * CHUNK
+    p = min(common, shortest - 1) // CHUNK * CHUNK
+    if p:
+        prefixes, branches, job = [rows[0][:p]], [r[p:] for r in rows], [0] * len(rows)
+    else:
+        p = max(up(max(len(r) for r in rows)) - CHUNK, CHUNK)
+        prefixes = [(r[:p] + [pad] * p)[:p] for r in rows]
+        branches, job = [r[p:] for r in rows], list(range(len(rows)))
+    S = max(up(max(len(b) for b in branches)), CHUNK)
+    return prefixes, [b + [pad] * (S - len(b)) for b in branches], job
+
+
+def fork_trace(vocab):
+    """Made-up fork inputs for an export (prefix_ids, branch_ids, branch_job): J 2, B 3, P 256, S 320, so no axis is 1
+    (specialized) and no two are equal (tied). Read positions for them lie in [0, 576)."""
+    g = torch.Generator().manual_seed(0)
+    ids = lambda rows, chunks: torch.randint(100, vocab, (rows, chunks * CHUNK), generator=g)
+    return ids(2, 4), ids(3, 5), torch.tensor([0, 1, 1])
+
+
+def fork_shapes(max_rows=4096):
+    """(dynamic shapes of the three fork inputs, the branch axis for the graph's read inputs)."""
+    from torch.export import Dim
+
+    B = Dim("branches", min=1, max=max_rows)
+    J = Dim("jobs", min=1, max=max_rows)
+    NP, NS = Dim("prefix_chunks", min=1, max=4096), Dim("branch_chunks", min=1, max=4096)
+    return {"prefix_ids": {0: J, 1: CHUNK * NP}, "branch_ids": {0: B, 1: CHUNK * NS}, "branch_job": {0: B}}, B
+
+
+def gather_hidden(hp, hb, branch_job, pos):
+    """Hidden states of `fork`'s outputs at positions `pos` [B, ...] of each branch's whole row (its prefix, then
+    the branch): [B, ..., hidden]. A position inside the prefix reads the prefix's row."""
+    P = hp.shape[1]
+    inside = pos < P
+    shape = (-1,) + (1,) * (pos.dim() - 1)
+    rows = torch.arange(pos.shape[0], device=pos.device).view(shape)
+    a = hp[branch_job.view(shape), torch.where(inside, pos, 0)]
+    b = hb[rows, torch.where(inside, 0, pos - P)]
+    return torch.where(inside.unsqueeze(-1), a, b)

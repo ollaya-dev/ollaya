@@ -3,11 +3,15 @@
     KEV_SRC=/path/to/kev uv run --with peft==0.21.0 --with pydantic==2.12.5 \
         python -m ollaya_convert.families.kev.export kev-0.8b --out out/kev-0.8b --run RUN --base BASE
 
-Graph (layout `kev-pointer-v1`, see layout.py and docs/families/kev.md):
-    inputs   input_ids   int64   [rows, seq]  one row per question; seq a multiple of 64, right-padded
-             decide_pos  int64   [rows]       position of the row's <|fim_suffix|> (decide) token
-             opt_pos     int64   [rows, k]    positions of the option-closing <|box_end|> tokens (pad with 0)
-    outputs  scores      float32 [rows, k]    raw pointer-head scores (k(h_opt) . q(h_decide)) / 16
+Graph (layout `kev-pointer-v1`, see layout.py and docs/families/kev.md), in the fork form: a question's row is
+its prefix followed by its branch, and every prefix runs once (`Qwen35Trunk.fork`, `qwen35.fork_rows`):
+    inputs   prefix_ids  int64   [J, P]       shared prefixes; P a multiple of 64
+             branch_ids  int64   [B, S]       one branch per question, right-padded; S a multiple of 64
+             branch_job  int64   [B]          the prefix each branch continues
+             decide_pos  int64   [B]          position of the row's <|fim_suffix|> (decide) token
+             opt_pos     int64   [B, k]       positions of the option-closing <|box_end|> tokens (pad with 0)
+    outputs  scores      float32 [B, k]       raw pointer-head scores (k(h_opt) . q(h_decide)) / 16
+Positions count from the start of the row (prefix, then branch).
 
 The LoRA is NOT merged: every adapted Linear runs as `x W^T + 2.0 * (x A^T) B^T`, so the graph keeps
 the upstream files byte-referenced: the base shards `model.safetensors-0000i-of-0000n.safetensors` (BF16,
@@ -25,12 +29,12 @@ import shutil
 import torch
 
 from ..llm_common import onnx_export as ox
-from ..llm_common.qwen35 import CHUNK, Qwen35Trunk, half_trunk
+from ..llm_common.qwen35 import CHUNK, Qwen35Trunk, fork_rows, fork_shapes, fork_trace, gather_hidden, half_trunk
 from ...weightless_sharded import safetensors_source, torchzip_source
 from . import ref
 from .layout import MAX_OPTIONS, SPECIAL
 
-INPUT_NAMES = ["input_ids", "decide_pos", "opt_pos"]
+INPUT_NAMES = ["prefix_ids", "branch_ids", "branch_job", "decide_pos", "opt_pos"]
 OUTPUT_NAMES = ["scores"]
 
 
@@ -40,14 +44,27 @@ class KevGraph(torch.nn.Module):
         self.trunk = Qwen35Trunk(text_model)
         self.head = head
 
-    def forward(self, input_ids, decide_pos, opt_pos):
-        h = self.trunk(input_ids).float()
-        rows = torch.arange(h.shape[0], device=h.device)
-        hd = h[rows, decide_pos]                      # [R, H]
-        ho = h[rows.unsqueeze(1), opt_pos]            # [R, K, H]
-        q = self.head.q(hd)                           # [R, P]
-        k = self.head.k(ho)                           # [R, K, P]
+    def forward(self, prefix_ids, branch_ids, branch_job, decide_pos, opt_pos):
+        hp, hb = self.trunk.fork(prefix_ids, branch_ids, branch_job)
+        hd = gather_hidden(hp, hb, branch_job, decide_pos).float()   # [B, H]
+        ho = gather_hidden(hp, hb, branch_job, opt_pos).float()      # [B, K, H]
+        q = self.head.q(hd)                           # [B, P]
+        k = self.head.k(ho)                           # [B, K, P]
         return (k @ q.unsqueeze(-1)).squeeze(-1) * self.head.scale
+
+
+def fork_args(rows, pad):
+    """Graph inputs for upstream rows ({"ids", "decide", "opts"}), split as the runner splits them."""
+    prefixes, branches, job = fork_rows([r["ids"] for r in rows], pad)
+    k = max(len(r["opts"]) for r in rows)
+    return (torch.tensor(prefixes), torch.tensor(branches), torch.tensor(job), torch.tensor([r["decide"] for r in rows]),
+            torch.tensor([r["opts"] + [0] * (k - len(r["opts"])) for r in rows]))
+
+
+def trace_args(vocab):
+    """Made-up inputs for the export (`fork_trace`, and k 6), with reads in both prefix and branch."""
+    opts = torch.tensor([[10, 200, 300, 400, 500, 575], [260, 261, 262, 263, 264, 265], [0, 255, 256, 257, 400, 575]])
+    return (*fork_trace(vocab), torch.tensor([575, 300, 100]), opts)
 
 
 def rename(name):
@@ -76,24 +93,20 @@ def export(slug, out_dir, run_dir, base_dir, fp16=False):
                         {"a": {"type": "choice", "instructions": "Which team?", "criteria": {"billing": "charges", "tech": "bugs", "other": None}},
                          "b": {"type": "score", "instructions": "How upset?", "criteria": ["calm", "annoyed", "furious"]}})
     rws = ref.rows(enc)
-    T = 256
-    ids = torch.full((2, T), tok.pad_token_id, dtype=torch.long)
-    for i, r in enumerate(rws):
-        ids[i, :len(r["ids"])] = torch.tensor(r["ids"])
-    args = (ids, torch.tensor([r["decide"] for r in rws]), torch.tensor([r["opts"] for r in rws]))
     with torch.no_grad():
         want = [torch.tensor(z) for z in ref.forward(m, enc)]
     if fp16:
         half_trunk(graph.trunk)   # after the fp32 reference: the trunk shares upstream's modules; the head stays fp32
     with torch.no_grad():
-        got = graph(*args)
-    print("eager graph vs upstream (unmerged vs merged LoRA): %.2e" % max(float((g - w).abs().max()) for g, w in zip(got, want)))
+        got = graph(*fork_args(rws, tok.pad_token_id))
+    print("eager graph vs upstream (unmerged vs merged LoRA): %.2e"
+          % max(float((g[:len(w)] - w).abs().max()) for g, w in zip(got, want)))
 
-    R = torch.export.Dim("rows", min=1, max=4096)
-    N = torch.export.Dim("chunks", min=1, max=4096)
+    dyn, B = fork_shapes()
     K = torch.export.Dim("options", min=1, max=MAX_OPTIONS)
-    dyn = {"input_ids": {0: R, 1: CHUNK * N}, "decide_pos": {0: R}, "opt_pos": {0: R, 1: K}}
+    dyn |= {"decide_pos": {0: B}, "opt_pos": {0: B, 1: K}}
     tmp = ox.scratch_dir("kev-export-")
+    args = trace_args(graph.trunk.m.embed_tokens.num_embeddings)
     secs = ox.export_graph(graph, args, INPUT_NAMES, OUTPUT_NAMES, dyn, os.path.join(tmp, "model.onnx"))
     print("exported in %.0fs" % secs)
     del graph, lora_model, m, want, got   # the fp32 model (36 GB for a 9B) is not needed for the rewrite
@@ -123,17 +136,21 @@ def export(slug, out_dir, run_dir, base_dir, fp16=False):
                      "lora": {"r": cfg["r"], "alpha": cfg["lora_alpha"], "scaling": cfg["lora_alpha"] / cfg["r"],
                               "merged": False}},
         "contract": {
+            "form": "fork",
             "inputs": {
-                "input_ids": {"dtype": "int64", "shape": ["rows", "seq"],
-                              "note": "one row per question; seq a multiple of 64; right-pad with any id (pad)"},
-                "decide_pos": {"dtype": "int64", "shape": ["rows"], "note": "position of the decide token"},
+                "prefix_ids": {"dtype": "int64", "shape": ["jobs", "prefix"],
+                               "note": "shared row prefixes; prefix a multiple of 64"},
+                "branch_ids": {"dtype": "int64", "shape": ["rows", "seq"],
+                               "note": "each question's row after its prefix; seq a multiple of 64; right-pad with any id (pad)"},
+                "branch_job": {"dtype": "int64", "shape": ["rows"], "note": "the prefix each row continues"},
+                "decide_pos": {"dtype": "int64", "shape": ["rows"], "note": "position of the decide token in the row"},
                 "opt_pos": {"dtype": "int64", "shape": ["rows", "k"],
-                            "note": "positions of each option's closing token; rows with fewer options pad with 0"},
+                            "note": "positions of each option's closing token in the row; rows with fewer options pad with 0"},
             },
             "outputs": {"scores": {"dtype": "float32", "shape": ["rows", "k"],
                                    "note": "raw pointer scores; the first k_row entries are the row's option logits"}},
             "seq_multiple": CHUNK,
-            "positions": "0..seq-1, implicit",
+            "positions": "0..prefix+seq-1, implicit: a row is its prefix, then its branch",
             "attention": "causal; no mask input (right padding cannot reach earlier positions)",
         },
         "max_state_tokens": 8192,
