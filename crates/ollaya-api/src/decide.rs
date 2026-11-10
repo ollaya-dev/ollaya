@@ -34,6 +34,10 @@ pub struct ChoiceQuestion {
     /// labels). Models without one refuse it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ordinal: Option<bool>,
+    /// Ollaya extension, from Decima's presets: `/api/decide` asks the question only when the
+    /// state is an object with all of these keys.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires: Option<Vec<String>>,
 }
 
 /// Choice criteria: TypeSafe's label -> description map, or (laya extension) a list of labels.
@@ -66,6 +70,10 @@ pub struct ScoreQuestion {
     pub instructions: Option<Value>,
     /// Level descriptions, level 0 first.
     pub criteria: Vec<Value>,
+    /// Ollaya extension, from Decima's presets: `/api/decide` asks the question only when the
+    /// state is an object with all of these keys.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -74,6 +82,10 @@ pub struct NoulQuestion {
     pub instructions: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub criteria: Option<NoulCriteria>,
+    /// Ollaya extension, from Decima's presets: `/api/decide` asks the question only when the
+    /// state is an object with all of these keys.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requires: Option<Vec<String>>,
 }
 
 /// What counts as true and false. Keys are exact, as in TypeSafe.
@@ -91,6 +103,15 @@ impl Question {
             Question::Choice(_) => "choice",
             Question::Score(_) => "score",
             Question::Noul(_) => "noul",
+        }
+    }
+
+    /// The state keys the question needs (`requires`), if any.
+    pub fn requires(&self) -> Option<&[String]> {
+        match self {
+            Question::Choice(q) => q.requires.as_deref(),
+            Question::Score(q) => q.requires.as_deref(),
+            Question::Noul(q) => q.requires.as_deref(),
         }
     }
 

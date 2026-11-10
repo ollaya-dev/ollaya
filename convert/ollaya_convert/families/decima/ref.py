@@ -65,10 +65,12 @@ MODELS = {
     # choice_fit) 86a07aab1c340fa5869bdb754e57d3851a1d288a.
     "decima-agent": {"repo": "amyrmahdy/decima-agent", "revision": "652d90ac9d33088edd730692c95f1da381cb9174",
                      "tag": "v2.3", "base": "amyrmahdy/decima-base, on jhu-clsp/mmBERT-base (MIT)"},
-    # The tag v1.0-preview: guards for LLM apps (inputs, tool results, replies), states up to 2,048 tokens,
-    # "choice_fit": true.
-    "decima-guard": {"repo": "amyrmahdy/decima-guard", "revision": "98d3f734c8323cb390d9ad750e1a606a8dd56f09",
-                     "tag": "v1.0-preview", "base": "amyrmahdy/decima-base-clean, on jhu-clsp/mmBERT-base (MIT)"},
+    # The tag v1.2 (2026-10-26): guards for LLM apps (inputs, tool results, replies), states up to 2,048 tokens,
+    # "choice_fit": true; 1.0's network and tokenizer, new weights and temperature (better at injections hidden in
+    # documents and tool results). v1.0-preview was 98d3f734c8323cb390d9ad750e1a606a8dd56f09; v1.1 (115f9a9b) was
+    # never exported.
+    "decima-guard": {"repo": "amyrmahdy/decima-guard", "revision": "31899f2a5e8aae3c35d9f19b9c9f7ed181d6c908",
+                     "tag": "v1.2", "base": "amyrmahdy/decima-base-clean, on jhu-clsp/mmBERT-base (MIT)"},
     # The tag v1.0: decima-base's network trained without non-commercial data and without BTZSC data, "choice_fit":
     # true, states up to 512 tokens. main (a37e006f) is one commit later, with only README.md changed.
     "decima-base-clean": {"repo": "amyrmahdy/decima-base-clean", "revision": "35eb218bdeeb8c450baba4159ebc08b67c4d632c",
