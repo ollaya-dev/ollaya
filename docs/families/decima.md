@@ -153,6 +153,25 @@ Goldens: `python -m ollaya_convert.families.decima.goldens out/<slug>` runs the 
 outputs, the decisions and the `/v1/systemone` answers against upstream's `system_one`. On CPU the ONNX Runtime is
 pyke's 1.28.0, linked statically; on CUDA it is Microsoft's 1.28.2 from the CUDA 13 pack.
 
+**Decima-guard 1.2 and the preset cases (measured 2026-11-10, RTX 5090).** The goldens add seven requests
+(`check.preset_cases`): the `decima-guard-rag` and `decima-guard-output` presets as upstream's `Router` asks them
+(`router.fill` into the preset's state template, `router.applicable` on `requires`), for plain text and each JSON
+state shape, and the check asserts that Ollaya's copies of both presets equal upstream's. `decima.check` finds 495
+requests with identical rows for guard 1.2 and guard-small, 19 rejected by both, 0 differences. 167 requests per
+model, 19 rejected upstream, 615 questions, 3,074 rows, all identical, every decision the same; every
+`/v1/systemone` answer matches upstream's to 4 decimals. On hope (RTX 5090 with Microsoft's ONNX Runtime from the
+CUDA 13 pack, Threadripper 3960X), recorded in `results/runs/2026-11-10-parity-rtx5090-{cuda,cpu}.json`:
+
+| Model | Device | Scores max | Ordinal projections max | Probabilities max (p99) |
+|---|---|---|---|---|
+| guard 1.2 | CUDA | 2.8e-5 | 5.4e-4 | 6.8e-5 (2.9e-6) |
+| guard 1.2 | CPU | 1.8e-5 | 1.2e-4 | 1.4e-5 (3.5e-6) |
+| guard-small 1.0 preview | CUDA | 1.1e-5 | 5.2e-5 | 6.3e-6 (2.0e-6) |
+| guard-small 1.0 preview | CPU | 1.9e-5 | 5.1e-5 | 6.3e-6 (2.5e-6) |
+
+The export of guard 1.2 matches upstream's PyTorch modules within 1.5e-5 (scores) and 3.1e-5 (ordinal projections)
+on 295 questions.
+
 **Ordinal choices (measured 2026-10-25).** The goldens add six requests (`check.ordinal_cases`): the
 `decima-guard-web` questions on three web inputs, an ordinal choice with descriptions next to the same choice
 without the flag, ten labels, and eleven (rejected, as at `bc02983b`). 160 requests per model, 19 rejected

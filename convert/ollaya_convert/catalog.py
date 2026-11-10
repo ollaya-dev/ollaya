@@ -1173,7 +1173,9 @@ CATALOG = {
                   "and guard-small, on CPU and CUDA (RTX 4090): identical token rows and truncation, the same 18 "
                   "rejected requests, the same decision on every question, scores within 3.2e-5 and probabilities "
                   "within 8.2e-6. Agent's states run to 8,192 tokens: rows of 3,041, 5,986 and 8,076 tokens are "
-                  "kept whole, and one of 8,266 is truncated.",
+                  "kept whole, and one of 8,266 is truncated. Guard 1.2 and guard-small, with the guard-rag and "
+                  "guard-output presets added, on 615 questions from 167 requests on an RTX 5090 (CUDA and CPU): "
+                  "identical rows, the same decisions, probabilities within 6.8e-5.",
     },
 }
 

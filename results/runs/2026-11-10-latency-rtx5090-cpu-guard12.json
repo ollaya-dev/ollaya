@@ -1,0 +1,52 @@
+{
+ "schema": 1,
+ "suite": "latency-triage",
+ "date": "2026-11-10T18:51:13Z",
+ "ollaya": "0.18.0",
+ "machine": "rtx-5090",
+ "machine_detail": {
+  "id": "rtx-5090",
+  "cpu": "AMD Ryzen Threadripper 3960X 24-Core Processor",
+  "threads": 48,
+  "gpus": [
+   {
+    "name": "NVIDIA GeForce RTX 5090",
+    "driver": "596.21",
+    "memory": "32607 MiB"
+   }
+  ],
+  "os": "Linux 6.6.87.2-microsoft-standard-WSL2"
+ },
+ "device": "cpu",
+ "protocol": {
+  "preset": "triage",
+  "questions": 5,
+  "states": 30,
+  "warm": 2,
+  "n": 10,
+  "client": "one request at a time over HTTP to /api/decide, timed by the client; each request a different short message, in turn",
+  "memory": "vram_mb: peak rise of the GPU's used memory over its idle level before the load (nvidia-smi, 100 ms); ram_peak_mb and ram_mb: the runner's VmHWM and VmRSS"
+ },
+ "note": "Ollaya 0.18.0.",
+ "results": [
+  {
+   "model": "decima:guard",
+   "questions": "triage",
+   "load_ms": 3332.2,
+   "first_request_ms": 4505.3,
+   "answered_by": "decima:guard",
+   "p50_ms": 1189.5,
+   "p90_ms": 1229.5,
+   "min_ms": 1095.2,
+   "eval_p50_ms": 1188.4,
+   "input_tokens": 458,
+   "device": "cpu",
+   "precision": "F32",
+   "digest": "0c6880db253dfdce4cf7e1a606721562debf9e703c2057b94eebe5b028ccdbaf",
+   "size_mb": 1263,
+   "ram_peak_mb": 1129,
+   "ram_mb": 1129
+  }
+ ],
+ "edition": "2026.10"
+}
