@@ -12,7 +12,7 @@ their order cannot change the answer. Score questions go through a cumulative-li
 | `decima:base`, `decima:latest` | `amyrmahdy/decima-base@2468005d` (Hub tag `v2.0`): `encoder/model.safetensors` (1.23 GB) and `head.safetensors` (57 MB) | `jhu-clsp/mmBERT-base` (MIT), 321M parameters | 0.7269 |
 | `decima:base-clean` | `amyrmahdy/decima-base-clean@35eb218b` (Hub tag `v1.0`; `main` changes only the README): the same two files, base retrained without non-commercial data | the same | 0.6930 |
 | `decima:agent` | `amyrmahdy/decima-agent@652d90ac` (Hub tag `v2.3`): the same two files, fine-tuned from decima-base for coding-agent decisions and knowledge-graph judgments, states up to 8,192 tokens | the same | 0.6125 |
-| `decima:guard` | `amyrmahdy/decima-guard@98d3f734` (Hub tag `v1.0-preview`): the same two files, a guard for LLM apps fine-tuned from decima-base-clean | the same | 0.8051 |
+| `decima:guard` | `amyrmahdy/decima-guard@31899f2a` (Hub tag `v1.2`): the same two files, a guard for LLM apps fine-tuned from decima-base-clean. 1.0 preview (`98d3f734`, temperature 0.8051) until November 2026; 1.1 was never exported | the same | 0.7527 |
 | `decima:guard-small` | `amyrmahdy/decima-guard-small@ac110248` (Hub tag `v1.0-preview`): `encoder/model.safetensors` (562 MB) and `head.safetensors`, guard's checks and training data | `jhu-clsp/mmBERT-small` (MIT), 140M parameters | 0.7546 |
 | `decima:small` | `amyrmahdy/decima-small@2e7f4d07` (Hub tag `v1.1.1`): `encoder/model.safetensors` (471 MB) and `head.safetensors` (19 MB) | `intfloat/multilingual-e5-small` (MIT), 122M parameters | 0.9356 |
 

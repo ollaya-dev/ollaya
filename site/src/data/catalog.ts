@@ -503,7 +503,7 @@ const overlays: Record<string, ModelOverlay> = {
       base: { summary: `Decima-base 2.0 (mmBERT-base, 321M), fp32: ${result('decima:base', 'typed.accuracy', 3)} on typed decisions; ${result('decima:base', 'gpu.p50_ms', 0)} ms for five questions on an ${benchGpu}.` },
       'base-clean': { summary: `Decima-base-clean 1.0: decima-base retrained without non-commercial data, for commercial use; ${result('decima:base-clean', 'typed.accuracy', 3)} on typed decisions.` },
       agent: { summary: "Decima-agent 2.3: decima-base fine-tuned for coding-agent decisions (secret and command gates, tool and model choice) and knowledge-graph judgments; states up to 8,192 tokens, options kept whole beside long questions." },
-      guard: { summary: 'Decima-guard 1.0 preview (mmBERT-base, 321M): prompt injection, jailbreaks, leaks and harmful content in user messages, tool results and model replies (OWASP Top 10 for LLM applications). English, Arabic and Persian.' },
+      guard: { summary: 'Decima-guard 1.2 preview (mmBERT-base, 321M): prompt injection, jailbreaks, leaks and harmful content in user messages, tool results and model replies (OWASP Top 10 for LLM applications), better at injections hidden in documents and tool results than 1.0. English, Arabic and Persian.' },
       'guard-small': { summary: 'Decima-guard-small 1.0 preview (mmBERT-small, 140M): the same checks, faster, a few points lower.' },
       small: { summary: `Decima-small 1.1 (multilingual-e5-small, 122M), fp32: ${result('decima:small', 'typed.accuracy', 3)} on typed decisions; ${result('decima:small', 'cpu.p50_ms', 0)} ms for five questions on a CPU.` },
     },
