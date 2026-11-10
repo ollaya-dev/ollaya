@@ -1688,6 +1688,7 @@ async fn presets_create_show_decide_delete() {
         name: name.into(),
         questions: serde_json::from_value(triage()).unwrap(),
         description: Some("Ticket routing".into()),
+        state: None,
     };
     d.client.create_preset(&create("my-triage")).await.unwrap();
     // A built-in name, or one that is not a file name, is a 422 on `name`.
@@ -1729,6 +1730,39 @@ async fn presets_create_show_decide_delete() {
     let mut both = DecideRequest::new("laya", state.clone(), serde_json::from_value(triage()).ok());
     both.preset = Some("my-triage".into());
     assert_eq!(api_err(d.client.decide(&both).await.unwrap_err()).0, 422);
+
+    // A state template takes plain text; `requires` picks the questions a state can answer.
+    d.client
+        .create_preset(&ollaya_api::CreatePresetRequest {
+            name: "shaped".into(),
+            questions: serde_json::from_value(json!({
+                "refund": {"type": "noul", "instructions": "Asks for a refund.", "requires": ["ticket"]},
+                "urgency": {"type": "score", "criteria": ["low", "high"], "requires": ["ticket", "plan"]},
+            }))
+            .unwrap(),
+            description: None,
+            state: Some(json!({"ticket": "{text}"})),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        d.client.show_preset("shaped").await.unwrap().state,
+        Some(json!({"ticket": "{text}"}))
+    );
+    let mut shaped = DecideRequest::new("laya", json!("I want my money back"), None);
+    shaped.preset = Some("shaped".into());
+    let r = d.client.decide(&shaped).await.unwrap();
+    assert_eq!(r.answers.keys().collect::<Vec<_>>(), ["refund"]);
+    shaped.state = Some(json!({"ticket": "refund please", "plan": "pro"}));
+    assert_eq!(d.client.decide(&shaped).await.unwrap().answers.len(), 2);
+    shaped.state = Some(json!({"other": 1}));
+    let (status, body) = api_err(d.client.decide(&shaped).await.unwrap_err());
+    assert_eq!(
+        (status, body.detail.unwrap()[0].path()),
+        (422, "state".into())
+    );
+    d.client.delete_preset("shaped").await.unwrap();
+
     req.preset = Some("nope".into());
     let (status, body) = api_err(d.client.decide(&req).await.unwrap_err());
     assert_eq!((status, body.code), (404, ollaya_api::ErrorCode::NotFound));

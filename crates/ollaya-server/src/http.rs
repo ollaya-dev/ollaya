@@ -716,14 +716,29 @@ async fn decide(
         }));
     };
 
-    // A preset stands in for `questions` (validation allows one or the other).
-    let questions = match &req.preset {
+    // A preset stands in for `questions` (validation allows one or the other), and puts a
+    // plain-text state into its state template.
+    let (state, questions) = match &req.preset {
         Some(name) => match s.ollaya.presets.get(name) {
-            Ok(Some(p)) => Some(p.questions),
+            Ok(Some(p)) => (
+                ollaya_api::presets::fill_state(p.state.as_ref(), state),
+                Some(p.questions),
+            ),
             Ok(None) => return Err(api_error(&Error::PresetNotFound(name.clone()))),
             Err(e) => return Err(api_error(&e)),
         },
-        None => req.questions.clone(),
+        None => (state, req.questions.clone()),
+    };
+    // Questions with `requires` are asked only when the state has those keys.
+    let questions = match questions {
+        Some(q) => Some(ollaya_api::presets::applicable(&q, &state).map_err(|m| {
+            ApiError::from(ErrorBody::invalid_request(vec![ValidationIssue::new(
+                body_loc(&["state"]),
+                "value_error",
+                m,
+            )]))
+        })?),
+        None => None,
     };
     let input = DecideInput {
         model: req.model.clone(),

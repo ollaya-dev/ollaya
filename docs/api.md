@@ -360,6 +360,14 @@ than `true`, `false` or `null` is a `bool_type` error, and `"ordinal": true` on 
 question is refused. The built-in preset `decima-guard-web` uses it, as Decima's own `/v1/systemone`
 does.
 
+**`requires` (from Decima's presets).** Any question may carry `"requires": [keys]`, a list of
+non-empty strings. `/api/decide` then asks it only when the state is an object that has every one of
+those keys, so one question set covers several state shapes; a string or array state keeps every
+question. When no question is left, the request is a `422 INVALID_REQUEST` `value_error` on
+`state` naming the keys it has. Anything but a list of non-empty strings is a `value_error` on
+`requires`. `/v1/*` ignores the field, as TypeSafe and Decima's own server do. The built-in presets
+`decima-guard-rag` and `decima-guard-output` use it.
+
 **Types follow TypeSafe, not laya.** laya also accepts numbers and booleans as criteria and
 instructions, rendering them with `json.dumps`. TypeSafe rejects them, and so does this API
 (`json_type`). The engine keeps laya's rendering for parity; the boundary is the stricter of the
@@ -517,7 +525,7 @@ The same endpoint loads and unloads models, as Ollama's `/api/generate` does: a 
 | `model` | string | yes | – | [§3](#3-model-names-and-resolution) |
 | `state` | string \| object \| array | no | – | As in [§5.1](#51-request-body-shared-by-the-decision-endpoints). Absent or `null`: a load or unload request. |
 | `questions` | object | with `state`, unless the model has embedded questions | the model's embedded questions | [§5.2](#52-question-schema). Not allowed without `state` (`missing` issue on `state`). |
-| `preset` | string | no | – | A preset's name ([§7.11](#711-presets)), built-in or custom, in place of `questions`: giving both is a `value_error` issue on `preset`, and it needs `state`. An unknown name is `404 NOT_FOUND`. Ollaya-only. |
+| `preset` | string | no | – | A preset's name ([§7.11](#711-presets)), built-in or custom, in place of `questions`: giving both is a `value_error` issue on `preset`, and it needs `state`. A string state goes into the preset's state template, if it has one. An unknown name is `404 NOT_FOUND`. Ollaya-only. |
 | `images` | array of string | no | `[]` | Images for a vision model (`decider:2b-vision`), as Ollama's `images`: base64, or a base64 `data:` URL. Each item must be a non-empty string (`string_type`, `string_too_short`); not allowed without `state`. The runner decodes them: Decider reads one PNG per request; Winnow with a matching projector reads up to 16 ordered PNGs. Unsupported formats, too many images, images over the model/context limits, and models that read no images return `422 INVALID_REQUEST` with the reason. |
 | `keep_alive` | string \| number | no | `OLLAYA_KEEP_ALIVE` (`5m`) | [§6](#6-keep_alive) |
 | `extras` | array of string | no | `[]` | Closed set: `"laya"`. Each value adds a same-named object to every answer. Unknown values are `enum` issues. |
@@ -1201,10 +1209,22 @@ Safe to retry.
 ### 7.11 Presets
 
 A preset is a named question set: `/api/decide` takes `preset` in place of `questions`, and
-`ollaya run --preset` takes its name. Eight presets are built in (`triage`, `email`, `guard`,
-`moderation`, `router`, `agent`, `decima-guard`, `decima-guard-web`); they cannot be changed or deleted. Custom presets live in the
+`ollaya run --preset` takes its name. Ten presets are built in (`triage`, `email`, `guard`,
+`moderation`, `router`, `agent`, `decima-guard`, `decima-guard-web`, `decima-guard-rag`,
+`decima-guard-output`); they cannot be changed or deleted. Custom presets live in the
 model store (`$OLLAYA_MODELS/presets/<name>.json`), so every client of the daemon sees the same
 ones. A custom preset is not a model: unlike a Modelfile's `QUESTIONS`, it works with any model.
+
+A preset may have a **state template** (`state`, as in Decima's presets): an object or array in which
+the string `"{text}"` marks where a plain-text state goes. With `preset`, a string state is put into
+it; an object or array state is used as it is. Its questions can then use `requires`
+([§5.2](#52-question-schema)): `decima-guard-rag` turns text into
+`{"user_task": "", "tool": "", "tool_result": "<text>"}` and asks only `indirect_injection`, while a
+state with `source`, `question` and `answer` gets `grounded`, and one with `user_request`, `tools` and
+`tool_call` gets `excessive_agency`. `decima-guard-output` puts text in `output` (`leak`), and takes
+`{"sink", "model_output"}` (`unsafe_for_sink`) or `{"user", "response"}` (`harmful`). The CLI, the
+MCP server and the desktop app apply a built-in preset's template themselves; the daemon applies a
+custom one's.
 
 Names are 1 to 64 characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit. A bad
 name, or a built-in one on create, is a `422 INVALID_REQUEST` issue on `name`.
@@ -1234,7 +1254,8 @@ name, or a built-in one on create, is a `422 INVALID_REQUEST` issue on `name`.
 ```
 
 **`POST /api/presets/create`** creates a custom preset, or replaces the one with that name.
-`questions` follows [§5.2](#52-question-schema); `description` is optional. Response: `200` with an
+`questions` follows [§5.2](#52-question-schema); `description` and `state` (the state template, an
+object or array; anything else is a `value_error` on `state`) are optional. Response: `200` with an
 empty body.
 
 <!-- curl: CreatePresetRequest -->
@@ -1249,7 +1270,8 @@ curl http://localhost:11435/api/presets/create -d '{
 }'
 ```
 
-**`POST /api/presets/show`** returns one preset, built-in or custom, with its questions.
+**`POST /api/presets/show`** returns one preset, built-in or custom, with its questions and, when it
+has one, its `state` template.
 
 <!-- curl: PresetRequest -->
 ```shell

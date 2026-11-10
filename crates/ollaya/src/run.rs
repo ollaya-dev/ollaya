@@ -46,7 +46,7 @@ pub struct RunArgs {
     /// An image file (PNG) to decide about, for vision models such as decider:2b-vision.
     #[arg(long, value_name = "FILE")]
     pub image: Option<std::path::PathBuf>,
-    /// A preset: built-in (triage, email, guard, moderation, router, agent, decima-guard, decima-guard-web) or custom
+    /// A preset: built-in (triage, email, guard, moderation, router, agent, decima-guard, decima-guard-web, decima-guard-rag, decima-guard-output) or custom
     /// (`ollaya preset list`).
     #[arg(long)]
     pub preset: Option<String>,
@@ -178,13 +178,14 @@ fn preset(name: &str) -> Result<Questions> {
     Ok(serde_json::from_value(q)?)
 }
 
-/// A preset by name: built-in ones from this binary, custom ones from the daemon.
-async fn any_preset(client: &Client, name: &str) -> Result<Questions> {
+/// A preset by name, with its state template: built-in ones from this binary, custom ones
+/// from the daemon.
+async fn any_preset(client: &Client, name: &str) -> Result<(Questions, Option<Value>)> {
     if presets::is_builtin(name) {
-        return preset(name);
+        return Ok((preset(name)?, presets::state_template(name)));
     }
     match client.show_preset(name).await {
-        Ok(p) => Ok(p.questions),
+        Ok(p) => Ok((p.questions, p.state)),
         Err(e) if e.code() == Some(&ollaya_api::ErrorCode::NotFound) => bail!(
             "unknown preset {name:?}; the built-in ones are {}, and `ollaya preset list` shows the custom ones",
             presets::NAMES.join(", ")
@@ -225,6 +226,8 @@ struct Session {
     client: Client,
     model: String,
     questions: Option<Questions>,
+    /// The preset's state template, which a plain-text state is put into.
+    state_template: Option<Value>,
     /// Base64 images sent with every state.
     images: Vec<String>,
     keep_alive: Option<KeepAlive>,
@@ -235,6 +238,7 @@ struct Session {
 
 impl Session {
     async fn decide(&self, state: Value) -> Result<DecideResponse> {
+        let state = presets::fill_state(self.state_template.as_ref(), state);
         let mut req = DecideRequest::new(&self.model, state, self.questions.clone());
         req.images = self.images.clone();
         req.keep_alive = self.keep_alive;
@@ -319,9 +323,12 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
         }
         Err(e) => return Err(e.into()),
     };
-    let questions = match (&args.questions, &args.preset) {
-        (None, Some(name)) if !presets::is_builtin(name) => Some(any_preset(&client, name).await?),
-        _ => choose_questions(args, show.questions.is_some())?,
+    let (questions, state_template) = match (&args.asked, &args.questions, &args.preset) {
+        (None, None, Some(name)) => {
+            let (q, t) = any_preset(&client, name).await?;
+            (Some(q), t)
+        }
+        _ => (choose_questions(args, show.questions.is_some())?, None),
     };
     if uses_default_preset(args, show.questions.is_some()) {
         eprintln!(
@@ -347,6 +354,7 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
         client,
         model: args.model.clone(),
         questions,
+        state_template,
         images,
         keep_alive: args.keepalive,
         format: args.format,
@@ -357,7 +365,7 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
 
 const HELP: &str = "Available commands:
   /set questions <file|@file|json>   Use the questions in a JSON file, or inline JSON
-  /preset <name>          Use a preset: built-in (triage, email, guard, moderation, router, agent, decima-guard, decima-guard-web) or custom
+  /preset <name>          Use a preset: built-in (triage, email, guard, moderation, router, agent, decima-guard, decima-guard-web, decima-guard-rag, decima-guard-output) or custom
   /show                   Show the model and the current questions
   /clear                  Clear the screen
   /bye                    Exit
@@ -473,6 +481,7 @@ fn repl(rt: &Runtime, mut session: Session) -> Result<()> {
             Some(Command::SetQuestions(raw)) => match resolve_questions(&raw) {
                 Ok(q) => {
                     session.questions = Some(q);
+                    session.state_template = None;
                     if is_inline_json(&raw) {
                         eprintln!("Set questions from inline JSON.");
                     } else {
@@ -485,8 +494,9 @@ fn repl(rt: &Runtime, mut session: Session) -> Result<()> {
                 Err(e) => eprintln!("error: {e:#}"),
             },
             Some(Command::Preset(name)) => match rt.block_on(any_preset(&session.client, &name)) {
-                Ok(q) => {
+                Ok((q, t)) => {
                     session.questions = Some(q);
+                    session.state_template = t;
                     eprintln!("Set questions to the {name} preset.");
                 }
                 Err(e) => eprintln!("error: {e:#}"),

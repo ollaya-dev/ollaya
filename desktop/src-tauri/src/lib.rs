@@ -710,6 +710,11 @@ async fn decide(
         Ok(v @ (Value::Object(_) | Value::Array(_))) if trimmed.starts_with(['{', '[']) => v,
         _ => Value::String(state),
     };
+    // A built-in preset puts plain text into its state template (the server does it for custom ones).
+    let state = match preset.as_deref().filter(|_| custom.is_none()) {
+        Some(name) => presets::fill_state(presets::state_template(name).as_ref(), state),
+        None => state,
+    };
     let mut request = DecideRequest::new(model, state, questions);
     request.preset = custom;
     client()?.decide(&request).await.map_err(|e| e.to_string())

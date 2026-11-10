@@ -185,11 +185,26 @@ pub fn create_preset_request(obj: Body) -> Result<CreatePresetRequest, Issues> {
             None
         }
     };
+    // The state template: what a plain-text state is put into, so any JSON content but a bare
+    // string (a template without `{text}` would ignore the text, which is allowed).
+    let state = match get(&obj, "state") {
+        None | Some(Value::Null) => None,
+        Some(v @ (Value::Object(_) | Value::Array(_))) => Some(v.clone()),
+        Some(_) => {
+            issues.push(ValidationIssue::new(
+                body_loc(&["state"]),
+                "value_error",
+                "a preset's 'state' is a template object or array, with \"{text}\" where the text goes",
+            ));
+            None
+        }
+    };
     match (name, questions, issues.is_empty()) {
         (Some(name), Some(questions), true) => Ok(CreatePresetRequest {
             name,
             questions,
             description,
+            state,
         }),
         _ => Err(issues),
     }
@@ -386,24 +401,50 @@ fn question(id: &str, def: &Value, base: &[Loc], issues: &mut Issues) -> Option<
             None
         }
     };
+    let rloc = at(&tloc, ["requires".into()]);
+    let requires = match q.get("requires") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(keys))
+            if keys
+                .iter()
+                .all(|k| k.as_str().is_some_and(|k| !k.is_empty())) =>
+        {
+            Some(
+                keys.iter()
+                    .filter_map(|k| k.as_str().map(str::to_owned))
+                    .collect(),
+            )
+        }
+        Some(_) => {
+            issues.push(ValidationIssue::new(
+                rloc,
+                "value_error",
+                "'requires' is a list of state keys (non-empty strings)",
+            ));
+            None
+        }
+    };
     let question = match tag {
         "choice" => choice_criteria(criteria, &cloc, issues).map(|criteria| {
             Question::Choice(ChoiceQuestion {
                 instructions,
                 criteria,
                 ordinal,
+                requires,
             })
         }),
         "score" => score_criteria(criteria, &cloc, issues).map(|criteria| {
             Question::Score(ScoreQuestion {
                 instructions,
                 criteria,
+                requires,
             })
         }),
         _ => noul_criteria(criteria, &cloc, issues).map(|criteria| {
             Question::Noul(NoulQuestion {
                 instructions,
                 criteria,
+                requires,
             })
         }),
     };
