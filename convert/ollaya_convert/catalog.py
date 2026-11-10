@@ -1152,9 +1152,10 @@ CATALOG = {
                              "a coding agent's loop (secret and command gates, tool, command and model choice) "
                              "and knowledge-graph judgments. States up to 8,192 tokens.",
                              "321M", 8192),
-            # HF tag v1.0-preview, decima.json with choice_fit (decima-late-interaction-v2), 2,048-token states.
-            "guard": _decima("decima-guard", "98d3f734c8323cb390d9ad750e1a606a8dd56f09",
-                             "A. M. Madani's Decima-guard 1.0 preview: a guard for LLM apps on Decima-base-clean "
+            # HF tag v1.2, decima.json with choice_fit (decima-late-interaction-v2), 2,048-token states; v1.0-preview
+            # was 98d3f734c8323cb390d9ad750e1a606a8dd56f09.
+            "guard": _decima("decima-guard", "31899f2a5e8aae3c35d9f19b9c9f7ed181d6c908",
+                             "A. M. Madani's Decima-guard 1.2 preview: a guard for LLM apps on Decima-base-clean "
                              "(mmBERT-base) that checks user messages, tool results and model replies for prompt "
                              "injection, jailbreaks, leaks and harmful content (the OWASP Top 10 for LLM "
                              "applications), trained for English, Arabic and Persian. 321M parameters. States up "
