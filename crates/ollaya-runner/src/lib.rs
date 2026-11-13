@@ -27,6 +27,7 @@ pub mod pplx;
 pub mod qwen3guard;
 pub mod server;
 pub mod strands;
+pub mod valen;
 pub mod vision;
 pub mod von;
 
