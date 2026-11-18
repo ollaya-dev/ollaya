@@ -519,12 +519,13 @@ The same endpoint loads and unloads models, as Ollama's `/api/generate` does: a 
 | `questions` | object | with `state`, unless the model has embedded questions | the model's embedded questions | [§5.2](#52-question-schema). Not allowed without `state` (`missing` issue on `state`). |
 | `preset` | string | no | – | A preset's name ([§7.11](#711-presets)), built-in or custom, in place of `questions`: giving both is a `value_error` issue on `preset`, and it needs `state`. An unknown name is `404 NOT_FOUND`. Ollaya-only. |
 | `images` | array of string | no | `[]` | Images for a vision model (`decider:2b-vision`), as Ollama's `images`: base64, or a base64 `data:` URL. Each item must be a non-empty string (`string_type`, `string_too_short`); not allowed without `state`. The runner decodes them: Decider reads one PNG per request; Winnow with a matching projector reads up to 16 ordered PNGs. Unsupported formats, too many images, images over the model/context limits, and models that read no images return `422 INVALID_REQUEST` with the reason. |
+| `audio` | array of string | no | `[]` | Audio clips for a model whose projector has an audio encoder and whose `decision.json` opts in (`"llama": {"audio": true}`; Gemma 4 E2B/E4B fine-tunes on `winnow-v1`): a WAV, FLAC or MP3 file each, base64 or a base64 `data:` URL. The same item rules as `images`; not allowed without `state`. The runner mixes each clip to mono and resamples it to the encoder's rate (16 kHz; a 16 kHz file passes unchanged). At most 8 clips, 30 s each; they follow the images in the prompt. Undecodable files, longer clips and models that read no audio return `422 INVALID_REQUEST` with the reason. Ollaya-only. |
 | `keep_alive` | string \| number | no | `OLLAYA_KEEP_ALIVE` (`5m`) | [§6](#6-keep_alive) |
 | `extras` | array of string | no | `[]` | Closed set: `"laya"`. Each value adds a same-named object to every answer. Unknown values are `enum` issues. |
 | `stream` | boolean | no | `false` | Reserved. `/api/decide` does not stream, and `true` is a `stream_unsupported` issue. It is rejected rather than ignored so that a streaming mode can be added later without changing what existing `stream: true` callers receive. |
 
-Native options are deliberately few. `keep_alive` is Ollama's lifecycle control. `images` carries
-what TypeSafe's schema has no field for; `/v1/*` stays TypeSafe-identical and takes no images. `extras` is how
+Native options are deliberately few. `keep_alive` is Ollama's lifecycle control. `images` and `audio` carry
+what TypeSafe's schema has no field for; `/v1/*` stays TypeSafe-identical and takes no images or audio. `extras` is how
 model-family outputs are exposed without redefining a TypeSafe field. There is no `options` object
 (Ollama's sampling parameters do not apply to decision models); one can be added later as an
 optional field.

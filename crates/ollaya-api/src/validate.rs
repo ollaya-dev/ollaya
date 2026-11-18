@@ -103,8 +103,9 @@ pub fn decide_request(mut obj: Body) -> Result<DecideRequest, Issues> {
             }
         },
     };
-    let images = images(get(&obj, "images"), &mut issues);
-    if get(&obj, "images").is_some() && !has_state {
+    let images = media("images", get(&obj, "images"), &mut issues);
+    let audio = media("audio", get(&obj, "audio"), &mut issues);
+    if (get(&obj, "images").is_some() || get(&obj, "audio").is_some()) && !has_state {
         issues.push(ValidationIssue::missing(body_loc(&["state"])));
     }
     let extras = extras(get(&obj, "extras"), &mut issues);
@@ -127,6 +128,7 @@ pub fn decide_request(mut obj: Body) -> Result<DecideRequest, Issues> {
         questions,
         preset,
         images,
+        audio,
         keep_alive,
         extras,
     })
@@ -538,9 +540,9 @@ fn noul_criteria(
     }
 }
 
-/// `images`: a list of non-empty strings (base64 or data URLs; the runner decodes them).
-fn images(value: Option<&Value>, issues: &mut Issues) -> Vec<String> {
-    let base = body_loc(&["images"]);
+/// `images` and `audio`: a list of non-empty strings (base64 or data URLs; the runner decodes them).
+fn media(field: &str, value: Option<&Value>, issues: &mut Issues) -> Vec<String> {
+    let base = body_loc(&[field]);
     let Some(value) = value else {
         return Vec::new();
     };
@@ -896,6 +898,24 @@ mod tests {
                 ("questions.c.noul.ordinal", "bool_type"),
             ])
         );
+    }
+
+    #[test]
+    fn decide_request_audio() {
+        let req = decide_request(obj(json!({
+            "model": "nature:p2-vision", "state": {}, "audio": ["UklGRg==", "data:audio/wav;base64,UklGRg=="],
+        })))
+        .unwrap();
+        assert_eq!(req.audio, ["UklGRg==", "data:audio/wav;base64,UklGRg=="]);
+        assert!(req.images.is_empty());
+        let issues =
+            decide_request(obj(json!({"model": "m", "state": "s", "audio": ["", 1]}))).unwrap_err();
+        assert_eq!(
+            kinds(&issues),
+            pairs(&[("audio.0", "string_too_short"), ("audio.1", "string_type")])
+        );
+        let issues = decide_request(obj(json!({"model": "m", "audio": ["UklGRg=="]}))).unwrap_err();
+        assert_eq!(kinds(&issues), pairs(&[("state", "missing")]));
     }
 
     #[test]

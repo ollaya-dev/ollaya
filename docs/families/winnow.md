@@ -275,3 +275,63 @@ PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_logs http://1
 For 12b, the same commands with `Winnow-12B-Q8_0.gguf`, `mmproj-Winnow-12B.gguf` and `winnow:12b`'s shipped
 `decision.json` (`thought: true`; for a 2,048-token run change only `llama.n_ctx`), and
 `winnow:12b-vision winnow:12b` for the HTTP checks. Goldens come from the same model on the same device.
+
+## Audio (`winnow-v1` with a Gemma 4 audio encoder, opt-in)
+
+Gemma 4 E2B and E4B carry an audio encoder (`gemma4a`, a 12-layer conformer, 16 kHz, 128 mel bins), and their
+projectors keep it: `mmproj-Winnow-E4B.gguf` has it too. The runner reads audio clips only when the model's
+`decision.json` opts in with `"llama": {"audio": true}`, because a projector can carry an encoder its model was never
+checked with. No `winnow:*` tag opts in: Winnow's author serves no audio. The path exists for Gemma 4 fine-tunes
+trained to hear (the first is a local nature-decision model; see below).
+
+- **Requests.** `audio` on `/api/decide` (base64 WAV, FLAC or MP3, or base64 `data:` URLs) or `--audio` in the CLI,
+  up to 8 clips of at most 30 s each, in order. `/v1/systemone` stays text only.
+- **Decoding.** symphonia decodes the file; channels are averaged to mono (as `librosa.to_mono`); a Kaiser-windowed
+  sinc filter resamples to the encoder's rate (`mtmd_get_audio_sample_rate`, 16 kHz). A 16 kHz mono file passes sample
+  for sample; other rates come close to, not exactly, what librosa's soxr resampler gives.
+- **Prompt.** After the images, under their own heading: `Images (in order):\n<image>\n…Audio (in order):\n<clip>\n…`
+  before `State:`. With no audio the prompt is unchanged byte for byte. libmtmd turns each clip into Gemma 4's
+  `<|audio>`…`<audio|>` block, 25 positions per second (750 for 30 s) of the 8,192-token context.
+- **Evaluation plan.** As for images: the media and the state once per request, each question from the fixed split,
+  nothing cached between requests. Clips are encoded one at a time (`mtmd_helper_eval_chunk_single`).
+
+### Parity (Ollaya, 2026-11-18)
+
+The reference is stock llama-server built from the pinned b11146 source (`7fe450e`), CUDA, with the same flags as
+the image parity above; the model is a Gemma 4 E4B fine-tune (Q8_0) and its projector, with `"audio": true`. The
+unchanged 1e-3 gate on normalized option logits:
+
+| Model | Device | Audio requests / questions | Decisions | Max option-logit difference |
+|---|---|---|---|---|
+| Gemma 4 E4B fine-tune, Q8_0 | RTX PRO 6000 Blackwell, CUDA (Linux) | 31 / 96 | 96/96 | 1.40e-4 |
+
+- **Coverage.** All three question types; synthetic clips (tones, noise, a sweep, whistles, 0.3 s to the 30 s
+  limit), two clips in both orders, an image and a clip together, a repeated request after the others, and 20 real
+  bird recordings of 10 s. Every request matches stock's count of context positions. Over HTTP: WAV, a `data:` URL,
+  FLAC at 44.1 kHz stereo and MP3 at 22.05 kHz, 8 clips; 9 clips, a 31 s clip, undecodable bytes, bad base64 and
+  audio for a model without `"audio": true` are rejected with `422`, and text requests after them still answer.
+- **Reference probabilities.** The fine-tune is trained without a logit soft-cap, so its option logits spread over
+  more than 100: llama-server's float32 probabilities underflow and a non-label token can outrank a label lifted by
+  100. The export samples at temperature 20 with a label bias of 1,000 and stores `20 · log p`; normalization
+  removes the constant. That multiplies float32 rounding by 20, which is why the error is ~1e-4 rather than the
+  ~1e-5 of the image parity.
+- **Against the fine-tune's PyTorch checkpoint** (not a gate; layout, quantization and feature-extraction
+  differences included): 486 recordings and 848 questions, the first 10 s at 16 kHz; the same top answer on 93.5 %
+  (Q8_0) and 94.5 % (BF16) of questions with the recording, against 91.8 % and 92.0 % without it, so the audio path
+  adds no disagreement of its own. What the recording changes (option logits with it minus without, centred)
+  correlates 0.90 between Ollaya and PyTorch.
+- **Not run yet.** CPU, Metal, Windows and Linux ARM audio parity; Winnow E2B.
+
+```bash
+# Reference on the same device as the runner. CPU: -ngl 0 --device none --no-mmproj-offload.
+llama-server -m MODEL.gguf --mmproj MMPROJ.gguf --host 127.0.0.1 --port 11439 -c 8192 -np 1 --cache-ram 0 \
+    --ctx-checkpoints 0 -b 2048 -ub 512 --fit off --no-ui --offline --swa-full -ngl all --device CUDA0
+PYTHONPATH=convert python -m ollaya_convert.families.winnow.audio_parity export http://127.0.0.1:11439 \
+    decision.json audio-goldens-cuda.json --clips CLIPS_DIR --temperature 20 --bias 1000
+ollaya runner --gguf MODEL.gguf --decision decision.json --mmproj MMPROJ.gguf --llama-dir LIBRARY_DIR --device cuda:0
+PYTHONPATH=convert python -m ollaya_convert.families.winnow.audio_parity check http://127.0.0.1:RUNNER_PORT \
+    audio-goldens-cuda.json
+```
+
+`--temperature` and `--bias` stay at 1 and 100 for a capped model. `CLIPS_DIR` is optional: 16 kHz mono WAV files,
+never committed.

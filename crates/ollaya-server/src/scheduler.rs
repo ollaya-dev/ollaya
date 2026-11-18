@@ -151,16 +151,21 @@ pub struct RunningInfo {
 }
 
 impl Runner {
-    /// Forward a request to the runner process. `images` are base64 (vision models).
+    /// Forward a request to the runner process. `images` (vision models) and `audio` (models
+    /// with an audio encoder) are base64.
     pub async fn decide(
         &self,
         state: &Value,
         questions: &Value,
         images: &[String],
+        audio: &[String],
     ) -> Result<Value, Error> {
         let mut body = serde_json::json!({"state": state, "questions": questions});
         if !images.is_empty() {
             body["images"] = serde_json::json!(images);
+        }
+        if !audio.is_empty() {
+            body["audio"] = serde_json::json!(audio);
         }
         let resp = self
             .http

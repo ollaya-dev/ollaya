@@ -730,6 +730,7 @@ async fn decide(
         state,
         questions: questions.as_ref().map(ollaya_api::decide::engine_questions),
         images: req.images.clone(),
+        audio: req.audio.clone(),
         keep_alive: req.keep_alive,
         cancel: None,
     };
@@ -757,6 +758,7 @@ async fn systemone(
             .as_ref()
             .map(ollaya_api::decide::engine_questions),
         images: Vec::new(),
+        audio: Vec::new(),
         keep_alive: None,
         cancel: None,
     };

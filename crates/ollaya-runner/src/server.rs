@@ -8,7 +8,8 @@
 //! * On startup, after the model is loaded, the runner prints one JSON line to stdout:
 //!   `{"port":<u16>,"device":"cuda:0"|"cpu"|"metal","precision":"fp16"|"fp32"|"<GGUF type>","engine":"onnx"|"mlx"|"llama"}`.
 //! * `GET /health` -> the same object plus `"status":"ok"`.
-//! * `POST /decide` `{state, questions, images?}` (images: base64, for vision models) ->
+//! * `POST /decide` `{state, questions, images?, audio?}` (base64; images for vision models, audio
+//!   files for models with an audio encoder) ->
 //!   `{questions:[{logits, act_logits}], input_tokens, state_tokens, state_truncated}`.
 //!   Errors are `{"error":{"code","message"}}` with status 400 (bad request) or 500.
 
@@ -105,6 +106,10 @@ pub struct Loaded {
     pub engine: &'static str,
 }
 
+/// The largest `/decide` body the runner reads: the daemon's 8 MB limit plus room for the JSON it
+/// adds around the caller's fields.
+const RUNNER_BODY_BYTES: usize = 9 * 1024 * 1024;
+
 #[derive(Debug, Deserialize)]
 struct DecideRequest {
     state: Value,
@@ -112,6 +117,9 @@ struct DecideRequest {
     /// Base64 images, for vision models.
     #[serde(default)]
     images: Vec<String>,
+    /// Base64 audio files (WAV, FLAC or MP3), for models with an audio encoder.
+    #[serde(default)]
+    audio: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -593,6 +601,9 @@ pub async fn run(config: RunnerConfig) -> Result<(), Error> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/decide", post(decide))
+        // The daemon forwards bodies up to its own limit (images and audio in base64); axum's
+        // default of 2 MB would refuse them.
+        .layer(axum::extract::DefaultBodyLimit::max(RUNNER_BODY_BYTES))
         .with_state(state);
     axum::serve(listener, app)
         .await
@@ -623,9 +634,14 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
                 .iter()
                 .map(|i| crate::vision::from_base64(i))
                 .collect::<Result<Vec<_>, _>>()?;
+            let audio = req
+                .audio
+                .iter()
+                .map(|a| crate::audio::decode(&crate::audio::from_base64(a)?))
+                .collect::<Result<Vec<_>, _>>()?;
             let out = state
                 .model
-                .run_images(&req.state, &req.questions, &images)?;
+                .run_media(&req.state, &req.questions, &images, &audio)?;
             let questions: Vec<QuestionLogits> = out
                 .questions
                 .into_iter()
@@ -653,6 +669,7 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
             .into_response(),
         Err(Error::Decision(e)) => error(StatusCode::BAD_REQUEST, "INVALID_REQUEST", &e.to_string()),
         Err(Error::Image(e)) => error(StatusCode::BAD_REQUEST, "INVALID_IMAGE", &e.to_string()),
+        Err(Error::Audio(e)) => error(StatusCode::BAD_REQUEST, "INVALID_AUDIO", &e.to_string()),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, "RUNNER_ERROR", &e.to_string()),
     }
 }
@@ -969,6 +986,7 @@ mod tests {
                     state: json!("s"),
                     questions: json!({"x": {"type": "noul", "instructions": "Is it?"}}),
                     images: Vec::new(),
+                    audio: Vec::new(),
                 };
                 let response = decide(State(state.clone()), Json(request)).await;
                 assert_eq!(response.status(), axum::http::StatusCode::OK);

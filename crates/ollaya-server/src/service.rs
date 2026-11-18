@@ -49,6 +49,8 @@ pub struct DecideInput {
     pub questions: Option<Value>,
     /// Images for vision models, base64 as the caller sent them.
     pub images: Vec<String>,
+    /// Audio clips for models with an audio encoder, base64 as the caller sent them.
+    pub audio: Vec<String>,
     pub keep_alive: Option<KeepAlive>,
     /// Set when the caller has gone away: once the model is loaded, the decision is skipped.
     pub cancel: Option<Arc<AtomicBool>>,
@@ -179,7 +181,7 @@ impl Ollaya {
         }
         let eval_started = Instant::now();
         let raw = lease
-            .decide(&input.state, &questions_json, &input.images)
+            .decide(&input.state, &questions_json, &input.images, &input.audio)
             .await?;
         drop(lease);
         let state_tokens = raw["state_tokens"].as_u64().unwrap_or(0) as usize;

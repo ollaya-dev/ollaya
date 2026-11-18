@@ -208,6 +208,10 @@ pub struct DecideRequest {
     /// Images for vision models, base64 or base64 data URLs (Ollama's `images`). Ollaya-only.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<String>,
+    /// Audio clips (WAV, FLAC or MP3), base64 or base64 data URLs, for models whose projector has
+    /// an audio encoder. At most 30 s each; resampled to the encoder's rate. Ollaya-only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub audio: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep_alive: Option<KeepAlive>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -222,6 +226,7 @@ impl DecideRequest {
             questions,
             preset: None,
             images: Vec::new(),
+            audio: Vec::new(),
             keep_alive: None,
             extras: Vec::new(),
         }
@@ -235,6 +240,7 @@ impl DecideRequest {
             questions: None,
             preset: None,
             images: Vec::new(),
+            audio: Vec::new(),
             keep_alive,
             extras: Vec::new(),
         }
