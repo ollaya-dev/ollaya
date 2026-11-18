@@ -242,6 +242,11 @@ impl Calibration {
         self.map.as_ref()
     }
 
+    /// The fixed temperature for a question type, before any option-count bucket.
+    pub fn type_temperature(&self, qtype: QType) -> f64 {
+        self.by_type[qtype.index()]
+    }
+
     /// The fixed temperature for a question type and option count.
     pub fn temperature(&self, qtype: QType, k: usize) -> f64 {
         self.by_options

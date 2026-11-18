@@ -17,6 +17,7 @@ pub mod d3;
 pub mod decider;
 pub mod decima;
 pub mod decision;
+pub mod fit;
 pub mod gliclass;
 pub mod gliclass_kv;
 pub mod jebadiah;

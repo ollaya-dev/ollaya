@@ -228,6 +228,7 @@ impl Model {
                     .then(|| LayaExtra::from_decision(&decided, q))
                     .transpose()
                     .map_err(err)?,
+                logits: None,
             };
             answers.insert(qid.clone(), answer);
         }

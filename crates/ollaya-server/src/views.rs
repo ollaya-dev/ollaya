@@ -304,6 +304,9 @@ pub fn show(store: &Store, info: &ModelInfo) -> ShowResponse {
         details: details(store, manifest),
         model_info,
         capabilities,
+        calibration: manifest
+            .layer(media::CALIBRATION)
+            .and_then(|d| store.read_blob_json::<Value>(d).ok()),
         modified_at: utc(e.modified),
         digest: bare(&e.digest),
     }
@@ -341,7 +344,12 @@ pub fn running_model(store: &Store, r: &RunningInfo) -> RunningModel {
 }
 
 /// An `/api/decide` response from the service's output.
-pub fn decide_response(out: DecideOutput, laya: bool) -> Result<DecideResponse, Error> {
+/// `laya` and `logits` are the requested extras.
+pub fn decide_response(
+    out: DecideOutput,
+    laya: bool,
+    logits: bool,
+) -> Result<DecideResponse, Error> {
     let render = |e: serde_json::Error| Error::Runner(format!("rendering answers: {e}"));
     let mut answers = IndexMap::with_capacity(out.answers.len());
     for ((id, q), a) in out.questions.iter().zip(&out.answers) {
@@ -355,6 +363,7 @@ pub fn decide_response(out: DecideOutput, laya: bool) -> Result<DecideResponse, 
             DecideAnswer {
                 answer: Answer::from_decision(a, q).map_err(render)?,
                 laya: extra,
+                logits: logits.then(|| a.logits.clone()),
             },
         );
     }

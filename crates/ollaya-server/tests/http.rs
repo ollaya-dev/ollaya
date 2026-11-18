@@ -621,13 +621,19 @@ async fn decide_routes_answers_and_unloads() {
         ),
         serde_json::from_value(triage()).ok(),
     );
-    req.extras = vec![ollaya_api::Extra::Laya];
+    req.extras = vec![ollaya_api::Extra::Laya, ollaya_api::Extra::Logits];
     req.keep_alive = Some(KeepAlive::Forever);
     let tr = d.client.decide(&req).await.unwrap();
     assert_eq!(tr.model, "laya:multilingual");
     assert_eq!(tr.routing.as_ref().unwrap().route, "multilingual");
     let laya = tr.answers["department"].laya.as_ref().unwrap();
     assert_eq!(laya.act_probability.map(|p| p > 0.5), Some(true));
+    // The option logits before the temperature, one per option.
+    for (qid, a) in &tr.answers {
+        let logits = a.logits.as_ref().unwrap();
+        let options = req.questions.as_ref().unwrap()[qid].num_options();
+        assert_eq!(logits.len(), options, "{qid}");
+    }
 
     let ps = d.client.ps().await.unwrap();
     let names: Vec<&str> = ps.models.iter().map(|m| m.name.as_str()).collect();

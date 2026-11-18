@@ -82,8 +82,12 @@ pub struct ShowResponse {
     pub details: ModelDetails,
     /// `general.*` keys are stable; `<family>.*` keys are family-specific.
     pub model_info: IndexMap<String, Value>,
-    /// Open set: `choice`, `score`, `noul`, `act`.
+    /// Open set: `choice`, `score`, `noul`, `act`, `vision`, `audio`.
     pub capabilities: Vec<String>,
+    /// The calibration layer as stored (`/api/create`'s `calibration` shape, possibly with more
+    /// keys), when the model has one. Ollaya-only; `ollaya calibrate` starts from it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calibration: Option<Value>,
     pub modified_at: DateTime<Utc>,
     /// sha256 of the manifest, bare hex, as in `/api/tags`. Servers before 0.13.0 don't send it.
     #[serde(default)]
