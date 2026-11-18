@@ -315,6 +315,8 @@ unchanged 1e-3 gate on normalized option logits:
 | Model | Device | Audio requests / questions | Decisions | Max option-logit difference |
 |---|---|---|---|---|
 | Gemma 4 E4B fine-tune, Q8_0 | RTX PRO 6000 Blackwell, CUDA (Linux) | 31 / 96 | 96/96 | 1.40e-4 |
+| Winnow E4B Q8_0, `"audio": true` | Apple M4 Pro, Metal (macOS) | 11 / 36 | 36/36 | 9.44e-6 |
+| Winnow E4B Q8_0, `"audio": true` | Apple M4 Pro, CPU (macOS) | 11 / 36 | 36/36 | 8.64e-6 |
 
 - **Coverage.** All three question types; synthetic clips (tones, noise, a sweep, whistles, 0.3 s to the 30 s
   limit), two clips in both orders, an image and a clip together, a repeated request after the others, and 20 real
@@ -331,7 +333,11 @@ unchanged 1e-3 gate on normalized option logits:
   (Q8_0) and 94.5 % (BF16) of questions with the recording, against 91.8 % and 92.0 % without it, so the audio path
   adds no disagreement of its own. What the recording changes (option logits with it minus without, centred)
   correlates 0.90 between Ollaya and PyTorch.
-- **Not run yet.** CPU, Metal, Windows and Linux ARM audio parity; Winnow E2B.
+- **Apple silicon.** Winnow E4B's own projector with audio switched on locally (no tag ships it), synthetic clips
+  only, goldens from ggml-org's macOS b11146 `llama-server` on the same machine (CPU: `-ngl 0 --device none
+  --no-mmproj-offload`). Winnow keeps the soft-cap, so the export runs at temperature 1 with bias 100, and the error
+  is the image parity's ~1e-5. The runner's audio warm-up ran on both devices.
+- **Not run yet.** Windows and Linux ARM audio parity; Winnow E2B.
 
 ```bash
 # Reference on the same device as the runner. CPU: -ngl 0 --device none --no-mmproj-offload.
