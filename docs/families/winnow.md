@@ -298,7 +298,10 @@ trained to hear (the first is a local nature-decision model; see below).
   can carry temperatures per media: `"media": {"audio": {"temperature": [choice, score, noul]}}` (also `text`, `image`
   and `image+audio`), applied to requests with exactly those media and clamped to the top-level `temperature_range`
   unless the entry has its own. `ollaya create` and a Modelfile's `CALIBRATION` take the same shape
-  ([api.md §7.9](../api.md#79-post-apicreate)).
+  ([api.md §7.9](../api.md#79-post-apicreate)). `ollaya calibrate` fits them on the installed model
+  ([api.md, "Calibrating a model"](../api.md#calibrating-a-model)). On the nature-decision fine-tune (Q8_0, fitted
+  on its dev split): audio choice T = 95.0 and noul T = 155.9, against 68.6 and 101.1 for images; dev ECE for audio
+  choice 0.060 → 0.027. BF16 fits the same within 0.05.
 - **Discovery and warm-up.** `ollaya show` lists `audio` among the capabilities of a model that opts in, and audio
   for any other model is refused before it loads. The runner runs a one-second clip at load, so the encoder's
   one-off costs do not land on the first request.
