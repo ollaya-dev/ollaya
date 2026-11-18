@@ -272,7 +272,7 @@ TypeSafe SDK users therefore see the same text from Ollaya as from TypeSafe.
 | `string_too_short` | Empty string where a name is required | `{"min_length": 1}` |
 | `model_name` | `model` / `source` / `destination` / `from` does not parse ([§3](#3-model-names-and-resolution)) | – |
 | `keep_alive` | `keep_alive` does not parse ([§6](#6-keep_alive)) | – |
-| `enum` | Unknown value in a closed set, e.g. `extras` | `{"expected": "'laya'"}` |
+| `enum` | Unknown value in a closed set, e.g. `extras` | `{"expected": "'laya' or 'logits'"}` |
 | `stream_unsupported` | `"stream": true` on `/api/decide` | – |
 | `parameter` | Unknown or invalid `/api/create` parameter | – |
 | `calibration` | `/api/create` calibration key that is not `<type>:<bucket>`, a `media` key that is not `text`, `image`, `audio` or `image+audio`, a nested `media`, or an invalid `temperature_range` | – |
@@ -1153,9 +1153,8 @@ that are never fitted on. A Modelfile then bakes it in: `FROM MODEL` and `CALIBR
 
 One example per line:
 
-```json
-{"state": {"site": "garden"}, "questions": {"species": {"type": "choice", "instructions": "Which bird?", "criteria": {"Turdus merula": null, "Erithacus rubecula": null}}},
- "audio": ["clips/0001.wav"], "labels": {"species": "Turdus merula"}}
+```jsonl
+{"state": {"site": "garden"}, "questions": {"species": {"type": "choice", "instructions": "Which bird?", "criteria": {"Turdus merula": null, "Erithacus rubecula": null}}}, "audio": ["clips/0001.wav"], "labels": {"species": "Turdus merula"}}
 ```
 
 | Field | Meaning |

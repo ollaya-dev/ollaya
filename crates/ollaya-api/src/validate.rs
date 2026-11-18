@@ -575,11 +575,15 @@ fn extras(value: Option<&Value>, issues: &mut Issues) -> Vec<Extra> {
         issues.push(ValidationIssue::wrong_type(base, "list_type"));
         return Vec::new();
     };
-    let expected = Extra::ALL
+    // Pydantic's literal_error wording: 'a', 'b' or 'c'.
+    let quoted: Vec<String> = Extra::ALL
         .iter()
         .map(|e| format!("'{}'", e.as_str()))
-        .collect::<Vec<_>>()
-        .join(", ");
+        .collect();
+    let expected = match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} or {last}", rest.join(", ")),
+        _ => quoted.concat(),
+    };
     let mut out = Vec::new();
     for (i, item) in items.iter().enumerate() {
         match item {
@@ -1090,7 +1094,7 @@ mod tests {
 
         let issues = decide_request(obj(json!({
             "model": 7, "questions": {"q": {"type": "noul"}},
-            "keep_alive": "soon", "extras": ["logits", 1], "stream": "yes",
+            "keep_alive": "soon", "extras": ["embeddings", 1], "stream": "yes",
         })))
         .unwrap_err();
         assert_eq!(
@@ -1104,7 +1108,7 @@ mod tests {
                 ("stream", "bool_type"),
             ])
         );
-        assert_eq!(issues[3].msg, "Input should be 'laya'");
+        assert_eq!(issues[3].msg, "Input should be 'laya' or 'logits'");
     }
 
     #[test]
