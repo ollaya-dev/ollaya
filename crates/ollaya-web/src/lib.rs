@@ -219,7 +219,8 @@ impl Model {
         for (r, ((qid, q), e)) in batch.questions.iter().zip(&batch.encoded).enumerate() {
             let row = &logits[r * batch.markers..][..e.markers.len()];
             let act = (act_width > 0).then(|| &act_logits[r * act_width..][..act_width]);
-            let decided = Answer::new(q, &self.calibration, row, act, batch.state_tokens);
+            let calibration = self.calibration.for_media("text");
+            let decided = Answer::new(q, calibration, row, act, batch.state_tokens);
             let answer = DecideAnswer {
                 answer: ApiAnswer::from_decision(&decided, q).map_err(err)?,
                 laya: batch

@@ -294,6 +294,14 @@ trained to hear (the first is a local nature-decision model; see below).
   `<|audio>`…`<audio|>` block, 25 positions per second (750 for 30 s) of the 8,192-token context.
 - **Evaluation plan.** As for images: the media and the state once per request, each question from the fixed split,
   nothing cached between requests. Clips are encoded one at a time (`mtmd_helper_eval_chunk_single`).
+- **Calibration.** A recording spreads the option logits differently than a photo or text, so a model's calibration
+  can carry temperatures per media: `"media": {"audio": {"temperature": [choice, score, noul]}}` (also `text`, `image`
+  and `image+audio`), applied to requests with exactly those media and clamped to the top-level `temperature_range`
+  unless the entry has its own. `ollaya create` and a Modelfile's `CALIBRATION` take the same shape
+  ([api.md §7.9](../api.md#79-post-apicreate)).
+- **Discovery and warm-up.** `ollaya show` lists `audio` among the capabilities of a model that opts in, and audio
+  for any other model is refused before it loads. The runner runs a one-second clip at load, so the encoder's
+  one-off costs do not land on the first request.
 
 ### Parity (Ollaya, 2026-11-18)
 

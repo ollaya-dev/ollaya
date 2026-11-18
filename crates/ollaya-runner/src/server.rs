@@ -498,6 +498,17 @@ fn warm_up(model: &dyn Engine) -> Result<(), Error> {
             serde_json::json!({"check": {"type": "noul", "instructions": "Is this a warm-up?"}});
         model.run_images(&state, &q, &[png])?;
     }
+    // So does an audio encoder: one second of a quiet tone, at the rate Gemma 4's encoder reads.
+    if model.reads_audio() {
+        let rate = 16_000;
+        let samples = (0..rate)
+            .map(|i| 0.1 * (std::f32::consts::TAU * 440.0 * i as f32 / rate as f32).sin())
+            .collect();
+        let clip = crate::audio::Clip { rate, samples };
+        let q =
+            serde_json::json!({"check": {"type": "noul", "instructions": "Is this a warm-up?"}});
+        model.run_media(&state, &q, &[], &[clip])?;
+    }
     Ok(())
 }
 

@@ -13,6 +13,19 @@ use crate::question::QType;
 pub const TEMP_MIN: f64 = 0.5;
 pub const TEMP_MAX: f64 = 5.0;
 
+/// The media a request carries, as [`CalibrationFile::media`] names them.
+pub const MEDIA_KEYS: [&str; 4] = ["text", "image", "audio", "image+audio"];
+
+/// The [`MEDIA_KEYS`] entry for a request with this many images and audio clips.
+pub fn media_key(images: usize, audio: usize) -> &'static str {
+    match (images > 0, audio > 0) {
+        (false, false) => "text",
+        (true, false) => "image",
+        (false, true) => "audio",
+        (true, true) => "image+audio",
+    }
+}
+
 /// The `calibration` layer: one temperature per question type, optionally refined per
 /// (type, option-count bucket), or a temperature that depends on the input.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -29,6 +42,13 @@ pub struct CalibrationFile {
     /// outside [`TEMP_MIN`]..[`TEMP_MAX`] (the raw label logits of instruct LLMs need 6 to 40).
     #[serde(default)]
     pub temperature_range: Option<[f64; 2]>,
+    /// Temperatures for the requests that carry these media ([`MEDIA_KEYS`]): an encoder's
+    /// logits spread differently for a recording than for a photo or text, so each is fitted on
+    /// its own. An entry replaces the temperatures above (`temperature`, `temperature_by_options`
+    /// and `temperature_map`) for its requests and keeps the clamp range above unless it has its
+    /// own. Requests whose media have no entry, and unknown keys, use the temperatures above.
+    #[serde(default)]
+    pub media: HashMap<String, CalibrationFile>,
 }
 
 /// Temperatures as they are applied: clamped, with neutral fallbacks for invalid entries.
@@ -37,6 +57,8 @@ pub struct Calibration {
     by_type: [f64; 3],
     by_options: HashMap<String, f64>,
     map: Option<TemperatureMap>,
+    /// Per [`MEDIA_KEYS`] entry; never nested.
+    media: HashMap<&'static str, Calibration>,
 }
 
 impl Default for Calibration {
@@ -45,6 +67,7 @@ impl Default for Calibration {
             by_type: [1.0; 3],
             by_options: HashMap::new(),
             map: None,
+            media: HashMap::new(),
         }
     }
 }
@@ -150,9 +173,15 @@ pub fn clamp_temperature_in(t: &Value, [lo, hi]: [f64; 2]) -> f64 {
 impl CalibrationFile {
     /// The clamp range: the file's own, when it is a valid range, else the default.
     pub fn range(&self) -> [f64; 2] {
+        self.own_range().unwrap_or([TEMP_MIN, TEMP_MAX])
+    }
+
+    fn own_range(&self) -> Option<[f64; 2]> {
         match self.temperature_range {
-            Some([lo, hi]) if lo.is_finite() && hi.is_finite() && 0.0 < lo && lo <= hi => [lo, hi],
-            _ => [TEMP_MIN, TEMP_MAX],
+            Some([lo, hi]) if lo.is_finite() && hi.is_finite() && 0.0 < lo && lo <= hi => {
+                Some([lo, hi])
+            }
+            _ => None,
         }
     }
 }
@@ -170,7 +199,18 @@ pub fn bucket(qtype: QType, k: usize) -> String {
 
 impl Calibration {
     pub fn from_file(file: &CalibrationFile) -> Self {
-        let range = file.range();
+        let mut cal = Self::fixed(file, file.range());
+        for key in MEDIA_KEYS {
+            if let Some(entry) = file.media.get(key) {
+                let range = entry.own_range().unwrap_or(file.range());
+                cal.media.insert(key, Self::fixed(entry, range));
+            }
+        }
+        cal
+    }
+
+    /// One level of a file: its temperatures, without the media entries.
+    fn fixed(file: &CalibrationFile, range: [f64; 2]) -> Self {
         let mut by_type = [1.0; 3];
         for (slot, t) in by_type.iter_mut().zip(&file.temperature) {
             *slot = clamp_temperature_in(t, range);
@@ -187,7 +227,14 @@ impl Calibration {
                 .temperature_map
                 .as_ref()
                 .and_then(TemperatureMap::parse),
+            media: HashMap::new(),
         }
+    }
+
+    /// The temperatures for a request with these media ([`media_key`]): the entry for them when
+    /// the file has one, else the file's own.
+    pub fn for_media(&self, key: &str) -> &Calibration {
+        self.media.get(key).unwrap_or(self)
     }
 
     /// The input-conditioned temperature, when the calibration has a valid one.
@@ -316,6 +363,46 @@ mod tests {
             cal.probabilities(QType::Score, &[0.0, 2.0], 1),
             cal.probabilities(QType::Score, &[0.0, 2.0], 9999)
         );
+    }
+
+    #[test]
+    fn media_entries_replace_the_temperatures_for_their_requests() {
+        // Biota's nature models: no soft-cap, so the fitted temperatures lie far outside the
+        // default range, and a recording spreads the logits more than a photo does.
+        let cal = load(json!({
+            "temperature": [68.58, 15.0, 101.09],
+            "temperature_by_options": {"choice:3-5": 60.0},
+            "temperature_range": [0.5, 200.0],
+            "media": {
+                "audio": {"temperature": [91.43, 15.0, 118.49]},
+                "text": {"temperature": [2.0, 2.0, 2.0], "temperature_range": [0.5, 5.0]},
+                "video": {"temperature": [1.0, 1.0, 1.0]},
+                "image+audio": {"temperature": [300.0], "media": {"audio": {"temperature": [1.0]}}},
+            },
+        }));
+        assert_eq!(media_key(0, 0), "text");
+        assert_eq!(media_key(2, 0), "image");
+        assert_eq!(media_key(0, 1), "audio");
+        assert_eq!(media_key(1, 1), "image+audio");
+        // No entry: the file's own temperatures, buckets included.
+        let image = cal.for_media(media_key(1, 0));
+        assert_eq!(image.temperature(QType::Choice, 4), 60.0);
+        assert_eq!(image.temperature(QType::Noul, 2), 101.09);
+        // An entry replaces them, buckets included, and keeps the file's range...
+        let audio = cal.for_media("audio");
+        assert_eq!(audio.temperature(QType::Choice, 4), 91.43);
+        assert_eq!(audio.temperature(QType::Noul, 2), 118.49);
+        // ...unless it has its own; and entries never nest.
+        assert_eq!(cal.for_media("text").temperature(QType::Choice, 2), 2.0);
+        let both = cal.for_media("image+audio");
+        assert_eq!(both.temperature(QType::Choice, 2), 200.0);
+        assert_eq!(both.temperature(QType::Score, 3), 1.0);
+        assert!(std::ptr::eq(both.for_media("audio"), both));
+        // Unknown keys are ignored.
+        assert!(std::ptr::eq(cal.for_media("video"), &cal));
+        // One logit unit per temperature: a 91.43 lead is odds of e (f32 logits, so 1e-6).
+        let p = audio.probabilities(QType::Choice, &[0.0, 91.43], 0);
+        assert!((p[1] - std::f64::consts::E / (1.0 + std::f64::consts::E)).abs() < 1e-6);
     }
 
     fn load(v: Value) -> Calibration {

@@ -251,6 +251,15 @@ pub struct CalibrationSpec {
     /// `"<type>:<2|3-5|6-10|11+>"` -> temperature.
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub temperature_by_options: IndexMap<String, f64>,
+    /// `[min, max]` the temperatures are clamped to; unset, `[0.5, 5]`. Raw label logits of an
+    /// instruct LLM need far larger temperatures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature_range: Option<[f64; 2]>,
+    /// Temperatures for the requests that carry these media: `text`, `image`, `audio` or
+    /// `image+audio`. An entry replaces `temperature` and `temperature_by_options` for its
+    /// requests and keeps `temperature_range` unless it sets its own; entries have no `media`.
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub media: IndexMap<String, CalibrationSpec>,
 }
 
 /// `parameters` of `/api/create` (closed set; Modelfile `PARAMETER`).

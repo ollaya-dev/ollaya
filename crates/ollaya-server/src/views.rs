@@ -13,7 +13,7 @@ use ollaya_registry::{Entry, ModelName, Store, media};
 use serde_json::{Value, json};
 
 use crate::Error;
-use crate::models::{Resolved, resolve};
+use crate::models::{Inputs, Resolved, resolve};
 use crate::scheduler::RunningInfo;
 use crate::service::{DecideOutput, ModelInfo};
 
@@ -130,13 +130,21 @@ fn decision(store: &Store, manifest: &Manifest) -> Option<Value> {
     store.read_blob_json(manifest.layer(media::DECISION)?).ok()
 }
 
-fn capabilities(decision: &Value) -> Vec<String> {
+/// Question types, `act` for an act head, and the media the model reads besides text (`vision`
+/// as Ollama names images, `audio`).
+fn capabilities(decision: &Value, inputs: Inputs) -> Vec<String> {
     let mut caps: Vec<String> = ["choice", "score", "noul"].map(String::from).to_vec();
     let has_act = decision["outputs"]
         .as_array()
         .is_some_and(|o| o.iter().any(|x| x == "act_logits"));
     if has_act {
         caps.push("act".into());
+    }
+    if inputs.images {
+        caps.push("vision".into());
+    }
+    if inputs.audio {
+        caps.push("audio".into());
     }
     caps
 }
@@ -179,7 +187,7 @@ pub fn show(store: &Store, info: &ModelInfo) -> ShowResponse {
                     model_info.insert(format!("{family}.{key}"), value.clone());
                 }
             }
-            (m.questions.clone(), None, capabilities(&d))
+            (m.questions.clone(), None, capabilities(&d, m.inputs))
         }
         Resolved::Router {
             name,
@@ -197,7 +205,7 @@ pub fn show(store: &Store, info: &ModelInfo) -> ShowResponse {
                     && let Ok(Some(te)) = store.read_manifest(&m.name)
                 {
                     let d = decision(store, &te.manifest).unwrap_or(Value::Null);
-                    let tc = capabilities(&d);
+                    let tc = capabilities(&d, m.inputs);
                     caps = Some(match caps {
                         None => tc,
                         Some(prev) => prev.into_iter().filter(|x| tc.contains(x)).collect(),

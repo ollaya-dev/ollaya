@@ -601,7 +601,16 @@ fn extras(value: Option<&Value>, issues: &mut Issues) -> Vec<Extra> {
 }
 
 fn calibration(value: &Value, issues: &mut Issues) -> Option<CalibrationSpec> {
-    let base = body_loc(&["calibration"]);
+    calibration_at(value, body_loc(&["calibration"]), true, issues)
+}
+
+/// One level of a calibration: the top level (`media` allowed) or a media entry.
+fn calibration_at(
+    value: &Value,
+    base: Vec<Loc>,
+    top: bool,
+    issues: &mut Issues,
+) -> Option<CalibrationSpec> {
     let Value::Object(m) = value else {
         issues.push(ValidationIssue::wrong_type(base, "dict_type"));
         return None;
@@ -653,6 +662,52 @@ fn calibration(value: &Value, issues: &mut Issues) -> Option<CalibrationSpec> {
         }
         Some(_) => issues.push(ValidationIssue::wrong_type(
             at(&base, ["temperature_by_options".into()]),
+            "dict_type",
+        )),
+    }
+    match m.get("temperature_range").filter(|v| !v.is_null()) {
+        None => {}
+        Some(v) => {
+            let rloc = at(&base, ["temperature_range".into()]);
+            let range = v.as_array().and_then(|r| match r.as_slice() {
+                [lo, hi] => Some([lo.as_f64()?, hi.as_f64()?]),
+                _ => None,
+            });
+            match range {
+                Some([lo, hi]) if lo.is_finite() && hi.is_finite() && 0.0 < lo && lo <= hi => {
+                    spec.temperature_range = Some([lo, hi]);
+                }
+                _ => issues.push(ValidationIssue::calibration(
+                    rloc,
+                    "expected [min, max] with 0 < min <= max",
+                )),
+            }
+        }
+    }
+    match m.get("media").filter(|v| !v.is_null()) {
+        None => {}
+        Some(_) if !top => issues.push(ValidationIssue::calibration(
+            at(&base, ["media".into()]),
+            "a media entry cannot have media of its own",
+        )),
+        Some(Value::Object(entries)) => {
+            let mloc = at(&base, ["media".into()]);
+            for (key, entry) in entries {
+                let kloc = at(&mloc, [Loc::key(key.as_str())]);
+                if !ollaya_decision::MEDIA_KEYS.contains(&key.as_str()) {
+                    issues.push(ValidationIssue::calibration(
+                        kloc,
+                        "keys are \"text\", \"image\", \"audio\" or \"image+audio\"",
+                    ));
+                    continue;
+                }
+                if let Some(e) = calibration_at(entry, kloc, false, issues) {
+                    spec.media.insert(key.clone(), e);
+                }
+            }
+        }
+        Some(_) => issues.push(ValidationIssue::wrong_type(
+            at(&base, ["media".into()]),
             "dict_type",
         )),
     }
@@ -1103,6 +1158,56 @@ mod tests {
         .unwrap();
         assert_eq!(ok.parameters.unwrap().precision.as_deref(), Some("fp32"));
         assert_eq!(ok.description.as_deref(), Some("Ticket triage"));
+    }
+
+    #[test]
+    fn create_request_media_calibration() {
+        let ok = create_request(obj(json!({
+            "model": "birds", "from": "nature:p2",
+            "calibration": {
+                "temperature": [68.58, 15.0, 101.09], "temperature_range": [0.5, 200],
+                "media": {"audio": {"temperature": [91.43, 15.0, 118.49]},
+                          "text": {"temperature": [2.0], "temperature_range": [0.5, 5]}},
+            },
+        })))
+        .unwrap();
+        let c = ok.calibration.unwrap();
+        assert_eq!(c.temperature_range, Some([0.5, 200.0]));
+        assert_eq!(c.media["audio"].temperature, [91.43, 15.0, 118.49]);
+        assert_eq!(c.media["audio"].temperature_range, None);
+        assert_eq!(c.media["text"].temperature_range, Some([0.5, 5.0]));
+        // The spec round-trips into the layer the daemon reads.
+        let layer: ollaya_decision::CalibrationFile =
+            serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
+        let cal = ollaya_decision::Calibration::from_file(&layer);
+        let audio = cal.for_media(ollaya_decision::media_key(0, 1));
+        assert_eq!(audio.temperature(ollaya_decision::QType::Choice, 4), 91.43);
+
+        let issues = create_request(obj(json!({
+            "model": "birds", "from": "nature:p2",
+            "calibration": {
+                "temperature_range": [5, 1],
+                "media": {"video": {}, "audio": {"temperature": ["hot"], "media": {}},
+                          "image": {"temperature_range": [0, 3]}, "text": 2},
+            },
+        })))
+        .unwrap_err();
+        assert_eq!(
+            kinds(&issues),
+            pairs(&[
+                ("calibration.temperature_range", "calibration"),
+                ("calibration.media.video", "calibration"),
+                ("calibration.media.audio.temperature.0", "float_type"),
+                ("calibration.media.audio.media", "calibration"),
+                ("calibration.media.image.temperature_range", "calibration"),
+                ("calibration.media.text", "dict_type"),
+            ])
+        );
+        let issues = create_request(obj(json!({
+            "model": "birds", "from": "nature:p2", "calibration": {"media": []},
+        })))
+        .unwrap_err();
+        assert_eq!(kinds(&issues), pairs(&[("calibration.media", "dict_type")]));
     }
 
     #[test]

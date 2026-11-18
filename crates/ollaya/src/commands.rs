@@ -303,7 +303,7 @@ pub fn create_request(name: &str, mf: modelfile::Modelfile) -> Result<CreateRequ
         .map(serde_json::from_value)
         .transpose()
         .context(
-            "CALIBRATION: expected {\"temperature\": [...], \"temperature_by_options\": {...}}",
+            "CALIBRATION: expected {\"temperature\": [...], \"temperature_by_options\": {...}, \"media\": {...}}",
         )?;
     Ok(CreateRequest {
         model: name.to_owned(),
