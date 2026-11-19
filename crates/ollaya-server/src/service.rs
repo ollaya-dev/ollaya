@@ -52,6 +52,8 @@ pub struct DecideInput {
     pub keep_alive: Option<KeepAlive>,
     /// Set when the caller has gone away: once the model is loaded, the decision is skipped.
     pub cancel: Option<Arc<AtomicBool>>,
+    /// The caller stops waiting then: once it has passed, the decision is skipped.
+    pub deadline: Option<Instant>,
 }
 
 /// Which model answered and why, when the requested model is a router.
@@ -177,9 +179,15 @@ impl Ollaya {
         {
             return Err(Error::Cancelled);
         }
+        let remaining = input
+            .deadline
+            .map(|d| d.saturating_duration_since(Instant::now()));
+        if remaining == Some(Duration::ZERO) {
+            return Err(Error::DeadlineExceeded);
+        }
         let eval_started = Instant::now();
         let raw = lease
-            .decide(&input.state, &questions_json, &input.images)
+            .decide(&input.state, &questions_json, &input.images, remaining)
             .await?;
         drop(lease);
         let state_tokens = raw["state_tokens"].as_u64().unwrap_or(0) as usize;

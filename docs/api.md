@@ -206,6 +206,7 @@ The `code` set is **open**: clients MUST handle an unknown code by falling back 
 | `OPERATION_IN_PROGRESS` | 409 | A pull or create is writing the same model name ([§11](#11-idempotency-and-retries)) | yes, after it finishes |
 | `REQUEST_TOO_LARGE` | 413 | Body over 8 MiB | no |
 | `QUEUE_FULL` | 503 | `OLLAYA_MAX_QUEUE` requests are already waiting; sent with `Retry-After: 1` | yes |
+| `DEADLINE_EXCEEDED` | 504 | The request's `X-Ollaya-Timeout-Ms` passed before the model could run it ([§10](#10-concurrency-queueing-timeouts-and-cancellation)); no forward pass ran | no |
 | `MODEL_LOAD_FAILED` | 500 | The runner could not load the model: corrupt files, not enough memory, or no load within `OLLAYA_LOAD_TIMEOUT` | rarely |
 | `INFERENCE_FAILED` | 500 | The runner crashed or failed during a decision | yes |
 | `STORAGE_ERROR` | 500 | Local disk failure: disk full, permissions, I/O | no |
@@ -265,6 +266,7 @@ TypeSafe SDK users therefore see the same text from Ollaya as from TypeSafe.
 | `missing` | Required field absent (`msg`: `Field required`) | – |
 | `string_type`, `bool_type`, `dict_type`, `list_type`, `float_type` | Wrong JSON type | – |
 | `state_type` | `state` is not a string, object or array | – |
+| `int_parsing` | `X-Ollaya-Timeout-Ms` is not a whole number of milliseconds (`loc`: `["header", "x-ollaya-timeout-ms"]`) | – |
 | `json_type` | `instructions` or a criterion is not a string, object, array (or `null` where allowed) | – |
 | `union_tag_not_found` | Question without a string `type` | `{"discriminator": "'type'"}` |
 | `union_tag_invalid` | Unknown question `type` | `{"discriminator": "'type'", "tag": "<given>", "expected_tags": "'choice', 'score', 'noul'"}` |
@@ -1518,7 +1520,13 @@ adds no measurable latency. Model-specific limits ([§5.3](#53-model-specific-li
 - **Load timeout.** A load that does not finish within `OLLAYA_LOAD_TIMEOUT` (default `5m`) fails.
   Every request waiting for it gets `500 MODEL_LOAD_FAILED`, and the next request retries the
   load.
-- **No inference timeout** on the server, as in Ollama. The client owns its deadline.
+- **Deadlines.** The server has no inference timeout of its own, as in Ollama: the client owns its
+  deadline. A client that sends `X-Ollaya-Timeout-Ms: <n>` on `/api/decide` or `/v1/*`
+  (milliseconds, counted from when the request arrives) lets the server skip work nobody waits
+  for: if the deadline passes while the request waits for a load, a slot or the runner's previous
+  forward pass, it gets `504 DEADLINE_EXCEEDED` and its forward pass never runs. A pass that has
+  started completes. The time is relative so that the check does not depend on the client's and
+  the server's clocks agreeing. A value that is not a whole number gets `422 INVALID_REQUEST`.
 - **Client cancellation** (the connection closes):
 
 | When | Effect |
@@ -1702,8 +1710,8 @@ Therefore:
 - **CORS headers.**
   - Preflight `OPTIONS` answers `204`.
   - Allowed request headers: `Authorization`, `Content-Type`, `Accept`, `User-Agent`,
-    `X-Requested-With`, `X-Request-Id`, `X-TypeSafe-SDK`, `X-TypeSafe-Runtime` and
-    `X-TypeSafe-Retry-Count`.
+    `X-Requested-With`, `X-Request-Id`, `X-TypeSafe-SDK`, `X-TypeSafe-Runtime`,
+    `X-TypeSafe-Retry-Count` and `X-Ollaya-Timeout-Ms`.
   - Exposed headers: `X-Request-Id`, `x-typesafe-request-id`, `Retry-After`,
     `X-Ollaya-Eval-Duration`, `X-Ollaya-Load-Duration` and `X-Ollaya-Total-Duration`.
 - **Host check.** When bound to a loopback address, the server rejects a `Host` header that is not

@@ -151,16 +151,21 @@ pub struct RunningInfo {
 }
 
 impl Runner {
-    /// Forward a request to the runner process. `images` are base64 (vision models).
+    /// Forward a request to the runner process. `images` are base64 (vision models). With
+    /// `timeout`, the runner drops the request if it is still queued when that has passed.
     pub async fn decide(
         &self,
         state: &Value,
         questions: &Value,
         images: &[String],
+        timeout: Option<Duration>,
     ) -> Result<Value, Error> {
         let mut body = serde_json::json!({"state": state, "questions": questions});
         if !images.is_empty() {
             body["images"] = serde_json::json!(images);
+        }
+        if let Some(timeout) = timeout {
+            body["timeout_ms"] = serde_json::json!(timeout.as_millis() as u64);
         }
         let resp = self
             .http
@@ -179,6 +184,9 @@ impl Runner {
         }
         let err = &body["error"];
         let message = err["message"].as_str().unwrap_or("runner error").to_owned();
+        if err["code"] == "DEADLINE_EXCEEDED" {
+            return Err(Error::DeadlineExceeded);
+        }
         if err["code"] == "TOO_MANY_OPTIONS" {
             return Err(Error::TooManyOptions {
                 question: err["question"].as_str().unwrap_or_default().to_owned(),

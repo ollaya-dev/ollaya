@@ -701,6 +701,40 @@ async fn preload_loads_models_before_ready() {
     d.stop().await;
 }
 
+async fn a_passed_deadline_skips_the_decision() {
+    let d = Daemon::start(
+        |dir| {
+            let store = Store::open(dir).unwrap();
+            add_model(&store, "slow:latest", &["en"], json!({"load_ms": 400}));
+        },
+        |_| {},
+    )
+    .await;
+    let body = json!({"model": "slow", "state": "Refund me.",
+                      "questions": {"refund": {"type": "noul", "instructions": "Refund?"}}})
+    .to_string();
+    let send = |timeout: &str| {
+        http()
+            .post(d.url("/v1/systemone"))
+            .header("x-ollaya-timeout-ms", timeout)
+            .body(body.clone())
+            .send()
+    };
+    let late = send("100").await.unwrap();
+    assert_eq!(late.status().as_u16(), 504);
+    let late: Value = late.json().await.unwrap();
+    assert_eq!(late["code"], "DEADLINE_EXCEEDED", "{late}");
+    let bad = send("soon").await.unwrap();
+    assert_eq!(bad.status().as_u16(), 422);
+    let ok = send("10000").await.unwrap();
+    assert_eq!(
+        ok.status().as_u16(),
+        200,
+        "loaded now, well within the deadline"
+    );
+    d.stop().await;
+}
+
 async fn systemone_is_typesafe_shaped() {
     let d = Daemon::laya().await;
     let (status, headers, body) = post_raw(
@@ -1790,6 +1824,7 @@ fn main() {
         tags_show_ps_and_v1_models,
         decide_routes_answers_and_unloads,
         preload_loads_models_before_ready,
+        a_passed_deadline_skips_the_decision,
         systemone_is_typesafe_shaped,
         systemone_rejects_truncated_state,
         model_specific_errors,
