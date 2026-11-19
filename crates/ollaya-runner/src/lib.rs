@@ -80,6 +80,9 @@ pub enum Error {
     Model(String),
     #[error(transparent)]
     Image(#[from] vision::ImageError),
+    /// The request's `timeout_ms` passed while it waited for the model thread.
+    #[error("the request's deadline passed while it waited for the model")]
+    DeadlineExceeded,
     #[error(transparent)]
     Audio(#[from] audio::AudioError),
 }
