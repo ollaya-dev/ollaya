@@ -22,6 +22,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Rust 1.100 moved build scripts' OUT_DIR one level deeper (<profile>/build/<package>/<hash>/out);
+  # ort-sys 2.0.0-rc.13, pinned with ort, then copies DirectML.dll to the wrong directory and the
+  # Windows build panics. Lift the pin with ort rc.15 or later (an ONNX Runtime update: full parity).
+  RUST_TOOLCHAIN: '1.99.1'
   CARGO_TERM_COLOR: always
   PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
@@ -77,8 +81,8 @@ jobs:
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - name: Install Rust
         run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          rustup toolchain install ${{ env.RUST_TOOLCHAIN }} --profile minimal
+          rustup default ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.platform }}

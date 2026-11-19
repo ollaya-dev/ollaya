@@ -271,9 +271,14 @@ mod imp {
 
     /// `target/<profile>/mlx.metallib`, next to the `ollaya` binary a `cargo build` produces.
     fn copy_next_to_binaries(metallib: &Path) {
-        // OUT_DIR is <target>/<profile>/build/<package>-<hash>/out.
+        // OUT_DIR is <target>/<profile>/build/<package>-<hash>/out, or since Cargo 1.100
+        // <target>/<profile>/build/<package>/<hash>/out: the profile is the parent of `build`.
         let out = PathBuf::from(env("OUT_DIR"));
-        let Some(profile_dir) = out.ancestors().nth(3) else {
+        let Some(profile_dir) = out
+            .ancestors()
+            .find(|p| p.file_name().is_some_and(|n| n == "build"))
+            .and_then(Path::parent)
+        else {
             return;
         };
         let dest = profile_dir.join("mlx.metallib");
