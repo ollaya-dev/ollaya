@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "date": "2026-11-10",
+ "edition": "2026.10",
+ "machine": "rtx-5090",
+ "device": "cuda",
+ "suite": "typed-decisions",
+ "ollaya": "0.18.0",
+ "protocol": {
+  "benchmark": "typed-decisions test split: 400 JSON states from four workflows, five typed questions each (2,000 questions: 600 choice, 600 noul, 800 score)",
+  "source": "https://huggingface.co/datasets/LocalLLaMA/typed-decisions",
+  "runner": "convert/ollaya_convert/bench_typed.py",
+  "client": "one request (one state, its five questions) at a time over HTTP to /v1/systemone, timed by the client",
+  "accuracy": "argmax of the returned probabilities against the gold label, over all 2,000 questions; a rejected request counts as wrong on its five questions; 95 % bootstrap interval over states",
+  "ece": "ten-bin expected calibration error of the top probability, pooled over the answered questions"
+ },
+ "results": [
+  {
+   "model": "decima:guard",
+   "digest": "0c6880db253dfdce4cf7e1a606721562debf9e703c2057b94eebe5b028ccdbaf",
+   "answered_by": [
+    "decima:guard"
+   ],
+   "rows": 400,
+   "questions": 2000,
+   "errors": 0,
+   "accuracy": 0.4365,
+   "accuracy_ci": [
+    0.411,
+    0.4615
+   ],
+   "by_type": {
+    "choice": 0.4133,
+    "noul": 0.5233,
+    "score": 0.3887
+   },
+   "by_workflow": {
+    "agent_trace_observability": 0.406,
+    "customer_service": 0.5,
+    "invoice_processing": 0.4,
+    "security_incidents": 0.44
+   },
+   "ece": 0.2354,
+   "brier": 0.7452,
+   "soft_ce": 1.4877,
+   "median_ms": 27.1,
+   "p95_ms": 31.7,
+   "trained_on_split": false
+  }
+ ]
+}

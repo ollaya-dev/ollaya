@@ -12,7 +12,7 @@ their order cannot change the answer. Score questions go through a cumulative-li
 | `decima:base`, `decima:latest` | `amyrmahdy/decima-base@2468005d` (Hub tag `v2.0`): `encoder/model.safetensors` (1.23 GB) and `head.safetensors` (57 MB) | `jhu-clsp/mmBERT-base` (MIT), 321M parameters | 0.7269 |
 | `decima:base-clean` | `amyrmahdy/decima-base-clean@35eb218b` (Hub tag `v1.0`; `main` changes only the README): the same two files, base retrained without non-commercial data | the same | 0.6930 |
 | `decima:agent` | `amyrmahdy/decima-agent@652d90ac` (Hub tag `v2.3`): the same two files, fine-tuned from decima-base for coding-agent decisions and knowledge-graph judgments, states up to 8,192 tokens | the same | 0.6125 |
-| `decima:guard` | `amyrmahdy/decima-guard@98d3f734` (Hub tag `v1.0-preview`): the same two files, a guard for LLM apps fine-tuned from decima-base-clean | the same | 0.8051 |
+| `decima:guard` | `amyrmahdy/decima-guard@31899f2a` (Hub tag `v1.2`): the same two files, a guard for LLM apps fine-tuned from decima-base-clean. 1.0 preview (`98d3f734`, temperature 0.8051) until November 2026; 1.1 was never exported | the same | 0.7527 |
 | `decima:guard-small` | `amyrmahdy/decima-guard-small@ac110248` (Hub tag `v1.0-preview`): `encoder/model.safetensors` (562 MB) and `head.safetensors`, guard's checks and training data | `jhu-clsp/mmBERT-small` (MIT), 140M parameters | 0.7546 |
 | `decima:small` | `amyrmahdy/decima-small@2e7f4d07` (Hub tag `v1.1.1`): `encoder/model.safetensors` (471 MB) and `head.safetensors` (19 MB) | `intfloat/multilingual-e5-small` (MIT), 122M parameters | 0.9356 |
 
@@ -152,6 +152,25 @@ Goldens: `python -m ollaya_convert.families.decima.goldens out/<slug>` runs the 
 `systemone.py` in fp32 on the CPU. `parity_decima` checks the rejections and every row id for id, then the graph's
 outputs, the decisions and the `/v1/systemone` answers against upstream's `system_one`. On CPU the ONNX Runtime is
 pyke's 1.28.0, linked statically; on CUDA it is Microsoft's 1.28.2 from the CUDA 13 pack.
+
+**Decima-guard 1.2 and the preset cases (measured 2026-11-10, RTX 5090).** The goldens add seven requests
+(`check.preset_cases`): the `decima-guard-rag` and `decima-guard-output` presets as upstream's `Router` asks them
+(`router.fill` into the preset's state template, `router.applicable` on `requires`), for plain text and each JSON
+state shape, and the check asserts that Ollaya's copies of both presets equal upstream's. `decima.check` finds 495
+requests with identical rows for guard 1.2 and guard-small, 19 rejected by both, 0 differences. 167 requests per
+model, 19 rejected upstream, 615 questions, 3,074 rows, all identical, every decision the same; every
+`/v1/systemone` answer matches upstream's to 4 decimals. On hope (RTX 5090 with Microsoft's ONNX Runtime from the
+CUDA 13 pack, Threadripper 3960X), recorded in `results/runs/2026-11-10-parity-rtx5090-{cuda,cpu}.json`:
+
+| Model | Device | Scores max | Ordinal projections max | Probabilities max (p99) |
+|---|---|---|---|---|
+| guard 1.2 | CUDA | 2.8e-5 | 5.4e-4 | 6.8e-5 (2.9e-6) |
+| guard 1.2 | CPU | 1.8e-5 | 1.2e-4 | 1.4e-5 (3.5e-6) |
+| guard-small 1.0 preview | CUDA | 1.1e-5 | 5.2e-5 | 6.3e-6 (2.0e-6) |
+| guard-small 1.0 preview | CPU | 1.9e-5 | 5.1e-5 | 6.3e-6 (2.5e-6) |
+
+The export of guard 1.2 matches upstream's PyTorch modules within 1.5e-5 (scores) and 3.1e-5 (ordinal projections)
+on 295 questions.
 
 **Ordinal choices (measured 2026-10-25).** The goldens add six requests (`check.ordinal_cases`): the
 `decima-guard-web` questions on three web inputs, an ordinal choice with descriptions next to the same choice

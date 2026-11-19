@@ -1,6 +1,6 @@
 //! Custom presets: named question sets kept in the model store (`<models>/presets/<name>.json`),
-//! next to the six built into Ollaya (`ollaya_api::presets`). A file holds
-//! `{"description": ..., "questions": {...}}` in the API's question schema.
+//! next to the ones built into Ollaya (`ollaya_api::presets`). A file holds
+//! `{"description": ..., "state": ..., "questions": {...}}` in the API's question schema.
 
 use std::path::{Path, PathBuf};
 
@@ -15,6 +15,8 @@ use crate::Error;
 struct PresetFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    state: Option<serde_json::Value>,
     questions: Questions,
 }
 
@@ -67,6 +69,7 @@ impl PresetStore {
                 builtin: true,
                 description: builtin::describe(name).map(str::to_owned),
                 questions,
+                state: builtin::state_template(name),
                 modified_at: None,
             }));
         }
@@ -75,6 +78,7 @@ impl PresetStore {
             builtin: false,
             description: file.description,
             questions: file.questions,
+            state: file.state,
             modified_at: Some(modified),
         }))
     }
@@ -131,6 +135,7 @@ impl PresetStore {
         std::fs::create_dir_all(&self.dir).map_err(io)?;
         let file = PresetFile {
             description: req.description.clone(),
+            state: req.state.clone(),
             questions: req.questions.clone(),
         };
         let bytes = serde_json::to_vec_pretty(&file).expect("presets serialize");
@@ -172,6 +177,7 @@ mod tests {
             }))
             .unwrap(),
             description: Some("Billing check".into()),
+            state: None,
         }
     }
 

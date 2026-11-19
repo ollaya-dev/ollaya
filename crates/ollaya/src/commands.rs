@@ -373,6 +373,7 @@ pub async fn preset_create(
         name: name.to_owned(),
         questions: crate::run::resolve_questions(questions)?,
         description,
+        state: None,
     };
     client.create_preset(&req).await?;
     eprintln!("Saved preset {name}. Use it with `ollaya run MODEL --preset {name}`.");

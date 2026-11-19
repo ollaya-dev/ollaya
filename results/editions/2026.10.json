@@ -45,7 +45,11 @@
   "2026-10-25-latency-rtx5090-cuda-cob561.json",
   "2026-10-25-latency-rtx5090-cpu-cob561.json",
   "2026-10-25-public-benchmark-rtx5090-cuda-cob561.json",
-  "2026-10-25-typed-decisions-rtx5090-cuda-cob561.json"
+  "2026-10-25-typed-decisions-rtx5090-cuda-cob561.json",
+  "2026-11-10-latency-rtx5090-cuda-guard12.json",
+  "2026-11-10-latency-rtx5090-cpu-guard12.json",
+  "2026-11-10-public-benchmark-rtx5090-cuda-guard12.json",
+  "2026-11-10-typed-decisions-rtx5090-cuda-guard12.json"
  ],
  "models": [
   "decima:small",
@@ -1447,26 +1451,26 @@
    },
    {
     "model": "decima:guard",
-    "score": 25.77,
+    "score": 25.18,
     "score_ci": [
-     23.67,
-     28.07
+     22.85,
+     27.4
     ],
     "tasks": {
-     "vitaminc-dev": 37.65,
-     "massive-en-US": 54.32,
-     "massive-de-DE": 46.15,
-     "boolq": -4.67,
-     "squad2": -2.34,
+     "vitaminc-dev": 35.14,
+     "massive-en-US": 47.06,
+     "massive-de-DE": 42.52,
+     "boolq": 7.33,
+     "squad2": -1.67,
      "paws": -2.4,
-     "multinli": 69.9,
-     "civil_comments": 40.67,
-     "aegis2": 49.6,
-     "helpsteer2": -11.95,
-     "summeval-relevance": -9.38,
-     "summeval-consistency": 67.01,
-     "pubmedqa": 13.6,
-     "typed-decisions": 12.67
+     "multinli": 68.9,
+     "civil_comments": 41.33,
+     "aegis2": 53.6,
+     "helpsteer2": -8.94,
+     "summeval-relevance": -8.85,
+     "summeval-consistency": 53.99,
+     "pubmedqa": 7.0,
+     "typed-decisions": 17.44
     },
     "trained_on": []
    },
@@ -2028,19 +2032,24 @@
   },
   {
    "release": "0.19.0",
-   "date": "2026-10-25",
+   "date": "2026-11-10",
    "runs": [
     "2026-10-25-latency-rtx5090-cuda-cob561.json",
     "2026-10-25-latency-rtx5090-cpu-cob561.json",
     "2026-10-25-public-benchmark-rtx5090-cuda-cob561.json",
-    "2026-10-25-typed-decisions-rtx5090-cuda-cob561.json"
+    "2026-10-25-typed-decisions-rtx5090-cuda-cob561.json",
+    "2026-11-10-latency-rtx5090-cuda-guard12.json",
+    "2026-11-10-latency-rtx5090-cpu-guard12.json",
+    "2026-11-10-public-benchmark-rtx5090-cuda-guard12.json",
+    "2026-11-10-typed-decisions-rtx5090-cuda-guard12.json"
    ],
    "models": [
     "decision2:kai",
     "decision2:eos",
     "decision2:sol",
     "decision2:nox",
-    "decision2:lux"
+    "decision2:lux",
+    "decima:guard"
    ]
   }
  ]

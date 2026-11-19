@@ -1,0 +1,125 @@
+{
+ "schema": 1,
+ "date": "2026-11-10",
+ "edition": "2026.10",
+ "machine": "rtx-5090",
+ "device": "cuda",
+ "suite": "public-benchmark",
+ "servers": {
+  "ollaya": "0.18.0"
+ },
+ "protocol": {
+  "benchmark": "Bespoke Labs' public decision benchmark: 13 subsets of 11 human-labeled public datasets, 3,880 questions",
+  "source": "https://github.com/bespokelabsai/nimble/blob/main/docs/PUBLIC_BENCHMARKS.md",
+  "runner": "Bespoke's own evaluate_public_jev, through convert/ollaya_convert/bench_public.py",
+  "client": "one request (one question) at a time over HTTP to /v1/systemone, timed by the client",
+  "accuracy": "macro: the mean of the 13 subsets; a rejected request counts as wrong",
+  "ece": "ten-bin expected calibration error of the top probability; pooled over all 3,880 questions"
+ },
+ "note": "Ollaya Bench edition 2026.10.",
+ "results": [
+  {
+   "server": "ollaya",
+   "model": "decima:guard",
+   "digest": "0c6880db253dfdce4cf7e1a606721562debf9e703c2057b94eebe5b028ccdbaf",
+   "records": 3880,
+   "errors": 0,
+   "macro_accuracy": 0.506,
+   "macro_accuracy_ci": [
+    0.4903,
+    0.5201
+   ],
+   "micro_accuracy": 0.5142,
+   "macro_ece": 0.2152,
+   "pooled_ece": 0.1699,
+   "brier": 0.6551,
+   "median_ms": 25.6,
+   "p95_ms": 28.0,
+   "by_type": {
+    "choice": 0.5395,
+    "noul": 0.5982,
+    "score": 0.2965
+   },
+   "per_subset": {
+    "vitaminc-dev": {
+     "n": 599,
+     "errors": 0,
+     "accuracy": 0.5676,
+     "ece": 0.1954
+    },
+    "massive-en-US": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.5,
+     "ece": 0.1194
+    },
+    "massive-de-DE": {
+     "n": 350,
+     "errors": 0,
+     "accuracy": 0.4571,
+     "ece": 0.0547
+    },
+    "boolq": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.5367,
+     "ece": 0.195
+    },
+    "squad2": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.4916,
+     "ece": 0.2641
+    },
+    "paws": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.488,
+     "ece": 0.3795
+    },
+    "multinli": {
+     "n": 299,
+     "errors": 0,
+     "accuracy": 0.7926,
+     "ece": 0.0785
+    },
+    "civil_comments": {
+     "n": 300,
+     "errors": 0,
+     "accuracy": 0.7067,
+     "ece": 0.1897
+    },
+    "aegis2": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.768,
+     "ece": 0.0902
+    },
+    "helpsteer2": {
+     "n": 249,
+     "errors": 0,
+     "accuracy": 0.1285,
+     "ece": 0.3787
+    },
+    "summeval-relevance": {
+     "n": 240,
+     "errors": 0,
+     "accuracy": 0.1292,
+     "ece": 0.5508
+    },
+    "summeval-consistency": {
+     "n": 144,
+     "errors": 0,
+     "accuracy": 0.6319,
+     "ece": 0.1245
+    },
+    "pubmedqa": {
+     "n": 250,
+     "errors": 0,
+     "accuracy": 0.38,
+     "ece": 0.177
+    }
+   }
+  }
+ ]
+}

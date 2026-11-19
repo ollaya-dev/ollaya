@@ -1,0 +1,47 @@
+{
+ "schema": 1,
+ "suite": "parity",
+ "date": "2026-11-10",
+ "machine": "rtx-5090",
+ "device": "cpu",
+ "ollaya": "0.18.0 at 713b1eb",
+ "protocol": {
+  "reference": "goldens from each family's goldens.py: the authors' code in PyTorch fp32 (TF32 off) on the checkpoint the manifest names",
+  "gate": "fp32 tags: identical encodings and decisions, option logits within 1e-3, wire answers as the authors' code; -fp16 tags (docs/decisions/0008-fp16-decoder-tags.md): identical encodings, at least 99.5 % of decisions the same, differences reported",
+  "runner": "convert/ollaya_convert/parity_run.py with crates/ollaya-runner/examples/parity_<family>.rs"
+ },
+ "results": [
+  {
+   "model": "decima:guard",
+   "questions": 615,
+   "decisions_same": 615,
+   "max_logit_diff": 1.823902130126953e-05,
+   "max_ordinal_diff": 0.00012493133544921875,
+   "max_prob_diff": 1.426866732043286e-05,
+   "p99_prob_diff": 3.4971422638863103e-06,
+   "max_answer_diff": 0.00010000000000010001,
+   "answers_other_choice": 0,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "d11b1bb014230b1d6836a589cdd6ec667e1b03e26b798427a665471ddd26a9cd"
+  },
+  {
+   "model": "decima:guard-small",
+   "questions": 615,
+   "decisions_same": 615,
+   "max_logit_diff": 1.8596649169921875e-05,
+   "max_ordinal_diff": 5.054473876953125e-05,
+   "max_prob_diff": 6.343442656764342e-06,
+   "p99_prob_diff": 2.4967625362748436e-06,
+   "max_answer_diff": 0.0001000000000000445,
+   "answers_other_choice": 0,
+   "pass": true,
+   "device": "cpu",
+   "kind": "runtime",
+   "gate": "fp32",
+   "export_sha256": "5e6c394f2d8ca4dd5308c242a306c16fa89077df89ff7f431c761d0a5c153790"
+  }
+ ]
+}

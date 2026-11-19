@@ -69,7 +69,8 @@ pub struct DecideParams {
     #[serde(default)]
     pub questions: Option<Value>,
     /// A preset (a named question set) to use instead of `questions`: built-in "triage", "email",
-    /// "guard", "moderation", "router", "agent", "decima-guard" or "decima-guard-web", or a custom one saved with
+    /// "guard", "moderation", "router", "agent", "decima-guard", "decima-guard-web", "decima-guard-rag" or
+    /// "decima-guard-output", or a custom one saved with
     /// `ollaya preset create`. Read ollaya://presets/<name> to see what each one asks.
     #[serde(default)]
     pub preset: Option<String>,
@@ -103,15 +104,15 @@ noul, the probability that the statement is true. The response is exactly TypeSa
         &self,
         Parameters(p): Parameters<DecideParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let questions = match (p.questions, p.preset.as_deref()) {
+        let (questions, template) = match (p.questions, p.preset.as_deref()) {
             (Some(_), Some(_)) => {
                 return Ok(tool_error("give either `questions` or `preset`, not both"));
             }
-            (Some(q), None) => Some(q),
+            (Some(q), None) => (Some(q), None),
             (None, Some(name)) => match presets::get(name) {
-                Some(q) => Some(q),
+                Some(q) => (Some(q), presets::state_template(name)),
                 None => match custom_preset(name).await {
-                    Some(q) => Some(q),
+                    Some((q, t)) => (Some(q), t),
                     None => {
                         return Ok(tool_error(&format!(
                             "unknown preset {name:?}; the built-in presets are {}, and \
@@ -121,7 +122,7 @@ noul, the probability that the statement is true. The response is exactly TypeSa
                     }
                 },
             },
-            (None, None) => None,
+            (None, None) => (None, None),
         };
         let questions = match questions.map(serde_json::from_value).transpose() {
             Ok(q) => q,
@@ -131,9 +132,19 @@ noul, the probability that the statement is true. The response is exactly TypeSa
                 )));
             }
         };
+        // A preset puts plain text into its state template; questions with `requires` are asked
+        // only when the state has those keys (here, since /v1/systemone asks every question).
+        let state = presets::fill_state(template.as_ref(), p.state);
+        let questions = match questions
+            .map(|q| presets::applicable(&q, &state))
+            .transpose()
+        {
+            Ok(q) => q,
+            Err(e) => return Ok(tool_error(&e)),
+        };
         let request = SystemOneRequest {
             model: p.model.unwrap_or_else(|| "laya".to_owned()),
-            state: p.state,
+            state,
             questions,
         };
         let client = connect().await?;
@@ -282,7 +293,7 @@ impl ServerHandler for OllayaMcp {
         } else if let Some(q) = uri.strip_prefix(PRESETS_URI).and_then(presets::get) {
             q
         } else if let Some(q) = match uri.strip_prefix(PRESETS_URI) {
-            Some(name) => custom_preset(name).await,
+            Some(name) => custom_preset(name).await.map(|(q, _)| q),
             None => None,
         } {
             q
@@ -349,8 +360,8 @@ pub async fn serve_http(addr: &str) -> anyhow::Result<()> {
 }
 
 /// A custom preset's questions from the daemon, or `None` if there is none (or no daemon).
-async fn custom_preset(name: &str) -> Option<Value> {
+async fn custom_preset(name: &str) -> Option<(Value, Option<Value>)> {
     let client = connect().await.ok()?;
     let p = client.show_preset(name).await.ok()?;
-    serde_json::to_value(p.questions).ok()
+    Some((serde_json::to_value(p.questions).ok()?, p.state))
 }
