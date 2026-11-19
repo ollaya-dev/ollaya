@@ -22,6 +22,8 @@ pub struct Answer {
     pub qtype: QType,
     /// Calibrated probability per option, in option order.
     pub probabilities: Vec<f64>,
+    /// The model's option logits, in option order, before the temperature.
+    pub logits: Vec<f32>,
     /// Probability that acting on this answer is appropriate, when the model has an act head.
     pub act_probability: Option<f64>,
 }
@@ -40,6 +42,7 @@ impl Answer {
         Answer {
             qtype: q.qtype,
             probabilities: calibration.probabilities(q.head(), logits, state_tokens),
+            logits: logits.to_vec(),
             act_probability,
         }
     }

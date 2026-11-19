@@ -8,7 +8,8 @@
 //! * On startup, after the model is loaded, the runner prints one JSON line to stdout:
 //!   `{"port":<u16>,"device":"cuda:0"|"cpu"|"metal","precision":"fp16"|"fp32"|"<GGUF type>","engine":"onnx"|"mlx"|"llama"}`.
 //! * `GET /health` -> the same object plus `"status":"ok"`.
-//! * `POST /decide` `{state, questions, images?}` (images: base64, for vision models) ->
+//! * `POST /decide` `{state, questions, images?, audio?}` (base64; images for vision models, audio
+//!   files for models with an audio encoder) ->
 //!   `{questions:[{logits, act_logits}], input_tokens, state_tokens, state_truncated}`.
 //!   Errors are `{"error":{"code","message"}}` with status 400 (bad request) or 500.
 
@@ -105,6 +106,10 @@ pub struct Loaded {
     pub engine: &'static str,
 }
 
+/// The largest `/decide` body the runner reads: the daemon's 8 MB limit plus room for the JSON it
+/// adds around the caller's fields.
+const RUNNER_BODY_BYTES: usize = 9 * 1024 * 1024;
+
 #[derive(Debug, Deserialize)]
 struct DecideRequest {
     state: Value,
@@ -112,6 +117,12 @@ struct DecideRequest {
     /// Base64 images, for vision models.
     #[serde(default)]
     images: Vec<String>,
+    /// Milliseconds the caller still waits; a request queued longer is dropped unanswered.
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+    /// Base64 audio files (WAV, FLAC or MP3), for models with an audio encoder.
+    #[serde(default)]
+    audio: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -490,6 +501,17 @@ fn warm_up(model: &dyn Engine) -> Result<(), Error> {
             serde_json::json!({"check": {"type": "noul", "instructions": "Is this a warm-up?"}});
         model.run_images(&state, &q, &[png])?;
     }
+    // So does an audio encoder: one second of a quiet tone, at the rate Gemma 4's encoder reads.
+    if model.reads_audio() {
+        let rate = 16_000;
+        let samples = (0..rate)
+            .map(|i| 0.1 * (std::f32::consts::TAU * 440.0 * i as f32 / rate as f32).sin())
+            .collect();
+        let clip = crate::audio::Clip { rate, samples };
+        let q =
+            serde_json::json!({"check": {"type": "noul", "instructions": "Is this a warm-up?"}});
+        model.run_media(&state, &q, &[], &[clip])?;
+    }
     Ok(())
 }
 
@@ -523,6 +545,22 @@ impl ModelThread {
             })
             .map_err(|e| Error::Model(format!("cannot start the model thread: {e}")))?;
         Ok(ModelThread { jobs })
+    }
+
+    /// [`ModelThread::run`], unless `deadline` has passed by the time `f` would start: queued work
+    /// nobody waits for any more never costs a forward pass.
+    async fn run_before<T: Send + 'static>(
+        &self,
+        deadline: Option<std::time::Instant>,
+        f: impl FnOnce() -> Result<T, Error> + Send + 'static,
+    ) -> Result<T, Error> {
+        self.run(move || {
+            if deadline.is_some_and(|d| std::time::Instant::now() >= d) {
+                return Err(Error::DeadlineExceeded);
+            }
+            f()
+        })
+        .await?
     }
 
     /// Run `f` on the model thread, after the calls queued before it. A panic in `f` comes back
@@ -593,6 +631,9 @@ pub async fn run(config: RunnerConfig) -> Result<(), Error> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/decide", post(decide))
+        // The daemon forwards bodies up to its own limit (images and audio in base64); axum's
+        // default of 2 MB would refuse them.
+        .layer(axum::extract::DefaultBodyLimit::max(RUNNER_BODY_BYTES))
         .with_state(state);
     axum::serve(listener, app)
         .await
@@ -610,9 +651,12 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<Value> {
 
 async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) -> Response {
     let state = Arc::clone(&s);
+    let deadline = req
+        .timeout_ms
+        .map(|ms| std::time::Instant::now() + std::time::Duration::from_millis(ms));
     let result = s
         .thread
-        .run(move || -> Result<Value, Error> {
+        .run_before(deadline, move || -> Result<Value, Error> {
             if let Some(qid) = ordinal_unsupported(state.model.as_ref(), &req.questions) {
                 return Err(Error::Decision(ollaya_decision::Error::invalid(format!(
                     "question {qid:?}: this model has no ordinal head; ask it without \"ordinal\""
@@ -623,9 +667,14 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
                 .iter()
                 .map(|i| crate::vision::from_base64(i))
                 .collect::<Result<Vec<_>, _>>()?;
+            let audio = req
+                .audio
+                .iter()
+                .map(|a| crate::audio::decode(&crate::audio::from_base64(a)?))
+                .collect::<Result<Vec<_>, _>>()?;
             let out = state
                 .model
-                .run_images(&req.state, &req.questions, &images)?;
+                .run_media(&req.state, &req.questions, &images, &audio)?;
             let questions: Vec<QuestionLogits> = out
                 .questions
                 .into_iter()
@@ -638,8 +687,7 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
                 "state_truncated": out.state_truncated,
             }))
         })
-        .await
-        .and_then(|r| r);
+        .await;
     match result {
         Ok(body) => Json(body).into_response(),
         Err(Error::Decision(ollaya_decision::Error::TooManyOptions { question, options, head_max_len })) => (
@@ -653,6 +701,8 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
             .into_response(),
         Err(Error::Decision(e)) => error(StatusCode::BAD_REQUEST, "INVALID_REQUEST", &e.to_string()),
         Err(Error::Image(e)) => error(StatusCode::BAD_REQUEST, "INVALID_IMAGE", &e.to_string()),
+        Err(Error::DeadlineExceeded) => error(StatusCode::GATEWAY_TIMEOUT, "DEADLINE_EXCEEDED", &Error::DeadlineExceeded.to_string()),
+        Err(Error::Audio(e)) => error(StatusCode::BAD_REQUEST, "INVALID_AUDIO", &e.to_string()),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, "RUNNER_ERROR", &e.to_string()),
     }
 }
@@ -679,6 +729,37 @@ fn error(status: StatusCode, code: &str, message: &str) -> Response {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn work_queued_past_its_deadline_never_runs() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::{Duration, Instant};
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let thread = super::ModelThread::spawn().unwrap();
+            let ran = Arc::new(AtomicBool::new(false));
+            let flag = Arc::clone(&ran);
+            let busy = thread.run(|| std::thread::sleep(Duration::from_millis(200)));
+            let late = thread.run_before(
+                Some(Instant::now() + Duration::from_millis(50)),
+                move || {
+                    flag.store(true, Ordering::SeqCst);
+                    Ok(())
+                },
+            );
+            let waited_for =
+                thread.run_before(Some(Instant::now() + Duration::from_secs(10)), || Ok(7));
+            let (busy, late, waited_for) = tokio::join!(busy, late, waited_for);
+            busy.unwrap();
+            assert!(
+                matches!(late, Err(super::Error::DeadlineExceeded)),
+                "{late:?}"
+            );
+            assert!(!ran.load(Ordering::SeqCst), "the expired work never ran");
+            assert_eq!(waited_for.unwrap(), 7);
+        });
+    }
+
     #[test]
     fn projector_failure_drops_gpu_before_cpu_retry() {
         use std::cell::Cell;
@@ -969,6 +1050,8 @@ mod tests {
                     state: json!("s"),
                     questions: json!({"x": {"type": "noul", "instructions": "Is it?"}}),
                     images: Vec::new(),
+                    timeout_ms: None,
+                    audio: Vec::new(),
                 };
                 let response = decide(State(state.clone()), Json(request)).await;
                 assert_eq!(response.status(), axum::http::StatusCode::OK);

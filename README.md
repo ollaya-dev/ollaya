@@ -105,6 +105,10 @@ The [FAQ](https://ollaya.dev/docs/faq) compares Ollaya and Ollama in more detail
   PARAMETER precision fp32
   ```
   Then run `ollaya create triage -f Modelfile` and `ollaya run triage "…"`.
+- **Calibration on your data.** `ollaya calibrate MODEL examples.jsonl --eval test.jsonl` runs labelled examples
+  through the model as installed (its quantization, your device), fits one temperature per media (text, images,
+  audio) and question type, reports NLL and ECE before and after, and writes a `CALIBRATION` file for a Modelfile.
+  Recordings spread a model's logits differently than photos, so each media is calibrated on its own.
 - **Fast and exact.**
   - **Hardware:** ONNX Runtime on CPU, and CUDA on NVIDIA GPUs. GGUF models run on llama.cpp:
     CPU, ROCm/HIP on AMD GPUs, Vulkan on Windows (any vendor's GPU; an integrated one when you name it), CUDA on NVIDIA GPUs, and Metal on Apple silicon.

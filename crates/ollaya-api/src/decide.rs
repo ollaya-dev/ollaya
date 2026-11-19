@@ -197,14 +197,17 @@ pub struct SystemOneRequest {
 pub enum Extra {
     /// Adds `laya: {confidence, act_probability}`.
     Laya,
+    /// Adds `logits`: the option logits before the temperature, which `ollaya calibrate` fits.
+    Logits,
 }
 
 impl Extra {
-    pub const ALL: [Extra; 1] = [Extra::Laya];
+    pub const ALL: [Extra; 2] = [Extra::Laya, Extra::Logits];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Extra::Laya => "laya",
+            Extra::Logits => "logits",
         }
     }
 
@@ -229,6 +232,10 @@ pub struct DecideRequest {
     /// Images for vision models, base64 or base64 data URLs (Ollama's `images`). Ollaya-only.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<String>,
+    /// Audio clips (WAV, FLAC or MP3), base64 or base64 data URLs, for models whose projector has
+    /// an audio encoder. At most 30 s each; resampled to the encoder's rate. Ollaya-only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub audio: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep_alive: Option<KeepAlive>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -243,6 +250,7 @@ impl DecideRequest {
             questions,
             preset: None,
             images: Vec::new(),
+            audio: Vec::new(),
             keep_alive: None,
             extras: Vec::new(),
         }
@@ -256,6 +264,7 @@ impl DecideRequest {
             questions: None,
             preset: None,
             images: Vec::new(),
+            audio: Vec::new(),
             keep_alive,
             extras: Vec::new(),
         }
@@ -378,11 +387,19 @@ pub struct DecideAnswer {
     pub answer: Answer,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub laya: Option<LayaExtra>,
+    /// The option logits before the temperature, in option order (`noul`: no, yes), with
+    /// `"extras": ["logits"]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logits: Option<Vec<f32>>,
 }
 
 impl From<Answer> for DecideAnswer {
     fn from(answer: Answer) -> Self {
-        DecideAnswer { answer, laya: None }
+        DecideAnswer {
+            answer,
+            laya: None,
+            logits: None,
+        }
     }
 }
 
@@ -526,11 +543,13 @@ mod tests {
         let answer = DecideAnswer {
             answer: Answer::from_decision(&decided, &noul).unwrap(),
             laya: Some(LayaExtra::from_decision(&decided, &noul).unwrap()),
+            logits: Some(decided.logits.clone()),
         };
         let v = serde_json::to_value(&answer).unwrap();
         assert_eq!(v["type"], "noul");
         assert!(v.get("confidence").is_none(), "noul has no confidence");
         assert_eq!(v["laya"]["act_probability"], Value::Null);
+        assert_eq!(v["logits"], json!([0.0, 1.0]));
     }
 
     #[test]
@@ -548,6 +567,7 @@ mod tests {
                 confidence: 0.0,
                 act_probability: Some(0.5),
             }),
+            logits: None,
         };
         let text = serde_json::to_string(&a).unwrap();
         assert_eq!(

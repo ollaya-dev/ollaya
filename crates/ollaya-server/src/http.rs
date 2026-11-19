@@ -193,6 +193,7 @@ pub fn error_body(e: &Error, pulling: bool) -> ErrorBody {
         Error::Unsupported(m) => ErrorBody::new(ErrorCode::UnsupportedModel, m.clone()),
         Error::Busy(n) => ErrorBody::operation_in_progress(n),
         Error::Cancelled => ErrorBody::new(ErrorCode::InferenceFailed, "request cancelled"),
+        Error::DeadlineExceeded => ErrorBody::new(ErrorCode::DeadlineExceeded, e.to_string()),
         Error::Corrupt(m) => ErrorBody::new(ErrorCode::StorageError, format!("corrupt model: {m}")),
         Error::PresetNotFound(_) => ErrorBody::new(ErrorCode::NotFound, e.to_string()),
         Error::BuiltinPreset(_) => ErrorBody::new(ErrorCode::Forbidden, e.to_string()),
@@ -668,6 +669,26 @@ fn qtype(questions: Option<&Questions>, id: &str) -> &'static str {
         .map_or("choice", Question::type_name)
 }
 
+/// `X-Ollaya-Timeout-Ms`, read when the request arrives: when the client stops waiting.
+fn deadline(headers: &HeaderMap) -> ApiResult<Option<Instant>> {
+    let Some(value) = headers.get(ollaya_api::TIMEOUT_HEADER) else {
+        return Ok(None);
+    };
+    value
+        .to_str()
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(|ms| Some(Instant::now() + Duration::from_millis(ms)))
+        .ok_or_else(|| {
+            ErrorBody::invalid_request(vec![ValidationIssue::new(
+                vec![Loc::key("header"), Loc::key(ollaya_api::TIMEOUT_HEADER)],
+                "int_parsing",
+                "Input should be a whole number of milliseconds",
+            )])
+            .into()
+        })
+}
+
 fn decision_error(e: &Error, questions: Option<&Questions>) -> ApiError {
     match e {
         Error::TooManyOptions {
@@ -683,8 +704,10 @@ fn decision_error(e: &Error, questions: Option<&Questions>) -> ApiError {
 async fn decide(
     State(s): State<Arc<AppState>>,
     uri: Uri,
+    headers: HeaderMap,
     body: Body,
 ) -> ApiResult<Json<DecideResponse>> {
+    let deadline = deadline(&headers)?;
     let req = parse(body, validate::decide_request).await?;
     let [name] = names([("model", &req.model)])?;
     let _slot = slot(&s)?;
@@ -745,13 +768,16 @@ async fn decide(
         state,
         questions: questions.as_ref().map(ollaya_api::decide::engine_questions),
         images: req.images.clone(),
+        audio: req.audio.clone(),
         keep_alive: req.keep_alive,
         cancel: None,
+        deadline,
     };
     let out = run_decision(&s, uri.path(), input)
         .await
         .map_err(|e| decision_error(&e, questions.as_ref()))?;
-    let resp = views::decide_response(out, req.wants(Extra::Laya)).map_err(|e| api_error(&e))?;
+    let resp = views::decide_response(out, req.wants(Extra::Laya), req.wants(Extra::Logits))
+        .map_err(|e| api_error(&e))?;
     Ok(Json(resp))
 }
 
@@ -759,8 +785,10 @@ async fn decide(
 async fn systemone(
     State(s): State<Arc<AppState>>,
     uri: Uri,
+    headers: HeaderMap,
     body: Body,
 ) -> ApiResult<(HeaderMap, Json<ollaya_api::SystemOneResponse>)> {
+    let deadline = deadline(&headers)?;
     let req = parse(body, validate::system_one_request).await?;
     names([("model", &req.model)])?;
     let _slot = slot(&s)?;
@@ -772,8 +800,10 @@ async fn systemone(
             .as_ref()
             .map(ollaya_api::decide::engine_questions),
         images: Vec::new(),
+        audio: Vec::new(),
         keep_alive: None,
         cancel: None,
+        deadline,
     };
     let out = run_decision(&s, uri.path(), input)
         .await
@@ -781,7 +811,7 @@ async fn systemone(
     if out.state_truncated {
         return Err(ErrorBody::state_truncated(&out.model).into());
     }
-    let resp = views::decide_response(out, false).map_err(|e| api_error(&e))?;
+    let resp = views::decide_response(out, false, false).map_err(|e| api_error(&e))?;
     Ok((timing_headers(&resp), Json(resp.into_system_one())))
 }
 
@@ -917,7 +947,7 @@ fn admit(s: &AppState, req: &Request, origin: Option<&str>) -> ApiResult<Admit> 
     Ok(Admit::Pass)
 }
 
-const CORS_ALLOW_HEADERS: &str = "Authorization, Content-Type, Accept, User-Agent, X-Requested-With, X-Request-Id, X-TypeSafe-SDK, X-TypeSafe-Runtime, X-TypeSafe-Retry-Count";
+const CORS_ALLOW_HEADERS: &str = "Authorization, Content-Type, Accept, User-Agent, X-Requested-With, X-Request-Id, X-TypeSafe-SDK, X-TypeSafe-Runtime, X-TypeSafe-Retry-Count, X-Ollaya-Timeout-Ms";
 const CORS_EXPOSE_HEADERS: &str = "X-Request-Id, x-typesafe-request-id, Retry-After, \
     X-Ollaya-Eval-Duration, X-Ollaya-Load-Duration, X-Ollaya-Total-Duration";
 

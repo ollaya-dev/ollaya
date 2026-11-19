@@ -217,23 +217,32 @@ fn add_model(store: &Store, name: &str, languages: &[&str], fake: Value) {
 
 /// A GGUF model, which runs on llama.cpp: the GGUF file and its decision layer.
 fn add_gguf_model(store: &Store, name: &str, fake: Value) {
+    add_gguf_media_model(store, name, fake, false, false);
+}
+
+/// A GGUF model with a projector (`vision`), and audio opted in (`audio`).
+fn add_gguf_media_model(store: &Store, name: &str, fake: Value, vision: bool, audio: bool) {
     let config = json!({"model_format": "gguf", "family": "winnow", "layout": "winnow-v1",
         "parameter_size": "4B", "description": format!("{name} for tests"), "license": "Apache-2.0"});
-    let decision =
-        json!({"engine": "llama", "family": "winnow", "layout": "winnow-v1", "fake": fake});
+    let decision = json!({"engine": "llama", "family": "winnow", "layout": "winnow-v1",
+        "llama": {"audio": audio}, "fake": fake});
+    let mut layers = vec![
+        blob(store, media::GGUF, format!("{name} gguf").as_bytes(), None),
+        blob(
+            store,
+            media::DECISION,
+            decision.to_string().as_bytes(),
+            None,
+        ),
+    ];
+    if vision {
+        layers.push(blob(store, media::MMPROJ, b"projector", None));
+    }
     let manifest = Manifest {
         schema_version: 2,
         media_type: MANIFEST_V2.into(),
         config: blob(store, media::CONFIG, config.to_string().as_bytes(), None),
-        layers: vec![
-            blob(store, media::GGUF, format!("{name} gguf").as_bytes(), None),
-            blob(
-                store,
-                media::DECISION,
-                decision.to_string().as_bytes(),
-                None,
-            ),
-        ],
+        layers,
     };
     let name = ModelName::parse(name).unwrap();
     store
@@ -612,13 +621,19 @@ async fn decide_routes_answers_and_unloads() {
         ),
         serde_json::from_value(triage()).ok(),
     );
-    req.extras = vec![ollaya_api::Extra::Laya];
+    req.extras = vec![ollaya_api::Extra::Laya, ollaya_api::Extra::Logits];
     req.keep_alive = Some(KeepAlive::Forever);
     let tr = d.client.decide(&req).await.unwrap();
     assert_eq!(tr.model, "laya:multilingual");
     assert_eq!(tr.routing.as_ref().unwrap().route, "multilingual");
     let laya = tr.answers["department"].laya.as_ref().unwrap();
     assert_eq!(laya.act_probability.map(|p| p > 0.5), Some(true));
+    // The option logits before the temperature, one per option.
+    for (qid, a) in &tr.answers {
+        let logits = a.logits.as_ref().unwrap();
+        let options = req.questions.as_ref().unwrap()[qid].num_options();
+        assert_eq!(logits.len(), options, "{qid}");
+    }
 
     let ps = d.client.ps().await.unwrap();
     let names: Vec<&str> = ps.models.iter().map(|m| m.name.as_str()).collect();
@@ -697,6 +712,40 @@ async fn preload_loads_models_before_ready() {
     assert_eq!(
         kept.models[0].expires_at, None,
         "a request without keep_alive leaves a preloaded model loaded: {kept:?}"
+    );
+    d.stop().await;
+}
+
+async fn a_passed_deadline_skips_the_decision() {
+    let d = Daemon::start(
+        |dir| {
+            let store = Store::open(dir).unwrap();
+            add_model(&store, "slow:latest", &["en"], json!({"load_ms": 400}));
+        },
+        |_| {},
+    )
+    .await;
+    let body = json!({"model": "slow", "state": "Refund me.",
+                      "questions": {"refund": {"type": "noul", "instructions": "Refund?"}}})
+    .to_string();
+    let send = |timeout: &str| {
+        http()
+            .post(d.url("/v1/systemone"))
+            .header("x-ollaya-timeout-ms", timeout)
+            .body(body.clone())
+            .send()
+    };
+    let late = send("100").await.unwrap();
+    assert_eq!(late.status().as_u16(), 504);
+    let late: Value = late.json().await.unwrap();
+    assert_eq!(late["code"], "DEADLINE_EXCEEDED", "{late}");
+    let bad = send("soon").await.unwrap();
+    assert_eq!(bad.status().as_u16(), 422);
+    let ok = send("10000").await.unwrap();
+    assert_eq!(
+        ok.status().as_u16(),
+        200,
+        "loaded now, well within the deadline"
     );
     d.stop().await;
 }
@@ -814,6 +863,20 @@ async fn model_specific_errors() {
         |c| c.load_timeout = Duration::from_secs(30),
     )
     .await;
+    // Media the model cannot read are refused before it loads: `broken` would fail to load.
+    for (field, what) in [("images", "images"), ("audio", "audio")] {
+        let (status, _, body) = post_raw(
+            &d.url("/api/decide"),
+            json!({"model": "broken", "state": "x", "questions": triage(), field: ["AAAA"]})
+                .to_string(),
+        )
+        .await;
+        assert_eq!(status, 422, "{body}");
+        assert_eq!(
+            body["detail"][0]["msg"],
+            format!("broken:latest does not read {what}")
+        );
+    }
     // About 1 MB of stderr before the runner announces itself: the load must not stall on a
     // full pipe.
     d.client.load("chatty", None).await.unwrap();
@@ -1787,6 +1850,8 @@ async fn gguf_runner_that_dies_on_the_gpu_restarts_on_the_cpu() {
             let store = Store::open(dir).unwrap();
             add_gguf_model(&store, "fragile:latest", json!({"abort_unless_cpu": true}));
             add_gguf_model(&store, "broken:latest", json!({"fail_load": true}));
+            add_gguf_media_model(&store, "sees:latest", json!({}), true, false);
+            add_gguf_media_model(&store, "hears:latest", json!({}), true, true);
         },
         |c| {
             c.device = "auto".into();
@@ -1806,6 +1871,14 @@ async fn gguf_runner_that_dies_on_the_gpu_restarts_on_the_cpu() {
     let (status, body) = api_err(d.client.load("broken", None).await.unwrap_err());
     assert_eq!(status, 500, "{body:?}");
     assert!(body.error.contains("cannot load this model"), "{body:?}");
+    // The media a model reads, as clients discover them.
+    for (name, caps) in [
+        ("broken", &["choice", "score", "noul"][..]),
+        ("sees", &["choice", "score", "noul", "vision"]),
+        ("hears", &["choice", "score", "noul", "vision", "audio"]),
+    ] {
+        assert_eq!(d.client.show(name).await.unwrap().capabilities, caps);
+    }
     d.stop().await;
 }
 
@@ -1824,6 +1897,7 @@ fn main() {
         tags_show_ps_and_v1_models,
         decide_routes_answers_and_unloads,
         preload_loads_models_before_ready,
+        a_passed_deadline_skips_the_decision,
         systemone_is_typesafe_shaped,
         systemone_rejects_truncated_state,
         model_specific_errors,

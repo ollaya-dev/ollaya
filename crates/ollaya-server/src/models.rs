@@ -55,6 +55,33 @@ impl EngineFiles {
     }
 }
 
+/// The media a model reads besides text, as its files declare them. The runner checks again on
+/// load: a projector without an audio encoder rejects audio there.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Inputs {
+    pub images: bool,
+    pub audio: bool,
+}
+
+impl Inputs {
+    /// An image graph or projector reads images; audio is opt-in (`"llama": {"audio": true}` in
+    /// `decision.json`) and only the `winnow-v1` layout places it, as the runner does.
+    fn of(files: &EngineFiles, decision: &Value) -> Self {
+        match files {
+            EngineFiles::Onnx(f) => Inputs {
+                images: f.vision_graph.is_some(),
+                audio: false,
+            },
+            EngineFiles::Llama(f) => Inputs {
+                images: f.mmproj.is_some(),
+                audio: f.mmproj.is_some()
+                    && decision["layout"] == "winnow-v1"
+                    && decision["llama"]["audio"] == true,
+            },
+        }
+    }
+}
+
 /// A model that answers requests itself.
 #[derive(Debug, Clone)]
 pub struct Loadable {
@@ -63,6 +90,7 @@ pub struct Loadable {
     pub digest: String,
     pub files: EngineFiles,
     pub calibration: Calibration,
+    pub inputs: Inputs,
     pub config: ModelConfig,
     /// A question schema baked in with a Modelfile, used when a request brings none.
     pub questions: Option<Value>,
@@ -147,11 +175,18 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
             decision: blob(media::DECISION)?,
             quantization,
         });
+        let decision = store.read_blob_json::<Value>(
+            manifest
+                .layer(media::DECISION)
+                .expect("the decision layer was found above"),
+        )?;
+        let inputs = Inputs::of(&files, &decision);
         return Ok(Resolved::Model(Box::new(Loadable {
             name,
             digest,
             files,
             calibration,
+            inputs,
             config,
             questions,
             size: manifest.total_size(),
@@ -193,10 +228,12 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
     if files.graph_fp32.is_none() && files.graph_fp16.is_none() {
         return Err(Error::Corrupt(format!("{name}: manifest has no graph")));
     }
+    let files = EngineFiles::Onnx(files);
     Ok(Resolved::Model(Box::new(Loadable {
         name,
         digest,
-        files: EngineFiles::Onnx(files),
+        inputs: Inputs::of(&files, &Value::Null),
+        files,
         calibration,
         config,
         questions,
@@ -293,7 +330,7 @@ mod tests {
             let store = Store::open(dir.path()).unwrap();
             let mut layers = vec![
                 blob(&store, media::GGUF, b"text weights"),
-                blob(&store, media::DECISION, b"{}"),
+                blob(&store, media::DECISION, br#"{"layout": "winnow-v1"}"#),
             ];
             let projector = blob(&store, media::MMPROJ, b"projector weights");
             if vision {
@@ -316,6 +353,11 @@ mod tests {
             let Resolved::Model(model) = resolve(&store, &name).unwrap() else {
                 panic!("expected model");
             };
+            let inputs = Inputs {
+                images: vision,
+                audio: false,
+            };
+            assert_eq!(model.inputs, inputs);
             let EngineFiles::Llama(files) = model.files else {
                 panic!("expected llama");
             };
@@ -328,6 +370,40 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn audio_is_read_only_when_the_decision_layer_opts_in() {
+        let inputs = |decision: Value, mmproj: bool| {
+            let files = EngineFiles::Llama(LlamaFiles {
+                mmproj: mmproj.then(|| PathBuf::from("mmproj")),
+                tokenizer: None,
+                gguf: PathBuf::from("gguf"),
+                decision: PathBuf::from("decision.json"),
+                quantization: String::new(),
+            });
+            Inputs::of(&files, &decision)
+        };
+        let both = Inputs {
+            images: true,
+            audio: true,
+        };
+        let images = Inputs {
+            images: true,
+            audio: false,
+        };
+        let on = serde_json::json!({"layout": "winnow-v1", "llama": {"audio": true}});
+        assert_eq!(inputs(on.clone(), true), both);
+        assert_eq!(inputs(on, false), Inputs::default());
+        for off in [
+            serde_json::json!({"layout": "winnow-v1", "llama": {}}),
+            serde_json::json!({"layout": "winnow-v1", "llama": {"audio": "yes"}}),
+            serde_json::json!({"layout": "d1-omni-v1", "llama": {"audio": true}}),
+        ] {
+            assert_eq!(inputs(off, true), images);
+        }
+        let (files, ..) = resolve_with(1, false, true);
+        assert_eq!(Inputs::of(&EngineFiles::Onnx(files), &Value::Null), images);
     }
 
     #[test]

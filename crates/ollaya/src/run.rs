@@ -46,6 +46,10 @@ pub struct RunArgs {
     /// An image file (PNG) to decide about, for vision models such as decider:2b-vision.
     #[arg(long, value_name = "FILE")]
     pub image: Option<std::path::PathBuf>,
+    /// An audio file (WAV, FLAC or MP3, at most 30 s) to decide about, for models whose projector
+    /// has an audio encoder (Gemma 4 E2B/E4B fine-tunes).
+    #[arg(long, value_name = "FILE")]
+    pub audio: Option<std::path::PathBuf>,
     /// A preset: built-in (triage, email, guard, moderation, router, agent, decima-guard, decima-guard-web, decima-guard-rag, decima-guard-output) or custom
     /// (`ollaya preset list`).
     #[arg(long)]
@@ -230,6 +234,8 @@ struct Session {
     state_template: Option<Value>,
     /// Base64 images sent with every state.
     images: Vec<String>,
+    /// Base64 audio files sent with every state.
+    audio: Vec<String>,
     keep_alive: Option<KeepAlive>,
     format: Format,
     verbose: bool,
@@ -241,6 +247,7 @@ impl Session {
         let state = presets::fill_state(self.state_template.as_ref(), state);
         let mut req = DecideRequest::new(&self.model, state, self.questions.clone());
         req.images = self.images.clone();
+        req.audio = self.audio.clone();
         req.keep_alive = self.keep_alive;
         Ok(self.client.decide(&req).await?)
     }
@@ -303,17 +310,22 @@ pub fn run(rt: &Runtime, args: RunArgs) -> Result<()> {
     }
 }
 
+/// A media file as the API carries it (base64), or nothing.
+fn read_base64(path: Option<&std::path::Path>) -> Result<Vec<String>> {
+    use base64::Engine as _;
+    let Some(path) = path else {
+        return Ok(Vec::new());
+    };
+    let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    Ok(vec![
+        base64::engine::general_purpose::STANDARD.encode(bytes),
+    ])
+}
+
 /// Connect (starting the daemon if needed), pull the model if it is missing, load it.
 async fn prepare(args: &RunArgs) -> Result<Session> {
-    let images = match &args.image {
-        Some(path) => {
-            use base64::Engine as _;
-            let bytes =
-                std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
-            vec![base64::engine::general_purpose::STANDARD.encode(bytes)]
-        }
-        None => Vec::new(),
-    };
+    let images = read_base64(args.image.as_deref())?;
+    let audio = read_base64(args.audio.as_deref())?;
     let client = daemon::client().await?;
     let show = match client.show(&args.model).await {
         Ok(s) => s,
@@ -356,6 +368,7 @@ async fn prepare(args: &RunArgs) -> Result<Session> {
         questions,
         state_template,
         images,
+        audio,
         keep_alive: args.keepalive,
         format: args.format,
         verbose: args.verbose,
@@ -574,6 +587,7 @@ mod tests {
             state: vec![],
             questions: questions.map(str::to_owned),
             image: None,
+            audio: None,
             preset: preset.map(str::to_owned),
             ask: vec![],
             choice: vec![],

@@ -103,8 +103,9 @@ pub fn decide_request(mut obj: Body) -> Result<DecideRequest, Issues> {
             }
         },
     };
-    let images = images(get(&obj, "images"), &mut issues);
-    if get(&obj, "images").is_some() && !has_state {
+    let images = media("images", get(&obj, "images"), &mut issues);
+    let audio = media("audio", get(&obj, "audio"), &mut issues);
+    if (get(&obj, "images").is_some() || get(&obj, "audio").is_some()) && !has_state {
         issues.push(ValidationIssue::missing(body_loc(&["state"])));
     }
     let extras = extras(get(&obj, "extras"), &mut issues);
@@ -127,6 +128,7 @@ pub fn decide_request(mut obj: Body) -> Result<DecideRequest, Issues> {
         questions,
         preset,
         images,
+        audio,
         keep_alive,
         extras,
     })
@@ -579,9 +581,9 @@ fn noul_criteria(
     }
 }
 
-/// `images`: a list of non-empty strings (base64 or data URLs; the runner decodes them).
-fn images(value: Option<&Value>, issues: &mut Issues) -> Vec<String> {
-    let base = body_loc(&["images"]);
+/// `images` and `audio`: a list of non-empty strings (base64 or data URLs; the runner decodes them).
+fn media(field: &str, value: Option<&Value>, issues: &mut Issues) -> Vec<String> {
+    let base = body_loc(&[field]);
     let Some(value) = value else {
         return Vec::new();
     };
@@ -614,11 +616,15 @@ fn extras(value: Option<&Value>, issues: &mut Issues) -> Vec<Extra> {
         issues.push(ValidationIssue::wrong_type(base, "list_type"));
         return Vec::new();
     };
-    let expected = Extra::ALL
+    // Pydantic's literal_error wording: 'a', 'b' or 'c'.
+    let quoted: Vec<String> = Extra::ALL
         .iter()
         .map(|e| format!("'{}'", e.as_str()))
-        .collect::<Vec<_>>()
-        .join(", ");
+        .collect();
+    let expected = match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} or {last}", rest.join(", ")),
+        _ => quoted.concat(),
+    };
     let mut out = Vec::new();
     for (i, item) in items.iter().enumerate() {
         match item {
@@ -640,7 +646,16 @@ fn extras(value: Option<&Value>, issues: &mut Issues) -> Vec<Extra> {
 }
 
 fn calibration(value: &Value, issues: &mut Issues) -> Option<CalibrationSpec> {
-    let base = body_loc(&["calibration"]);
+    calibration_at(value, body_loc(&["calibration"]), true, issues)
+}
+
+/// One level of a calibration: the top level (`media` allowed) or a media entry.
+fn calibration_at(
+    value: &Value,
+    base: Vec<Loc>,
+    top: bool,
+    issues: &mut Issues,
+) -> Option<CalibrationSpec> {
     let Value::Object(m) = value else {
         issues.push(ValidationIssue::wrong_type(base, "dict_type"));
         return None;
@@ -692,6 +707,52 @@ fn calibration(value: &Value, issues: &mut Issues) -> Option<CalibrationSpec> {
         }
         Some(_) => issues.push(ValidationIssue::wrong_type(
             at(&base, ["temperature_by_options".into()]),
+            "dict_type",
+        )),
+    }
+    match m.get("temperature_range").filter(|v| !v.is_null()) {
+        None => {}
+        Some(v) => {
+            let rloc = at(&base, ["temperature_range".into()]);
+            let range = v.as_array().and_then(|r| match r.as_slice() {
+                [lo, hi] => Some([lo.as_f64()?, hi.as_f64()?]),
+                _ => None,
+            });
+            match range {
+                Some([lo, hi]) if lo.is_finite() && hi.is_finite() && 0.0 < lo && lo <= hi => {
+                    spec.temperature_range = Some([lo, hi]);
+                }
+                _ => issues.push(ValidationIssue::calibration(
+                    rloc,
+                    "expected [min, max] with 0 < min <= max",
+                )),
+            }
+        }
+    }
+    match m.get("media").filter(|v| !v.is_null()) {
+        None => {}
+        Some(_) if !top => issues.push(ValidationIssue::calibration(
+            at(&base, ["media".into()]),
+            "a media entry cannot have media of its own",
+        )),
+        Some(Value::Object(entries)) => {
+            let mloc = at(&base, ["media".into()]);
+            for (key, entry) in entries {
+                let kloc = at(&mloc, [Loc::key(key.as_str())]);
+                if !ollaya_decision::MEDIA_KEYS.contains(&key.as_str()) {
+                    issues.push(ValidationIssue::calibration(
+                        kloc,
+                        "keys are \"text\", \"image\", \"audio\" or \"image+audio\"",
+                    ));
+                    continue;
+                }
+                if let Some(e) = calibration_at(entry, kloc, false, issues) {
+                    spec.media.insert(key.clone(), e);
+                }
+            }
+        }
+        Some(_) => issues.push(ValidationIssue::wrong_type(
+            at(&base, ["media".into()]),
             "dict_type",
         )),
     }
@@ -940,6 +1001,24 @@ mod tests {
     }
 
     #[test]
+    fn decide_request_audio() {
+        let req = decide_request(obj(json!({
+            "model": "nature:p2-vision", "state": {}, "audio": ["UklGRg==", "data:audio/wav;base64,UklGRg=="],
+        })))
+        .unwrap();
+        assert_eq!(req.audio, ["UklGRg==", "data:audio/wav;base64,UklGRg=="]);
+        assert!(req.images.is_empty());
+        let issues =
+            decide_request(obj(json!({"model": "m", "state": "s", "audio": ["", 1]}))).unwrap_err();
+        assert_eq!(
+            kinds(&issues),
+            pairs(&[("audio.0", "string_too_short"), ("audio.1", "string_type")])
+        );
+        let issues = decide_request(obj(json!({"model": "m", "audio": ["UklGRg=="]}))).unwrap_err();
+        assert_eq!(kinds(&issues), pairs(&[("state", "missing")]));
+    }
+
+    #[test]
     fn decide_request_images() {
         let req = decide_request(obj(json!({
             "model": "decider:2b-vision", "state": "s", "images": ["aGk=", "data:image/png;base64,aGk="],
@@ -1056,7 +1135,7 @@ mod tests {
 
         let issues = decide_request(obj(json!({
             "model": 7, "questions": {"q": {"type": "noul"}},
-            "keep_alive": "soon", "extras": ["logits", 1], "stream": "yes",
+            "keep_alive": "soon", "extras": ["embeddings", 1], "stream": "yes",
         })))
         .unwrap_err();
         assert_eq!(
@@ -1070,7 +1149,7 @@ mod tests {
                 ("stream", "bool_type"),
             ])
         );
-        assert_eq!(issues[3].msg, "Input should be 'laya'");
+        assert_eq!(issues[3].msg, "Input should be 'laya' or 'logits'");
     }
 
     #[test]
@@ -1124,6 +1203,56 @@ mod tests {
         .unwrap();
         assert_eq!(ok.parameters.unwrap().precision.as_deref(), Some("fp32"));
         assert_eq!(ok.description.as_deref(), Some("Ticket triage"));
+    }
+
+    #[test]
+    fn create_request_media_calibration() {
+        let ok = create_request(obj(json!({
+            "model": "birds", "from": "nature:p2",
+            "calibration": {
+                "temperature": [68.58, 15.0, 101.09], "temperature_range": [0.5, 200],
+                "media": {"audio": {"temperature": [91.43, 15.0, 118.49]},
+                          "text": {"temperature": [2.0], "temperature_range": [0.5, 5]}},
+            },
+        })))
+        .unwrap();
+        let c = ok.calibration.unwrap();
+        assert_eq!(c.temperature_range, Some([0.5, 200.0]));
+        assert_eq!(c.media["audio"].temperature, [91.43, 15.0, 118.49]);
+        assert_eq!(c.media["audio"].temperature_range, None);
+        assert_eq!(c.media["text"].temperature_range, Some([0.5, 5.0]));
+        // The spec round-trips into the layer the daemon reads.
+        let layer: ollaya_decision::CalibrationFile =
+            serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
+        let cal = ollaya_decision::Calibration::from_file(&layer);
+        let audio = cal.for_media(ollaya_decision::media_key(0, 1));
+        assert_eq!(audio.temperature(ollaya_decision::QType::Choice, 4), 91.43);
+
+        let issues = create_request(obj(json!({
+            "model": "birds", "from": "nature:p2",
+            "calibration": {
+                "temperature_range": [5, 1],
+                "media": {"video": {}, "audio": {"temperature": ["hot"], "media": {}},
+                          "image": {"temperature_range": [0, 3]}, "text": 2},
+            },
+        })))
+        .unwrap_err();
+        assert_eq!(
+            kinds(&issues),
+            pairs(&[
+                ("calibration.temperature_range", "calibration"),
+                ("calibration.media.video", "calibration"),
+                ("calibration.media.audio.temperature.0", "float_type"),
+                ("calibration.media.audio.media", "calibration"),
+                ("calibration.media.image.temperature_range", "calibration"),
+                ("calibration.media.text", "dict_type"),
+            ])
+        );
+        let issues = create_request(obj(json!({
+            "model": "birds", "from": "nature:p2", "calibration": {"media": []},
+        })))
+        .unwrap_err();
+        assert_eq!(kinds(&issues), pairs(&[("calibration.media", "dict_type")]));
     }
 
     #[test]

@@ -1,6 +1,7 @@
-//! Still-image support through libmtmd from the same pinned release as libllama.
+//! Still images and audio clips through libmtmd from the same pinned release as libllama.
 //! All operations run under LlamaModel's context mutex. PNG decoding uses Ollaya's
-//! existing decoder; no URLs, paths, video subprocesses or audio are accepted.
+//! existing decoder and audio files are decoded and resampled by [`crate::audio`]; no URLs,
+//! paths or video subprocesses are accepted.
 use super::model_error;
 use crate::{Error, vision};
 use libloading::Library;
@@ -57,6 +58,9 @@ struct Api {
     marker: unsafe extern "C" fn(*const c_void) -> *const c_char,
     supports_vision: unsafe extern "C" fn(*const c_void) -> bool,
     bitmap: unsafe extern "C" fn(u32, u32, *const u8) -> *mut c_void,
+    bitmap_audio: unsafe extern "C" fn(usize, *const f32) -> *mut c_void,
+    supports_audio: unsafe extern "C" fn(*const c_void) -> bool,
+    audio_rate: unsafe extern "C" fn(*const c_void) -> c_int,
     bitmap_free: unsafe extern "C" fn(*mut c_void),
     chunks: unsafe extern "C" fn() -> *mut c_void,
     chunks_free: unsafe extern "C" fn(*mut c_void),
@@ -138,6 +142,9 @@ impl Api {
                 marker: symbol!("mtmd_get_marker"),
                 supports_vision: symbol!("mtmd_support_vision"),
                 bitmap: symbol!("mtmd_bitmap_init"),
+                bitmap_audio: symbol!("mtmd_bitmap_init_from_audio"),
+                supports_audio: symbol!("mtmd_support_audio"),
+                audio_rate: symbol!("mtmd_get_audio_sample_rate"),
                 bitmap_free: symbol!("mtmd_bitmap_free"),
                 chunks: symbol!("mtmd_input_chunks_init"),
                 chunks_free: symbol!("mtmd_input_chunks_free"),
@@ -162,6 +169,9 @@ impl Api {
         }
     }
 }
+/// Audio clips per request. Each 30 s clip is 750 positions of Gemma 4's 8,192-token context.
+pub(super) const MAX_CLIPS: usize = 8;
+
 pub(super) struct Vision {
     api: Api,
     ptr: NonNull<c_void>,
@@ -201,11 +211,41 @@ impl Vision {
         }
         Ok(vision)
     }
-    pub(super) fn prefix(&self, text: &str, images: &[Vec<u8>]) -> Result<Chunks<'_>, Error> {
+    /// The projector has an audio encoder too (Gemma 4's `gemma4a`).
+    pub(super) fn reads_audio(&self) -> bool {
+        // SAFETY: valid projector handle.
+        unsafe { (self.api.supports_audio)(self.ptr.as_ptr()) }
+    }
+
+    /// The audio encoder's sample rate in Hz (16,000 for Gemma 4).
+    pub(super) fn audio_rate(&self) -> Option<u32> {
+        // SAFETY: valid projector handle; mtmd returns -1 without an audio encoder.
+        let rate = unsafe { (self.api.audio_rate)(self.ptr.as_ptr()) };
+        (rate > 0).then_some(rate as u32)
+    }
+
+    /// Tokenize `text`, whose `<__media__>` markers stand for the images, then the audio
+    /// clips (mono samples at [`Vision::audio_rate`]), in that order.
+    pub(super) fn prefix(
+        &self,
+        text: &str,
+        images: &[Vec<u8>],
+        audio: &[Vec<f32>],
+    ) -> Result<Chunks<'_>, Error> {
         if images.len() > 16 {
             return Err(
                 ollaya_decision::Error::invalid("GGUF vision accepts at most 16 images").into(),
             );
+        }
+        if audio.len() > MAX_CLIPS {
+            return Err(ollaya_decision::Error::invalid(format!(
+                "{} audio clips given; this model reads at most {MAX_CLIPS}",
+                audio.len()
+            ))
+            .into());
+        }
+        if !audio.is_empty() && !self.reads_audio() {
+            return Err(crate::audio::AudioError::Unsupported.into());
         }
         let mut bitmaps = Vec::new();
         for bytes in images {
@@ -218,6 +258,18 @@ impl Vision {
                 api: &self.api,
                 ptr: NonNull::new(ptr)
                     .ok_or_else(|| model_error("mtmd bitmap allocation failed"))?,
+            });
+        }
+        for samples in audio {
+            if samples.is_empty() {
+                return Err(crate::audio::AudioError::Empty.into());
+            }
+            // SAFETY: `samples` holds samples.len() f32 values; mtmd copies them.
+            let ptr = unsafe { (self.api.bitmap_audio)(samples.len(), samples.as_ptr()) };
+            bitmaps.push(Bitmap {
+                api: &self.api,
+                ptr: NonNull::new(ptr)
+                    .ok_or_else(|| model_error("mtmd audio bitmap allocation failed"))?,
             });
         }
         // SAFETY: marker belongs to the live projector and is NUL terminated.
