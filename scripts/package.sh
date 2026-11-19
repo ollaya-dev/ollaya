@@ -71,6 +71,8 @@ ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 ORT_VERSION=1.28.0
 ORT_LICENSE_SHA256=2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c
 ORT_NOTICES_SHA256=0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2
+ORT_NOTICES_WHEEL_URL=https://files.pythonhosted.org/packages/98/f8/dcbe7700dca82fa540035abd3c868fe5ad0f86af00b9a3db7c2e27d15c7d/onnxruntime-1.28.0-cp312-cp312-macosx_14_0_arm64.whl
+ORT_NOTICES_WHEEL_SHA256=26ff0fdd06efb6c155bae95387a09db1a2be89c7a03e4d0bffd5a171cc2826da
 # The CUDA pack runs Microsoft's ONNX Runtime GPU release instead, unmodified: pyke's CUDA build
 # has no kernels for sm_120 (docs/decisions/0004-cuda-onnxruntime-builds.md). Same minor version
 # as ORT_VERSION; bump together. The one exception is linux-arm64, pinned below.
@@ -346,10 +348,22 @@ fi
 
 # --- ONNX Runtime notices ----------------------------------------------------------------------
 
-ORT_RAW=https://raw.githubusercontent.com/microsoft/onnxruntime/v$ORT_VERSION
-fetch "$ORT_RAW/LICENSE" "$CACHE/onnxruntime-$ORT_VERSION/LICENSE" "$ORT_LICENSE_SHA256"
-fetch "$ORT_RAW/ThirdPartyNotices.txt" "$CACHE/onnxruntime-$ORT_VERSION/ThirdPartyNotices.txt" \
-    "$ORT_NOTICES_SHA256"
+# Taken from Microsoft's onnxruntime wheel on PyPI, which carries both files byte for byte as tagged
+# in the repository (the sha256 pins are the repository's). github.com/microsoft/onnxruntime has
+# returned 404 since 2026-11-18.
+ort_notices=$CACHE/onnxruntime-$ORT_VERSION
+if [ ! -f "$ort_notices/LICENSE" ] || [ "$(sha256_of "$ort_notices/LICENSE")" != "$ORT_LICENSE_SHA256" ] ||
+    [ ! -f "$ort_notices/ThirdPartyNotices.txt" ] ||
+    [ "$(sha256_of "$ort_notices/ThirdPartyNotices.txt")" != "$ORT_NOTICES_SHA256" ]; then
+    have unzip || die "missing tool: unzip"
+    fetch "$ORT_NOTICES_WHEEL_URL" "$CACHE/${ORT_NOTICES_WHEEL_URL##*/}" "$ORT_NOTICES_WHEEL_SHA256"
+    mkdir -p "$ort_notices"
+    unzip -q -o -j "$CACHE/${ORT_NOTICES_WHEEL_URL##*/}" onnxruntime/LICENSE onnxruntime/ThirdPartyNotices.txt \
+        -d "$ort_notices"
+fi
+[ "$(sha256_of "$ort_notices/LICENSE")" = "$ORT_LICENSE_SHA256" ] || die "sha256 mismatch: ONNX Runtime LICENSE"
+[ "$(sha256_of "$ort_notices/ThirdPartyNotices.txt")" = "$ORT_NOTICES_SHA256" ] ||
+    die "sha256 mismatch: ONNX Runtime ThirdPartyNotices.txt"
 
 ort_notice() {
     cat <<EOF

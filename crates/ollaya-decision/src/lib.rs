@@ -17,6 +17,7 @@ pub mod d3;
 pub mod decider;
 pub mod decima;
 pub mod decision;
+pub mod fit;
 pub mod gliclass;
 pub mod gliclass_kv;
 pub mod jebadiah;
@@ -40,7 +41,7 @@ pub mod von;
 pub mod winnow;
 
 pub use answer::Answer;
-pub use calibration::{Calibration, CalibrationFile, TemperatureMap};
+pub use calibration::{Calibration, CalibrationFile, MEDIA_KEYS, TemperatureMap, media_key};
 pub use layout::{Encoded, LayaLayout, SpecialTokens, TokenEncoder, serialize_state};
 pub use question::{Criteria, QType, Question, Questions, parse_questions};
 

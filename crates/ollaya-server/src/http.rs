@@ -753,6 +753,7 @@ async fn decide(
         state,
         questions: questions.as_ref().map(ollaya_api::decide::engine_questions),
         images: req.images.clone(),
+        audio: req.audio.clone(),
         keep_alive: req.keep_alive,
         cancel: None,
         deadline,
@@ -760,7 +761,8 @@ async fn decide(
     let out = run_decision(&s, uri.path(), input)
         .await
         .map_err(|e| decision_error(&e, questions.as_ref()))?;
-    let resp = views::decide_response(out, req.wants(Extra::Laya)).map_err(|e| api_error(&e))?;
+    let resp = views::decide_response(out, req.wants(Extra::Laya), req.wants(Extra::Logits))
+        .map_err(|e| api_error(&e))?;
     Ok(Json(resp))
 }
 
@@ -783,6 +785,7 @@ async fn systemone(
             .as_ref()
             .map(ollaya_api::decide::engine_questions),
         images: Vec::new(),
+        audio: Vec::new(),
         keep_alive: None,
         cancel: None,
         deadline,
@@ -793,7 +796,7 @@ async fn systemone(
     if out.state_truncated {
         return Err(ErrorBody::state_truncated(&out.model).into());
     }
-    let resp = views::decide_response(out, false).map_err(|e| api_error(&e))?;
+    let resp = views::decide_response(out, false, false).map_err(|e| api_error(&e))?;
     Ok((timing_headers(&resp), Json(resp.into_system_one())))
 }
 

@@ -49,6 +49,8 @@ pub struct DecideInput {
     pub questions: Option<Value>,
     /// Images for vision models, base64 as the caller sent them.
     pub images: Vec<String>,
+    /// Audio clips for models with an audio encoder, base64 as the caller sent them.
+    pub audio: Vec<String>,
     pub keep_alive: Option<KeepAlive>,
     /// Set when the caller has gone away: once the model is loaded, the decision is skipped.
     pub cancel: Option<Arc<AtomicBool>>,
@@ -170,6 +172,18 @@ impl Ollaya {
         let questions =
             parse_questions(&questions_json).map_err(|e| Error::InvalidRequest(e.to_string()))?;
         check_limits(&questions)?;
+        // Before loading: a model that cannot read the media would load only to refuse them.
+        for (sent, reads, what) in [
+            (!input.images.is_empty(), model.inputs.images, "images"),
+            (!input.audio.is_empty(), model.inputs.audio, "audio"),
+        ] {
+            if sent && !reads {
+                return Err(Error::InvalidRequest(format!(
+                    "{} does not read {what}",
+                    model.name
+                )));
+            }
+        }
 
         let (lease, load_duration) = self.scheduler.acquire(&model, input.keep_alive).await?;
         if input
@@ -187,14 +201,21 @@ impl Ollaya {
         }
         let eval_started = Instant::now();
         let raw = lease
-            .decide(&input.state, &questions_json, &input.images, remaining)
+            .decide(
+                &input.state,
+                &questions_json,
+                &input.images,
+                &input.audio,
+                remaining,
+            )
             .await?;
         drop(lease);
         let state_tokens = raw["state_tokens"].as_u64().unwrap_or(0) as usize;
         if state_tokens > ollaya_api::MAX_STATE_TOKENS {
             return Err(Error::InputTooLong(state_tokens));
         }
-        let answers = answers_from(&model, &questions, &raw, state_tokens)?;
+        let media = ollaya_decision::media_key(input.images.len(), input.audio.len());
+        let answers = answers_from(&model, media, &questions, &raw, state_tokens)?;
         let eval_duration = eval_started.elapsed();
         Ok(DecideOutput {
             requested: name.to_string(),
@@ -512,10 +533,12 @@ fn check_limits(questions: &Questions) -> Result<(), Error> {
     Ok(())
 }
 
-/// Calibrated answers from the runner's raw logits. `state_tokens` is the runner's count, which
-/// an input-conditioned calibration reads.
+/// Calibrated answers from the runner's raw logits, with the temperatures for the request's
+/// `media` ([`ollaya_decision::media_key`]). `state_tokens` is the runner's count, which an
+/// input-conditioned calibration reads.
 fn answers_from(
     model: &Loadable,
+    media: &str,
     questions: &Questions,
     raw: &Value,
     state_tokens: usize,
@@ -530,6 +553,7 @@ fn answers_from(
             questions.len()
         )));
     }
+    let calibration = model.calibration.for_media(media);
     questions
         .values()
         .zip(rows)
@@ -546,7 +570,7 @@ fn answers_from(
             let act: Option<Vec<f32>> = serde_json::from_value(row["act_logits"].clone()).ok();
             Ok(Answer::new(
                 q,
-                &model.calibration,
+                calibration,
                 &logits,
                 act.as_deref(),
                 state_tokens,

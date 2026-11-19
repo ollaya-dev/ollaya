@@ -34,6 +34,7 @@ tracing.workspace = true
 libloading.workspace = true
 ndarray.workspace = true
 png.workspace = true
+symphonia.workspace = true
 ort = { workspace = true, features = ["download-binaries", "copy-dylibs", "tls-rustls"] }
 serde.workspace = true
 serde_json.workspace = true

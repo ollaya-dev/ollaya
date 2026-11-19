@@ -54,6 +54,26 @@ pub trait Engine: Send + Sync {
         }
         self.run_json(state, questions)
     }
+
+    /// The model reads audio clips (a GGUF projector with an audio encoder).
+    fn reads_audio(&self) -> bool {
+        false
+    }
+
+    /// Answer a request that may come with images and audio clips. Only models whose projector
+    /// has an audio encoder read clips; the others answer as [`Engine::run_images`] does.
+    fn run_media(
+        &self,
+        state: &Value,
+        questions: &Value,
+        images: &[Vec<u8>],
+        audio: &[crate::audio::Clip],
+    ) -> Result<Output, Error> {
+        if !audio.is_empty() {
+            return Err(Error::Audio(crate::audio::AudioError::Unsupported));
+        }
+        self.run_images(state, questions, images)
+    }
 }
 
 impl Engine for OnnxModel {

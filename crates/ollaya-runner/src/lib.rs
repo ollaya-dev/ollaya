@@ -4,6 +4,7 @@
 //! rendering happen in `ollaya-decision`, so engines stay small and interchangeable.
 
 pub mod arbiter;
+pub mod audio;
 pub mod clef;
 pub mod clm;
 pub mod d1_omni;
@@ -82,6 +83,8 @@ pub enum Error {
     /// The request's `timeout_ms` passed while it waited for the model thread.
     #[error("the request's deadline passed while it waited for the model")]
     DeadlineExceeded,
+    #[error(transparent)]
+    Audio(#[from] audio::AudioError),
 }
 
 // Session builder errors carry the builder for recovery; we only need the message.

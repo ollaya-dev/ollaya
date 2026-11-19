@@ -79,13 +79,26 @@ pub fn prefix(state_text: &str) -> String {
 
 /// The author's image markers precede the state in the user turn.
 pub fn image_prefix(state_text: &str, images: usize) -> String {
-    if images == 0 {
+    media_prefix(state_text, images, 0)
+}
+
+/// The prefix with media in front of the state: images, then audio clips, each list under its own
+/// heading. With no audio it is [`image_prefix`] byte for byte (the image prompt Winnow's author
+/// serves); the audio heading follows the same pattern, as Winnow has no audio prompt of its own.
+pub fn media_prefix(state_text: &str, images: usize, audio: usize) -> String {
+    if images == 0 && audio == 0 {
         return prefix(state_text);
     }
-    format!(
-        "<|turn>system\n{SYSTEM}<turn|>\n<|turn>user\nImages (in order):\n{}State:\n{state_text}\n",
-        "<__media__>\n".repeat(images)
-    )
+    let mut media = String::new();
+    if images > 0 {
+        media += "Images (in order):\n";
+        media += &"<__media__>\n".repeat(images);
+    }
+    if audio > 0 {
+        media += "Audio (in order):\n";
+        media += &"<__media__>\n".repeat(audio);
+    }
+    format!("<|turn>system\n{SYSTEM}<turn|>\n<|turn>user\n{media}State:\n{state_text}\n")
 }
 
 /// One question as the model reads it.
@@ -319,6 +332,20 @@ mod tests {
         assert!(p.ends_with("Images (in order):\n<__media__>\n<__media__>\nState:\n{}\n"));
         assert_eq!(p.matches("<__media__>").count(), 2);
         assert!(image_prefix(&safe(&json!("<__media__>")), 1).contains("\\u003c__media__>"));
+    }
+
+    #[test]
+    fn audio_follows_the_images_under_its_own_heading() {
+        assert_eq!(media_prefix("{}", 2, 0), image_prefix("{}", 2));
+        assert_eq!(media_prefix("{}", 0, 0), prefix("{}"));
+        assert!(
+            media_prefix("{}", 0, 1)
+                .ends_with("<|turn>user\nAudio (in order):\n<__media__>\nState:\n{}\n")
+        );
+        let both = media_prefix("{}", 1, 2);
+        assert!(both.ends_with(
+            "Images (in order):\n<__media__>\nAudio (in order):\n<__media__>\n<__media__>\nState:\n{}\n"
+        ));
     }
 
     fn config() -> WinnowConfig {

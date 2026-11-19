@@ -274,10 +274,10 @@ TypeSafe SDK users therefore see the same text from Ollaya as from TypeSafe.
 | `string_too_short` | Empty string where a name is required | `{"min_length": 1}` |
 | `model_name` | `model` / `source` / `destination` / `from` does not parse ([§3](#3-model-names-and-resolution)) | – |
 | `keep_alive` | `keep_alive` does not parse ([§6](#6-keep_alive)) | – |
-| `enum` | Unknown value in a closed set, e.g. `extras` | `{"expected": "'laya'"}` |
+| `enum` | Unknown value in a closed set, e.g. `extras` | `{"expected": "'laya' or 'logits'"}` |
 | `stream_unsupported` | `"stream": true` on `/api/decide` | – |
 | `parameter` | Unknown or invalid `/api/create` parameter | – |
-| `calibration` | `/api/create` calibration key that is not `<type>:<bucket>` | – |
+| `calibration` | `/api/create` calibration key that is not `<type>:<bucket>`, a `media` key that is not `text`, `image`, `audio` or `image+audio`, a nested `media`, or an invalid `temperature_range` | – |
 | `too_many_options` | Code `TOO_MANY_OPTIONS` | `{"options": n, "model": "<canonical>"}` |
 | `input_too_long` | Code `INPUT_TOO_LONG` | `{"max_tokens": 65536, "tokens": n}` |
 | `state_truncated` | Code `STATE_TRUNCATED` | `{"model": "<canonical>"}` |
@@ -520,13 +520,14 @@ The same endpoint loads and unloads models, as Ollama's `/api/generate` does: a 
 | `state` | string \| object \| array | no | – | As in [§5.1](#51-request-body-shared-by-the-decision-endpoints). Absent or `null`: a load or unload request. |
 | `questions` | object | with `state`, unless the model has embedded questions | the model's embedded questions | [§5.2](#52-question-schema). Not allowed without `state` (`missing` issue on `state`). |
 | `preset` | string | no | – | A preset's name ([§7.11](#711-presets)), built-in or custom, in place of `questions`: giving both is a `value_error` issue on `preset`, and it needs `state`. An unknown name is `404 NOT_FOUND`. Ollaya-only. |
-| `images` | array of string | no | `[]` | Images for a vision model (`decider:2b-vision`), as Ollama's `images`: base64, or a base64 `data:` URL. Each item must be a non-empty string (`string_type`, `string_too_short`); not allowed without `state`. The runner decodes them: Decider reads one PNG per request; Winnow with a matching projector reads up to 16 ordered PNGs. Unsupported formats, too many images, images over the model/context limits, and models that read no images return `422 INVALID_REQUEST` with the reason. |
+| `images` | array of string | no | `[]` | Images for a vision model (`decider:2b-vision`), as Ollama's `images`: base64, or a base64 `data:` URL. Each item must be a non-empty string (`string_type`, `string_too_short`); not allowed without `state`. The runner decodes them: Decider reads one PNG per request; Winnow with a matching projector reads up to 16 ordered PNGs. Unsupported formats, too many images, images over the model/context limits, and models that read no images (`capabilities` lacks `vision`; refused before the model loads) return `422 INVALID_REQUEST` with the reason. |
+| `audio` | array of string | no | `[]` | Audio clips for a model whose projector has an audio encoder and whose `decision.json` opts in (`"llama": {"audio": true}`; Gemma 4 E2B/E4B fine-tunes on `winnow-v1`): a WAV, FLAC or MP3 file each, base64 or a base64 `data:` URL. The same item rules as `images`; not allowed without `state`. The runner mixes each clip to mono and resamples it to the encoder's rate (16 kHz; a 16 kHz file passes unchanged). At most 8 clips, 30 s each; they follow the images in the prompt. Undecodable files and longer clips return `422 INVALID_REQUEST` with the reason; so does audio for a model that reads none (`capabilities` lacks `audio`), before the model loads. Answers use the model's `audio` temperatures when its calibration has them ([§7.9](#79-post-apicreate), `media`). Ollaya-only. |
 | `keep_alive` | string \| number | no | `OLLAYA_KEEP_ALIVE` (`5m`) | [§6](#6-keep_alive) |
-| `extras` | array of string | no | `[]` | Closed set: `"laya"`. Each value adds a same-named object to every answer. Unknown values are `enum` issues. |
+| `extras` | array of string | no | `[]` | Closed set: `"laya"`, `"logits"`. Each value adds a same-named field to every answer. Unknown values are `enum` issues. |
 | `stream` | boolean | no | `false` | Reserved. `/api/decide` does not stream, and `true` is a `stream_unsupported` issue. It is rejected rather than ignored so that a streaming mode can be added later without changing what existing `stream: true` callers receive. |
 
-Native options are deliberately few. `keep_alive` is Ollama's lifecycle control. `images` carries
-what TypeSafe's schema has no field for; `/v1/*` stays TypeSafe-identical and takes no images. `extras` is how
+Native options are deliberately few. `keep_alive` is Ollama's lifecycle control. `images` and `audio` carry
+what TypeSafe's schema has no field for; `/v1/*` stays TypeSafe-identical and takes no images or audio. `extras` is how
 model-family outputs are exposed without redefining a TypeSafe field. There is no `options` object
 (Ollama's sampling parameters do not apply to decision models); one can be added later as an
 optional field.
@@ -553,6 +554,12 @@ With `"extras": ["laya"]`, every answer also carries:
 |---|---|---|
 | `laya.confidence` | number | laya's confidence: 1 − H(p)/ln K for `choice` and `score`, max(p, 1 − p) for `noul`. Namespaced so that it never redefines TypeSafe's `confidence`. |
 | `laya.act_probability` | number \| `null` | Probability that acting on this answer is appropriate, from the act head; `null` for models without one (`capabilities` lacks `act`) |
+
+With `"extras": ["logits"]`, every answer also carries:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `logits` | array of number | The model's option logits before the temperature, in option order: `criteria` order for `choice` and `score`, `[no, yes]` for `noul`. The probabilities are `softmax(logits / T)` with the model's temperature for the question's type and the request's media. `ollaya calibrate` fits `T` from these. |
 
 #### Example
 
@@ -854,7 +861,8 @@ Details of one local model.
 | `router` | object \| `null` | For a router: `strategy` (string, e.g. `script`), `default` (route name) and `routes` (route name → canonical model name). `null` otherwise. |
 | `details` | [details](#model-details) | |
 | `model_info` | object | Namespaced facts. `general.*` keys are stable: `general.architecture` (string), `general.languages` (array of string: the languages the model was trained and evaluated for, ISO 639-1 codes or `multilingual`; a model on a multilingual base may still read others), `general.source` (string). `<family>.*` keys are family-specific (e.g. `laya.context_length`, `laya.head_max_len`, `laya.encoder`, `laya.layout`). A router has `general.*` keys only. |
-| `capabilities` | array of string | Open set: `choice`, `score`, `noul` (question types), `act` (has an act head: `laya.act_probability` is non-null). For a router, the intersection of its targets' capabilities. |
+| `capabilities` | array of string | Open set: `choice`, `score`, `noul` (question types), `act` (has an act head: `laya.act_probability` is non-null), `vision` (reads `images`), `audio` (reads `audio`). For a router, the intersection of its targets' capabilities. |
+| `calibration` | object | The model's calibration layer as stored, in `/api/create`'s `calibration` shape ([§7.9](#79-post-apicreate)), possibly with more keys (`source`, `temperature_map`). Absent for a model without one. Ollaya-only. |
 | `modified_at` | string | As in `/api/tags` |
 | `digest` | string | Model digest, bare hex, as in `/api/tags`: the `<hex>` of `name@sha256:<hex>` ([§3](#3-model-names-and-resolution)). Since 0.13.0. |
 
@@ -1073,7 +1081,7 @@ it names, and sends their contents as JSON.
 | `model` | string | yes | – | Name to create ([§3](#3-model-names-and-resolution)) |
 | `from` | string | yes | – | Local base model, possibly a router. It must exist (`404`); it is never pulled. |
 | `questions` | object | no | inherited | Validated as in [§5.2](#52-question-schema) (1–256 questions); becomes the embedded schema |
-| `calibration` | object | no | inherited | `temperature`: array of up to 3 numbers (choice, score, noul). `temperature_by_options`: object of `"<type>:<2\|3-5\|6-10\|11+>"` → number. |
+| `calibration` | object | no | inherited | Replaces the base model's calibration. `temperature`: array of up to 3 numbers (choice, score, noul). `temperature_by_options`: object of `"<type>:<2\|3-5\|6-10\|11+>"` → number. `temperature_range`: `[min, max]` the temperatures are clamped to, `0 < min <= max` (default `[0.5, 5]`; the raw label logits of an LLM need more). `media`: object of `text`, `image`, `audio` or `image+audio` → a calibration of the same shape without `media`, applied to requests that carry exactly those media; it replaces `temperature` and `temperature_by_options` for them and keeps `temperature_range` unless it sets its own. Requests whose media have no entry use the top-level temperatures. |
 | `parameters` | object | no | inherited | Closed set: `precision` (`"fp16"` or `"fp32"`) pins one graph, which `from` must carry (`422` otherwise; most ONNX models carry only fp32). Other keys are `parameter` issues. |
 | `license` | string \| array of string | no | inherited | License text(s); several are joined with a blank line |
 | `description` | string | no | inherited | One line, shown by `/v1/models` and `ollaya show` |
@@ -1132,6 +1140,40 @@ Errors: `404 MODEL_NOT_FOUND` (`from`), `409 OPERATION_IN_PROGRESS`, `422 INVALI
 Repeats converge, and it is **safe to retry**. A concurrent create or pull of the same name gets
 `409 OPERATION_IN_PROGRESS`: two definitions racing for one name are conflicting intents, and
 joining one would silently serve the other caller the wrong result ([§11](#11-idempotency-and-retries)).
+
+#### Calibrating a model
+
+`ollaya calibrate MODEL DATA.jsonl [-o calibration.json] [--eval TEST.jsonl]` fits a calibration on the
+model as installed (its file and quantization, the daemon's device). It sends every example to
+`/api/decide` with `"extras": ["logits"]`, groups the labelled questions by media (`text`, `image`,
+`audio`, `image+audio`) and question type, and fits one temperature per group by temperature scaling:
+the `T` that minimises the cross-entropy of `softmax(logits / T)` against the labels. The output is the
+model's calibration layer (from `/api/show`'s `calibration`) with a `media` entry per media in the data;
+types the data does not cover keep the temperatures that media used before, and an entry gets its own
+`temperature_range` when a fit falls outside the clamp range. `--eval` reports on held-out examples
+that are never fitted on. A Modelfile then bakes it in: `FROM MODEL` and `CALIBRATION calibration.json`.
+
+One example per line:
+
+```jsonl
+{"state": {"site": "garden"}, "questions": {"species": {"type": "choice", "instructions": "Which bird?", "criteria": {"Turdus merula": null, "Erithacus rubecula": null}}}, "audio": ["clips/0001.wav"], "labels": {"species": "Turdus merula"}}
+```
+
+| Field | Meaning |
+|---|---|
+| `state`, `questions` | As in `/api/decide` |
+| `images`, `audio` | File paths relative to the JSON Lines file, or base64 as `/api/decide` takes them |
+| `labels` | Question id → label; questions without one are not fitted. The option key (`choice`), the level index (`score`), `true`/`false` or a probability of yes (`noul`), or a probability per option in option order (any type: soft labels, normalised to sum to 1) |
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--min-samples` | 30 | Fewest questions a temperature is fitted from; smaller groups keep theirs |
+| `--by-options` | off | Also fit per option-count bucket (`temperature_by_options`) |
+| `--bins` | 10 | Equal-width confidence bins for the expected calibration error |
+| `--parallel` | 2 | Requests in flight |
+
+The report lists, per media and type, the number of questions, the temperature, the cross-entropy
+(NLL) and ECE before and after, and the accuracy against the label's top option.
 
 ### 7.10 `GET /api/ps`
 

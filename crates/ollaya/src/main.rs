@@ -4,6 +4,7 @@
 //! (`ollaya runner`, hidden). The CLI and the daemon never load ONNX Runtime themselves: only
 //! runner processes do, so a GPU provider is never registered in-process here.
 
+mod calibrate;
 mod commands;
 mod daemon;
 mod mcp;
@@ -100,6 +101,8 @@ enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Fit a model's temperatures to labelled examples, per media and question type
+    Calibrate(calibrate::CalibrateArgs),
     /// Create a model from a Modelfile
     Create {
         name: String,
@@ -327,6 +330,7 @@ async fn client_command(command: Command) -> Result<()> {
         } => commands::cp(&client, &source, &destination).await,
         Command::Stop { model: Some(model) } => commands::stop(&client, &model).await,
         Command::Create { name, file } => commands::create(&client, &name, &file).await,
+        Command::Calibrate(args) => calibrate::calibrate(&client, &args).await,
         Command::Preset(cmd) => match cmd {
             PresetCommand::List => commands::preset_list(&client).await,
             PresetCommand::Show { name } => commands::preset_show(&client, &name).await,

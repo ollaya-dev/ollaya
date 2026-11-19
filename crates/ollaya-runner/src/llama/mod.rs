@@ -81,6 +81,11 @@ pub struct LlamaSettings {
     /// (jev-style copies the prefix to sequence 1). The default splits it across sequences.
     #[serde(default)]
     pub kv_unified: bool,
+    /// The model reads audio clips through its projector's audio encoder (`winnow-v1` only). Off
+    /// by default: a projector can carry an encoder the model was never checked with (Winnow E4B's
+    /// has Gemma 4's), so a model opts in once its audio path has passed parity.
+    #[serde(default)]
+    pub audio: bool,
 }
 
 fn attn_causal() -> i32 {
@@ -1126,7 +1131,7 @@ impl LlamaModel {
                     body,
                     d1::POST
                 );
-                let chunks = vision.prefix(&prefix, images)?;
+                let chunks = vision.prefix(&prefix, images, &[])?;
                 if chunks.positions() >= self.settings.n_ctx {
                     return Err(ollaya_decision::Error::invalid(
                         "d1 image prompt exceeds context; resize the image or shorten the prompt",
@@ -1179,11 +1184,13 @@ impl LlamaModel {
         result
     }
 
+    /// `winnow-v1` with images and audio clips in front of the state (see `winnow::media_prefix`).
     fn run_winnow_images(
         &self,
         state: &Value,
         questions: &Value,
         images: &[Vec<u8>],
+        audio: &[crate::audio::Clip],
     ) -> Result<Output, Error> {
         let Layout::Winnow(cfg) = &self.layout else {
             return Err(crate::vision::ImageError::Unsupported.into());
@@ -1196,14 +1203,21 @@ impl LlamaModel {
         let (state_text, state_tokens, state_truncated) =
             self.vocab
                 .cut(winnow::state_text(state)?, cfg.max_state_tokens, true)?;
-        let prefix = winnow::image_prefix(&state_text, images.len());
+        let clips = match (audio.is_empty(), vision.audio_rate()) {
+            (true, _) => Vec::new(),
+            (false, Some(rate)) if self.settings.audio && vision.reads_audio() => {
+                audio.iter().map(|c| c.at(rate)).collect::<Vec<_>>()
+            }
+            (false, _) => return Err(crate::audio::AudioError::Unsupported.into()),
+        };
+        let prefix = winnow::media_prefix(&state_text, images.len(), clips.len());
         let mut ctx = self
             .handles
             .context
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         // Projector and llama context share this mutex; no cache is reused between image requests.
-        let chunks = vision.prefix(&prefix, images)?;
+        let chunks = vision.prefix(&prefix, images, &clips)?;
         let (head_positions, prefix_tail) = chunks.tail()?;
         // mtmd tokenizes the text after the final image separately from synthetic image
         // delimiters. Keep those delimiter IDs and retokenize only the actual text tail
@@ -1890,19 +1904,36 @@ impl crate::engine::Engine for LlamaModel {
     fn reads_images(&self) -> bool {
         self.vision.is_some()
     }
+    fn reads_audio(&self) -> bool {
+        self.settings.audio
+            && matches!(self.layout, Layout::Winnow(_))
+            && self.vision.as_ref().is_some_and(|v| v.reads_audio())
+    }
     fn run_images(
         &self,
         state: &Value,
         questions: &Value,
         images: &[Vec<u8>],
     ) -> Result<Output, Error> {
-        if images.is_empty() {
+        self.run_media(state, questions, images, &[])
+    }
+    fn run_media(
+        &self,
+        state: &Value,
+        questions: &Value,
+        images: &[Vec<u8>],
+        audio: &[crate::audio::Clip],
+    ) -> Result<Output, Error> {
+        if !audio.is_empty() && !self.reads_audio() {
+            return Err(crate::audio::AudioError::Unsupported.into());
+        }
+        if images.is_empty() && audio.is_empty() {
             return self.run_json(state, questions);
         }
         if matches!(self.layout, Layout::D1(_)) {
             self.run_d1_images(state, questions, images)
         } else {
-            self.run_winnow_images(state, questions, images)
+            self.run_winnow_images(state, questions, images, audio)
         }
     }
 
@@ -2002,7 +2033,10 @@ mod tests {
                 n_seq_max: 1,
                 n_outputs_max: 0,
                 kv_unified: false,
+                audio: false,
             }
         );
+        let s: LlamaSettings = serde_json::from_str(r#"{"n_ctx": 8192, "audio": true}"#).unwrap();
+        assert!(s.audio);
     }
 }
