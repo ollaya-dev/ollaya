@@ -186,6 +186,10 @@ Additional properties:
 - The graph uses opset 20. Weights are BF16 in the checkpoint and computed in fp32.
 - **Padding to 64.** Each 64-token chunk is one `Scan` step. Padding in-graph would need `T % 64` on a
   dynamic axis, which torch.export cannot keep symbolic.
+- **Fork form.** The export takes `prefix_ids`, `branch_ids` and `branch_job` instead of `input_ids`: every row
+  starts with the same context, which runs once per request, and each scoring row (an isolated score level
+  included) continues it. `slot_pos` counts from the start of the row. The numbers are the row form's; see
+  [kev.md](kev.md#fork-form) for the split. The runner still reads row-form graphs.
 
 ## Measured parity
 

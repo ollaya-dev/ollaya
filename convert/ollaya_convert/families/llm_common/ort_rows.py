@@ -23,7 +23,18 @@ def session(path: str, threads: int = 0, provider: str = "CPUExecutionProvider")
 def run_rows(sess, rows: List[List[int]], extra: Callable[[List[int], int], Dict[str, np.ndarray]], pad_id: int,
              budget: int = 8192, width: int = 0):
     """rows: token id lists. extra(batch_row_indices, padded_len) -> the other graph inputs for that batch.
-    Returns (outputs [len(rows), ...] in input order, seconds)."""
+    Returns (outputs [len(rows), ...] in input order, seconds). A graph in the fork form (`prefix_ids`) runs the
+    rows of the request in one run, split as the runner splits them (`qwen35.fork_rows`)."""
+    if any(i.name == "prefix_ids" for i in sess.get_inputs()):
+        from .qwen35 import fork_rows
+
+        prefixes, branches, job = fork_rows(rows, pad_id)
+        L = len(prefixes[0]) + len(branches[0])
+        feed = {"prefix_ids": np.array(prefixes, dtype=np.int64), "branch_ids": np.array(branches, dtype=np.int64),
+                "branch_job": np.array(job, dtype=np.int64), **extra(list(range(len(rows))), L)}
+        t0 = time.perf_counter()
+        res = sess.run(None, feed)[0]
+        return list(res), time.perf_counter() - t0
     order = sorted(range(len(rows)), key=lambda i: len(rows[i]))
     out = [None] * len(rows)
     t = 0.0

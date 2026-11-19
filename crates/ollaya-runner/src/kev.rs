@@ -5,6 +5,9 @@
 //! implicit, no mask: every layer is causal), `decide_pos` [rows] and `opt_pos` [rows, k] (shorter
 //! rows padded with 0) to the pointer head's raw `scores` [rows, k]. A row's first `k_row` scores
 //! are its option logits. Rows come from `ollaya_decision::kev`.
+//!
+//! A graph in the fork form takes the rows as a shared prefix and one branch per question instead
+//! of `input_ids` ([`crate::fork`]): the state runs once per request, with the same numbers.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -12,6 +15,7 @@ use std::sync::Mutex;
 use ndarray::{Array1, Array2, Ix2};
 use ollaya_decision::kev::{KevLayout, KevRow, KevState};
 use ollaya_decision::{Calibration, CalibrationFile, Questions, TokenEncoder};
+use ort::session::Session;
 use ort::session::builder::SessionBuilder;
 use serde::Deserialize;
 use serde_json::Value;
@@ -27,6 +31,14 @@ const MAX_ROWS: usize = 4096;
 /// Padded tokens per `session.run`, as for the other Qwen3.5 decoders (`decider`).
 const TOKEN_BUDGET: usize = 8192;
 const INPUTS: [&str; 3] = ["input_ids", "decide_pos", "opt_pos"];
+/// The same graph in the fork form ([`crate::fork`]).
+const FORK_INPUTS: [&str; 5] = [
+    "prefix_ids",
+    "branch_ids",
+    "branch_job",
+    "decide_pos",
+    "opt_pos",
+];
 const OUTPUT: &str = "scores";
 
 #[derive(Debug, Clone, Deserialize)]
@@ -129,12 +141,15 @@ impl KevModel {
         if let Some(session) = net.session() {
             let session = session.lock().expect("session mutex poisoned");
             let inputs: Vec<&str> = session.inputs().iter().map(|i| i.name()).collect();
-            if inputs.len() != INPUTS.len()
-                || !INPUTS.iter().all(|n| inputs.contains(n))
+            let is = |want: &[&str]| {
+                inputs.len() == want.len() && want.iter().all(|n| inputs.contains(n))
+            };
+            if !(is(&INPUTS) || is(&FORK_INPUTS))
                 || !session.outputs().iter().any(|o| o.name() == OUTPUT)
             {
                 return Err(Error::Model(format!(
-                    "graph inputs {inputs:?} do not match the kev contract ({INPUTS:?} -> {OUTPUT:?})"
+                    "graph inputs {inputs:?} do not match the kev contract ({INPUTS:?} or \
+                     {FORK_INPUTS:?} -> {OUTPUT:?})"
                 )));
             }
         }
@@ -196,7 +211,8 @@ impl KevModel {
 
 /// Each row's option scores from a pointer graph (`input_ids`, `decide_pos`, `opt_pos` -> `scores`):
 /// its first `k_row` outputs. Rows run shortest first, in batches padded to a multiple of
-/// `seq_multiple`. Shared by the pointer layouts (`kev`, `strands`).
+/// `seq_multiple`. Shared by the pointer layouts (`kev`, `strands`). A graph in the fork form runs
+/// through [`fork_scores`].
 pub(crate) fn pointer_scores(
     net: &Decoder,
     rows: &[KevRow],
@@ -204,6 +220,11 @@ pub(crate) fn pointer_scores(
     pad: u32,
     device: Device,
 ) -> Result<Vec<Vec<f32>>, Error> {
+    if let Decoder::Ort(session) = net
+        && crate::fork::is_fork(session)
+    {
+        return fork_scores(session, rows, seq_multiple, pad, device);
+    }
     let mut order: Vec<usize> = (0..rows.len()).collect();
     order.sort_by_key(|&i| rows[i].ids.len());
     let padded: Vec<usize> = order
@@ -265,6 +286,53 @@ pub(crate) fn pointer_scores(
         }
     }
     Ok(scores)
+}
+
+/// [`pointer_scores`] for a graph in the fork form: each run carries the request's shared prefix
+/// once and the questions as branches; read positions stay the rows' own.
+fn fork_scores(
+    session: &Mutex<Session>,
+    rows: &[KevRow],
+    seq_multiple: usize,
+    pad: u32,
+    device: Device,
+) -> Result<Vec<Vec<f32>>, Error> {
+    let ids: Vec<&[u32]> = rows.iter().map(|r| r.ids.as_slice()).collect();
+    let runs = crate::fork::runs(&ids, seq_multiple, pad, TOKEN_BUDGET, MAX_ROWS);
+    let reads = |run: &[usize]| -> Result<Vec<crate::fork::Input>, Error> {
+        let k = run.iter().map(|&i| rows[i].opts.len()).max().unwrap_or(0);
+        let mut decide_pos = Array1::<i64>::zeros(run.len());
+        let mut opt_pos = Array2::<i64>::zeros((run.len(), k));
+        for (r, &i) in run.iter().enumerate() {
+            decide_pos[r] = rows[i].decide as i64;
+            for (c, &p) in rows[i].opts.iter().enumerate() {
+                opt_pos[[r, c]] = p as i64;
+            }
+        }
+        Ok(vec![
+            (
+                "decide_pos".into(),
+                ort::value::Tensor::from_array(decide_pos)?.into(),
+            ),
+            (
+                "opt_pos".into(),
+                ort::value::Tensor::from_array(opt_pos)?.into(),
+            ),
+        ])
+    };
+    let scores = crate::fork::outputs(session, runs, TOKEN_BUDGET, device, OUTPUT, reads)?;
+    rows.iter()
+        .zip(scores)
+        .map(|(row, s)| {
+            s.get(..row.opts.len()).map(<[f32]>::to_vec).ok_or_else(|| {
+                Error::Model(format!(
+                    "{OUTPUT} has {} scores for {} options",
+                    s.len(),
+                    row.opts.len()
+                ))
+            })
+        })
+        .collect()
 }
 
 /// Session options for the kev graphs on `device`: the decoder options (see
