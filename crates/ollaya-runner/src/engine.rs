@@ -31,7 +31,7 @@ pub trait Engine: Send + Sync {
         None
     }
 
-    /// The model reads images (`decider-vision-v1`).
+    /// The model reads images (`decider-vision-v1`, `valen-decision-1.5-v1`).
     fn reads_images(&self) -> bool {
         false
     }
@@ -151,6 +151,7 @@ pub const LAYOUTS: &[&str] = &[
     "d1-omni-markers-v1",
     "d3-code-readout-v1",
     "gliclass-kv-v1",
+    "valen-decision-1.5-v1",
 ];
 
 /// The layout a `decision` layer declares.
@@ -225,6 +226,9 @@ pub fn load(
             files, device, threads,
         )?)),
         "gliclass-kv-v1" => Ok(Box::new(crate::gliclass_kv::GliclassKvModel::load_files(
+            files, device, threads,
+        )?)),
+        "valen-decision-1.5-v1" => Ok(Box::new(crate::valen::Valen15Model::load_files(
             files, device, threads,
         )?)),
         other => Err(Error::Model(format!(

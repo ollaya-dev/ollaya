@@ -56,6 +56,21 @@ pub fn dumps_canonical(value: &Value) -> String {
     out
 }
 
+/// `json.dumps(value, ensure_ascii=False, sort_keys=True)`: the default separators, with object
+/// keys in code point order.
+pub fn dumps_sorted(value: &Value) -> String {
+    let mut out = String::new();
+    let style = Style {
+        ascii: false,
+        sort_keys: true,
+        item_sep: ", ",
+        key_sep: ": ",
+        indent: None,
+    };
+    write_value(&mut out, value, &style, 0);
+    out
+}
+
 struct Style {
     ascii: bool,
     sort_keys: bool,
@@ -284,6 +299,20 @@ mod tests {
         assert_eq!(dumps_canonical(&json!("a\"b")), r#""a\"b""#);
         assert_eq!(dumps_canonical(&json!(null)), "null");
         assert_eq!(dumps_canonical(&json!({})), "{}");
+    }
+
+    #[test]
+    fn sorted_matches_python() {
+        // json.dumps(v, ensure_ascii=False, sort_keys=True)
+        let v = json!({"key": "b", "description": {"z": [1, 2.5, null], "é": "x\n", "A": true, "a": 1e-5}});
+        assert_eq!(
+            dumps_sorted(&v),
+            r#"{"description": {"A": true, "a": 1e-05, "z": [1, 2.5, null], "é": "x\n"}, "key": "b"}"#
+        );
+        assert_eq!(
+            dumps_sorted(&json!([{"b": 1, "a": []}])),
+            r#"[{"a": [], "b": 1}]"#
+        );
     }
 
     #[test]

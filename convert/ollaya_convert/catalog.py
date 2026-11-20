@@ -144,6 +144,13 @@ def _kev_license(repo, base):
             "Licensed under the Apache License, Version 2.0.\n\n" % (repo, base, base)) + LICENSE_APACHE
 
 
+def _valen_license(size):
+    return ("Valen-Decision-1.5-%s by Valen-Team (https://huggingface.co/Valen-Team/Valen-Decision-1.5-%s), "
+            "post-trained model, Mixer head and inference code: Apache-2.0.\n"
+            "Base model: Qwen3.5-%s by the Qwen team (https://huggingface.co/Qwen/Qwen3.5-%s), Apache-2.0.\n"
+            "Licensed under the Apache License, Version 2.0.\n\n" % (size, size, size, size)) + LICENSE_APACHE
+
+
 NIMBLE_V3_LICENSE = (
     "Bespoke-Nimble-9B-v3 by Bespoke Labs (https://huggingface.co/bespokelabs/Bespoke-Nimble-9B-v3)\n"
     "LoRA adapter: Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0), per the model card: "
@@ -1009,6 +1016,42 @@ CATALOG = {
                   "model and joint schema head, fp32) on 571 questions from 131 requests, on CUDA: identical token ids "
                   "and spans, the same 13 rejected requests, the same decision on every question, logits within "
                   "4.3e-5 and probabilities within 6.3e-6.",
+    },
+    "valen": {
+        "namespace": "library",
+        "model": "valen",
+        "family": "valen",
+        "author": "Valen-Team (post-trained models and Mixer head) and the Qwen team (base models)",
+        "license": "Apache-2.0",
+        "license_text": _valen_license("0.8B"),
+        "tags": {
+            # Valen-Decision-1.5 only (layout `valen-decision-1.5-v1`). Two graphs: vision.onnx and the decoder. The
+            # grounding head (bbox questions) is not exported: the API has no box answer. 9B: not converted yet;
+            # 27B (Qwen3.8) does not fit the parity GPU.
+            "0.8b": _wl("valen-0.8b", "Valen-Team/Valen-Decision-1.5-0.8B", "e079395fe9b8e0763b384af403e636e91c1a1559",
+                        "Valen-Decision-1.5 0.8B: Qwen3.5-0.8B vision-language, post-trained, with a Mixer head that "
+                        "scores every candidate of every question in one forward pass per request. Reads one PNG "
+                        "image per request (`images` in /api/decide, `--image` in the CLI).",
+                        "0.8B", 16384, ["multilingual"], license_text=_valen_license("0.8B"),
+                        wl_dir=os.path.join(OUT, "valen-0.8b")),
+            "2b": _wl("valen-2b", "Valen-Team/Valen-Decision-1.5-2B", "1b890606578ba0f40bb70ed46891ab65f778e76d",
+                      "Valen-Decision-1.5 2B: Qwen3.5-2B vision-language, post-trained, with a Mixer head; one forward "
+                      "pass per request. Reads one PNG image per request.",
+                      "2B", 16384, ["multilingual"], license_text=_valen_license("2B"),
+                      wl_dir=os.path.join(OUT, "valen-2b")),
+            "4b": _wl("valen-4b", "Valen-Team/Valen-Decision-1.5-4B", "9b0cacc976d7fb72f252ee1adb1564f5f15e462c",
+                      "Valen-Decision-1.5 4B: Qwen3.5-4B vision-language, post-trained, with a Mixer head; one forward "
+                      "pass per request. Reads one PNG image per request. Weights stay BF16 in memory.",
+                      "4B", 16384, ["multilingual"], license_text=_valen_license("4B"),
+                      wl_dir=os.path.join(OUT, "valen-4b"),
+                      weights={"model-%05d-of-00002.safetensors" % i: "model-%05d-of-00002.safetensors" % i
+                               for i in (1, 2)}),
+        },
+        "aliases": {"latest": "2b"},
+        "parity": "Ollaya's Rust runtime matches Valen-Team's own code in fp32 on 642 questions (146 requests, 15 "
+                  "with an image) for each of 0.8B, 2B and 4B: identical token ids, attention blocks, positions and "
+                  "resized pixels, the same decision on every question, and candidate logits within 1.9e-4 on CUDA "
+                  "and within 1.7e-4 on the CPU.",
     },
     "jeb": {
         "namespace": "library",
