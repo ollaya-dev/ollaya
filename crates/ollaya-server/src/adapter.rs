@@ -10,8 +10,11 @@ use serde_json::Value;
 
 use crate::Error;
 
-/// Backbones an adapter can run on in this version: the encoders (decoders are a later slice).
-const ENCODERS: &[&str] = &["modernbert", "deberta-v2"];
+/// Backbones an adapter can run on in this version: ModernBERT only. Decoders are a later slice.
+/// DeBERTa-v2 is refused: its relative-position projections (`pos_key`, `pos_query`) are computed
+/// once at load without the adapter, so an adapter on `query_proj` or `key_proj` would differ from
+/// the merged model; parity was measured on ModernBERT alone.
+const ENCODERS: &[&str] = &["modernbert"];
 
 /// Layouts whose engine takes adapters in this version.
 pub const LAYOUTS: &[&str] = &["laya-markers-v1"];
@@ -48,9 +51,16 @@ pub fn read_base(store: &Store, from: &str, manifest: &Manifest) -> Result<BaseT
     };
     let arch: Value = store.read_blob_json(arch_layer)?;
     let kind = arch["backbone"]["type"].as_str().unwrap_or_default();
+    if kind == "deberta-v2" {
+        return Err(refuse(format!(
+            "ADAPTER: {from} has a \"deberta-v2\" backbone; adapters are not supported on DeBERTa-v2 \
+             yet (its relative-position projections are computed without the adapter), only on \
+             ModernBERT"
+        )));
+    }
     if !ENCODERS.contains(&kind) {
         return Err(refuse(format!(
-            "ADAPTER: {from} has a {kind:?} backbone; this version runs adapters on encoders only"
+            "ADAPTER: {from} has a {kind:?} backbone; this version runs adapters on ModernBERT encoders only"
         )));
     }
     let layout = manifest

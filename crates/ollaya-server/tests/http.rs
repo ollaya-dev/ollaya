@@ -292,10 +292,15 @@ fn safetensors(tensors: &[(&str, &[usize])]) -> Vec<u8> {
 /// graph, as `laya:en` has. Its linears: `encoder.layers.0.attn.Wo` [8, 8] and
 /// `encoder.layers.0.mlp.Wi` [32, 8].
 fn add_mlx_model(store: &Store, name: &str, fake: Value) {
+    add_mlx_encoder(store, name, fake, "modernbert");
+}
+
+/// `add_mlx_model` with another backbone type in the arch layer.
+fn add_mlx_encoder(store: &Store, name: &str, fake: Value, backbone: &str) {
     let config = json!({"model_format": "onnx", "family": "laya", "parameter_size": "421M",
         "context_length": 512, "languages": ["en"], "description": format!("{name} for tests"),
         "license": "Apache-2.0"});
-    let arch = json!({"schema": 1, "backbone": {"type": "modernbert", "prefix": "encoder."},
+    let arch = json!({"schema": 1, "backbone": {"type": backbone, "prefix": "encoder."},
         "head": {"type": "laya"}, "weights": {"format": "safetensors", "file": "model.safetensors"}});
     let weights = safetensors(&[
         ("encoder.layers.0.attn.Wo.weight", &[8, 8]),
@@ -795,6 +800,17 @@ async fn adapter_refusals_name_the_problem_and_write_nothing() {
     refuse(status, &body, "precision");
     // Nothing was written by any refusal: only `x7`, and the blobs uploaded for them.
     assert_eq!(store.list().unwrap().len(), before + 1);
+    d.stop().await;
+
+    // A DeBERTa-v2 base: its position projections ignore the adapter, so it is refused.
+    let d = Daemon::start(
+        |dir| add_mlx_encoder(&Store::open(dir).unwrap(), "deb", json!({}), "deberta-v2"),
+        |c| c.device = "metal".into(),
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    let (status, body) = create_adapter(&d, "z", "deb", adapter_config(8), &weights).await;
+    refuse(status, &body, "not supported on DeBERTa-v2");
     d.stop().await;
 
     // A base with no arch layer (ONNX only).

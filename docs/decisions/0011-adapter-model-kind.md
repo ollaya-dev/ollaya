@@ -167,6 +167,13 @@ What the decoder adds is passing the active adapter through `qwen3.rs` and `qwen
 projections), replacing the merge that `MlxDecoder::load` does with `Tensors::with_lora`, and its own parity run
 against the merged model. Both slices can ship together if review prefers; neither is blocked by the other.
 
+**Backbones in the encoder slice: ModernBERT only.** `ollaya create` refuses an adapter on a DeBERTa-v2 base
+("not supported on DeBERTa-v2"). `mlx/deberta.rs` computes the relative-position projections (`pos_key`, `pos_query`)
+once at load, from the base's `key_proj` and `query_proj`, without the adapter, so an adapter on either of those two
+modules would give an answer that differs from the merged model. Parity was measured on ModernBERT alone. Supporting
+DeBERTa-v2 means applying the adapter to those projections (per request, not at load) and measuring parity on it, in
+its own change.
+
 ### 5. Compatibility
 
 - Existing models, merged or not, resolve and run exactly as before: they stay keyed by manifest digest (section 3),
