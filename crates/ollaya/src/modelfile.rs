@@ -6,7 +6,7 @@
 //! QUESTIONS ./triage.json
 //! CALIBRATION ./calibration.json
 //! PARAMETER precision fp32
-//! ADAPTER ./ft-a            # a PEFT directory (LoRA), instead of the other layers: see below
+//! ADAPTER ./ft-a            # a PEFT directory (LoRA), added to FROM's layers: see below
 //! LICENSE ./LICENSE
 //! DESCRIPTION Support ticket triage
 //! ```

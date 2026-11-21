@@ -1,7 +1,8 @@
 # 0011: Adapters as a model kind: N LoRA fine-tunes over one loaded base
 
 - Status: proposed, 2026-11-19 (issue #172); revised 2026-11-21 after review (numbered 0011 because #169 takes 0010).
-  Design only; the code follows once this is agreed.
+  The encoder slice is implemented on the ModernBERT backbone (decoders and DeBERTa-v2 are not yet, see section 4);
+  the rest of the design stands as written.
 - Applies to: `crates/ollaya-registry/src/manifest.rs`, `crates/ollaya/src/modelfile.rs`,
   `ModelConfig` and `Ollaya::create` in `crates/ollaya-server`, `scheduler.rs`, `models.rs`, `service.rs`, the runner's
   `server.rs` and `engine.rs`, and the MLX engine in `crates/ollaya-runner/src/mlx` (`mod.rs`, `modernbert.rs`).
@@ -119,8 +120,9 @@ Today a runner is keyed by manifest digest and the limit is a count. Proposal:
 - **A runner takes adapter models at run time**: `POST /adapters` registers one with its manifest digest, its
   adapter tensors (paths of the blobs, like the other runner arguments) and its own `decision.json` and tokenizer
   paths, from which the runner builds that model's front over the shared network, the way `load_files` does for
-  one model; `DELETE /adapters/<digest>` drops it. `/decide` gains a required `adapter` (that digest) and the
-  runner picks the front and tensors by it. An unknown adapter is `404`. Two adapter models of one base whose
+  one model; `DELETE /adapters/<digest>` drops it. `/decide` gains an optional `adapter` (that digest): the runner
+  picks the front and tensors by it, and a request without one is answered by the base alone, which is what the
+  parity section's "a request to the base is unchanged by loaded adapters" asks for. An unknown adapter is `404`. Two adapter models of one base whose
   `decision.json` differ (another `max_len`, say) therefore each answer under their own. If a base's tensors are
   shared by two manifests whose `decision.json` differ, the same holds: each is registered with its own.
 - **What is counted.** `OLLAYA_MAX_LOADED_MODELS` keeps counting runners, that is bases, because that is where the
@@ -131,14 +133,18 @@ Today a runner is keyed by manifest digest and the limit is a count. Proposal:
   Nothing here adds a byte budget; a later change could, and this layout does not block it.
 - **`/api/ps`.** One row per loaded model name. The base's row carries the base's `size`, an adapter's row only its
   own, so the rows sum to the real total. A base reached only through adapters is listed under the name in
-  `details.parent_model`. (Today a runner appears once per digest, and still does for plain models.)
+  `details.parent_model`. A model loaded both as itself and as the base of adapters is two runners (two copies) but
+  one row: its `size` counts both, and it is kept until stopped if either copy is. `ollaya stop <base>` unloads every
+  runner of that base, the shared one with its adapters. (Plain models keep one runner, hence one row, per digest.)
 - **Eviction.** Adapters go before bases. When a runner's adapter limit is reached, its least recently used idle adapter
   is dropped (no process dies). When the runner limit is reached, the least recently used idle *runner* goes, adapters
-  with it, as now. Loading an adapter never evicts its own base; a base never goes while it has a lease or an adapter
-  loaded.
+  with it, as now. Loading an adapter never evicts its own base; a base never goes while it has a lease (a request in
+  flight, on the base or on one of its adapters). An idle base goes with its adapters, when it is the least recently
+  used or when the user stops it; it is not held by adapters that are merely loaded.
 - **Keep-alive.** A request's `keep_alive` applies to the model that answered, as documented. An adapter unloads on its
   own clock. The base's clock is the latest of its own and its adapters', so the base stays loaded while any adapter
-  is; `-1` on one adapter keeps the base forever. `OLLAYA_PRELOAD` takes adapter names.
+  is; `-1` on one adapter keeps the base forever, until that adapter is unloaded, when the base's clock is worked out
+  again from the adapters that are left. `OLLAYA_PRELOAD` takes adapter names.
 - **Failure.** A runner that dies takes its adapters with it; the scheduler forgets all of them and the next request
   reloads the base and the adapter it needs. A load that fails because of one adapter leaves the base and the other
   adapters loaded, and answers `MODEL_LOAD_FAILED` for that adapter only.
