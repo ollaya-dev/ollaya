@@ -337,6 +337,21 @@ const overlays: Record<string, ModelOverlay> = {
       flash: { summary: 'Clef-Flash (Qwen3.5-9B, post-trained) with its joint schema head, text only. Needs a 24 GB GPU.' },
     },
   },
+  valen: {
+    title: 'Valen',
+    description:
+      "Decision models by Valen-Team. Valen-Decision-1.5 is Qwen3.5 vision-language, fully post-trained, with a Mixer head that scores every candidate; the state, an image and every question share one sequence with the authors' block attention. Reads text and PNG images.",
+    publisher: { name: 'Valen-Team', url: 'https://huggingface.co/Valen-Team' },
+    capabilities: ['decision', 'fine-tuned', 'vision'],
+    keywords: ['valen', 'valen-decision', 'valen-team', 'qwen', 'qwen3.5', 'mixer', 'vision', 'image', 'llm', 'decision', 'classification', 'typesafe', 'system one'],
+    rank: 30,
+    tags: {
+      latest: { summary: 'Same as valen:2b.' },
+      '0.8b': { summary: 'Valen-Decision-1.5 0.8B (Qwen3.5-0.8B, post-trained): the smallest and fastest.' },
+      '2b': { summary: 'Valen-Decision-1.5 2B (Qwen3.5-2B, post-trained).' },
+      '4b': { summary: 'Valen-Decision-1.5 4B (Qwen3.5-4B, post-trained): the largest size in the library; weights kept BF16 in memory.' },
+    },
+  },
   jeb: {
     stats: stats('jeb:9b'),
     title: 'Jebadiah',
