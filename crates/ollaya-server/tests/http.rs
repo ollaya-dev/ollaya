@@ -83,6 +83,11 @@ mod fake_runner {
             json!({"port": port, "device": device, "precision": "fp32", "engine": "mlx", "bytes": 5000})
         );
         let d = decision.clone();
+        // A runner whose queue is stuck: it takes the request and never answers.
+        let (hang_post, hang_delete) = (
+            fake["hang_adapter_post"].as_bool() == Some(true),
+            fake["hang_adapter_delete"].as_bool() == Some(true),
+        );
         let loaded: Arc<Mutex<HashSet<String>>> = Default::default();
         let (on_decide, on_add, on_drop) = (loaded.clone(), loaded.clone(), loaded);
         let app = axum::Router::new()
@@ -105,6 +110,9 @@ mod fake_runner {
             .route(
                 "/adapters",
                 post(move |Json(req): Json<Value>| async move {
+                    if hang_post {
+                        std::future::pending::<()>().await;
+                    }
                     // The runner gets the adapter's own files, which exist in the store.
                     for key in ["spec", "weights", "decision", "tokenizer"] {
                         let ok = req[key].as_str().is_some_and(|p| std::path::Path::new(p).is_file());
@@ -132,6 +140,9 @@ mod fake_runner {
             .route(
                 "/adapters/{digest}",
                 delete(move |axum::extract::Path(digest): axum::extract::Path<String>| async move {
+                    if hang_delete {
+                        std::future::pending::<()>().await;
+                    }
                     if on_drop.lock().unwrap().remove(&digest) {
                         Json(json!({"status": "ok"})).into_response()
                     } else {
@@ -985,6 +996,76 @@ async fn the_adapter_limit_drops_the_least_recently_used_idle_adapter() {
         .map(|m| m.name)
         .collect();
     assert_eq!(names, ["b:latest", "c:latest", "laya:en"], "{names:?}");
+    d.stop().await;
+}
+
+/// A daemon whose `laya:en` has `fake` in its decision layer; adapters inherit it.
+async fn fake_adapter_daemon(fake: Value, load_timeout: Duration) -> (Daemon, String) {
+    let d = Daemon::start(
+        |dir| add_mlx_model(&Store::open(dir).unwrap(), "laya:en", fake),
+        |c| {
+            c.device = "metal".into();
+            c.load_timeout = load_timeout;
+        },
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    (d, weights)
+}
+
+async fn a_runner_that_never_answers_does_not_hold_the_load_lock_for_ever() {
+    // Registering an adapter: the runner takes the request and never answers.
+    let (d, weights) = fake_adapter_daemon(
+        json!({"hang_adapter_post": true}),
+        Duration::from_millis(800),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    let ask = |model: &'static str| {
+        let client = &d.client;
+        async move {
+            tokio::time::timeout(
+                Duration::from_secs(20),
+                client.decide(&DecideRequest::new(
+                    model,
+                    json!("x"),
+                    serde_json::from_value(triage()).ok(),
+                )),
+            )
+            .await
+            .expect("the load lock was held with no timeout")
+        }
+    };
+    let (status, body) = api_err(ask("a").await.unwrap_err());
+    assert_eq!((status, body.code), (500, ErrorCode::ModelLoadFailed));
+    assert!(body.error.contains("load timeout"), "{}", body.error);
+    // Every other load still goes: a plain model needs the same lock.
+    ask("laya:en").await.unwrap();
+    d.stop().await;
+
+    // Dropping an adapter: the unload gives up on the runner, forgets the adapter, and returns.
+    let (d, weights) = fake_adapter_daemon(
+        json!({"hang_adapter_delete": true}),
+        Duration::from_millis(800),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    let req = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    d.client.decide(&req).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(20), d.client.unload("a"))
+        .await
+        .expect("the unload waited for the runner with no timeout")
+        .unwrap();
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert!(!names.contains(&"a:latest".to_owned()), "{names:?}");
     d.stop().await;
 }
 
@@ -2647,6 +2728,7 @@ fn main() {
         adapter_refusals_name_the_problem_and_write_nothing,
         adapter_models_run_on_mlx_only_and_fail_alone,
         the_adapter_limit_drops_the_least_recently_used_idle_adapter,
+        a_runner_that_never_answers_does_not_hold_the_load_lock_for_ever,
         blobs_follow_the_api_key_are_verified_and_pruned,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();

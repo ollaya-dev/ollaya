@@ -166,6 +166,9 @@ pub struct Runner {
     adapters: Mutex<HashMap<String, AdapterState>>,
     child: tokio::sync::Mutex<Child>,
     http: reqwest::Client,
+    /// How long registering or dropping an adapter may take (`OLLAYA_LOAD_TIMEOUT`): both run
+    /// while the scheduler's load lock is held, behind the runner's queue of decisions.
+    load_timeout: Duration,
     leases: AtomicUsize,
     /// When an idle runner may be unloaded; `None` while leased or when kept forever.
     expires: Mutex<Option<Instant>>,
@@ -272,15 +275,16 @@ impl Runner {
         let resp = self
             .http
             .post(format!("http://127.0.0.1:{}/adapters", self.port))
+            .timeout(self.load_timeout)
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::LoadFailed(format!("{}: {e}", model.name)))?;
+            .map_err(|e| Error::LoadFailed(format!("{}: {}", model.name, self.timed_out(&e))))?;
         let ok = resp.status().is_success();
         let body: Value = resp
             .json()
             .await
-            .map_err(|e| Error::LoadFailed(format!("{}: {e}", model.name)))?;
+            .map_err(|e| Error::LoadFailed(format!("{}: {}", model.name, self.timed_out(&e))))?;
         if !ok {
             let message = body["error"]["message"]
                 .as_str()
@@ -293,14 +297,27 @@ impl Runner {
         Ok(body["bytes"].as_u64().unwrap_or(0))
     }
 
+    /// An error of a request to the runner, with the reason a timeout stands for.
+    fn timed_out(&self, e: &reqwest::Error) -> String {
+        if e.is_timeout() {
+            format!(
+                "the runner did not answer within the load timeout ({} s)",
+                self.load_timeout.as_secs()
+            )
+        } else {
+            e.to_string()
+        }
+    }
+
     /// Drop an adapter from the runner (`DELETE /adapters/<digest>`).
     async fn delete_adapter(&self, digest: &str) -> Result<(), Error> {
         let resp = self
             .http
             .delete(format!("http://127.0.0.1:{}/adapters/{digest}", self.port))
+            .timeout(self.load_timeout)
             .send()
             .await
-            .map_err(|e| Error::Runner(format!("{}: {e}", self.name)))?;
+            .map_err(|e| Error::Runner(format!("{}: {}", self.name, self.timed_out(&e))))?;
         if resp.status().is_success() || resp.status() == reqwest::StatusCode::NOT_FOUND {
             Ok(())
         } else {
@@ -1129,6 +1146,7 @@ impl Scheduler {
                 .tls_certs_only(std::iter::empty())
                 .build()
                 .map_err(|e| Error::LoadFailed(e.to_string()))?,
+            load_timeout: self.config.load_timeout,
             leases: AtomicUsize::new(0),
             expires: Mutex::new(None),
             keep_forever: Mutex::new(false),
