@@ -227,6 +227,7 @@ fn safetensors_index(file: &File) -> Result<HashMap<String, Entry>, String> {
     let header: serde_json::Map<String, serde_json::Value> =
         serde_json::from_slice(&header).map_err(|e| e.to_string())?;
     let base = 8 + n;
+    let file_len = file.metadata().map_err(|e| e.to_string())?.len();
     let mut index = HashMap::new();
     for (name, v) in header {
         if name == "__metadata__" {
@@ -239,12 +240,19 @@ fn safetensors_index(file: &File) -> Result<HashMap<String, Entry>, String> {
             serde_json::from_value(v["data_offsets"].clone()).map_err(|e| e.to_string())?;
         // Tensors of dtypes the models never read (I64 buffers and the like) are left out.
         let Ok(dt) = dtype(tag) else { continue };
-        let e = entry(dt, shape, base + offsets[0]);
-        if offsets[1] - offsets[0] != e.len {
-            return Err(format!(
-                "tensor {name}: {} bytes for its shape",
-                offsets[1] - offsets[0]
-            ));
+        let size = offsets[1]
+            .checked_sub(offsets[0])
+            .ok_or_else(|| format!("tensor {name}: data_offsets {offsets:?} are reversed"))?;
+        let begin = base
+            .checked_add(offsets[0])
+            .filter(|_| {
+                base.checked_add(offsets[1])
+                    .is_some_and(|end| end <= file_len)
+            })
+            .ok_or_else(|| format!("tensor {name}: data_offsets {offsets:?} run past the file"))?;
+        let e = entry(dt, shape, begin);
+        if size != e.len {
+            return Err(format!("tensor {name}: {size} bytes for its shape"));
         }
         index.insert(name, e);
     }

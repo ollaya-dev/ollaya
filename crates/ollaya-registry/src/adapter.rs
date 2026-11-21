@@ -137,9 +137,16 @@ pub fn parse_safetensors_header(header: &[u8]) -> Result<Vec<TensorInfo>, String
 /// The tensors of a safetensors file, read from its header alone (the largest header accepted is
 /// 100 MiB, as the runner's reader does). Only dtype, shape and offsets: no tensor is read.
 pub fn read_safetensors_header(path: &std::path::Path) -> Result<Vec<TensorInfo>, String> {
+    read_safetensors(path).map(|(tensors, _)| tensors)
+}
+
+/// As [`read_safetensors_header`], and the length in bytes of the file's data section (what the
+/// tensors' offsets are checked against by [`check_layout`]).
+pub fn read_safetensors(path: &std::path::Path) -> Result<(Vec<TensorInfo>, u64), String> {
     use std::io::Read as _;
     let shown = path.display();
     let mut file = std::fs::File::open(path).map_err(|e| format!("{shown}: {e}"))?;
+    let file_len = file.metadata().map_err(|e| format!("{shown}: {e}"))?.len();
     let mut len = [0u8; 8];
     file.read_exact(&mut len)
         .map_err(|e| format!("{shown}: not a safetensors file: {e}"))?;
@@ -150,7 +157,64 @@ pub fn read_safetensors_header(path: &std::path::Path) -> Result<Vec<TensorInfo>
     let mut header = vec![0u8; n as usize];
     file.read_exact(&mut header)
         .map_err(|e| format!("{shown}: not a safetensors file: {e}"))?;
-    parse_safetensors_header(&header).map_err(|e| format!("{shown}: {e}"))
+    let tensors = parse_safetensors_header(&header).map_err(|e| format!("{shown}: {e}"))?;
+    Ok((tensors, file_len - 8 - n))
+}
+
+/// The bytes of one element of a dtype the adapter check accepts.
+fn element_size(dtype: &str) -> Option<u64> {
+    match dtype {
+        "F32" => Some(4),
+        "F16" | "BF16" => Some(2),
+        _ => None,
+    }
+}
+
+/// Check the data section of an uploaded safetensors file against its header: every tensor's
+/// offsets are ordered and inside the `data_len` bytes, no two tensors overlap, and each tensor's
+/// size is its dtype times its shape. Run at create, so a hostile file is refused there and the
+/// runner never meets one.
+pub fn check_layout(tensors: &[TensorInfo], data_len: u64) -> Result<(), String> {
+    let mut spans: Vec<(u64, u64, &str)> = Vec::with_capacity(tensors.len());
+    for t in tensors {
+        let [begin, end] = t.offsets;
+        if begin > end {
+            return Err(format!(
+                "tensor {}: data_offsets [{begin}, {end}] are reversed",
+                t.name
+            ));
+        }
+        if end > data_len {
+            return Err(format!(
+                "tensor {}: data_offsets [{begin}, {end}] run past the file's {data_len} data bytes",
+                t.name
+            ));
+        }
+        if let Some(size) = element_size(&t.dtype) {
+            let elements = t
+                .shape
+                .iter()
+                .try_fold(1u64, |n, &d| n.checked_mul(d as u64))
+                .and_then(|n| n.checked_mul(size));
+            if elements != Some(end - begin) {
+                return Err(format!(
+                    "tensor {}: {} bytes for shape {:?} of {}",
+                    t.name,
+                    end - begin,
+                    t.shape,
+                    t.dtype
+                ));
+            }
+        }
+        spans.push((begin, end, &t.name));
+    }
+    spans.sort();
+    for w in spans.windows(2) {
+        if w[1].0 < w[0].1 {
+            return Err(format!("tensors {} and {} overlap", w[0].2, w[1].2));
+        }
+    }
+    Ok(())
 }
 
 /// The checked adapter: what the spec records besides its base.
@@ -501,5 +565,73 @@ mod tests {
             }]
         );
         assert!(parse_safetensors_header(b"[1]").is_err());
+    }
+
+    fn laid_out(name: &str, shape: &[usize], offsets: [u64; 2]) -> TensorInfo {
+        TensorInfo {
+            offsets,
+            ..t(name, "F32", shape)
+        }
+    }
+
+    #[test]
+    fn a_good_layout_passes() {
+        let ts = [
+            laid_out("a", &[2, 3], [0, 24]),
+            laid_out("b", &[4], [24, 40]),
+        ];
+        assert!(check_layout(&ts, 40).is_ok());
+        assert!(check_layout(&[], 0).is_ok());
+    }
+
+    #[test]
+    fn reversed_offsets_are_refused_not_subtracted() {
+        let ts = [laid_out("a", &[2], [16, 8])];
+        assert!(check_layout(&ts, 64).unwrap_err().contains("reversed"));
+    }
+
+    #[test]
+    fn offsets_past_the_data_are_refused() {
+        let ts = [laid_out("a", &[2], [0, 8])];
+        assert!(check_layout(&ts, 7).unwrap_err().contains("run past"));
+        let ts = [laid_out("a", &[2], [u64::MAX - 3, u64::MAX])];
+        assert!(check_layout(&ts, 64).unwrap_err().contains("run past"));
+    }
+
+    #[test]
+    fn overlapping_tensors_are_refused() {
+        let ts = [laid_out("a", &[4], [0, 16]), laid_out("b", &[2], [8, 16])];
+        assert!(check_layout(&ts, 16).unwrap_err().contains("overlap"));
+    }
+
+    #[test]
+    fn sizes_must_match_dtype_times_shape() {
+        let ts = [laid_out("a", &[2, 3], [0, 20])];
+        assert!(
+            check_layout(&ts, 20)
+                .unwrap_err()
+                .contains("bytes for shape")
+        );
+        let mut half = laid_out("a", &[2, 3], [0, 12]);
+        half.dtype = "BF16".into();
+        assert!(check_layout(&[half], 12).is_ok());
+        let ts = [laid_out("a", &[usize::MAX, 4], [0, 8])];
+        assert!(check_layout(&ts, 8).is_err());
+    }
+
+    #[test]
+    fn the_data_length_of_a_file_is_what_follows_its_header() {
+        let header = br#"{"a":{"dtype":"F32","shape":[2],"data_offsets":[0,8]}}"#;
+        let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+        bytes.extend_from_slice(header);
+        bytes.extend_from_slice(&[0u8; 8]);
+        let dir = std::env::temp_dir().join(format!("ollaya-st-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.safetensors");
+        std::fs::write(&path, &bytes).unwrap();
+        let (ts, data_len) = read_safetensors(&path).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(data_len, 8);
+        assert!(check_layout(&ts, data_len).is_ok());
     }
 }

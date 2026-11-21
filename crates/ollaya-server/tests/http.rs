@@ -773,6 +773,47 @@ async fn adapter_refusals_name_the_problem_and_write_nothing() {
     .await;
     let (status, body) = create_adapter(&d, "x4", "laya:en", adapter_config(8), &wide).await;
     refuse(status, &body, "[4, 8]");
+    // Offsets that run past the file, run backwards, or overlap (peft files are trusted by
+    // nobody: the runner subtracts them).
+    let lora = |at: [(u64, u64); 2]| {
+        let mut header = serde_json::Map::new();
+        for (name, shape, (b, e)) in [
+            (
+                "base_model.model.layers.0.attn.Wo.lora_A.weight",
+                [4, 8],
+                at[0],
+            ),
+            (
+                "base_model.model.layers.0.attn.Wo.lora_B.weight",
+                [8, 4],
+                at[1],
+            ),
+        ] {
+            header.insert(
+                name.into(),
+                json!({"dtype": "F32", "shape": shape, "data_offsets": [b, e]}),
+            );
+        }
+        let header = Value::Object(header).to_string().into_bytes();
+        let mut out = (header.len() as u64).to_le_bytes().to_vec();
+        out.extend(header);
+        out.extend(vec![0u8; 256]);
+        out
+    };
+    for (i, (at, what)) in [
+        ([(128, 0), (128, 256)], "reversed"),
+        ([(0, 128), (128, 9999)], "run past"),
+        ([(0, 128), (64, 192)], "overlap"),
+        ([(0, 100), (128, 256)], "bytes for shape"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let blob = upload(&d, &lora(at)).await;
+        let (status, body) =
+            create_adapter(&d, &format!("off{i}"), "laya:en", adapter_config(8), &blob).await;
+        refuse(status, &body, what);
+    }
     // Options the engine does not run, and weights that were never uploaded.
     let mut config = adapter_config(8);
     config["use_dora"] = json!(true);

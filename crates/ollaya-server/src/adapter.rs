@@ -141,10 +141,11 @@ pub fn spec_for(
         )));
     }
     let base = read_base(store, from, manifest)?;
-    let tensors =
-        adapter::read_safetensors_header(&path).map_err(|e| refuse(format!("ADAPTER: {e}")))?;
+    let (tensors, data_len) =
+        adapter::read_safetensors(&path).map_err(|e| refuse(format!("ADAPTER: {e}")))?;
     let checked = adapter::check(config, &tensors, &base.shapes, &base.backbone_prefix)
         .map_err(|e| refuse(format!("ADAPTER: {e}")))?;
+    adapter::check_layout(&tensors, data_len).map_err(|e| refuse(format!("ADAPTER: {e}")))?;
     let arch = manifest.layer(media::ARCH).expect("read_base found it");
     let spec = AdapterSpec {
         schema: adapter::SCHEMA,
