@@ -1,9 +1,10 @@
-# 0010: Adapters as a model kind: N LoRA fine-tunes over one loaded base
+# 0011: Adapters as a model kind: N LoRA fine-tunes over one loaded base
 
-- Status: proposed, 2026-11-19 (issue #172). Design only; the code follows once this is agreed.
+- Status: proposed, 2026-11-19 (issue #172); revised 2026-11-21 after review (numbered 0011 because #169 takes 0010).
+  Design only; the code follows once this is agreed.
 - Applies to: `crates/ollaya-registry/src/manifest.rs`, `crates/ollaya/src/modelfile.rs`,
-  `ModelConfig` and `Ollaya::create` in `crates/ollaya-server`, `scheduler.rs`, `models.rs`, and the MLX engine in
-  `crates/ollaya-runner/src/mlx`.
+  `ModelConfig` and `Ollaya::create` in `crates/ollaya-server`, `scheduler.rs`, `models.rs`, `service.rs`, the runner's
+  `server.rs` and `engine.rs`, and the MLX engine in `crates/ollaya-runner/src/mlx` (`mod.rs`, `modernbert.rs`).
 - Not covered: batching in the runner (its own record, measured on its own) and fp16 on MLX (`PARAMETER precision`,
   its own record against [0008](0008-fp16-decoder-tags.md)'s bar).
 
@@ -47,10 +48,12 @@ All names and values below are proposals unless the text says the code already d
   whitespace so that the same adapter on the same base gives the same blob. The model's digest is the sha256 of its
   manifest, as now.
 - The manifest keeps every layer of the base (as any `create` does), so it is self-contained and removing the base's
-  tag does not break it. `base` in the spec is what the adapter was checked against. **The sharing key is the
-  base's arch digest plus its weights digests, not its manifest digest**: a base with other questions or calibration
-  has another manifest digest and the same tensors, and should share the runner. (Alternative: the manifest digest
-  only, simpler, but then a recalibrated base would load a second copy.)
+  tag does not break it. `base` in the spec is what the adapter was checked against. **For adapter models the
+  sharing key is the base's arch digest plus its weights digests, not its manifest digest**: a base with other
+  questions or calibration has another manifest digest and the same tensors, and should share the runner. Section 3
+  says what that asks of the runner. (Alternative: the manifest digest only, simpler, but then a recalibrated base
+  would load a second copy.) The key is used only where an adapter is involved; a model without one keeps its
+  manifest digest as key.
 - `ModelConfig.model_format` is `adapter`; `engine`, `family` and `layout` are the base's. A client that does not
   know the kind stops in `Scheduler::run_check` and `models::resolve_entry` ("is an adapter model, which this version
   cannot run; upgrade ollaya"), rather than serving the plain base under the adapter's name.
@@ -68,9 +71,11 @@ QUESTIONS ./q.json        # the other directives work as before
 `ADAPTER` takes one directory and may appear once. `PARAMETER precision` is refused with an adapter for now.
 Because `/api/create` takes only inline JSON ("no `files` map and no `/api/blobs` upload", `docs/api.md` 7.9) and an
 adapter is tens to hundreds of MB, this needs the file to reach the daemon. Proposal: implement the reserved
-`HEAD`/`POST /api/blobs/:digest` (today `501`): the CLI hashes the safetensors, uploads it if the daemon lacks it, and
-`/api/create` gets `adapter: {"config": {...}, "weights": "sha256:..."}`. (Alternative: a path the daemon reads
-itself; no new endpoint, but it only works when client and daemon share a disk.)
+`HEAD`/`POST /api/blobs/:digest` (today `501`), as in Ollama: the CLI hashes the safetensors, uploads it if the daemon
+lacks it, and `/api/create` gets `adapter: {"config": {...}, "weights": "sha256:..."}`. An uploaded blob that no
+manifest references falls under [0006](0006-manifest-retention.md)'s pruning, and the endpoint follows
+`OLLAYA_API_KEY` as `create` does. (Alternative: a path the daemon reads itself; no new endpoint, but it only works
+when client and daemon share a disk.)
 
 Validation happens in `create`, before anything is written, and refuses with `422` and a message:
 
@@ -79,7 +84,8 @@ Validation happens in `create`, before anything is written, and refuses with `42
 2. The adapter config's own checks (`r`, `lora_alpha`, no rslora/dora/patterns, `peft_type` is `LORA`).
 3. Every `lora_A`/`lora_B` pair names a module that exists in the arch layer, as a linear weight `[out, in]`, with
    `A = [r, in]` and `B = [out, r]` for the same `r` as the config. A tensor that is not a pair (peft's
-   `modules_to_save`, a trained head) is refused in this first version.
+   `modules_to_save`, a trained head) is refused in this first version; accepting it is its own later change
+   (replaced head tensors would be per-adapter state in the runner, so the sharing key would not change).
 4. The dtype is F32, F16 or BF16.
 
 A mismatch names the module and both shapes. There is no check that the adapter was *trained* on this base; shapes
@@ -90,19 +96,42 @@ shape compatibility plus the parity test below.
 
 Today a runner is keyed by manifest digest and the limit is a count. Proposal:
 
-- **A runner is keyed by the base's sharing key** (section 1). It loads the base once and serves the base itself and
-  any number of adapter models. Models with equal keys that have no adapter share a runner as they do now.
-- **A runner takes adapters at run time**: `POST /adapters` loads an adapter's tensors (paths of the blobs, like the
-  other runner arguments) and `DELETE /adapters/<digest>` drops it; `/decide` gains an optional `adapter` (the adapter
-  model's digest; absent means the base). An unknown adapter is `404`.
+- **Only adapter models are keyed by the base's sharing key** (section 1). Such a runner loads the base once and
+  serves any number of adapter models. A model without an adapter keeps its manifest digest as key, as today
+  (`Scheduler::acquire`, `lease_existing`, `unload` and `reap` in `scheduler.rs` all key `runners` by
+  `Loadable.digest`), so nothing changes for it. The cost is plain: `laya:en` served as itself and an adapter on
+  `laya:en` are two runners with two copies of the base. (Letting a plain model join a tensor-keyed runner is an opt-in
+  for a later change.)
+- **What a shared runner needs per model, read from the code.** A runner is started with `--decision`,
+  `--tokenizer`, `--arch` and `--weights` paths (`Scheduler::spawn_with`); `runner::server::load` builds
+  `ModelFiles` from them with `calibration: None`, and `engine::load` picks the engine from the decision layer's
+  `layout` (`engine::layout_of`). The encoder engine for `laya-markers-v1` (`OnnxModel::load_files` in `onnx.rs`)
+  reads `decision.json` for `max_len`, `head_max_len`, the special tokens and `min_markers`, loads the tokenizer,
+  and wraps a network from `crate::net::load` (for MLX, `MlxNet::load` in `mlx/mod.rs`). The decoder engines do
+  the same around `MlxDecoder::load`. So the per-model part of an engine is its `decision.json` and tokenizer;
+  the network (arch and tensors) is what can be shared. **Calibration, labels and questions do not reach the
+  runner today**: the daemon reads them from the manifest (`resolve_entry` in `models.rs`, into
+  `Loadable.calibration` and `Loadable.questions`), sends the questions in every `/decide` body
+  (`service.rs`, `Runner::decide`) and applies the calibration to the returned logits (`for_media` in
+  `service.rs`). The `files.calibration` that engines read in `load_files` is set only by `ModelFiles::dir`, the
+  development and parity path. A shared runner therefore cannot answer with another manifest's calibration, so
+  long as that stays in the daemon: this record keeps it there, per request, from the manifest that was asked for.
+- **A runner takes adapter models at run time**: `POST /adapters` registers one with its manifest digest, its
+  adapter tensors (paths of the blobs, like the other runner arguments) and its own `decision.json` and tokenizer
+  paths, from which the runner builds that model's front over the shared network, the way `load_files` does for
+  one model; `DELETE /adapters/<digest>` drops it. `/decide` gains a required `adapter` (that digest) and the
+  runner picks the front and tensors by it. An unknown adapter is `404`. Two adapter models of one base whose
+  `decision.json` differ (another `max_len`, say) therefore each answer under their own. If a base's tensors are
+  shared by two manifests whose `decision.json` differ, the same holds: each is registered with its own.
 - **What is counted.** `OLLAYA_MAX_LOADED_MODELS` keeps counting runners, that is bases, because that is where the
-  memory is. Adapters are bounded per runner by a new `OLLAYA_MAX_ADAPTERS` (proposal: default 16).
+  memory is. Adapters are bounded per runner by a new `OLLAYA_MAX_ADAPTERS` (proposal: default 16). The maintainers
+  settled that this count, with reported memory, is enough for now.
   Memory is *reported*, not enforced, as today: each runner reports the bytes its tensors occupy (the engine knows
   them; the base is fp32 after the upcast of [0001](0001-mlx-engine.md), an adapter is its elements times 4).
-  Nothing here adds a byte budget; if you want one, it is a later change that this layout does not block.
+  Nothing here adds a byte budget; a later change could, and this layout does not block it.
 - **`/api/ps`.** One row per loaded model name. The base's row carries the base's `size`, an adapter's row only its
   own, so the rows sum to the real total. A base reached only through adapters is listed under the name in
-  `details.parent_model`. (Today a runner appears once per digest.)
+  `details.parent_model`. (Today a runner appears once per digest, and still does for plain models.)
 - **Eviction.** Adapters go before bases. When a runner's adapter limit is reached, its least recently used idle adapter
   is dropped (no process dies). When the runner limit is reached, the least recently used idle *runner* goes, adapters
   with it, as now. Loading an adapter never evicts its own base; a base never goes while it has a lease or an adapter
@@ -126,13 +155,22 @@ Requests are served by the runner's one MLX worker, in order, as now, whatever t
 promise throughput.** In #172 one runner answered 4.1 to 4.3 requests a second and four runners 10.7 to 11.8, so
 at three to four in flight an adapter model on one runner may be slower than four merged runners; what it gives is
 memory (about 2.6 GB per merged checkpoint against the adapter's own size). Batching rows of different adapters is
-the next record. The first slice covers what MLX already merges today (the Qwen3 and Qwen3.5 decoders); the encoder
-engines (`laya`, `nli`, `gliclass`) have no LoRA path yet and are the second slice, which is what #172 needs.
+the next record. The docs say it plainly: **one base serves its adapters one request at a time.** A deployment that is
+sensitive to latency under concurrent requests can keep its fine-tunes as separate models, since the shared base is
+opt-in per model and runs one request at a time.
+
+**Slices.** The encoder first: #172's use is `laya`, an encoder, and the engines for `laya`, `nli` and `gliclass` have
+no LoRA path today. The decoders (Qwen3 and Qwen3.5) are a second slice, not the same one, though not a large one: the
+hook is the same. Every backbone and head reads its linear layers through the one `Linear` in `mlx/modernbert.rs`
+(imported by `deberta.rs`, `qwen3.rs`, `heads.rs`), so the unmerged `x·Wᵀ + scaling · (x·Aᵀ)·Bᵀ` goes in one place.
+What the decoder adds is passing the active adapter through `qwen3.rs` and `qwen35.rs` (including the linear-attention
+projections), replacing the merge that `MlxDecoder::load` does with `Tensors::with_lora`, and its own parity run
+against the merged model. Both slices can ship together if review prefers; neither is blocked by the other.
 
 ### 5. Compatibility
 
-- Existing models, merged or not, resolve and run exactly as before; their manifests are untouched, so their digests
-  are too. Nothing changes for the kev ONNX graphs, whose adapter is part of the graph.
+- Existing models, merged or not, resolve and run exactly as before: they stay keyed by manifest digest (section 3),
+  their manifests are untouched, so their digests are too. Nothing changes for the kev ONNX graphs, whose adapter is part of the graph.
 - Without `ADAPTER`, `create` writes what it writes today. `model_format: "adapter"` appears only on models that use it.
 - An older client reading an adapter model's manifest fails with the "upgrade ollaya" error (section 1).
 - On a device other than `metal`, or in a build without the `mlx` feature, an adapter model fails to load with a
@@ -157,13 +195,12 @@ between requests, and a request to the base is unchanged by loaded adapters. Pla
   within the adapters' own size of one base alone. Measured on a Mac and recorded under `results/` as
   [0009](0009-measurement-per-release.md) asks, not typed into pages.
 
-## Questions for the maintainers
+## Settled with the maintainers (2026-11-21)
 
-1. **Upload or path** for the adapter file at create (section 2)? We lean to implementing `/api/blobs`.
-2. **`modules_to_save`.** A fine-tune that also trains a head (peft's `modules_to_save`) cannot be an adapter in this
-   version. Should a later one let an adapter replace named head tensors, which would also change what the sharing key
-   must cover?
-3. **A byte budget** instead of, or beside, the runner count and `OLLAYA_MAX_ADAPTERS`?
-4. **Throughput first or memory first.** If one worker per base makes the adapter kind slower than N runners at
-   a few requests in flight, is memory alone enough to land it before batching, or should the two ship together?
-5. **The second slice** (encoders) is where our use is; is it right to land the decoder path first?
+1. **Upload or path** for the adapter file at create: `/api/blobs` upload as in Ollama (section 2).
+2. **`modules_to_save`**: later, in its own change; replaced head tensors would be per-adapter state in the runner, so
+   the sharing key would not need to change (section 2).
+3. **A byte budget**: not now; the runner count plus `OLLAYA_MAX_ADAPTERS`, with reported memory (section 3).
+4. **Throughput first or memory first**: memory first may land before batching, with the docs saying that one base
+   serves its adapters one request at a time (section 4).
+5. **Slice order**: the encoder slice first, or both together (section 4).
