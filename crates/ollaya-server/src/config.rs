@@ -40,6 +40,8 @@ pub struct ServerConfig {
     pub log_dir: Option<PathBuf>,
     /// `OLLAYA_PRELOAD`: models to load with `keep_alive: -1` right after start, in order.
     pub preload: Vec<String>,
+    /// `OLLAYA_READ_ONLY`: HTTP requests that change the model store answer `403 READ_ONLY`.
+    pub read_only: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -98,6 +100,17 @@ impl ServerConfig {
                         .ok_or_else(|| invalid(name, &v, "expected a positive integer".into()))
                 })
                 .transpose()
+        };
+        let flag = |name: &'static str| -> Result<bool, ConfigError> {
+            match var(name).map(|v| v.to_ascii_lowercase()).as_deref() {
+                None | Some("0" | "false" | "no" | "off") => Ok(false),
+                Some("1" | "true" | "yes" | "on") => Ok(true),
+                Some(v) => Err(invalid(
+                    name,
+                    v,
+                    "expected 1, true, yes or on, or 0, false, no or off".into(),
+                )),
+            }
         };
         let count = |name: &'static str, default: usize| -> Result<usize, ConfigError> {
             Ok(positive(name)?.unwrap_or(default))
@@ -173,6 +186,7 @@ impl ServerConfig {
             origins: list("OLLAYA_ORIGINS"),
             log_dir: var("OLLAYA_LOG_DIR").map(PathBuf::from),
             preload,
+            read_only: flag("OLLAYA_READ_ONLY")?,
         })
     }
 }
@@ -203,6 +217,21 @@ mod tests {
         assert!(c.api_key.is_none() && c.origins.is_empty());
         assert!(c.log_dir.is_none());
         assert!(c.preload.is_empty());
+        assert!(!c.read_only);
+    }
+
+    #[test]
+    fn read_only_is_a_flag() {
+        for on in ["1", "true", "TRUE", " yes ", "on"] {
+            assert!(with(&[("OLLAYA_READ_ONLY", on)]).unwrap().read_only, "{on}");
+        }
+        for off in ["", "0", "false", "No", "off"] {
+            assert!(
+                !with(&[("OLLAYA_READ_ONLY", off)]).unwrap().read_only,
+                "{off}"
+            );
+        }
+        assert!(with(&[("OLLAYA_READ_ONLY", "maybe")]).is_err());
     }
 
     #[test]
@@ -229,6 +258,7 @@ mod tests {
                 "https://*.example.com, chrome-extension://*",
             ),
             ("OLLAYA_LOG_DIR", "/var/log/ollaya"),
+            ("OLLAYA_READ_ONLY", "1"),
         ])
         .unwrap();
         assert_eq!(c.host.bind_addr(), "0.0.0.0:9000");
@@ -241,6 +271,7 @@ mod tests {
         assert_eq!(c.api_key.as_deref(), Some("secret"));
         assert_eq!(c.origins, ["https://*.example.com", "chrome-extension://*"]);
         assert_eq!(c.log_dir, Some(PathBuf::from("/var/log/ollaya")));
+        assert!(c.read_only);
     }
 
     #[test]
