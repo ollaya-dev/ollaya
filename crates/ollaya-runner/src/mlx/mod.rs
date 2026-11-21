@@ -281,6 +281,10 @@ fn arch_dir(arch_path: &Path) -> PathBuf {
 impl Model {
     fn load(arch: &Arch, paths: &[PathBuf], dir: &Path) -> Result<Model, Error> {
         let t = Tensors::open(paths, dir, &arch.weights)?;
+        let t = match &arch.lora {
+            Some(lora) => t.with_lora(arch.backbone.prefix(), lora),
+            None => t,
+        };
         let backbone = match &arch.backbone {
             Backbone::Modernbert(c) => Encoder::ModernBert(modernbert::ModernBert::load(c, &t)?),
             Backbone::DebertaV2(c) => Encoder::DebertaV2(deberta::DebertaV2::load(c, &t)?),
