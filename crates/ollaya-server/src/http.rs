@@ -543,6 +543,9 @@ async fn blob_upload(
         std::process::id(),
         UPLOADS.fetch_add(1, Ordering::Relaxed)
     ));
+    // Deletes the temp file however this future ends, a dropped connection included: it is
+    // cancelled then, and the prune never touches a `-partial` name.
+    let mut partial = PartialUpload(Some(tmp.clone()));
     let result = async {
         let io = |e: std::io::Error| api_error(&Error::Registry(e.into()));
         let mut file = tokio::fs::File::create(&tmp).await.map_err(io)?;
@@ -571,10 +574,22 @@ async fn blob_upload(
         Ok(StatusCode::CREATED)
     }
     .await;
-    if result.is_err() {
-        let _ = tokio::fs::remove_file(&tmp).await;
+    if result.is_ok() {
+        partial.0 = None;
     }
     result
+}
+
+/// The `-partial` temp file of an upload in progress; dropping it removes the file, unless the
+/// upload took it away (the rename) and cleared the path.
+struct PartialUpload(Option<std::path::PathBuf>);
+
+impl Drop for PartialUpload {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 /// `OLLAYA_READ_ONLY` refuses every request that changes the model store: pull, create, copy,
@@ -1354,6 +1369,30 @@ pub async fn serve_bound(config: ServerConfig, listeners: Listeners) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_cancelled_upload_leaves_no_partial_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp = dir.path().join("blob-partial-upload-1-0");
+        std::fs::write(&tmp, b"half an adapter").unwrap();
+        // The handler future is dropped while it waits for more of the body.
+        let task = tokio::spawn({
+            let guard = super::PartialUpload(Some(tmp.clone()));
+            async move {
+                let _guard = guard;
+                std::future::pending::<()>().await;
+            }
+        });
+        tokio::task::yield_now().await;
+        task.abort();
+        let _ = task.await;
+        assert!(!tmp.exists());
+        // A finished upload clears the path first: the renamed blob is not removed.
+        let blob = dir.path().join("blob");
+        std::fs::write(&blob, b"whole").unwrap();
+        drop(super::PartialUpload(None));
+        assert!(blob.exists());
+    }
 
     #[tokio::test]
     async fn loopback_hosts_listen_on_both_loopbacks() {
