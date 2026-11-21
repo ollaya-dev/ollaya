@@ -88,6 +88,9 @@ mod fake_runner {
             fake["hang_adapter_post"].as_bool() == Some(true),
             fake["hang_adapter_delete"].as_bool() == Some(true),
         );
+        let d_log: Option<&'static str> = fake["delete_log"]
+            .as_str()
+            .map(|s| &*Box::leak(s.to_owned().into_boxed_str()));
         let loaded: Arc<Mutex<HashSet<String>>> = Default::default();
         let (on_decide, on_add, on_drop) = (loaded.clone(), loaded.clone(), loaded);
         let app = axum::Router::new()
@@ -140,6 +143,12 @@ mod fake_runner {
             .route(
                 "/adapters/{digest}",
                 delete(move |axum::extract::Path(digest): axum::extract::Path<String>| async move {
+                    // The deletes the runner got, for a test to read.
+                    if let Some(log) = d_log {
+                        use std::io::Write as _;
+                        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(log).unwrap();
+                        writeln!(f, "{digest}").unwrap();
+                    }
                     if hang_delete {
                         std::future::pending::<()>().await;
                     }
@@ -1061,6 +1070,32 @@ async fn a_runner_that_never_answers_does_not_hold_the_load_lock_for_ever() {
     ask("laya:en").await.unwrap();
     d.stop().await;
 
+    // After the timeout the daemon tells the runner to drop the adapter, in case it finishes
+    // loading it later and would serve it outside the count.
+    let log = std::env::temp_dir().join(format!("ollaya-deletes-{}", std::process::id()));
+    let _ = std::fs::remove_file(&log);
+    let (d, weights) = fake_adapter_daemon(
+        json!({"hang_adapter_post": true, "delete_log": log.display().to_string()}),
+        Duration::from_millis(800),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    let req = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    d.client.decide(&req).await.unwrap_err();
+    let digest = Store::open(d._dir.path())
+        .unwrap()
+        .read_manifest(&ModelName::parse("a").unwrap())
+        .unwrap()
+        .unwrap()
+        .digest;
+    let deleted = std::fs::read_to_string(&log).unwrap_or_default();
+    let _ = std::fs::remove_file(&log);
+    assert!(
+        deleted.contains(digest.trim_start_matches("sha256:")) || deleted.contains(&digest),
+        "no DELETE /adapters/<digest> after the timeout: {deleted:?}"
+    );
+    d.stop().await;
+
     // Dropping an adapter: the unload gives up on the runner, forgets the adapter, and returns.
     let (d, weights) = fake_adapter_daemon(
         json!({"hang_adapter_delete": true}),
@@ -1115,6 +1150,47 @@ async fn the_base_stops_being_kept_when_its_keep_forever_adapter_goes() {
         expires(ps, "laya:en").is_some(),
         "the base was kept for ever by an adapter that is gone"
     );
+    d.stop().await;
+}
+
+async fn an_expiring_plain_runner_leaves_the_shared_base_alone_and_stop_takes_it() {
+    let (d, weights) = adapter_daemon(|_| {}).await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    let mut keep = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    keep.keep_alive = Some(KeepAlive::Forever);
+    d.client.decide(&keep).await.unwrap();
+    // The plain `laya:en` is a second runner of the same name, and expires after a second.
+    let mut brief =
+        DecideRequest::new("laya:en", json!("x"), serde_json::from_value(triage()).ok());
+    brief.keep_alive = Some(KeepAlive::For(Duration::from_secs(1)));
+    d.client.decide(&brief).await.unwrap();
+    let size =
+        |ps: &[ollaya_api::RunningModel]| ps.iter().find(|m| m.name == "laya:en").map(|m| m.size);
+    assert!(size(&d.client.ps().await.unwrap().models) > Some(5000));
+    // Wait for the reaper to take the plain runner (its copy no longer counted).
+    let mut waited = 0;
+    while size(&d.client.ps().await.unwrap().models) != Some(5000) {
+        waited += 1;
+        assert!(waited < 100, "the plain runner never expired");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(
+        names,
+        ["a:latest", "laya:en"],
+        "the shared base went with it: {names:?}"
+    );
+    // The user's `stop laya:en` does take the shared base, with its adapters.
+    d.client.unload("laya:en").await.unwrap();
+    assert!(d.client.ps().await.unwrap().models.is_empty());
     d.stop().await;
 }
 
@@ -2779,6 +2855,7 @@ fn main() {
         the_adapter_limit_drops_the_least_recently_used_idle_adapter,
         a_runner_that_never_answers_does_not_hold_the_load_lock_for_ever,
         the_base_stops_being_kept_when_its_keep_forever_adapter_goes,
+        an_expiring_plain_runner_leaves_the_shared_base_alone_and_stop_takes_it,
         blobs_follow_the_api_key_are_verified_and_pruned,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();

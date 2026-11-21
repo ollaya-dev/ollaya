@@ -278,13 +278,16 @@ impl Runner {
             .timeout(self.load_timeout)
             .json(&body)
             .send()
-            .await
-            .map_err(|e| Error::LoadFailed(format!("{}: {}", model.name, self.timed_out(&e))))?;
+            .await;
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => return Err(self.load_error(model, &e).await),
+        };
         let ok = resp.status().is_success();
-        let body: Value = resp
-            .json()
-            .await
-            .map_err(|e| Error::LoadFailed(format!("{}: {}", model.name, self.timed_out(&e))))?;
+        let body: Value = match resp.json().await {
+            Ok(b) => b,
+            Err(e) => return Err(self.load_error(model, &e).await),
+        };
         if !ok {
             let message = body["error"]["message"]
                 .as_str()
@@ -295,6 +298,20 @@ impl Runner {
             )));
         }
         Ok(body["bytes"].as_u64().unwrap_or(0))
+    }
+
+    /// The error of a failed `POST /adapters`. After a timeout the runner may still finish loading
+    /// the adapter later and serve it outside the count, so a best-effort `DELETE` follows (the
+    /// runner takes it after the load, in its queue's order); its own answer is not waited for
+    /// beyond a few seconds.
+    async fn load_error(&self, model: &Loadable, e: &reqwest::Error) -> Error {
+        if e.is_timeout() {
+            let wait = self.load_timeout.min(Duration::from_secs(5));
+            if let Err(d) = self.delete_adapter(&model.digest, wait).await {
+                tracing::warn!(model = %self.name, "after the adapter load timed out: {d}");
+            }
+        }
+        Error::LoadFailed(format!("{}: {}", model.name, self.timed_out(e)))
     }
 
     /// An error of a request to the runner, with the reason a timeout stands for.
@@ -327,11 +344,11 @@ impl Runner {
     }
 
     /// Drop an adapter from the runner (`DELETE /adapters/<digest>`).
-    async fn delete_adapter(&self, digest: &str) -> Result<(), Error> {
+    async fn delete_adapter(&self, digest: &str, timeout: Duration) -> Result<(), Error> {
         let resp = self
             .http
             .delete(format!("http://127.0.0.1:{}/adapters/{digest}", self.port))
-            .timeout(self.load_timeout)
+            .timeout(timeout)
             .send()
             .await
             .map_err(|e| Error::Runner(format!("{}: {}", self.name, self.timed_out(&e))))?;
@@ -415,7 +432,7 @@ impl Runner {
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        if let Err(e) = self.delete_adapter(digest).await {
+        if let Err(e) = self.delete_adapter(digest, self.load_timeout).await {
             tracing::warn!(model = %self.name, "{e}");
         }
         if let Some(a) = self.adapters.lock().unwrap().remove(digest) {
@@ -765,8 +782,24 @@ impl Scheduler {
         Some(r)
     }
 
-    /// Unload a model now (the runner finishes in-flight requests first). `digest` is the model's
-    /// manifest digest. An adapter model leaves its runner; the runner goes with its last adapter.
+    /// Take down the runner stored under `key` (the reaper's and `make_room`'s eviction): that
+    /// runner only. A plain `laya:en` that expires or is evicted leaves a shared base of adapters
+    /// created on it, and their keep-alive, alone.
+    async fn evict(&self, key: &str) {
+        let runner = self.runners.lock().unwrap().remove(key);
+        if let Some(r) = runner {
+            while r.leases.load(Ordering::SeqCst) > 0 {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            r.kill().await;
+            tracing::info!(model = %r.name, "unloaded model");
+        }
+    }
+
+    /// Unload a model now, at the user's word (`stop`, `delete`; the runner finishes in-flight
+    /// requests first). `digest` is the model's manifest digest. An adapter model leaves its
+    /// runner; the runner goes with its last adapter. A base also takes down the shared runner of
+    /// adapters created on it, with those adapters. Internal eviction does not: see `evict`.
     pub async fn unload(&self, digest: &str) -> bool {
         // The runner keyed by this digest, and the shared runner of any adapters created on this
         // manifest: `ollaya stop <base>` reaches the base whether it was loaded as itself, as the
@@ -932,7 +965,7 @@ impl Scheduler {
             }
         }
         for digest in expired {
-            self.unload(&digest).await;
+            self.evict(&digest).await;
         }
         // A runner that died on its own (crash, OOM kill) is forgotten so the next request reloads it.
         let mut dead = Vec::new();
@@ -969,7 +1002,7 @@ impl Scheduler {
             least_recently_used(&candidates)
         };
         if let Some(digest) = victim {
-            self.unload(&digest).await;
+            self.evict(&digest).await;
         }
     }
 

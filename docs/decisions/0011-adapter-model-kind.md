@@ -138,9 +138,12 @@ Today a runner is keyed by manifest digest and the limit is a count. Proposal:
   runner of that base, the shared one with its adapters. (Plain models keep one runner, hence one row, per digest.)
 - **Eviction.** Adapters go before bases. When a runner's adapter limit is reached, its least recently used idle adapter
   is dropped (no process dies). When the runner limit is reached, the least recently used idle *runner* goes, adapters
-  with it, as now. Loading an adapter never evicts its own base; a base never goes while it has a lease (a request in
-  flight, on the base or on one of its adapters). An idle base goes with its adapters, when it is the least recently
-  used or when the user stops it; it is not held by adapters that are merely loaded.
+  with it, as now. Loading an adapter never evicts its own base; a base is never killed under a request: eviction picks
+  idle runners only, and the user's `stop` waits for requests in flight, on the base or on one of its adapters. An idle
+  base goes with its adapters when it is the least recently used or when the user stops it; it is not held by adapters
+  that are merely loaded. Eviction and expiry act on one runner by its own key: a plain `laya:en` that expires or is
+  evicted leaves the shared base of adapters created on it, and their keep-alive, alone. Only `stop` and `delete` of
+  the base reach both.
 - **Keep-alive.** A request's `keep_alive` applies to the model that answered, as documented. An adapter unloads on its
   own clock. The base's clock is the latest of its own and its adapters', so the base stays loaded while any adapter
   is; `-1` on one adapter keeps the base forever, until that adapter is unloaded, when the base's clock is worked out
