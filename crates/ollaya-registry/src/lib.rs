@@ -1,5 +1,6 @@
 //! Model names, manifests, the local blob store, and pulling from a registry.
 
+pub mod adapter;
 pub mod manifest;
 pub mod name;
 pub mod pull;

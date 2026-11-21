@@ -15,7 +15,7 @@ use std::task::Poll;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Request, State};
+use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, Uri, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -117,7 +117,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/presets/show", post(show_preset))
         .route("/api/presets/delete", delete(delete_preset))
         .route("/api/push", post(reserved))
-        .route("/api/blobs/{digest}", post(reserved).head(reserved))
+        .route(
+            "/api/blobs/{digest}",
+            post(blob_upload)
+                .head(blob_head)
+                // Adapter weights are tens to hundreds of MB: streamed to disk, not buffered.
+                .layer(axum::extract::DefaultBodyLimit::disable()),
+        )
         .route("/v1/systemone", post(systemone))
         .route("/v1/decisions", post(systemone))
         .route("/v1/models", get(v1_models))
@@ -471,13 +477,104 @@ async fn delete_preset(
     }
 }
 
-/// `/api/push` and `/api/blobs/:digest`, not implemented yet. A read-only server answers their
-/// `POST` with `403 READ_ONLY`, as it will once they write to the model store.
+/// `/api/push`, not implemented yet. A read-only server answers its `POST` with `403 READ_ONLY`,
+/// as it will once it writes to the model store.
 async fn reserved(State(s): State<Arc<AppState>>, method: Method, uri: Uri) -> ApiError {
     if method == Method::POST && s.config.read_only {
         return ErrorBody::read_only(uri.path()).into();
     }
     ErrorBody::not_implemented(uri.path()).into()
+}
+
+/// The largest blob `POST /api/blobs/:digest` takes.
+const MAX_BLOB_BYTES: u64 = 8 << 30;
+
+fn blob_digest(digest: &str) -> ApiResult<&str> {
+    ollaya_registry::store::digest_hex(digest)
+        .map_err(|e| api_error(&Error::InvalidRequest(e.to_string())))?;
+    Ok(digest)
+}
+
+/// `HEAD /api/blobs/:digest`: `200` when the blob is in the model store, else `404`. It follows
+/// `OLLAYA_API_KEY` like every other endpoint, and is allowed on a read-only server.
+async fn blob_head(
+    State(s): State<Arc<AppState>>,
+    Path(digest): Path<String>,
+) -> ApiResult<StatusCode> {
+    let path = s
+        .store()
+        .blob_path(blob_digest(&digest)?)
+        .map_err(|e| api_error(&e.into()))?;
+    Ok(if path.is_file() {
+        StatusCode::OK
+    } else {
+        StatusCode::NOT_FOUND
+    })
+}
+
+/// `POST /api/blobs/:digest`: store the request body as a blob, if its sha256 is `digest`. The
+/// body is streamed to a partial file and moved into place once verified. `201` on success (also
+/// when the blob was there already). A blob no manifest references is removed by the next prune,
+/// as every unreferenced blob is (decision 0006).
+async fn blob_upload(
+    State(s): State<Arc<AppState>>,
+    uri: Uri,
+    Path(digest): Path<String>,
+    body: Body,
+) -> ApiResult<StatusCode> {
+    use sha2::Digest as _;
+    use tokio::io::AsyncWriteExt as _;
+    writable(&s, &uri)?;
+    let digest = blob_digest(&digest)?.to_owned();
+    let dest = s
+        .store()
+        .blob_path(&digest)
+        .map_err(|e| api_error(&e.into()))?;
+    if dest.is_file() {
+        return Ok(StatusCode::CREATED);
+    }
+    // `-partial` in the name: a prune leaves it alone while the upload runs.
+    static UPLOADS: AtomicU64 = AtomicU64::new(0);
+    let tmp = dest.with_file_name(format!(
+        "{}-partial-upload-{}-{}",
+        dest.file_name()
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_default(),
+        std::process::id(),
+        UPLOADS.fetch_add(1, Ordering::Relaxed)
+    ));
+    let result = async {
+        let io = |e: std::io::Error| api_error(&Error::Registry(e.into()));
+        let mut file = tokio::fs::File::create(&tmp).await.map_err(io)?;
+        let mut hasher = sha2::Sha256::new();
+        let mut total = 0u64;
+        let mut stream = body.into_data_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| {
+                api_error(&Error::InvalidRequest(format!("reading the upload: {e}")))
+            })?;
+            total += chunk.len() as u64;
+            if total > MAX_BLOB_BYTES {
+                return Err(ErrorBody::request_too_large().into());
+            }
+            hasher.update(&chunk);
+            file.write_all(&chunk).await.map_err(io)?;
+        }
+        file.flush().await.map_err(io)?;
+        let got = format!("sha256:{}", hex::encode(hasher.finalize()));
+        if got != digest {
+            return Err(api_error(&Error::InvalidRequest(format!(
+                "digest mismatch: the upload is {got}, not {digest}; nothing was stored"
+            ))));
+        }
+        tokio::fs::rename(&tmp, &dest).await.map_err(io)?;
+        Ok(StatusCode::CREATED)
+    }
+    .await;
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&tmp).await;
+    }
+    result
 }
 
 /// `OLLAYA_READ_ONLY` refuses every request that changes the model store: pull, create, copy,
@@ -616,6 +713,10 @@ async fn create(State(s): State<Arc<AppState>>, uri: Uri, body: Body) -> ApiResu
         precision: req.parameters.as_ref().and_then(|p| p.precision.clone()),
         license: req.license.as_ref().map(|l| l.text()),
         description: req.description.clone(),
+        adapter: req.adapter.as_ref().map(|a| crate::service::AdapterInput {
+            config: a.config.clone(),
+            weights: a.weights.clone(),
+        }),
     };
     let lines = Arc::new(Mutex::new(Vec::new()));
     let sink = lines.clone();
@@ -1072,6 +1173,7 @@ pub fn build(config: ServerConfig, runner: RunnerLaunch) -> Result<Arc<AppState>
     let scheduler = Scheduler::new(SchedulerConfig {
         keep_alive: config.keep_alive,
         max_loaded: config.max_loaded,
+        max_adapters: config.max_adapters,
         device: config.device.clone(),
         threads: config.threads,
         load_timeout: config.load_timeout,

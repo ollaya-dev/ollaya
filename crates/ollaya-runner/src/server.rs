@@ -8,7 +8,12 @@
 //! * On startup, after the model is loaded, the runner prints one JSON line to stdout:
 //!   `{"port":<u16>,"device":"cuda:0"|"cpu"|"metal","precision":"fp16"|"fp32"|"<GGUF type>","engine":"onnx"|"mlx"|"llama"}`.
 //! * `GET /health` -> the same object plus `"status":"ok"`.
-//! * `POST /decide` `{state, questions, images?, audio?}` (base64; images for vision models, audio
+//! * `POST /adapters` `{digest, spec, weights, decision, tokenizer}` (paths of blobs) loads an
+//!   adapter model over the loaded base (decision 0011) -> `{bytes}`; `DELETE /adapters/<digest>`
+//!   drops it (`404` if unknown). `/decide` takes `adapter: <digest>` to answer as that adapter
+//!   model, with its own `decision.json` and tokenizer; unknown: `404 ADAPTER_NOT_FOUND`. The
+//!   hello line and `/health` carry `bytes`, what the base's tensors occupy, when the engine knows.
+//! * `POST /decide` `{state, questions, images?, audio?, adapter?}` (base64; images for vision models, audio
 //!   files for models with an audio encoder) ->
 //!   `{questions:[{logits, act_logits}], input_tokens, state_tokens, state_truncated}`.
 //!   Errors are `{"error":{"code","message"}}` with status 400 (bad request) or 500.
@@ -123,6 +128,18 @@ struct DecideRequest {
     /// Base64 audio files (WAV, FLAC or MP3), for models with an audio encoder.
     #[serde(default)]
     audio: Vec<String>,
+    /// The adapter model (its manifest digest) that answers, over this runner's base.
+    #[serde(default)]
+    adapter: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AdapterRequest {
+    digest: String,
+    spec: PathBuf,
+    weights: PathBuf,
+    decision: PathBuf,
+    tokenizer: PathBuf,
 }
 
 #[derive(Debug, Serialize)]
@@ -134,6 +151,8 @@ struct QuestionLogits {
 
 struct AppState {
     model: Box<dyn Engine>,
+    /// Adapter models loaded over `model`, by digest.
+    adapters: std::sync::RwLock<std::collections::HashMap<String, Arc<dyn Engine>>>,
     loaded: Loaded,
     /// Where every call into `model` runs.
     thread: ModelThread,
@@ -611,11 +630,13 @@ pub async fn run(config: RunnerConfig) -> Result<(), Error> {
         .local_addr()
         .map_err(|e| Error::Model(e.to_string()))?
         .port();
+    let bytes = model.memory_bytes().unwrap_or(0);
     let hello = json!({
         "port": port,
         "device": loaded.device,
         "precision": loaded.precision,
         "engine": loaded.engine,
+        "bytes": bytes,
     });
     {
         use std::io::Write;
@@ -625,12 +646,15 @@ pub async fn run(config: RunnerConfig) -> Result<(), Error> {
     }
     let state = Arc::new(AppState {
         model,
+        adapters: Default::default(),
         loaded,
         thread,
     });
     let app = Router::new()
         .route("/health", get(health))
         .route("/decide", post(decide))
+        .route("/adapters", post(add_adapter))
+        .route("/adapters/{digest}", axum::routing::delete(drop_adapter))
         // The daemon forwards bodies up to its own limit (images and audio in base64); axum's
         // default of 2 MB would refuse them.
         .layer(axum::extract::DefaultBodyLimit::max(RUNNER_BODY_BYTES))
@@ -646,18 +670,108 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<Value> {
         "device": s.loaded.device,
         "precision": s.loaded.precision,
         "engine": s.loaded.engine,
+        "bytes": s.model.memory_bytes().unwrap_or(0),
+        "adapters": s.adapters.read().expect("adapters lock").len(),
     }))
+}
+
+async fn add_adapter(State(s): State<Arc<AppState>>, Json(req): Json<AdapterRequest>) -> Response {
+    let state = Arc::clone(&s);
+    let result = s
+        .thread
+        .run(move || -> Result<u64, Error> {
+            let load = engine::AdapterLoad {
+                digest: req.digest.clone(),
+                spec: req.spec,
+                weights: req.weights,
+                decision: req.decision,
+                tokenizer: req.tokenizer,
+            };
+            let (front, bytes) = state.model.load_adapter(&load)?;
+            state
+                .adapters
+                .write()
+                .expect("adapters lock")
+                .insert(req.digest, Arc::from(front));
+            Ok(bytes)
+        })
+        .await
+        .and_then(|r| r);
+    match result {
+        Ok(bytes) => Json(json!({"bytes": bytes})).into_response(),
+        Err(e) => error(
+            StatusCode::BAD_REQUEST,
+            "ADAPTER_LOAD_FAILED",
+            &e.to_string(),
+        ),
+    }
+}
+
+async fn drop_adapter(
+    State(s): State<Arc<AppState>>,
+    axum::extract::Path(digest): axum::extract::Path<String>,
+) -> Response {
+    let state = Arc::clone(&s);
+    let result = s
+        .thread
+        .run(move || -> Result<bool, Error> {
+            let was = state
+                .adapters
+                .write()
+                .expect("adapters lock")
+                .remove(&digest);
+            if was.is_some() {
+                state.model.unload_adapter(&digest)?;
+            }
+            Ok(was.is_some())
+        })
+        .await
+        .and_then(|r| r);
+    match result {
+        Ok(true) => Json(json!({"status": "ok"})).into_response(),
+        Ok(false) => error(
+            StatusCode::NOT_FOUND,
+            "ADAPTER_NOT_FOUND",
+            "no such adapter is loaded",
+        ),
+        Err(e) => error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "RUNNER_ERROR",
+            &e.to_string(),
+        ),
+    }
 }
 
 async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) -> Response {
     let state = Arc::clone(&s);
+    let adapter = match &req.adapter {
+        Some(digest) => match s
+            .adapters
+            .read()
+            .expect("adapters lock")
+            .get(digest)
+            .cloned()
+        {
+            Some(engine) => Some(engine),
+            None => {
+                return error(
+                    StatusCode::NOT_FOUND,
+                    "ADAPTER_NOT_FOUND",
+                    &format!("no adapter {digest} is loaded"),
+                );
+            }
+        },
+        None => None,
+    };
     let deadline = req
         .timeout_ms
         .map(|ms| std::time::Instant::now() + std::time::Duration::from_millis(ms));
     let result = s
         .thread
         .run_before(deadline, move || -> Result<Value, Error> {
-            if let Some(qid) = ordinal_unsupported(state.model.as_ref(), &req.questions) {
+            // The adapter model's own front over the shared network, or the base itself.
+            let model: &dyn Engine = adapter.as_deref().unwrap_or(state.model.as_ref());
+            if let Some(qid) = ordinal_unsupported(model, &req.questions) {
                 return Err(Error::Decision(ollaya_decision::Error::invalid(format!(
                     "question {qid:?}: this model has no ordinal head; ask it without \"ordinal\""
                 ))));
@@ -672,9 +786,7 @@ async fn decide(State(s): State<Arc<AppState>>, Json(req): Json<DecideRequest>) 
                 .iter()
                 .map(|a| crate::audio::decode(&crate::audio::from_base64(a)?))
                 .collect::<Result<Vec<_>, _>>()?;
-            let out = state
-                .model
-                .run_media(&req.state, &req.questions, &images, &audio)?;
+            let out = model.run_media(&req.state, &req.questions, &images, &audio)?;
             let questions: Vec<QuestionLogits> = out
                 .questions
                 .into_iter()
@@ -896,8 +1008,18 @@ mod tests {
     use ollaya_decision::{Questions, parse_questions};
     use serde_json::{Value, json};
 
-    use super::{DeviceRequest, initialize_with_cpu_fallback, warm_up};
-    use crate::{Engine, Error, Output};
+    use std::sync::Arc;
+
+    use axum::Json;
+    use axum::extract::State;
+    use axum::http::StatusCode;
+    use axum::response::Response;
+
+    use super::{
+        AdapterRequest, AppState, DecideRequest, DeviceRequest, Loaded, ModelThread, add_adapter,
+        decide, drop_adapter, initialize_with_cpu_fallback, warm_up,
+    };
+    use crate::{Engine, Error, Output, QuestionOutput, engine};
 
     #[test]
     fn devices_parse() {
@@ -1010,6 +1132,134 @@ mod tests {
         }
     }
 
+    /// Answers with `[tag]` as the only logit, and takes adapters: their front answers `[tag + 1]`.
+    struct Tagged(f32, Mutex<Vec<String>>);
+
+    impl Engine for Tagged {
+        fn run(&self, _state: &Value, _questions: &Questions) -> Result<Output, Error> {
+            Ok(Output {
+                questions: vec![QuestionOutput {
+                    logits: vec![self.0],
+                    act_logits: None,
+                }],
+                input_tokens: 1,
+                state_tokens: 1,
+                state_truncated: false,
+            })
+        }
+
+        fn load_adapter(&self, a: &engine::AdapterLoad) -> Result<(Box<dyn Engine>, u64), Error> {
+            if a.spec.to_string_lossy() == "broken" {
+                return Err(Error::Model("a broken adapter".into()));
+            }
+            self.1.lock().unwrap().push(a.digest.clone());
+            Ok((Box::new(Tagged(self.0 + 1.0, Mutex::default())), 64))
+        }
+
+        fn unload_adapter(&self, digest: &str) -> Result<(), Error> {
+            self.1.lock().unwrap().retain(|d| d != digest);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn adapters_load_answer_by_digest_and_drop() {
+        use axum::body::to_bytes;
+        runtime_with_short_lived_blocking_threads().block_on(async {
+            let state = Arc::new(AppState {
+                model: Box::new(Tagged(10.0, Mutex::default())),
+                adapters: Default::default(),
+                loaded: Loaded {
+                    device: "metal".into(),
+                    precision: "fp32".into(),
+                    engine: "mlx",
+                },
+                thread: ModelThread::spawn().unwrap(),
+            });
+            let body = |r: Response| async move {
+                let status = r.status();
+                let bytes = to_bytes(r.into_body(), usize::MAX).await.unwrap();
+                (status, serde_json::from_slice::<Value>(&bytes).unwrap())
+            };
+            let request = |adapter: Option<&str>| DecideRequest {
+                state: json!("s"),
+                questions: json!({"x": {"type": "noul", "instructions": "Is it?"}}),
+                images: Vec::new(),
+                timeout_ms: None,
+                audio: Vec::new(),
+                adapter: adapter.map(str::to_owned),
+            };
+            let load = |digest: &str, spec: &str| AdapterRequest {
+                digest: digest.into(),
+                spec: spec.into(),
+                weights: "w".into(),
+                decision: "d".into(),
+                tokenizer: "t".into(),
+            };
+            let logit = |v: &Value| v["questions"][0]["logits"][0].as_f64().unwrap();
+
+            // The base answers as itself, and an unknown adapter is a 404, not the base's answer.
+            let (status, base) =
+                body(decide(State(state.clone()), Json(request(None))).await).await;
+            assert_eq!((status, logit(&base)), (StatusCode::OK, 10.0));
+            let (status, missing) =
+                body(decide(State(state.clone()), Json(request(Some("sha256:a")))).await).await;
+            assert_eq!(status, StatusCode::NOT_FOUND);
+            assert_eq!(missing["error"]["code"], "ADAPTER_NOT_FOUND");
+
+            // Loaded, it answers under its own front; the base is untouched.
+            let (status, loaded) =
+                body(add_adapter(State(state.clone()), Json(load("sha256:a", "spec"))).await).await;
+            assert_eq!(
+                (status, loaded["bytes"].as_u64()),
+                (StatusCode::OK, Some(64))
+            );
+            let (_, a) =
+                body(decide(State(state.clone()), Json(request(Some("sha256:a")))).await).await;
+            let (_, base) = body(decide(State(state.clone()), Json(request(None))).await).await;
+            assert_eq!((logit(&a), logit(&base)), (11.0, 10.0));
+
+            // An adapter that fails to load fails alone: the one that loaded still answers.
+            let (status, failed) =
+                body(add_adapter(State(state.clone()), Json(load("sha256:b", "broken"))).await)
+                    .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+            assert!(
+                failed["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("a broken adapter")
+            );
+            let (status, _) =
+                body(decide(State(state.clone()), Json(request(Some("sha256:a")))).await).await;
+            assert_eq!(status, StatusCode::OK);
+
+            // Dropped, it is gone from the runner and the engine; dropping again is a 404.
+            let drop_it =
+                |d: &str| drop_adapter(State(state.clone()), axum::extract::Path(d.to_owned()));
+            assert_eq!(body(drop_it("sha256:a").await).await.0, StatusCode::OK);
+            assert_eq!(
+                body(drop_it("sha256:a").await).await.0,
+                StatusCode::NOT_FOUND
+            );
+            assert!(
+                state
+                    .model
+                    .load_adapter(&engine::AdapterLoad {
+                        digest: "sha256:z".into(),
+                        spec: "broken".into(),
+                        weights: "w".into(),
+                        decision: "d".into(),
+                        tokenizer: "t".into(),
+                    })
+                    .is_err()
+            );
+            let (status, _) =
+                body(decide(State(state.clone()), Json(request(Some("sha256:a")))).await).await;
+            assert_eq!(status, StatusCode::NOT_FOUND);
+        });
+    }
+
     /// A runtime that retires an idle blocking thread after 1 ms instead of tokio's 10 s, so a
     /// request after a pause would land on a new thread if requests ran on the blocking pool.
     fn runtime_with_short_lived_blocking_threads() -> tokio::runtime::Runtime {
@@ -1037,6 +1287,7 @@ mod tests {
             let seen = threads.0.clone();
             let state = Arc::new(AppState {
                 model: Box::new(threads),
+                adapters: Default::default(),
                 loaded: Loaded {
                     device: "cuda:0".into(),
                     precision: "fp32".into(),
@@ -1052,6 +1303,7 @@ mod tests {
                     images: Vec::new(),
                     timeout_ms: None,
                     audio: Vec::new(),
+                    adapter: None,
                 };
                 let response = decide(State(state.clone()), Json(request)).await;
                 assert_eq!(response.status(), axum::http::StatusCode::OK);

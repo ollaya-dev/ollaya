@@ -3,6 +3,7 @@
 //! family engine keeps one tokenizer, layout and readout for every device.
 
 use std::borrow::Cow;
+use std::path::Path;
 use std::sync::Mutex;
 
 use ndarray::{Array2, Ix2};
@@ -131,10 +132,52 @@ impl Net {
         }
     }
 
+    /// Bytes the network's tensors occupy, when the engine knows them (MLX does).
+    pub fn bytes(&self) -> Option<u64> {
+        match self {
+            Net::Ort(_) => None,
+            #[cfg(feature = "mlx")]
+            Net::Mlx(net) => Some(net.bytes()),
+        }
+    }
+
+    /// Load an adapter over this network (decision 0011); returns the bytes it occupies.
+    #[cfg_attr(not(feature = "mlx"), allow(unused_variables))]
+    pub fn add_adapter(&self, digest: &str, spec: &Path, weights: &Path) -> Result<u64, Error> {
+        match self {
+            Net::Ort(_) => Err(adapters_need_mlx()),
+            #[cfg(feature = "mlx")]
+            Net::Mlx(net) => net.add_adapter(digest, spec, weights),
+        }
+    }
+
+    /// Drop an adapter loaded with [`Self::add_adapter`].
+    #[cfg_attr(not(feature = "mlx"), allow(unused_variables))]
+    pub fn remove_adapter(&self, digest: &str) -> Result<(), Error> {
+        match self {
+            Net::Ort(_) => Err(adapters_need_mlx()),
+            #[cfg(feature = "mlx")]
+            Net::Mlx(net) => net.remove_adapter(digest),
+        }
+    }
+
     /// Run `batch` and return the named outputs, each [rows, width].
     pub fn run(&self, batch: Batch, outputs: &[&str]) -> Result<Vec<Array2<f32>>, Error> {
+        self.run_with(batch, outputs, None)
+    }
+
+    /// [`Self::run`] as the adapter loaded under `adapter`.
+    pub fn run_with(
+        &self,
+        batch: Batch,
+        outputs: &[&str],
+        adapter: Option<&str>,
+    ) -> Result<Vec<Array2<f32>>, Error> {
         match self {
             Net::Ort(session) => {
+                if adapter.is_some() {
+                    return Err(adapters_need_mlx());
+                }
                 let rows = batch.input_ids.nrows();
                 let mut inputs: Vec<(Cow<'_, str>, SessionInputValue<'_>)> = ort::inputs![
                     "input_ids" => Tensor::from_array(batch.input_ids)?,
@@ -164,7 +207,11 @@ impl Net {
                     .collect()
             }
             #[cfg(feature = "mlx")]
-            Net::Mlx(net) => net.run(&batch, outputs),
+            Net::Mlx(net) => net.run_with(&batch, outputs, adapter),
         }
     }
+}
+
+fn adapters_need_mlx() -> Error {
+    Error::Model("adapter models run on MLX only (the Metal GPU)".into())
 }

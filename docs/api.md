@@ -54,7 +54,7 @@ through the matching type in `ollaya-api`, and request examples pass boundary va
 | `POST` | `/api/presets/show` | One preset's questions | no |
 | `DELETE` | `/api/presets/delete` | Delete a custom preset | no |
 | `POST` | `/api/push` | Reserved: `501 NOT_IMPLEMENTED` | – |
-| `HEAD`, `POST` | `/api/blobs/:digest` | Reserved: `501 NOT_IMPLEMENTED` | – |
+| `HEAD`, `POST` | `/api/blobs/:digest` | Check for, or upload, a blob (an adapter's weights, [§7.9](#79-post-apicreate)) | no |
 | `POST` | `/v1/systemone` | TypeSafe System One, wire-identical | no |
 | `POST` | `/v1/decisions` | Alias of `/v1/systemone` | no |
 | `GET` | `/v1/models` | TypeSafe model list: the local models | no |
@@ -474,6 +474,9 @@ years) is a `keep_alive` issue (`422`). `ollaya_api::KeepAlive` implements this 
 - `/v1/*` does not read `keep_alive` (TypeSafe has no such field); those requests use the default.
 - When `OLLAYA_MAX_LOADED_MODELS` is reached, an idle model can be unloaded before its timer runs
   out to make room ([§10](#10-concurrency-queueing-timeouts-and-cancellation)).
+- An adapter model has its own timer. The base it shares with other adapter models stays loaded
+  until the latest of their timers (or for ever, if one adapter has `keep_alive: -1`).
+  `OLLAYA_PRELOAD` takes adapter model names.
 
 ---
 
@@ -1097,11 +1100,28 @@ it names, and sends their contents as JSON.
 | `parameters` | object | no | inherited | Closed set: `precision` (`"fp16"` or `"fp32"`) pins one graph, which `from` must carry (`422` otherwise; most ONNX models carry only fp32). Other keys are `parameter` issues. |
 | `license` | string \| array of string | no | inherited | License text(s); several are joined with a blank line |
 | `description` | string | no | inherited | One line, shown by `/v1/models` and `ollaya show` |
+| `adapter` | object | no | – | Make the model a LoRA adapter over `from` ([ADR 0011](decisions/0011-adapter-model-kind.md)): `{"config": {...}, "weights": "sha256:<hex>"}`. `config` is peft's `adapter_config.json`; `weights` is the digest of the adapter's `adapter_model.safetensors`, uploaded first with `POST /api/blobs/:digest`. Cannot be combined with `parameters.precision`. |
 | `stream` | boolean | no | `true` | As in `/api/pull` |
 
-Unlike Ollama, there is no `files` map and no `/api/blobs` upload. A decision model's own layers are
-small JSON documents, so they travel inline and a two-step upload protocol is not needed. Weights
-always come from a registry.
+Unlike Ollama, there is no `files` map. A decision model's own layers are small JSON documents, so
+they travel inline. Model weights always come from a registry; the one file a user brings is a
+LoRA adapter's, uploaded to `/api/blobs/:digest` ([§7.12](#712-blobs-and-reserved-endpoints)).
+
+**Adapter models.** With `adapter`, the new model is an *adapter model*: its manifest keeps every
+layer of `from` and adds the adapter's spec and weights, and `details.format` is `adapter`.
+`from` must be an encoder the MLX engine runs (an arch layer; this version: `laya-markers-v1`),
+not a router and not an adapter model. Before anything is written, `create` refuses with
+`422 INVALID_REQUEST` and a message that names the module and both shapes: `modules_to_save` or
+any tensor that is not a `lora_A` / `lora_B` pair (a trained head), a target module the base does
+not have, a shape that is not the base's, `use_rslora`, `use_dora`, `rank_pattern`,
+`alpha_pattern`, a `peft_type` other than `LORA`, or a dtype other than F32, F16 or BF16. Shapes
+cannot show that the adapter was trained on this base; only that it fits. Adapter models run on MLX
+only (`OLLAYA_DEVICE=auto` or `metal`, Apple silicon): on any other device they fail to load with a
+message saying so. All adapter models of one base share one runner, so *N* fine-tunes cost one copy
+of the base and the adapters' own tensors. **One base serves its adapters one request at a time**:
+the runner has one worker, whatever adapter a request names. This is about memory, not
+throughput; a latency-sensitive deployment under concurrent requests can keep its fine-tunes as
+separate (merged) models.
 
 **Streaming response.** `ProgressResponse` lines with `status`: `using existing layer sha256:<hex>`
 (one per inherited layer), `creating new layer sha256:<hex>` (one per new layer), then
@@ -1192,6 +1212,11 @@ The report lists, per media and type, the number of questions, the temperature, 
 Models loaded in memory, sorted by name. Routers never appear; their loaded targets do. Models that
 share a digest share one runner and appear once, under the name they were last loaded by. No
 request body. Not paginated: the list is bounded by `OLLAYA_MAX_LOADED_MODELS`.
+
+Adapter models ([§7.9](#79-post-apicreate)) of one base share one runner, and appear as one row
+per name: the base's row, under the name its adapters were created `FROM` (`details.parent_model`
+of an adapter's row), carries the base's `size`; each adapter's row only its own, so the rows add
+up to what the runner holds. The base's `expires_at` is the latest of its adapters'.
 
 | Response field | Type | Meaning |
 |---|---|---|
@@ -1353,12 +1378,20 @@ server, `422 INVALID_REQUEST`, `500 STORAGE_ERROR`.
 Create is idempotent (the same request leaves the same file); delete behaves like
 [`/api/delete`](#77-delete-apidelete): a repeat gets `404`.
 
-### 7.12 Reserved endpoints
+### 7.12 Blobs and reserved endpoints
 
-`POST /api/push`, `HEAD /api/blobs/:digest` and `POST /api/blobs/:digest` return
-`501 NOT_IMPLEMENTED`. The registry is static (manifests are files published with the site), so
-there is nothing to push to yet. The paths are reserved with Ollama's semantics, so adding them
-later changes nothing else. A read-only server answers their `POST` with `403 READ_ONLY`.
+`HEAD /api/blobs/:digest` answers `200` when the blob is in the model store and `404` when it is
+not. `POST /api/blobs/:digest` stores the request body (raw bytes, streamed to disk; up to 8 GiB)
+as that blob when its sha256 is `digest` and answers `201` (also when the blob was already there);
+any other body is `422` and nothing is stored. A blob that no manifest references is removed by the
+next prune, which every model removal runs ([ADR 0006](decisions/0006-manifest-retention.md)), so
+upload and create in one go. Both follow `OLLAYA_API_KEY` like every endpoint; a read-only server
+answers the `POST` with `403 READ_ONLY`.
+
+`POST /api/push` returns `501 NOT_IMPLEMENTED`. The registry is static (manifests are files
+published with the site), so there is nothing to push to yet. The path is reserved with Ollama's
+semantics, so adding it later changes nothing else. A read-only server answers its `POST` with
+`403 READ_ONLY`.
 
 ### 7.13 `GET /api/activity`
 
@@ -1822,7 +1855,8 @@ These are the variables that change API behaviour.
 | `OLLAYA_ORIGINS` | unset | Extra allowed browser origins |
 | `OLLAYA_READ_ONLY` | unset | `1`, `true`, `yes` or `on` refuses pull, create, copy, delete and custom preset changes over HTTP with `403 READ_ONLY` ([§14](#14-security)); `0`, `false`, `no` or `off` turns it off. Any other value stops the daemon at start. |
 | `OLLAYA_KEEP_ALIVE` | `5m` | Default `keep_alive` ([§6](#6-keep_alive)) |
-| `OLLAYA_MAX_LOADED_MODELS` | `3` | Loaded-model limit |
+| `OLLAYA_MAX_LOADED_MODELS` | `3` | Loaded-model limit: runners, so a base that adapter models share counts once |
+| `OLLAYA_MAX_ADAPTERS` | `16` | Adapter models one runner holds over its base. At the limit, the least recently used idle adapter is unloaded first; the base stays loaded ([ADR 0011](decisions/0011-adapter-model-kind.md)) |
 | `OLLAYA_DEVICE` | `auto` | Runner device: `auto` (MLX on the Apple GPU for models with an arch layer in builds with the `mlx` feature, else CUDA or ROCm if available, else CPU; on Windows, GGUF models without CUDA also use a discrete Vulkan GPU), `cpu`, `cuda`, `cuda:<n>`, `rocm`, `rocm:<n>` (GGUF only), `vulkan`, `vulkan:<n>` (GGUF only), `metal` |
 | `OLLAYA_THREADS` | unset | CPU threads for each loaded model: ONNX Runtime's intra-op threads, or llama.cpp's threads for GGUF models. Unset keeps each engine's default: ONNX Runtime's own, and for GGUF models half the CPUs available to the server on x86-64 (about one per physical core), all of them on arm64 |
 | `OLLAYA_MAX_QUEUE` | `512` | Queue bound before `503 QUEUE_FULL` |

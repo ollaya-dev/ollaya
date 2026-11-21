@@ -6,12 +6,17 @@
 //! QUESTIONS ./triage.json
 //! CALIBRATION ./calibration.json
 //! PARAMETER precision fp32
+//! ADAPTER ./ft-a            # a PEFT directory (LoRA), instead of the other layers: see below
 //! LICENSE ./LICENSE
 //! DESCRIPTION Support ticket triage
 //! ```
 //!
 //! Directives are case-insensitive. A value may be a path (relative to the Modelfile), inline
 //! JSON, or a `"""`-quoted block spanning lines. `#` starts a comment line.
+//!
+//! `ADAPTER` takes one directory (`adapter_config.json` and `adapter_model.safetensors`, as peft
+//! writes it) and may appear once: the model is then an adapter model over `FROM`
+//! (decision 0011), which shares `FROM`'s loaded copy with the other adapters of it.
 
 use std::path::{Path, PathBuf};
 
@@ -26,6 +31,8 @@ pub struct Modelfile {
     pub precision: Option<String>,
     pub license: Option<String>,
     pub description: Option<String>,
+    /// A PEFT adapter directory.
+    pub adapter: Option<PathBuf>,
 }
 
 pub fn read(path: &Path) -> Result<Modelfile> {
@@ -79,6 +86,9 @@ pub fn parse(text: &str, base: &Path) -> Result<Modelfile> {
     if mf.from.is_empty() {
         bail!("a Modelfile needs a FROM line");
     }
+    if mf.adapter.is_some() && mf.precision.is_some() {
+        bail!("PARAMETER precision cannot be combined with ADAPTER");
+    }
     Ok(mf)
 }
 
@@ -120,6 +130,17 @@ fn apply(mf: &mut Modelfile, directive: &str, src: Source, base: &Path, line: us
             mf.from = match src {
                 Source::Word(w) | Source::Inline(w) => w,
             }
+        }
+        "ADAPTER" => {
+            if mf.adapter.is_some() {
+                bail!("line {line}: ADAPTER may appear once");
+            }
+            let (Source::Word(w) | Source::Inline(w)) = src;
+            let dir = resolve(base, &w);
+            if !dir.is_dir() {
+                bail!("ADAPTER: {} is not a directory", dir.display());
+            }
+            mf.adapter = Some(dir);
         }
         "QUESTIONS" => mf.questions = Some(json(src, base, "QUESTIONS")?),
         "CALIBRATION" => mf.calibration = Some(json(src, base, "CALIBRATION")?),
@@ -182,6 +203,21 @@ LICENSE """MIT"""
         assert_eq!(mf.precision.as_deref(), Some("fp32"));
         assert_eq!(mf.description.as_deref(), Some("Support triage"));
         assert_eq!(mf.license.as_deref(), Some("MIT"));
+    }
+
+    #[test]
+    fn adapter_is_one_directory_and_excludes_precision() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("ft-a")).unwrap();
+        let mf = parse("FROM laya:en\nADAPTER ./ft-a\n", dir.path()).unwrap();
+        assert_eq!(mf.adapter, Some(dir.path().join("./ft-a")));
+        assert!(parse("FROM laya:en\nADAPTER ./ft-a\nADAPTER ./ft-a", dir.path()).is_err());
+        assert!(parse("FROM laya:en\nADAPTER ./missing", dir.path()).is_err());
+        let why = parse(
+            "FROM laya:en\nADAPTER ./ft-a\nPARAMETER precision fp32",
+            dir.path(),
+        );
+        assert!(why.unwrap_err().to_string().contains("precision"));
     }
 
     #[test]

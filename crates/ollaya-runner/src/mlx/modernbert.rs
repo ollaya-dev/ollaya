@@ -26,6 +26,8 @@ type Result<T> = std::result::Result<T, Error>;
 pub struct Linear {
     w_t: Array,
     b: Option<Array>,
+    /// The `.weight` tensor's name without the suffix: what an adapter names it by.
+    name: String,
 }
 
 impl Linear {
@@ -40,6 +42,7 @@ impl Linear {
         Ok(Linear {
             w_t: w.transpose(&[1, 0]).map_err(mlx)?,
             b,
+            name: prefix.trim_end_matches('.').to_owned(),
         })
     }
 
@@ -57,13 +60,20 @@ impl Linear {
                 .transpose(&[1, 0])
                 .map_err(mlx)?,
             b: bias.map(|b| t.get(b, &[out])).transpose()?,
+            name: weight.strip_suffix(".weight").unwrap_or(weight).to_owned(),
         })
     }
 
+    /// `x Wᵀ (+ b)`, and with an adapter active that adapts this linear, `+ scaling · (x Aᵀ) Bᵀ`
+    /// (peft's order: the base layer with its bias, then the LoRA branch), unmerged.
     pub fn forward(&self, x: &Array) -> Result<Array> {
         let y = x.matmul(&self.w_t).map_err(mlx)?;
-        match &self.b {
-            Some(b) => y.add(b).map_err(mlx),
+        let y = match &self.b {
+            Some(b) => y.add(b).map_err(mlx)?,
+            None => y,
+        };
+        match super::adapter::delta(&self.name, x)? {
+            Some(d) => y.add(&d).map_err(mlx),
             None => Ok(y),
         }
     }

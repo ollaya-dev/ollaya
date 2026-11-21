@@ -59,7 +59,10 @@ pub struct Encoding {
 }
 
 pub struct OnnxModel {
-    net: Net,
+    /// Shared with the adapter models over this network (decision 0011).
+    net: std::sync::Arc<Net>,
+    /// Set for an adapter model's front: the digest its tensors are loaded under.
+    adapter: Option<String>,
     tokenizer: Tokenizer,
     layout: LayaLayout,
     min_markers: usize,
@@ -247,7 +250,8 @@ impl OnnxModel {
         let net = crate::net::load(files, device, intra_threads, Head::Laya)?;
 
         Ok(OnnxModel {
-            net,
+            net: std::sync::Arc::new(net),
+            adapter: None,
             tokenizer: Tokenizer(tokenizer),
             layout: LayaLayout {
                 max_len: config.max_len,
@@ -258,6 +262,42 @@ impl OnnxModel {
             calibration,
             device,
         })
+    }
+
+    /// A front over this model's network: its own `decision.json` and tokenizer (`max_len`,
+    /// special tokens and the rest are the front's), the network shared. With `adapter`, requests
+    /// run as the adapter loaded under that digest.
+    pub fn front(
+        &self,
+        decision: &Path,
+        tokenizer: &Path,
+        adapter: Option<String>,
+    ) -> Result<Self, Error> {
+        let config: DecisionConfig = read_json(decision)?;
+        if config.engine != "onnx" || config.layout != "laya-markers-v1" {
+            return Err(Error::Model(format!(
+                "unsupported engine/layout {}/{}; this runner serves onnx/laya-markers-v1",
+                config.engine, config.layout
+            )));
+        }
+        Ok(OnnxModel {
+            net: self.net.clone(),
+            adapter,
+            tokenizer: Tokenizer(load_tokenizer(tokenizer)?),
+            layout: LayaLayout {
+                max_len: config.max_len,
+                head_max_len: config.head_max_len,
+                special: config.special_tokens,
+            },
+            min_markers: config.min_markers,
+            calibration: Calibration::default(),
+            device: self.device,
+        })
+    }
+
+    /// The network, for adapters to be loaded into.
+    pub fn net(&self) -> &Net {
+        &self.net
     }
 
     /// Encode every question against the shared state (token ids and marker positions).
@@ -332,7 +372,7 @@ impl OnnxModel {
             }
         }
 
-        let [logits, act] = <[_; 2]>::try_from(self.net.run(
+        let [logits, act] = <[_; 2]>::try_from(self.net.run_with(
             Batch {
                 input_ids,
                 attention,
@@ -340,6 +380,7 @@ impl OnnxModel {
                 qtype: Some(qtypes.to_vec()),
             },
             &["logits", "act_logits"],
+            self.adapter.as_deref(),
         )?)
         .map_err(|_| Error::Model("expected two outputs".into()))?;
         Ok(encoded

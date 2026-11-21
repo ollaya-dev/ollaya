@@ -22,8 +22,8 @@ use crate::decide::{
 use crate::error::{ErrorBody, Loc, ValidationIssue, body_loc};
 use crate::keep_alive::KeepAlive;
 use crate::models::{
-    CalibrationSpec, CopyRequest, CreateParameters, CreateRequest, DeleteRequest, License,
-    PullRequest, ShowRequest,
+    CalibrationSpec, CopyRequest, CreateAdapter, CreateParameters, CreateRequest, DeleteRequest,
+    License, PullRequest, ShowRequest,
 };
 use crate::presets::{CreatePresetRequest, PresetRequest};
 use crate::{
@@ -296,6 +296,7 @@ pub fn create_request(obj: Body) -> Result<CreateRequest, Issues> {
     let calibration = get(&obj, "calibration").and_then(|v| calibration(v, &mut issues));
     let parameters = get(&obj, "parameters").and_then(|v| parameters(v, &mut issues));
     let license = get(&obj, "license").and_then(|v| license(v, &mut issues));
+    let adapter = get(&obj, "adapter").and_then(|v| adapter(v, &mut issues));
     let description = match get(&obj, "description") {
         None => None,
         Some(Value::String(s)) => Some(s.clone()),
@@ -316,10 +317,72 @@ pub fn create_request(obj: Body) -> Result<CreateRequest, Issues> {
             calibration,
             parameters,
             license,
+            adapter,
             description,
             stream,
         }),
         _ => Err(issues),
+    }
+}
+
+/// `adapter`: `{config: {..}, weights: "sha256:<hex>"}`.
+fn adapter(value: &Value, issues: &mut Issues) -> Option<CreateAdapter> {
+    let base = body_loc(&["adapter"]);
+    let Value::Object(m) = value else {
+        issues.push(ValidationIssue::wrong_type(base, "dict_type"));
+        return None;
+    };
+    let before = issues.len();
+    let cloc = at(&base, [Loc::key("config")]);
+    let config = match m.get("config") {
+        Some(c @ Value::Object(_)) => Some(c.clone()),
+        Some(_) => {
+            issues.push(ValidationIssue::wrong_type(cloc, "dict_type"));
+            None
+        }
+        None => {
+            issues.push(ValidationIssue::missing(cloc));
+            None
+        }
+    };
+    let wloc = at(&base, [Loc::key("weights")]);
+    let weights = match m.get("weights") {
+        Some(Value::String(d))
+            if d.strip_prefix("sha256:")
+                .is_some_and(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())) =>
+        {
+            Some(d.clone())
+        }
+        Some(Value::String(_)) => {
+            issues.push(ValidationIssue::new(
+                wloc,
+                "adapter",
+                "weights must be a digest, sha256:<64 hex digits>",
+            ));
+            None
+        }
+        Some(_) => {
+            issues.push(ValidationIssue::wrong_type(wloc, "string_type"));
+            None
+        }
+        None => {
+            issues.push(ValidationIssue::missing(wloc));
+            None
+        }
+    };
+    if let Some(k) = m
+        .keys()
+        .find(|k| !matches!(k.as_str(), "config" | "weights"))
+    {
+        issues.push(ValidationIssue::new(
+            at(&base, [Loc::key(k.as_str())]),
+            "adapter",
+            format!("unknown field {k:?}; known fields: config, weights"),
+        ));
+    }
+    match (config, weights, issues.len() == before) {
+        (Some(config), Some(weights), true) => Some(CreateAdapter { config, weights }),
+        _ => None,
     }
 }
 
@@ -1203,6 +1266,42 @@ mod tests {
         .unwrap();
         assert_eq!(ok.parameters.unwrap().precision.as_deref(), Some("fp32"));
         assert_eq!(ok.description.as_deref(), Some("Ticket triage"));
+    }
+
+    #[test]
+    fn create_request_adapter() {
+        let digest = format!("sha256:{}", "ab".repeat(32));
+        let ok = create_request(obj(json!({
+            "model": "ft-a", "from": "laya:en",
+            "adapter": {"config": {"r": 4}, "weights": digest},
+        })))
+        .unwrap();
+        assert_eq!(ok.adapter.unwrap().weights, digest);
+        let issues = create_request(obj(json!({
+            "model": "ft-a", "from": "laya:en",
+            "adapter": {"config": [], "weights": "sha256:abc", "path": "/x"},
+        })))
+        .unwrap_err();
+        assert_eq!(
+            kinds(&issues),
+            pairs(&[
+                ("adapter.config", "dict_type"),
+                ("adapter.weights", "adapter"),
+                ("adapter.path", "adapter"),
+            ])
+        );
+        let issues =
+            create_request(obj(json!({"model": "a", "from": "b", "adapter": {}}))).unwrap_err();
+        assert_eq!(
+            kinds(&issues),
+            pairs(&[
+                ("adapter.config", "missing"),
+                ("adapter.weights", "missing")
+            ])
+        );
+        let issues =
+            create_request(obj(json!({"model": "a", "from": "b", "adapter": 3}))).unwrap_err();
+        assert_eq!(kinds(&issues), pairs(&[("adapter", "dict_type")]));
     }
 
     #[test]

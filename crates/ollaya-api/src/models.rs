@@ -282,6 +282,16 @@ pub enum License {
     Many(Vec<String>),
 }
 
+/// The `adapter` of `/api/create`: a peft LoRA adapter, as decision 0011 describes. The weights
+/// are uploaded first (`POST /api/blobs/:digest`) and named by digest; `config` is peft's
+/// `adapter_config.json`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CreateAdapter {
+    pub config: serde_json::Value,
+    /// `sha256:<hex>` of the adapter's safetensors file.
+    pub weights: String,
+}
+
 /// `POST /api/create`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CreateRequest {
@@ -295,6 +305,9 @@ pub struct CreateRequest {
     pub parameters: Option<CreateParameters>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Option<License>,
+    /// Make the model a LoRA adapter over `from` (an encoder the MLX engine runs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<CreateAdapter>,
     /// One line for `/v1/models` and `ollaya show`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

@@ -34,6 +34,11 @@ pub mod media {
     /// Matching multimodal projector for a GGUF text model.
     pub const MMPROJ: &str = "application/vnd.ollaya.projector.gguf";
     pub const GGUF: &str = "application/vnd.ollaya.weights.gguf";
+    /// An adapter model's spec: a small JSON file naming the base it was checked against and the
+    /// modules it adapts (`crate::adapter::AdapterSpec`). It holds no weights.
+    pub const ADAPTER: &str = "application/vnd.ollaya.adapter";
+    /// The adapter's safetensors file, byte for byte as peft wrote it.
+    pub const ADAPTER_WEIGHTS: &str = "application/vnd.ollaya.adapter.weights";
 }
 
 pub const ANNOTATION_PRECISION: &str = "org.ollaya.precision";
@@ -66,7 +71,8 @@ pub struct Manifest {
 /// The config blob: what `ollaya list` / `show` report about a model.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ModelConfig {
-    /// `onnx`, `gguf`, or `router` for a model that only dispatches.
+    /// `onnx`, `gguf`, `router` for a model that only dispatches, or `adapter` for a LoRA adapter
+    /// over a base the MLX engine runs (decision 0011).
     pub model_format: String,
     pub family: String,
     #[serde(default)]

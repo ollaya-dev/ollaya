@@ -275,6 +275,45 @@ impl Client {
         drain(self.create_stream(req).await?, on_progress).await
     }
 
+    /// `HEAD /api/blobs/:digest`: is the blob in the daemon's model store?
+    pub async fn blob_exists(&self, digest: &str) -> Result<bool> {
+        match self
+            .send(Method::HEAD, &format!("/api/blobs/{digest}"), None::<&()>)
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(ClientError::Api { status: 404, .. }) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// `POST /api/blobs/:digest`: upload `body` as the blob `digest` (its sha256). The daemon
+    /// checks the digest and stores nothing on a mismatch.
+    pub async fn upload_blob(&self, digest: &str, body: reqwest::Body) -> Result<()> {
+        let url = self.url(&format!("/api/blobs/{digest}"));
+        let resp = self
+            .request(Method::POST, &url)
+            .body(body)
+            .send()
+            .await
+            .map_err(|source| ClientError::Http {
+                url: url.clone(),
+                source,
+            })?;
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(());
+        }
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|source| ClientError::Http { url, source })?;
+        Err(ClientError::Api {
+            status: status.as_u16(),
+            body: ErrorBody::from_response(status.as_u16(), &bytes),
+        })
+    }
+
     fn url(&self, path: &str) -> String {
         format!("{}{path}", self.base)
     }
