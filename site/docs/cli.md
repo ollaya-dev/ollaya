@@ -121,6 +121,7 @@ It is configured with environment variables:
 | `OLLAYA_THREADS` | unset | CPU threads for each loaded model. Unset: ONNX Runtime's default, and for GGUF models half the CPUs on x86-64, all of them on arm64 |
 | `OLLAYA_API_KEY` | unset | Require `Authorization: Bearer <key>`; the CLI sends it too |
 | `OLLAYA_ORIGINS` | unset | Extra browser origins to allow, comma-separated |
+| `OLLAYA_READ_ONLY` | unset | `1`: clients cannot pull, create, copy or delete models, or change presets (`403 READ_ONLY`) |
 | `OLLAYA_REGISTRY` | `{{SITE_HOST}}` | Default registry host in model names |
 | `OLLAYA_LOG` | `info` | Log levels; `debug` logs every request with its status and duration |
 | `OLLAYA_LOG_DIR` | unset | Log to `<dir>/server.log` instead of stderr (created if missing; appended, never rotated) |

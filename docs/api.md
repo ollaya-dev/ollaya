@@ -200,6 +200,7 @@ The `code` set is **open**: clients MUST handle an unknown code by falling back 
 | `STATE_TRUNCATED` | 422 | `/v1/systemone` or `/v1/decisions` would drop part of `state` to fit the answering model's context | no |
 | `UNAUTHORIZED` | 401 | `OLLAYA_API_KEY` is set and the request has no matching `Authorization: Bearer` header | no |
 | `FORBIDDEN` | 403 | `Origin` or `Host` header not allowed ([§14](#14-security)) | no |
+| `READ_ONLY` | 403 | `OLLAYA_READ_ONLY` is set and the request would change the model store: pull, create, copy, delete, creating or deleting a custom preset, and `POST` on the reserved push and blob paths ([§14](#14-security)) | no |
 | `MODEL_NOT_FOUND` | 404 | Model (or a router's target) not on this machine; for `/api/pull`, not in the registry | no |
 | `NOT_FOUND` | 404 | No such endpoint | no |
 | `METHOD_NOT_ALLOWED` | 405 | Endpoint exists, method does not | no |
@@ -971,7 +972,8 @@ Only the layers this host needs are downloaded (the precision variant chosen at 
 **Errors before the stream starts are ordinary HTTP errors.** The server fetches the manifest
 before sending the response head. So a name that does not parse (`422`), a model that is not in the
 registry (`404 MODEL_NOT_FOUND`: `model "laya:xl" not found in registry ollaya.dev`) and an
-unreachable registry (`502 REGISTRY_ERROR`) have real status codes, and `curl --fail` works. Ollama
+unreachable registry (`502 REGISTRY_ERROR`) have real status codes, and `curl --fail` works. So does
+`403 READ_ONLY` from a read-only server ([§14](#14-security)). Ollama
 instead streams these as error lines after `200`. Status codes matter to scripts, and Ollama
 clients handle both forms. By digest, the same goes for a digest the registry doesn't have
 (`404 MODEL_NOT_FOUND`: `model "laya:en@sha256:<hex>" not found in registry ollaya.dev: it has no
@@ -1046,8 +1048,9 @@ Response: `200` with an empty body, as in Ollama.
 curl -X DELETE http://localhost:11435/api/delete -d '{"model": "triage"}'
 ```
 
-Errors: `404 MODEL_NOT_FOUND` if the name does not exist, `409 OPERATION_IN_PROGRESS` while a pull
-or create writes it, `422 INVALID_REQUEST`, `500 STORAGE_ERROR`.
+Errors: `403 READ_ONLY` on a read-only server, `404 MODEL_NOT_FOUND` if the name does not exist,
+`409 OPERATION_IN_PROGRESS` while a pull or create writes it, `422 INVALID_REQUEST`,
+`500 STORAGE_ERROR`.
 
 **Idempotency.** The effect is idempotent: after one or many calls the model is gone. The *response*
 is not: a repeat gets `404`, as in Ollama. That `404` tells `ollaya rm lyaa` that the name was a
@@ -1072,8 +1075,9 @@ Response: `200` with an empty body.
 curl http://localhost:11435/api/copy -d '{"source": "laya:en", "destination": "my-guardrail"}'
 ```
 
-Errors: `404 MODEL_NOT_FOUND` (source), `409 OPERATION_IN_PROGRESS` (a pull or create writes the
-destination), `422 INVALID_REQUEST`, `500 STORAGE_ERROR`.
+Errors: `403 READ_ONLY` on a read-only server, `404 MODEL_NOT_FOUND` (source),
+`409 OPERATION_IN_PROGRESS` (a pull or create writes the destination), `422 INVALID_REQUEST`,
+`500 STORAGE_ERROR`.
 
 **Idempotency.** The final state depends only on the request, so repeats converge. **Safe to
 retry.** Copying a model onto itself is a no-op `200`.
@@ -1141,8 +1145,8 @@ curl http://localhost:11435/api/create -d '{
 {"status":"success"}
 ```
 
-Errors: `404 MODEL_NOT_FOUND` (`from`), `409 OPERATION_IN_PROGRESS`, `422 INVALID_REQUEST`,
-`500 STORAGE_ERROR`.
+Errors: `403 READ_ONLY` on a read-only server, `404 MODEL_NOT_FOUND` (`from`),
+`409 OPERATION_IN_PROGRESS`, `422 INVALID_REQUEST`, `500 STORAGE_ERROR`.
 
 **Idempotency.** Layers are content-addressed, so the same request produces the same manifest.
 Repeats converge, and it is **safe to retry**. A concurrent create or pull of the same name gets
@@ -1344,7 +1348,8 @@ curl -X DELETE http://localhost:11435/api/presets/delete -d '{"name": "billing-c
 ```
 
 Errors: `404 NOT_FOUND` for a name no preset has (show, delete, and `preset` on `/api/decide`),
-`403 FORBIDDEN` for deleting a built-in preset, `422 INVALID_REQUEST`, `500 STORAGE_ERROR`.
+`403 FORBIDDEN` for deleting a built-in preset, `403 READ_ONLY` for create and delete on a read-only
+server, `422 INVALID_REQUEST`, `500 STORAGE_ERROR`.
 Create is idempotent (the same request leaves the same file); delete behaves like
 [`/api/delete`](#77-delete-apidelete): a repeat gets `404`.
 
@@ -1353,7 +1358,7 @@ Create is idempotent (the same request leaves the same file); delete behaves lik
 `POST /api/push`, `HEAD /api/blobs/:digest` and `POST /api/blobs/:digest` return
 `501 NOT_IMPLEMENTED`. The registry is static (manifests are files published with the site), so
 there is nothing to push to yet. The paths are reserved with Ollama's semantics, so adding them
-later changes nothing else.
+later changes nothing else. A read-only server answers their `POST` with `403 READ_ONLY`.
 
 ### 7.13 `GET /api/activity`
 
@@ -1754,6 +1759,15 @@ Therefore:
   TypeSafe SDK already sends `Bearer $TYPESAFE_API_KEY`, and the `ollaya` CLI and `ollaya-api`
   client send `$OLLAYA_API_KEY`. This keeps the protection laya-app has today (`LAYA_TOKEN`) for
   the shared GPU deployment.
+- **`OLLAYA_READ_ONLY`.** The API key lets its holder do everything, pulls included. With
+  `OLLAYA_READ_ONLY=1` the server refuses every HTTP request that changes the model store with
+  `403 READ_ONLY`: `POST /api/pull`, `POST /api/create`, `POST /api/copy`, `DELETE /api/delete`,
+  `POST /api/presets/create`, `DELETE /api/presets/delete`, and `POST` on `/api/push` and
+  `/api/blobs/:digest`. Decisions, loading and unloading, and every read (`/api/tags`,
+  `/api/show`, `/api/ps`, `/api/presets`, `/api/version`, `/v1/models`) stay open. Models come
+  from the host: pull them with `ollaya pull` through a server without the variable on the same
+  `OLLAYA_MODELS`, and keep them loaded with `OLLAYA_PRELOAD`. The server logs at
+  start that it is read-only.
 - **Startup warning.** When the bind address is not loopback and `OLLAYA_API_KEY` is unset, the
   server logs a warning at startup. It does not refuse to start: containers bind `0.0.0.0` behind
   port mapping, as Ollama's image does.
@@ -1806,6 +1820,7 @@ These are the variables that change API behaviour.
 | `OLLAYA_HOST` | `127.0.0.1:11435` | Server bind address; the client's target. `http://` is assumed if no scheme is given. A missing port means `11435` for `http` and `443` for `https`; an empty host means `127.0.0.1`. A path is kept as a prefix. With `127.0.0.1` or `localhost` the server also listens on `[::1]` at the same port, because Windows programs reach a WSL server at `localhost` over IPv6 first. |
 | `OLLAYA_API_KEY` | unset | Require `Authorization: Bearer <key>` ([§14](#14-security)); the client sends it |
 | `OLLAYA_ORIGINS` | unset | Extra allowed browser origins |
+| `OLLAYA_READ_ONLY` | unset | `1`, `true`, `yes` or `on` refuses pull, create, copy, delete and custom preset changes over HTTP with `403 READ_ONLY` ([§14](#14-security)); `0`, `false`, `no` or `off` turns it off. Any other value stops the daemon at start. |
 | `OLLAYA_KEEP_ALIVE` | `5m` | Default `keep_alive` ([§6](#6-keep_alive)) |
 | `OLLAYA_MAX_LOADED_MODELS` | `3` | Loaded-model limit |
 | `OLLAYA_DEVICE` | `auto` | Runner device: `auto` (MLX on the Apple GPU for models with an arch layer in builds with the `mlx` feature, else CUDA or ROCm if available, else CPU; on Windows, GGUF models without CUDA also use a discrete Vulkan GPU), `cpu`, `cuda`, `cuda:<n>`, `rocm`, `rocm:<n>` (GGUF only), `vulkan`, `vulkan:<n>` (GGUF only), `metal` |

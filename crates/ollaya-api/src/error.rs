@@ -26,6 +26,7 @@ pub enum ErrorCode {
     StateTruncated,
     Unauthorized,
     Forbidden,
+    ReadOnly,
     ModelNotFound,
     NotFound,
     MethodNotAllowed,
@@ -47,7 +48,7 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Every code this version defines, in the order of the table in `docs/api.md` §4.2.
-    pub const ALL: [ErrorCode; 22] = [
+    pub const ALL: [ErrorCode; 23] = [
         ErrorCode::InvalidJson,
         ErrorCode::InvalidRequest,
         ErrorCode::TooManyOptions,
@@ -55,6 +56,7 @@ impl ErrorCode {
         ErrorCode::StateTruncated,
         ErrorCode::Unauthorized,
         ErrorCode::Forbidden,
+        ErrorCode::ReadOnly,
         ErrorCode::ModelNotFound,
         ErrorCode::NotFound,
         ErrorCode::MethodNotAllowed,
@@ -81,6 +83,7 @@ impl ErrorCode {
             ErrorCode::StateTruncated => "STATE_TRUNCATED",
             ErrorCode::Unauthorized => "UNAUTHORIZED",
             ErrorCode::Forbidden => "FORBIDDEN",
+            ErrorCode::ReadOnly => "READ_ONLY",
             ErrorCode::ModelNotFound => "MODEL_NOT_FOUND",
             ErrorCode::NotFound => "NOT_FOUND",
             ErrorCode::MethodNotAllowed => "METHOD_NOT_ALLOWED",
@@ -112,7 +115,7 @@ impl ErrorCode {
         match self {
             ErrorCode::InvalidJson => 400,
             ErrorCode::Unauthorized => 401,
-            ErrorCode::Forbidden => 403,
+            ErrorCode::Forbidden | ErrorCode::ReadOnly => 403,
             ErrorCode::ModelNotFound | ErrorCode::NotFound => 404,
             ErrorCode::MethodNotAllowed => 405,
             ErrorCode::OperationInProgress => 409,
@@ -632,6 +635,17 @@ impl ErrorBody {
     /// `403 FORBIDDEN` for a disallowed `Origin` or `Host`.
     pub fn forbidden(what: &str) -> Self {
         ErrorBody::new(ErrorCode::Forbidden, format!("{what} is not allowed"))
+    }
+
+    /// `403 READ_ONLY`: `OLLAYA_READ_ONLY` refuses `path`, which changes the model store.
+    pub fn read_only(path: &str) -> Self {
+        ErrorBody::new(
+            ErrorCode::ReadOnly,
+            format!(
+                "{path} is turned off: this server is read-only (OLLAYA_READ_ONLY); \
+                 manage models on the host"
+            ),
+        )
     }
 
     /// `404 NOT_FOUND` for an unknown path. Ollama's text endpoints get a pointer to

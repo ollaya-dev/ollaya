@@ -403,7 +403,12 @@ async fn show(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Response>
     Ok(Json(views::show(s.store(), &info)).into_response())
 }
 
-async fn delete_model(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<StatusCode> {
+async fn delete_model(
+    State(s): State<Arc<AppState>>,
+    uri: Uri,
+    body: Body,
+) -> ApiResult<StatusCode> {
+    writable(&s, &uri)?;
     let req = parse(body, validate::delete_request).await?;
     let [name] = names([("model", &req.model)])?;
     match s.ollaya.delete(&req.model).await {
@@ -413,7 +418,8 @@ async fn delete_model(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<S
     }
 }
 
-async fn copy(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<StatusCode> {
+async fn copy(State(s): State<Arc<AppState>>, uri: Uri, body: Body) -> ApiResult<StatusCode> {
+    writable(&s, &uri)?;
     let req = parse(body, validate::copy_request).await?;
     names([("source", &req.source), ("destination", &req.destination)])?;
     written_name("destination", &req.destination)?;
@@ -428,7 +434,12 @@ async fn presets(State(s): State<Arc<AppState>>) -> ApiResult<Json<PresetsRespon
     Ok(Json(PresetsResponse { presets }))
 }
 
-async fn create_preset(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<StatusCode> {
+async fn create_preset(
+    State(s): State<Arc<AppState>>,
+    uri: Uri,
+    body: Body,
+) -> ApiResult<StatusCode> {
+    writable(&s, &uri)?;
     let req = parse(body, validate::create_preset_request).await?;
     s.ollaya.presets.put(&req).map_err(|e| api_error(&e))?;
     Ok(StatusCode::OK)
@@ -446,7 +457,12 @@ async fn show_preset(
     }
 }
 
-async fn delete_preset(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<StatusCode> {
+async fn delete_preset(
+    State(s): State<Arc<AppState>>,
+    uri: Uri,
+    body: Body,
+) -> ApiResult<StatusCode> {
+    writable(&s, &uri)?;
     let req = parse(body, validate::preset_request).await?;
     match s.ollaya.presets.delete(&req.name) {
         Ok(true) => Ok(StatusCode::OK),
@@ -455,8 +471,22 @@ async fn delete_preset(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<
     }
 }
 
-async fn reserved(uri: Uri) -> ApiError {
+/// `/api/push` and `/api/blobs/:digest`, not implemented yet. A read-only server answers their
+/// `POST` with `403 READ_ONLY`, as it will once they write to the model store.
+async fn reserved(State(s): State<Arc<AppState>>, method: Method, uri: Uri) -> ApiError {
+    if method == Method::POST && s.config.read_only {
+        return ErrorBody::read_only(uri.path()).into();
+    }
     ErrorBody::not_implemented(uri.path()).into()
+}
+
+/// `OLLAYA_READ_ONLY` refuses every request that changes the model store: pull, create, copy,
+/// delete and custom presets. Models come from the host instead.
+fn writable(s: &AppState, uri: &Uri) -> ApiResult<()> {
+    if s.config.read_only {
+        return Err(ErrorBody::read_only(uri.path()).into());
+    }
+    Ok(())
 }
 
 async fn not_found(uri: Uri) -> ApiError {
@@ -478,7 +508,8 @@ fn progress(p: ollaya_registry::Progress) -> ProgressResponse {
 
 /// `POST /api/pull`. Failures before the first layer line are HTTP errors; later ones are a
 /// final error line.
-async fn pull(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Response> {
+async fn pull(State(s): State<Arc<AppState>>, uri: Uri, body: Body) -> ApiResult<Response> {
+    writable(&s, &uri)?;
     let req = parse(body, validate::pull_request).await?;
     names([("model", &req.model)])?;
     let pull_error = |e: &Error| -> ApiError { error_body(e, true).into() };
@@ -567,7 +598,8 @@ async fn pull(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Response>
 
 /// `POST /api/create`. Creating writes a few small blobs, so the whole operation runs before
 /// the response starts: every failure is an ordinary HTTP error.
-async fn create(State(s): State<Arc<AppState>>, body: Body) -> ApiResult<Response> {
+async fn create(State(s): State<Arc<AppState>>, uri: Uri, body: Body) -> ApiResult<Response> {
+    writable(&s, &uri)?;
     let req = parse(body, validate::create_request).await?;
     names([("model", &req.model), ("from", &req.from)])?;
     written_name("model", &req.model)?;
@@ -1195,9 +1227,20 @@ pub async fn serve_bound(config: ServerConfig, listeners: Listeners) -> Result<(
         .collect::<Vec<_>>()
         .join(", ");
     if !state.loopback && state.config.api_key.is_none() {
+        let can = if state.config.read_only {
+            "run models"
+        } else {
+            "run, pull and delete models"
+        };
         tracing::warn!(
             "listening on {local}, which is reachable from other machines, without OLLAYA_API_KEY: \
-             anyone who can reach it can run, pull and delete models"
+             anyone who can reach it can {can}"
+        );
+    }
+    if state.config.read_only {
+        tracing::info!(
+            "read-only (OLLAYA_READ_ONLY): pull, create, copy, delete and preset changes over \
+             HTTP answer 403"
         );
     }
     tracing::info!(address = %local, version = VERSION, models = %state.config.models.display(),

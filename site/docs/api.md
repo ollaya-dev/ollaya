@@ -67,6 +67,7 @@ Every error, on every endpoint, has this body:
 | `STATE_TRUNCATED` | 422 | `/v1/systemone` or `/v1/decisions` would drop part of `state` to fit the model's context | no |
 | `UNAUTHORIZED` | 401 | `OLLAYA_API_KEY` is set and the request lacks the key | no |
 | `FORBIDDEN` | 403 | Browser `Origin` or `Host` header not allowed | no |
+| `READ_ONLY` | 403 | `OLLAYA_READ_ONLY` is set and the request would pull, create, copy or delete a model, or change a custom preset | no |
 | `MODEL_NOT_FOUND` | 404 | Model (or a router's target) not on this machine; for a pull, not in the registry | no |
 | `NOT_FOUND` | 404 | No such endpoint | no |
 | `METHOD_NOT_ALLOWED` | 405 | Endpoint exists, method doesn't | no |
@@ -486,6 +487,7 @@ GET /api/version
 The server binds to `127.0.0.1:11435` and, like Ollama, trusts local callers. Binding it to another address (`OLLAYA_HOST=0.0.0.0`) lets everyone who can reach the port run decisions and pull, delete and create models, so:
 
 - **`OLLAYA_API_KEY`** makes every request except `GET /`, `HEAD /` and CORS preflight require `Authorization: Bearer <key>`; otherwise the answer is `401 UNAUTHORIZED`. The TypeSafe SDK sends its key this way, and the `ollaya` CLI sends `$OLLAYA_API_KEY`. The server logs a warning when it listens beyond loopback without a key.
+- **`OLLAYA_READ_ONLY=1`** keeps clients from changing the models, since the API key lets its holder do everything. Pull, create, copy, delete, and creating or deleting a custom preset answer `403 READ_ONLY`. Decisions and every read stay open. Pull the models on the host first, through a server without the variable, and keep them loaded with `OLLAYA_PRELOAD`.
 - **TLS** is not terminated by the server; put a reverse proxy in front for remote access.
 - **Browsers.** Requests with an `Origin` header are allowed only from `localhost`, `127.0.0.1`, `0.0.0.0` and `[::1]` (any port), app and editor webviews, and the origins in `OLLAYA_ORIGINS` (comma-separated, `*` wildcards). A loopback server also rejects unexpected `Host` headers, which blocks DNS rebinding.
 - **Your data.** States and questions are never logged and never echoed in errors.
@@ -495,6 +497,7 @@ The server binds to `127.0.0.1:11435` and, like Ollama, trusts local callers. Bi
 | `OLLAYA_HOST` | `127.0.0.1:11435` | Bind address; the client's target. A loopback address also listens on `[::1]`, so Windows programs reach a server in WSL at `localhost` without delay |
 | `OLLAYA_API_KEY` | unset | Require `Authorization: Bearer <key>` |
 | `OLLAYA_ORIGINS` | unset | Extra allowed browser origins |
+| `OLLAYA_READ_ONLY` | unset | `1` refuses pull, create, copy, delete and preset changes with `403 READ_ONLY` |
 | `OLLAYA_KEEP_ALIVE` | `5m` | Default `keep_alive` |
 | `OLLAYA_MAX_LOADED_MODELS` | `3` | Loaded-model limit |
 | `OLLAYA_MAX_QUEUE` | `512` | Requests in flight before `503 QUEUE_FULL` |

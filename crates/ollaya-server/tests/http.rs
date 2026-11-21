@@ -1882,6 +1882,75 @@ async fn gguf_runner_that_dies_on_the_gpu_restarts_on_the_cpu() {
     d.stop().await;
 }
 
+async fn read_only_refuses_store_changes() {
+    let d = Daemon::start(laya_store, |c| c.read_only = true).await;
+    let read_only = |e: ClientError, what: &str| {
+        let (status, body) = api_err(e);
+        assert_eq!((status, &body.code), (403, &ErrorCode::ReadOnly), "{what}");
+        assert!(body.error.contains("read-only"), "{what}: {}", body.error);
+    };
+    read_only(
+        d.client
+            .pull(&PullRequest::new("laya:multilingual"), |_| {})
+            .await
+            .unwrap_err(),
+        "pull",
+    );
+    let create = serde_json::from_value(json!({"model": "mine", "from": "laya:en"})).unwrap();
+    read_only(
+        d.client.create(&create, |_| {}).await.unwrap_err(),
+        "create",
+    );
+    read_only(d.client.copy("laya:en", "mine").await.unwrap_err(), "copy");
+    read_only(d.client.delete("laya:en").await.unwrap_err(), "delete");
+    let preset = ollaya_api::CreatePresetRequest {
+        name: "my-triage".into(),
+        questions: serde_json::from_value(triage()).unwrap(),
+        description: None,
+        state: None,
+    };
+    read_only(
+        d.client.create_preset(&preset).await.unwrap_err(),
+        "create preset",
+    );
+    read_only(
+        d.client.delete_preset("my-triage").await.unwrap_err(),
+        "delete preset",
+    );
+    for path in ["/api/push", "/api/blobs/sha256:00"] {
+        let (status, _, body) = post_raw(&d.url(path), "{}").await;
+        assert_eq!(
+            (status, body["code"].as_str()),
+            (403, Some("READ_ONLY")),
+            "{path}"
+        );
+    }
+
+    // Nothing changed, and everything that only reads or decides still works.
+    let tags = d.client.tags().await.unwrap();
+    let mut names: Vec<_> = tags.models.iter().map(|m| m.name.as_str()).collect();
+    names.sort_unstable();
+    assert!(
+        names.contains(&"laya:en") && !names.contains(&"mine:latest"),
+        "{names:?}"
+    );
+    d.client.show("laya:en").await.unwrap();
+    d.client.presets().await.unwrap();
+    d.client.version().await.unwrap();
+    let answer = d
+        .client
+        .decide(&DecideRequest::new(
+            "laya:en",
+            json!("Hi, how much would we save by switching to the annual plan?"),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(answer.model, "laya:en");
+    assert!(!d.client.ps().await.unwrap().models.is_empty());
+    d.stop().await;
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("runner") {
@@ -1911,6 +1980,7 @@ fn main() {
         show_modelfile_keeps_a_multi_line_description,
         gguf_runner_that_dies_on_the_gpu_restarts_on_the_cpu,
         presets_create_show_decide_delete,
+        read_only_refuses_store_changes,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mut passed, mut failed) = (0, Vec::new());
