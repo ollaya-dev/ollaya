@@ -425,6 +425,28 @@ impl Runner {
     }
 }
 
+/// One row per loaded model name (decision 0011, section 3). A model loaded as itself and as the
+/// base of adapters is two runners with one name and one digest: its row counts both copies
+/// (`size`), is kept until stopped if either is, and otherwise lasts as long as the later one.
+/// Rows must be sorted by name.
+fn merge_rows(rows: Vec<RunningInfo>) -> Vec<RunningInfo> {
+    let mut out: Vec<RunningInfo> = Vec::with_capacity(rows.len());
+    for row in rows {
+        match out.last_mut() {
+            Some(last) if last.name == row.name => {
+                last.size += row.size;
+                last.loaded_at = last.loaded_at.min(row.loaded_at);
+                last.expires_at = match (last.expires_at, row.expires_at) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    _ => None,
+                };
+            }
+            _ => out.push(row),
+        }
+    }
+    out
+}
+
 /// The idle entry used longest ago: `(key, leases, last_used)` for each candidate. Eviction of
 /// runners and of adapters both pick this way.
 fn least_recently_used<K: Clone>(candidates: &[(K, usize, Instant)]) -> Option<K> {
@@ -746,13 +768,28 @@ impl Scheduler {
     /// Unload a model now (the runner finishes in-flight requests first). `digest` is the model's
     /// manifest digest. An adapter model leaves its runner; the runner goes with its last adapter.
     pub async fn unload(&self, digest: &str) -> bool {
-        let runner = self.runners.lock().unwrap().remove(digest);
-        if let Some(r) = runner {
-            while r.leases.load(Ordering::SeqCst) > 0 {
-                tokio::time::sleep(Duration::from_millis(20)).await;
+        // The runner keyed by this digest, and the shared runner of any adapters created on this
+        // manifest: `ollaya stop <base>` reaches the base whether it was loaded as itself, as the
+        // base of adapters, or both. Its adapters go with it, as when it is evicted.
+        let gone: Vec<Arc<Runner>> = {
+            let mut runners = self.runners.lock().unwrap();
+            let keys: Vec<String> = runners
+                .iter()
+                .filter(|(key, r)| {
+                    key.as_str() == digest || r.base.as_ref().is_some_and(|b| b.manifest == digest)
+                })
+                .map(|(key, _)| key.clone())
+                .collect();
+            keys.iter().filter_map(|k| runners.remove(k)).collect()
+        };
+        if !gone.is_empty() {
+            for r in gone {
+                while r.leases.load(Ordering::SeqCst) > 0 {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                r.kill().await;
+                tracing::info!(model = %r.name, "unloaded model");
             }
-            r.kill().await;
-            tracing::info!(model = %r.name, "unloaded model");
             return true;
         }
         let holder = self
@@ -841,7 +878,7 @@ impl Scheduler {
             }
         }
         out.sort_by(|a, b| a.name.cmp(&b.name));
-        out
+        merge_rows(out)
     }
 
     /// Unload every runner (daemon shutdown).

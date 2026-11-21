@@ -700,7 +700,25 @@ async fn adapter_models_create_decide_share_a_runner_and_delete() {
     // second runner, with its own copy of the base.
     let plain = ask("laya:en").await;
     assert_eq!(plain.model, "laya:en");
-    assert_eq!(d.client.ps().await.unwrap().models.len(), 4);
+    // Two runners, but `ps` shows one row per name: `laya:en` once, with both copies counted.
+    let ps = d.client.ps().await.unwrap().models;
+    let names: Vec<_> = ps.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["ft-a:latest", "ft-b:latest", "laya:en"],
+        "{names:?}"
+    );
+    assert!(
+        ps.iter().find(|m| m.name == "laya:en").unwrap().size > 5000,
+        "the plain runner's copy and the shared base's"
+    );
+    // `stop laya:en` reaches both runners, and the adapters that were on the shared one go.
+    d.client.unload("laya:en").await.unwrap();
+    assert!(d.client.ps().await.unwrap().models.is_empty());
+    ask("ft-a").await;
+    ask("ft-b").await;
+    ask("laya:en").await;
+    assert_eq!(d.client.ps().await.unwrap().models.len(), 3);
 
     // Deleting an adapter model drops it from its runner; the base and the other adapter stay.
     d.client.delete("ft-a").await.unwrap();
