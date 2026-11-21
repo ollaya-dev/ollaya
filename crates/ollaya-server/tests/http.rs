@@ -1069,6 +1069,37 @@ async fn a_runner_that_never_answers_does_not_hold_the_load_lock_for_ever() {
     d.stop().await;
 }
 
+async fn the_base_stops_being_kept_when_its_keep_forever_adapter_goes() {
+    let (d, weights) = adapter_daemon(|_| {}).await;
+    // Different alphas, so that the two are two models (one digest each).
+    for (name, alpha) in [("a", 8), ("b", 16)] {
+        create_adapter(&d, name, "laya:en", adapter_config(alpha), &weights).await;
+    }
+    let mut keep = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    keep.keep_alive = Some(KeepAlive::Forever);
+    d.client.decide(&keep).await.unwrap();
+    let req = DecideRequest::new("b", json!("x"), serde_json::from_value(triage()).ok());
+    d.client.decide(&req).await.unwrap();
+    let expires = |ps: Vec<ollaya_api::RunningModel>, name: &str| {
+        ps.into_iter().find(|m| m.name == name).unwrap().expires_at
+    };
+    let ps = d.client.ps().await.unwrap().models;
+    assert_eq!(
+        expires(ps.clone(), "laya:en"),
+        None,
+        "-1 on `a` keeps the base"
+    );
+    assert!(expires(ps, "b:latest").is_some());
+    // `a` goes; the base's clock is now `b`'s.
+    d.client.unload("a").await.unwrap();
+    let ps = d.client.ps().await.unwrap().models;
+    assert!(
+        expires(ps, "laya:en").is_some(),
+        "the base was kept for ever by an adapter that is gone"
+    );
+    d.stop().await;
+}
+
 async fn blobs_follow_the_api_key_are_verified_and_pruned() {
     let d = Daemon::start(laya_store, |c| c.api_key = Some("secret".into())).await;
     let bytes = b"some adapter bytes".to_vec();
@@ -2729,6 +2760,7 @@ fn main() {
         adapter_models_run_on_mlx_only_and_fail_alone,
         the_adapter_limit_drops_the_least_recently_used_idle_adapter,
         a_runner_that_never_answers_does_not_hold_the_load_lock_for_ever,
+        the_base_stops_being_kept_when_its_keep_forever_adapter_goes,
         blobs_follow_the_api_key_are_verified_and_pruned,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();

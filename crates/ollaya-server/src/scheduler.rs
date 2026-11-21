@@ -309,6 +309,23 @@ impl Runner {
         }
     }
 
+    /// Set the base's clock from the adapters that are left: kept forever only while one of them
+    /// is, and until the latest of their clocks. Called after an adapter goes, so a `-1` adapter
+    /// that is gone no longer keeps the base loaded.
+    fn recompute_clock(&self) {
+        let clock = base_clock(
+            self.adapters
+                .lock()
+                .unwrap()
+                .values()
+                .map(|a| (a.expires, a.keep_forever)),
+        );
+        *self.keep_forever.lock().unwrap() = clock.1;
+        if let Some(expires) = clock.0 {
+            *self.expires.lock().unwrap() = Some(expires);
+        }
+    }
+
     /// Drop an adapter from the runner (`DELETE /adapters/<digest>`).
     async fn delete_adapter(&self, digest: &str) -> Result<(), Error> {
         let resp = self
@@ -404,6 +421,7 @@ impl Runner {
         if let Some(a) = self.adapters.lock().unwrap().remove(digest) {
             tracing::info!(model = %a.name, "unloaded adapter");
         }
+        self.recompute_clock();
     }
 }
 
