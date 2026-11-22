@@ -651,11 +651,15 @@ impl Scheduler {
         let started = Instant::now();
         let key = model.runner_key();
         let mut loaded = false;
-        let runner = match self.lease_existing(key) {
+        let fast = match &model.adapter {
+            None => self.lease_existing(key),
+            Some(_) => self.lease_existing_adapter(key, &model.digest),
+        };
+        let runner = match fast {
             Some(r) => r,
             None => {
                 let _guard = self.load_lock.lock().await;
-                match self.lease_existing(key) {
+                let runner = match self.lease_existing(key) {
                     Some(r) => r,
                     None => {
                         self.make_room().await;
@@ -671,19 +675,20 @@ impl Scheduler {
                             load_ms = started.elapsed().as_millis() as u64, "loaded model");
                         runner
                     }
+                };
+                // The runner is leased from here: a failure gives the lease back.
+                if let Some(files) = &model.adapter {
+                    match self.lease_adapter_locked(&runner, model, files).await {
+                        Ok(did_load) => loaded |= did_load,
+                        Err(e) => {
+                            self.give_back(&runner);
+                            return Err(e);
+                        }
+                    }
                 }
+                runner
             }
         };
-        // The runner is leased from here: a failure gives the lease back.
-        if let Some(files) = &model.adapter {
-            match self.lease_adapter(&runner, model, files).await {
-                Ok(did_load) => loaded |= did_load,
-                Err(e) => {
-                    self.give_back(&runner);
-                    return Err(e);
-                }
-            }
-        }
         let keep_alive = keep_alive.unwrap_or_else(|| {
             let pinned = match &model.adapter {
                 Some(_) => runner
@@ -715,19 +720,15 @@ impl Scheduler {
         ))
     }
 
-    /// Lease `model` in `runner`, loading it into the runner when it is not there. Returns
-    /// whether it was loaded. Only that adapter fails when it cannot load: the base and the other
-    /// adapters stay.
-    async fn lease_adapter(
+    /// Lease `model` in `runner`, loading it into the runner when it is not there. Caller must
+    /// hold `self.load_lock`. Returns whether it was loaded. Only that adapter fails when it
+    /// cannot load: the base and the other adapters stay.
+    async fn lease_adapter_locked(
         &self,
         runner: &Arc<Runner>,
         model: &Loadable,
         files: &AdapterFiles,
     ) -> Result<bool, Error> {
-        if runner.lease_adapter(&model.digest) {
-            return Ok(false);
-        }
-        let _guard = self.load_lock.lock().await;
         if runner.lease_adapter(&model.digest) {
             return Ok(false);
         }
@@ -793,6 +794,20 @@ impl Scheduler {
     fn lease_existing(&self, digest: &str) -> Option<Arc<Runner>> {
         let runners = self.runners.lock().unwrap();
         let r = runners.get(digest)?.clone();
+        r.leases.fetch_add(1, Ordering::SeqCst);
+        *r.expires.lock().unwrap() = None;
+        Some(r)
+    }
+
+    /// Lease an existing runner together with an already-loaded adapter, atomically under
+    /// `runners`. Returns `None` without taking a runner lease when the adapter is not loaded, so
+    /// no caller ever waits on `load_lock` while holding a runner lease.
+    fn lease_existing_adapter(&self, key: &str, adapter: &str) -> Option<Arc<Runner>> {
+        let runners = self.runners.lock().unwrap();
+        let r = runners.get(key)?.clone();
+        if !r.lease_adapter(adapter) {
+            return None;
+        }
         r.leases.fetch_add(1, Ordering::SeqCst);
         *r.expires.lock().unwrap() = None;
         Some(r)
@@ -1610,6 +1625,98 @@ mod tests {
                 .await
                 .expect("load_lock stayed held after bounded Unloading timeout")
                 .unwrap();
+        drop(lease);
+        scheduler.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn make_room_evict_does_not_deadlock_with_cold_adapter_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let port = mock_adapter_server().await;
+        let scheduler = test_scheduler(1, Duration::from_secs(2));
+        let base_key = "shared-base";
+        let a_digest = "sha256:adapter-a";
+        let b_digest = "sha256:adapter-b";
+        let adapter_b = test_adapter_loadable(dir.path(), "ft-b:latest", b_digest, base_key);
+
+        let idle_a = || {
+            let mut adapters = HashMap::new();
+            adapters.insert(
+                a_digest.into(),
+                AdapterState {
+                    name: "ft-a:latest".into(),
+                    size: 1000,
+                    loaded_at: SystemTime::now(),
+                    leases: 0,
+                    last_used: Instant::now(),
+                    expires: Some(Instant::now() + Duration::from_secs(300)),
+                    keep_forever: false,
+                    pinned: false,
+                    removing: false,
+                },
+            );
+            adapters
+        };
+
+        // Part 1: `make_room` holds `load_lock` and evicts idle runner R while a cold adapter
+        // request for B waits on `load_lock`.
+        let runner = test_shared_runner(port, Duration::from_secs(2), idle_a(), 0);
+        scheduler
+            .runners
+            .lock()
+            .unwrap()
+            .insert(base_key.into(), runner);
+
+        let guard = scheduler.load_lock.lock().await;
+        let task2 = tokio::spawn({
+            let s = scheduler.clone();
+            let b = adapter_b.clone();
+            async move { s.acquire(&b, None).await }
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        tokio::time::timeout(Duration::from_secs(2), scheduler.evict(base_key))
+            .await
+            .expect("evict deadlocked while adapter request waited on load_lock");
+        drop(guard);
+
+        let res = tokio::time::timeout(Duration::from_secs(2), task2)
+            .await
+            .expect("adapter request hung")
+            .unwrap();
+        assert!(
+            matches!(res, Err(Error::LoadFailed(_))),
+            "expected LoadFailed after victim was evicted"
+        );
+
+        // Part 2: when R is not evicted, a waiting cold-adapter request holds no runner lease
+        // across `load_lock` and finishes loading B once `load_lock` is released.
+        let runner2 = test_shared_runner(port, Duration::from_secs(2), idle_a(), 0);
+        scheduler
+            .runners
+            .lock()
+            .unwrap()
+            .insert(base_key.into(), runner2.clone());
+
+        let guard = scheduler.load_lock.lock().await;
+        let task2 = tokio::spawn({
+            let s = scheduler.clone();
+            let b = adapter_b.clone();
+            async move { s.acquire(&b, None).await }
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(
+            runner2.leases.load(Ordering::SeqCst),
+            0,
+            "cold adapter request held runner lease while waiting on load_lock"
+        );
+        drop(guard);
+
+        let (lease, _) = tokio::time::timeout(Duration::from_secs(2), task2)
+            .await
+            .expect("cold adapter request hung")
+            .unwrap()
+            .unwrap();
         drop(lease);
         scheduler.shutdown().await;
     }
