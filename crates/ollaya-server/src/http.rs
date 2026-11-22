@@ -417,7 +417,13 @@ async fn delete_model(
     writable(&s, &uri)?;
     let req = parse(body, validate::delete_request).await?;
     let [name] = names([("model", &req.model)])?;
-    match s.ollaya.delete(&req.model).await {
+    let (ollaya, model) = (s.ollaya.clone(), req.model.clone());
+    // Spawn so a client disconnect while waiting on in-flight leases still finishes unloading
+    // and removes the manifest.
+    match tokio::spawn(async move { ollaya.delete(&model).await })
+        .await
+        .map_err(|e| api_error(&Error::Runner(format!("delete task failed: {e}"))))?
+    {
         Ok(true) => Ok(StatusCode::OK),
         Ok(false) => Err(ErrorBody::model_not_found(&name.to_string()).into()),
         Err(e) => Err(api_error(&e)),

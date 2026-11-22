@@ -91,6 +91,11 @@ mod fake_runner {
         let d_log: Option<&'static str> = fake["delete_log"]
             .as_str()
             .map(|s| &*Box::leak(s.to_owned().into_boxed_str()));
+        let slow_ms = fake["slow_ms"].as_u64().unwrap_or(0);
+        let slow_log: Option<&'static str> = fake["slow_log"]
+            .as_str()
+            .map(|s| &*Box::leak(s.to_owned().into_boxed_str()));
+        let delete_ms = fake["delete_ms"].as_u64().unwrap_or(0);
         let loaded: Arc<Mutex<HashSet<String>>> = Default::default();
         let (on_decide, on_add, on_drop) = (loaded.clone(), loaded.clone(), loaded);
         let app = axum::Router::new()
@@ -106,6 +111,18 @@ mod fake_runner {
                             StatusCode::NOT_FOUND,
                             json!({"code": "ADAPTER_NOT_FOUND", "message": format!("no adapter {a}")}),
                         );
+                    }
+                    if slow_ms > 0 && req["state"].as_str().is_some_and(|s| s.contains("SLOW")) {
+                        if let Some(log) = slow_log {
+                            use std::io::Write as _;
+                            let mut f = std::fs::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(log)
+                                .unwrap();
+                            writeln!(f, "slow").unwrap();
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(slow_ms)).await;
                     }
                     decide(&d, &req)
                 }),
@@ -151,6 +168,9 @@ mod fake_runner {
                     }
                     if hang_delete {
                         std::future::pending::<()>().await;
+                    }
+                    if delete_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delete_ms)).await;
                     }
                     if on_drop.lock().unwrap().remove(&digest) {
                         Json(json!({"status": "ok"})).into_response()
@@ -1274,6 +1294,107 @@ async fn blobs_follow_the_api_key_are_verified_and_pruned() {
             .unwrap_err(),
     );
     assert_eq!(status, 422);
+    d.stop().await;
+}
+
+async fn a_cancelled_delete_finishes_unloading_and_does_not_block_later_loads() {
+    let log_dir = tempfile::tempdir().unwrap();
+    let slow_log = log_dir.path().join("slow.log");
+    let (d, weights) = fake_adapter_daemon(
+        json!({"slow_ms": 600, "slow_log": slow_log.display().to_string()}),
+        Duration::from_millis(800),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    create_adapter(&d, "b", "laya:en", adapter_config(16), &weights).await;
+    d.client
+        .decide(&DecideRequest::new(
+            "a",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap();
+
+    // Hold a lease on `a` inside `/decide`, then send a DELETE that disconnects early.
+    let slow = tokio::spawn({
+        let client = Client::new(&d.base).unwrap();
+        async move {
+            client
+                .decide(&DecideRequest::new(
+                    "a",
+                    json!("SLOW"),
+                    serde_json::from_value(triage()).ok(),
+                ))
+                .await
+        }
+    });
+    for _ in 0..300 {
+        if std::fs::read_to_string(&slow_log)
+            .unwrap_or_default()
+            .contains("slow")
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        std::fs::read_to_string(&slow_log)
+            .unwrap_or_default()
+            .contains("slow"),
+        "slow decision never reached the runner"
+    );
+
+    let impatient = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_millis(150))
+        .build()
+        .unwrap();
+    let res = impatient
+        .delete(d.url("/api/delete"))
+        .json(&json!({"model": "a"}))
+        .send()
+        .await;
+    assert!(res.is_err(), "impatient delete should have timed out");
+
+    slow.await.unwrap().unwrap();
+    // Wait until `store.remove` finishes in the spawned delete task.
+    let mut removed = false;
+    for _ in 0..40 {
+        let tags = d.client.tags().await.unwrap().models;
+        if !tags.iter().any(|m| m.name == "a:latest") {
+            removed = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(removed, "cancelled delete left `a:latest` in the store");
+
+    // Later loads (both `b` and re-creating/loading `a`) must not hang on `Slot::Unloading`.
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        d.client.decide(&DecideRequest::new(
+            "b",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        )),
+    )
+    .await
+    .expect("load of `b` hung after cancelled delete")
+    .unwrap();
+    let (status, _) = create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    assert_eq!(status, 200);
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        d.client.decide(&DecideRequest::new(
+            "a",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        )),
+    )
+    .await
+    .expect("reload of `a` hung after cancelled delete")
+    .unwrap();
     d.stop().await;
 }
 
@@ -2857,6 +2978,7 @@ fn main() {
         the_base_stops_being_kept_when_its_keep_forever_adapter_goes,
         an_expiring_plain_runner_leaves_the_shared_base_alone_and_stop_takes_it,
         blobs_follow_the_api_key_are_verified_and_pruned,
+        a_cancelled_delete_finishes_unloading_and_does_not_block_later_loads,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mut passed, mut failed) = (0, Vec::new());

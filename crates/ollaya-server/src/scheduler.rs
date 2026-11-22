@@ -330,6 +330,7 @@ impl Runner {
     /// is, and until the latest of their clocks. Called after an adapter goes, so a `-1` adapter
     /// that is gone no longer keeps the base loaded.
     fn recompute_clock(&self) {
+        let now = Instant::now();
         let clock = base_clock(
             self.adapters
                 .lock()
@@ -338,9 +339,7 @@ impl Runner {
                 .map(|a| (a.expires, a.keep_forever)),
         );
         *self.keep_forever.lock().unwrap() = clock.1;
-        if let Some(expires) = clock.0 {
-            *self.expires.lock().unwrap() = Some(expires);
-        }
+        *self.expires.lock().unwrap() = clock.0.or(Some(now));
     }
 
     /// Drop an adapter from the runner (`DELETE /adapters/<digest>`).
@@ -418,27 +417,33 @@ impl Runner {
         picked
     }
 
-    /// Drop an adapter that [`Self::begin_remove`] marked, once its leases are over.
-    async fn finish_remove(&self, digest: &str) {
-        loop {
-            let leased = self
-                .adapters
-                .lock()
-                .unwrap()
-                .get(digest)
-                .is_some_and(|a| a.leases > 0);
-            if !leased {
-                break;
+    /// Drop an adapter that [`Self::begin_remove`] marked, once its leases are over. Spawned so a
+    /// cancelled `unload` future cannot leave the adapter stuck in `removing = true`.
+    async fn finish_remove(self: &Arc<Self>, digest: &str) {
+        let runner = self.clone();
+        let digest = digest.to_owned();
+        let _ = tokio::spawn(async move {
+            loop {
+                let leased = runner
+                    .adapters
+                    .lock()
+                    .unwrap()
+                    .get(&digest)
+                    .is_some_and(|a| a.leases > 0);
+                if !leased {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-        if let Err(e) = self.delete_adapter(digest, self.load_timeout).await {
-            tracing::warn!(model = %self.name, "{e}");
-        }
-        if let Some(a) = self.adapters.lock().unwrap().remove(digest) {
-            tracing::info!(model = %a.name, "unloaded adapter");
-        }
-        self.recompute_clock();
+            if let Err(e) = runner.delete_adapter(&digest, runner.load_timeout).await {
+                tracing::warn!(model = %runner.name, "{e}");
+            }
+            if let Some(a) = runner.adapters.lock().unwrap().remove(&digest) {
+                tracing::info!(model = %a.name, "unloaded adapter");
+            }
+            runner.recompute_clock();
+        })
+        .await;
     }
 }
 
@@ -727,10 +732,21 @@ impl Scheduler {
             return Ok(false);
         }
         let max = self.config.max_adapters.max(1);
+        let deadline = Instant::now() + self.config.load_timeout;
         let victim = loop {
             match runner.adapter_slot(&model.digest, max) {
                 // An unload of this very adapter is still running: wait it out, then load again.
-                Slot::Unloading => tokio::time::sleep(Duration::from_millis(20)).await,
+                Slot::Unloading => {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        return Err(Error::LoadFailed(format!(
+                            "{}: timed out waiting for a previous unload to finish ({} s)",
+                            model.name,
+                            self.config.load_timeout.as_secs()
+                        )));
+                    }
+                    tokio::time::sleep(remaining.min(Duration::from_millis(20))).await;
+                }
                 Slot::Free => break None,
                 Slot::Evict(victim) => break Some(victim),
                 Slot::Full => {
@@ -1276,9 +1292,148 @@ const STDERR_TAIL: usize = 5;
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::process::Stdio;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant, SystemTime};
 
-    use super::{Plan, base_clock, least_recently_used, plan, runner_warns};
+    use axum::Json;
+    use axum::routing::{delete, post};
+    use ollaya_api::KeepAlive;
+    use ollaya_decision::Calibration;
+    use ollaya_registry::{ModelConfig, ModelName};
+    use serde_json::json;
+    use tokio::process::{Child, Command};
+
+    use super::{
+        AdapterState, Base, Plan, Runner, Scheduler, SchedulerConfig, base_clock,
+        least_recently_used, plan, runner_warns,
+    };
+    use crate::Error;
+    use crate::models::{AdapterFiles, EngineFiles, Inputs, Loadable, RunnerFiles};
+
+    fn dummy_child() -> Child {
+        #[cfg(unix)]
+        let mut cmd = {
+            let mut c = Command::new("sleep");
+            c.arg("60");
+            c
+        };
+        #[cfg(windows)]
+        let mut cmd = {
+            let mut c = Command::new("ping");
+            c.args(["-n", "60", "127.0.0.1"]);
+            c
+        };
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap()
+    }
+
+    async fn mock_adapter_server() -> u16 {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = axum::Router::new()
+            .route("/adapters", post(|| async { Json(json!({"bytes": 1000})) }))
+            .route(
+                "/adapters/{digest}",
+                delete(|| async { Json(json!({"status": "ok"})) }),
+            );
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        port
+    }
+
+    fn test_scheduler(max_loaded: usize, load_timeout: Duration) -> Arc<Scheduler> {
+        Scheduler::new(SchedulerConfig {
+            keep_alive: KeepAlive::For(Duration::from_secs(300)),
+            max_loaded,
+            max_adapters: 4,
+            device: "metal".into(),
+            threads: None,
+            load_timeout,
+            exe: PathBuf::from("nonexistent-ollaya-test-exe"),
+            arg0: None,
+            env: vec![],
+            llama_dir: None,
+            cpu_exe: None,
+        })
+    }
+
+    fn test_adapter_loadable(dir: &Path, name: &str, digest: &str, base_key: &str) -> Loadable {
+        let placeholder = |file: &str| {
+            let p = dir.join(file);
+            if !p.exists() {
+                std::fs::write(&p, b"{}").unwrap();
+            }
+            p
+        };
+        let config: ModelConfig =
+            serde_json::from_value(json!({"model_format": "adapter", "family": "laya"})).unwrap();
+        Loadable {
+            name: ModelName::parse(name).unwrap(),
+            digest: digest.into(),
+            files: EngineFiles::Onnx(RunnerFiles {
+                graph_fp32: None,
+                graph_fp16: None,
+                tokenizer: placeholder("tokenizer.json"),
+                decision: placeholder("decision.json"),
+                arch: Some(placeholder("arch.json")),
+                weights: vec![placeholder("base.safetensors")],
+                vision_graph: None,
+            }),
+            calibration: Calibration::default(),
+            inputs: Inputs::default(),
+            config,
+            questions: None,
+            size: 1000,
+            adapter: Some(AdapterFiles {
+                spec: placeholder("spec.json"),
+                weights: placeholder("adapter.safetensors"),
+                key: base_key.into(),
+                parent: "laya:en".into(),
+                base_manifest: "sha256:base".into(),
+                base_size: 5000,
+            }),
+        }
+    }
+
+    fn test_shared_runner(
+        port: u16,
+        load_timeout: Duration,
+        adapters: HashMap<String, AdapterState>,
+        leases: usize,
+    ) -> Arc<Runner> {
+        Arc::new(Runner {
+            name: "laya:en".into(),
+            digest: "sha256:base".into(),
+            device: "metal".into(),
+            precision: "fp32".into(),
+            engine: "mlx".into(),
+            size: 5000,
+            loaded_at: SystemTime::now(),
+            port,
+            base: Some(Base {
+                name: "laya:en".into(),
+                manifest: "sha256:base".into(),
+            }),
+            adapters: Mutex::new(adapters),
+            child: tokio::sync::Mutex::new(dummy_child()),
+            http: reqwest::Client::builder().no_proxy().build().unwrap(),
+            load_timeout,
+            leases: AtomicUsize::new(leases),
+            expires: Mutex::new(None),
+            keep_forever: Mutex::new(false),
+            pinned: AtomicBool::new(false),
+            last_used: Mutex::new(Instant::now()),
+        })
+    }
 
     #[test]
     fn runner_warnings_are_recognised_with_or_without_colour() {
@@ -1339,5 +1494,123 @@ mod tests {
         // `-1` on one adapter keeps the base forever.
         assert_eq!(base_clock([(at(10), false), (None, true)]), (at(10), true));
         assert_eq!(base_clock([]), (None, false));
+    }
+
+    #[tokio::test]
+    async fn dropped_unload_completes_and_allows_later_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let port = mock_adapter_server().await;
+        let scheduler = test_scheduler(2, Duration::from_secs(2));
+        let base_key = "shared-base";
+        let a_digest = "sha256:adapter-a";
+        let b_digest = "sha256:adapter-b";
+        let adapter_a = test_adapter_loadable(dir.path(), "ft-a:latest", a_digest, base_key);
+        let mut adapters = HashMap::new();
+        adapters.insert(
+            a_digest.into(),
+            AdapterState {
+                name: "ft-a:latest".into(),
+                size: 1000,
+                loaded_at: SystemTime::now(),
+                leases: 1,
+                last_used: Instant::now(),
+                expires: None,
+                keep_forever: false,
+                pinned: false,
+                removing: false,
+            },
+        );
+        adapters.insert(
+            b_digest.into(),
+            AdapterState {
+                name: "ft-b:latest".into(),
+                size: 1000,
+                loaded_at: SystemTime::now(),
+                leases: 0,
+                last_used: Instant::now(),
+                expires: None,
+                keep_forever: true,
+                pinned: false,
+                removing: false,
+            },
+        );
+        let runner = test_shared_runner(port, Duration::from_secs(2), adapters, 1);
+        scheduler
+            .runners
+            .lock()
+            .unwrap()
+            .insert(base_key.into(), runner.clone());
+
+        // Drop `unload` while `finish_remove` waits for adapter `a`'s active lease.
+        let cancelled = tokio::time::timeout(Duration::from_millis(60), scheduler.unload(a_digest))
+            .await
+            .is_err();
+        assert!(cancelled, "unload should block while lease is active");
+
+        // End the lease; a spawned `finish_remove` still finishes removing `a`.
+        if let Some(a) = runner.adapters.lock().unwrap().get_mut(a_digest) {
+            a.leases = 0;
+        }
+        runner.leases.store(0, Ordering::SeqCst);
+
+        let (lease, _) =
+            tokio::time::timeout(Duration::from_secs(2), scheduler.acquire(&adapter_a, None))
+                .await
+                .expect("acquire hung after cancelled unload")
+                .unwrap();
+        drop(lease);
+        scheduler.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn unloading_wait_is_bounded_by_load_timeout() {
+        let dir = tempfile::tempdir().unwrap();
+        let port = mock_adapter_server().await;
+        let scheduler = test_scheduler(2, Duration::from_millis(120));
+        let base_key = "shared-base";
+        let a_digest = "sha256:adapter-a";
+        let b_digest = "sha256:adapter-b";
+        let adapter_a = test_adapter_loadable(dir.path(), "ft-a:latest", a_digest, base_key);
+        let adapter_b = test_adapter_loadable(dir.path(), "ft-b:latest", b_digest, base_key);
+        let mut adapters = HashMap::new();
+        adapters.insert(
+            a_digest.into(),
+            AdapterState {
+                name: "ft-a:latest".into(),
+                size: 1000,
+                loaded_at: SystemTime::now(),
+                leases: 1,
+                last_used: Instant::now(),
+                expires: None,
+                keep_forever: false,
+                pinned: false,
+                removing: true,
+            },
+        );
+        let runner = test_shared_runner(port, Duration::from_millis(120), adapters, 1);
+        scheduler
+            .runners
+            .lock()
+            .unwrap()
+            .insert(base_key.into(), runner);
+
+        let err = tokio::time::timeout(Duration::from_secs(2), scheduler.acquire(&adapter_a, None))
+            .await
+            .expect("Slot::Unloading loop did not respect load_timeout")
+            .err()
+            .expect("expected LoadFailed");
+        assert!(
+            matches!(err, Error::LoadFailed(ref m) if m.contains("unload") || m.contains("timed out")),
+            "unexpected error: {err:?}"
+        );
+
+        // `load_lock` was released, so another adapter loads cleanly.
+        let (lease, _) =
+            tokio::time::timeout(Duration::from_secs(2), scheduler.acquire(&adapter_b, None))
+                .await
+                .expect("load_lock stayed held after bounded Unloading timeout")
+                .unwrap();
+        drop(lease);
+        scheduler.shutdown().await;
     }
 }
