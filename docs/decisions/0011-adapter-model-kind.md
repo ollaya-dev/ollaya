@@ -1,6 +1,6 @@
 # 0011: Adapters as a model kind: N LoRA fine-tunes over one loaded base
 
-- Status: proposed, 2026-11-19 (issue #172); revised 2026-11-21 after review (numbered 0011 because #169 takes 0010).
+- Status: accepted, 2026-11-22 (issue #172; proposed 2026-11-19, revised 2026-11-21, numbered 0011 because #169 takes 0010).
   The encoder slice is implemented on the ModernBERT backbone (decoders and DeBERTa-v2 are not yet, see section 4);
   the rest of the design stands as written.
 - Applies to: `crates/ollaya-registry/src/manifest.rs`, `crates/ollaya/src/modelfile.rs`,
