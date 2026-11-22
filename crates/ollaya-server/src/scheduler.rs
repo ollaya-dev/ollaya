@@ -403,17 +403,23 @@ impl Runner {
     }
 
     /// Mark the adapters `pick` chooses as being unloaded, so no request leases them meanwhile.
+    /// Adapters already being removed are skipped so no second DELETE is sent.
     fn begin_remove(
         &self,
         pick: impl FnOnce(&HashMap<String, AdapterState>) -> Vec<String>,
     ) -> Vec<String> {
         let mut adapters = self.adapters.lock().unwrap();
-        let picked = pick(&adapters);
-        for d in &picked {
-            if let Some(a) = adapters.get_mut(d) {
-                a.removing = true;
-            }
-        }
+        let mut picked = pick(&adapters);
+        picked.retain(|d| {
+            adapters.get_mut(d).is_some_and(|a| {
+                if a.removing {
+                    false
+                } else {
+                    a.removing = true;
+                    true
+                }
+            })
+        });
         picked
     }
 
@@ -444,6 +450,23 @@ impl Runner {
             runner.recompute_clock();
         })
         .await;
+    }
+
+    /// Wait until an in-flight removal of `digest` finishes (the entry is gone or replaced by a
+    /// new load with `removing == false`).
+    async fn wait_removed(&self, digest: &str) {
+        loop {
+            let removing = self
+                .adapters
+                .lock()
+                .unwrap()
+                .get(digest)
+                .is_some_and(|a| a.removing);
+            if !removing {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
     }
 }
 
@@ -892,13 +915,20 @@ impl Scheduler {
             return false;
         };
         let marked = runner.begin_remove(|a| {
-            a.contains_key(digest)
+            a.get(digest)
+                .is_some_and(|s| !s.removing)
                 .then(|| digest.to_owned())
                 .into_iter()
                 .collect()
         });
-        for d in marked {
-            runner.finish_remove(&d).await;
+        if marked.is_empty() {
+            // Another unload (the reaper or a concurrent stop) already claimed it: wait without
+            // sending a second DELETE.
+            runner.wait_removed(digest).await;
+        } else {
+            for d in marked {
+                runner.finish_remove(&d).await;
+            }
         }
         if runner.adapters.lock().unwrap().is_empty() {
             let gone = {

@@ -1560,6 +1560,70 @@ async fn two_plain_runners_with_one_name_stay_two_ps_rows() {
     d.stop().await;
 }
 
+async fn a_stop_racing_the_reaper_sends_one_delete() {
+    let log_dir = tempfile::tempdir().unwrap();
+    let log = log_dir.path().join("deletes.log");
+    let (d, weights) = fake_adapter_daemon(
+        json!({"delete_ms": 400, "delete_log": log.display().to_string()}),
+        Duration::from_secs(5),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    create_adapter(&d, "b", "laya:en", adapter_config(16), &weights).await;
+
+    let mut keep_b = DecideRequest::new("b", json!("x"), serde_json::from_value(triage()).ok());
+    keep_b.keep_alive = Some(KeepAlive::Forever);
+    d.client.decide(&keep_b).await.unwrap();
+
+    let mut expire_a = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    expire_a.keep_alive = Some(KeepAlive::For(Duration::from_millis(100)));
+    d.client.decide(&expire_a).await.unwrap();
+
+    let a_digest = Store::open(d._dir.path())
+        .unwrap()
+        .read_manifest(&ModelName::parse("a").unwrap())
+        .unwrap()
+        .unwrap()
+        .digest;
+
+    // Wait until the reaper enters DELETE /adapters/<a_digest> (while `delete_ms` holds it open
+    // and `a.removing == true`), then race `unload("a")` against it.
+    let mut saw_delete = false;
+    for _ in 0..150 {
+        if std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .lines()
+            .any(|l| l.trim() == a_digest)
+        {
+            saw_delete = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(saw_delete, "reaper never started unloading `a`");
+
+    d.client.unload("a").await.unwrap();
+
+    let contents = std::fs::read_to_string(&log).unwrap_or_default();
+    let count = contents.lines().filter(|l| l.trim() == a_digest).count();
+    assert_eq!(
+        count, 1,
+        "expected 1 DELETE for {a_digest}, got: {contents:?}"
+    );
+
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(names, ["b:latest", "laya:en"], "{names:?}");
+    d.stop().await;
+}
+
 async fn unknown_paths_methods_and_reserved() {
     let d = Daemon::laya().await;
     let r = http().get(d.url("/api/nope")).send().await.unwrap();
@@ -3143,6 +3207,7 @@ fn main() {
         a_cancelled_delete_finishes_unloading_and_does_not_block_later_loads,
         a_failed_adapter_load_keeps_the_other_adapters_keep_alive,
         two_plain_runners_with_one_name_stay_two_ps_rows,
+        a_stop_racing_the_reaper_sends_one_delete,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mut passed, mut failed) = (0, Vec::new());
