@@ -782,13 +782,32 @@ impl Scheduler {
         Ok(true)
     }
 
-    /// Give back a runner lease taken for a load that failed; the runner's clock starts.
+    /// Give back a runner lease taken for a load that failed; the runner's clock resumes from its
+    /// remaining adapters (as [`Lease::drop`] does), or starts from the default keep-alive when no
+    /// adapters are loaded yet.
     fn give_back(&self, runner: &Runner) {
-        runner.leases.fetch_sub(1, Ordering::SeqCst);
-        *runner.last_used.lock().unwrap() = Instant::now();
-        if let KeepAlive::For(d) = self.config.keep_alive {
-            *runner.expires.lock().unwrap() = Some(Instant::now() + d);
+        let now = Instant::now();
+        *runner.last_used.lock().unwrap() = now;
+        let (empty, clock) = {
+            let adapters = runner.adapters.lock().unwrap();
+            (
+                adapters.is_empty(),
+                base_clock(adapters.values().map(|a| (a.expires, a.keep_forever))),
+            )
+        };
+        if empty {
+            match self.config.keep_alive {
+                KeepAlive::Forever => *runner.keep_forever.lock().unwrap() = true,
+                KeepAlive::For(d) => {
+                    *runner.keep_forever.lock().unwrap() = false;
+                    *runner.expires.lock().unwrap() = Some(now + d);
+                }
+            }
+        } else {
+            *runner.keep_forever.lock().unwrap() = clock.1;
+            *runner.expires.lock().unwrap() = clock.0.or(Some(now));
         }
+        runner.leases.fetch_sub(1, Ordering::SeqCst);
     }
 
     fn lease_existing(&self, digest: &str) -> Option<Arc<Runner>> {

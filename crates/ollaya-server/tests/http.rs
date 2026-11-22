@@ -1398,6 +1398,98 @@ async fn a_cancelled_delete_finishes_unloading_and_does_not_block_later_loads() 
     d.stop().await;
 }
 
+async fn a_failed_adapter_load_keeps_the_other_adapters_keep_alive() {
+    let d = Daemon::start(
+        |dir| add_mlx_model(&Store::open(dir).unwrap(), "laya:en", json!({})),
+        |c| {
+            c.device = "metal".into();
+            c.keep_alive = KeepAlive::For(Duration::from_secs(60));
+        },
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    create_adapter(&d, "good", "laya:en", adapter_config(8), &weights).await;
+    create_adapter(&d, "bad", "laya:en", adapter_config(16), &weights).await;
+    let store = Store::open(d._dir.path()).unwrap();
+    let bad_name = ModelName::parse("bad").unwrap();
+    let mut m = store.read_manifest(&bad_name).unwrap().unwrap().manifest;
+    m.layers.retain(|l| l.media_type != media::DECISION);
+    m.layers.push(blob(
+        &store,
+        media::DECISION,
+        decision_json(json!({"fail_adapter": true}))
+            .to_string()
+            .as_bytes(),
+        None,
+    ));
+    store
+        .write_manifest(&bad_name, &serde_json::to_vec(&m).unwrap())
+        .unwrap();
+
+    // `good` holds a 1h keep-alive; `bad` failing must not cut the base back to 60s.
+    let mut long = DecideRequest::new("good", json!("x"), serde_json::from_value(triage()).ok());
+    long.keep_alive = Some(KeepAlive::For(Duration::from_secs(3600)));
+    d.client.decide(&long).await.unwrap();
+
+    let base_expires = |ps: &[ollaya_api::RunningModel]| {
+        ps.iter().find(|m| m.name == "laya:en").unwrap().expires_at
+    };
+    let before =
+        base_expires(&d.client.ps().await.unwrap().models).expect("laya:en should have an expiry");
+    assert!(
+        std::time::SystemTime::from(before)
+            .duration_since(std::time::SystemTime::now())
+            .unwrap()
+            > Duration::from_secs(1800)
+    );
+
+    let (status, body) = api_err(
+        d.client
+            .decide(&DecideRequest::new(
+                "bad",
+                json!("x"),
+                serde_json::from_value(triage()).ok(),
+            ))
+            .await
+            .unwrap_err(),
+    );
+    assert_eq!((status, body.code), (500, ErrorCode::ModelLoadFailed));
+
+    let after =
+        base_expires(&d.client.ps().await.unwrap().models).expect("laya:en should keep its expiry");
+    let remaining = std::time::SystemTime::from(after)
+        .duration_since(std::time::SystemTime::now())
+        .unwrap_or_default();
+    assert!(
+        remaining > Duration::from_secs(1800),
+        "failed adapter load cut base keep-alive short to {remaining:?}"
+    );
+
+    // Likewise when another adapter keeps the base loaded forever (`-1`).
+    let mut forever = DecideRequest::new("good", json!("x"), serde_json::from_value(triage()).ok());
+    forever.keep_alive = Some(KeepAlive::Forever);
+    d.client.decide(&forever).await.unwrap();
+    assert_eq!(base_expires(&d.client.ps().await.unwrap().models), None);
+
+    let (status, body) = api_err(
+        d.client
+            .decide(&DecideRequest::new(
+                "bad",
+                json!("x"),
+                serde_json::from_value(triage()).ok(),
+            ))
+            .await
+            .unwrap_err(),
+    );
+    assert_eq!((status, body.code), (500, ErrorCode::ModelLoadFailed));
+    assert_eq!(
+        base_expires(&d.client.ps().await.unwrap().models),
+        None,
+        "failed adapter load cleared keep_forever on the base"
+    );
+    d.stop().await;
+}
+
 async fn unknown_paths_methods_and_reserved() {
     let d = Daemon::laya().await;
     let r = http().get(d.url("/api/nope")).send().await.unwrap();
@@ -2979,6 +3071,7 @@ fn main() {
         an_expiring_plain_runner_leaves_the_shared_base_alone_and_stop_takes_it,
         blobs_follow_the_api_key_are_verified_and_pruned,
         a_cancelled_delete_finishes_unloading_and_does_not_block_later_loads,
+        a_failed_adapter_load_keeps_the_other_adapters_keep_alive,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mut passed, mut failed) = (0, Vec::new());
