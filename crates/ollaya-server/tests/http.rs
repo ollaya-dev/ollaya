@@ -1490,6 +1490,76 @@ async fn a_failed_adapter_load_keeps_the_other_adapters_keep_alive() {
     d.stop().await;
 }
 
+async fn two_plain_runners_with_one_name_stay_two_ps_rows() {
+    let d = Daemon::start(
+        |dir| {
+            add_model(
+                &Store::open(dir).unwrap(),
+                "laya:en",
+                &["en"],
+                json!({"v": 1}),
+            )
+        },
+        |c| c.max_loaded = 4,
+    )
+    .await;
+    let store = Store::open(d._dir.path()).unwrap();
+    let name = ModelName::parse("laya:en").unwrap();
+    let d1 = store
+        .read_manifest(&name)
+        .unwrap()
+        .unwrap()
+        .digest
+        .trim_start_matches("sha256:")
+        .to_owned();
+    d.client
+        .decide(&DecideRequest::new(
+            "laya:en",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap();
+
+    // Re-pulling the tag gives a second manifest digest while the old runner stays loaded.
+    add_model(&store, "laya:en", &["en"], json!({"v": 2}));
+    let d2 = store
+        .read_manifest(&name)
+        .unwrap()
+        .unwrap()
+        .digest
+        .trim_start_matches("sha256:")
+        .to_owned();
+    assert_ne!(d1, d2);
+    d.client
+        .decide(&DecideRequest::new(
+            "laya:en",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap();
+
+    let rows: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .filter(|m| m.name == "laya:en")
+        .collect();
+    let mut digests: Vec<_> = rows.iter().map(|m| m.digest.as_str()).collect();
+    digests.sort();
+    let mut expected = vec![d1.as_str(), d2.as_str()];
+    expected.sort();
+    assert_eq!(
+        digests, expected,
+        "two plain runners with one name should stay two ps rows: {digests:?}"
+    );
+    d.stop().await;
+}
+
 async fn unknown_paths_methods_and_reserved() {
     let d = Daemon::laya().await;
     let r = http().get(d.url("/api/nope")).send().await.unwrap();
@@ -3072,6 +3142,7 @@ fn main() {
         blobs_follow_the_api_key_are_verified_and_pruned,
         a_cancelled_delete_finishes_unloading_and_does_not_block_later_loads,
         a_failed_adapter_load_keeps_the_other_adapters_keep_alive,
+        two_plain_runners_with_one_name_stay_two_ps_rows,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mut passed, mut failed) = (0, Vec::new());

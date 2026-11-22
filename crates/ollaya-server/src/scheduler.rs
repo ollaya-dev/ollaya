@@ -447,26 +447,32 @@ impl Runner {
     }
 }
 
-/// One row per loaded model name (decision 0011, section 3). A model loaded as itself and as the
-/// base of adapters is two runners with one name and one digest: its row counts both copies
-/// (`size`), is kept until stopped if either is, and otherwise lasts as long as the later one.
-/// Rows must be sorted by name.
-fn merge_rows(rows: Vec<RunningInfo>) -> Vec<RunningInfo> {
-    let mut out: Vec<RunningInfo> = Vec::with_capacity(rows.len());
-    for row in rows {
+/// One row per loaded model name and digest when a model is loaded both as itself and as the
+/// base of adapters (decision 0011, section 3): its row counts both copies (`size`), is kept
+/// until stopped if either is, and otherwise lasts as long as the later one. Two plain runners
+/// with the same name (e.g. a re-pulled tag whose old digest is still loaded) stay two rows.
+/// Rows must be sorted by `(name, digest)`.
+fn merge_rows(rows: Vec<(RunningInfo, bool)>) -> Vec<RunningInfo> {
+    let mut out: Vec<(RunningInfo, bool)> = Vec::with_capacity(rows.len());
+    for (row, shared) in rows {
         match out.last_mut() {
-            Some(last) if last.name == row.name => {
+            Some((last, last_shared))
+                if last.name == row.name
+                    && last.digest == row.digest
+                    && (*last_shared || shared) =>
+            {
                 last.size += row.size;
                 last.loaded_at = last.loaded_at.min(row.loaded_at);
                 last.expires_at = match (last.expires_at, row.expires_at) {
                     (Some(a), Some(b)) => Some(a.max(b)),
                     _ => None,
                 };
+                *last_shared = true;
             }
-            _ => out.push(row),
+            _ => out.push((row, shared)),
         }
     }
-    out
+    out.into_iter().map(|(info, _)| info).collect()
 }
 
 /// The idle entry used longest ago: `(key, leases, last_used)` for each candidate. Eviction of
@@ -916,7 +922,7 @@ impl Scheduler {
         let now_i = Instant::now();
         let now_s = SystemTime::now();
         let at = |e: Instant| now_s + e.saturating_duration_since(now_i);
-        let mut out: Vec<RunningInfo> = Vec::new();
+        let mut out: Vec<(RunningInfo, bool)> = Vec::new();
         for r in self.runners.lock().unwrap().values() {
             let busy = r.leases.load(Ordering::SeqCst) > 0;
             let expires_at = if *r.keep_forever.lock().unwrap() {
@@ -929,18 +935,21 @@ impl Scheduler {
             // One row per loaded model name: the base, and one for each adapter over it. The
             // base's `size` is the base's, an adapter's only its own, so the rows add up to what
             // the runner holds.
-            out.push(RunningInfo {
-                name: r.name.clone(),
-                digest: r
-                    .base
-                    .as_ref()
-                    .map_or_else(|| r.digest.clone(), |b| b.manifest.clone()),
-                device: r.device.clone(),
-                precision: r.precision.clone(),
-                size: r.size,
-                loaded_at: r.loaded_at,
-                expires_at,
-            });
+            out.push((
+                RunningInfo {
+                    name: r.name.clone(),
+                    digest: r
+                        .base
+                        .as_ref()
+                        .map_or_else(|| r.digest.clone(), |b| b.manifest.clone()),
+                    device: r.device.clone(),
+                    precision: r.precision.clone(),
+                    size: r.size,
+                    loaded_at: r.loaded_at,
+                    expires_at,
+                },
+                r.base.is_some(),
+            ));
             for (digest, a) in r.adapters.lock().unwrap().iter() {
                 let expires_at = if a.keep_forever {
                     None
@@ -949,18 +958,21 @@ impl Scheduler {
                 } else {
                     a.expires.map(at)
                 };
-                out.push(RunningInfo {
-                    name: a.name.clone(),
-                    digest: digest.clone(),
-                    device: r.device.clone(),
-                    precision: r.precision.clone(),
-                    size: a.size,
-                    loaded_at: a.loaded_at,
-                    expires_at,
-                });
+                out.push((
+                    RunningInfo {
+                        name: a.name.clone(),
+                        digest: digest.clone(),
+                        device: r.device.clone(),
+                        precision: r.precision.clone(),
+                        size: a.size,
+                        loaded_at: a.loaded_at,
+                        expires_at,
+                    },
+                    false,
+                ));
             }
         }
-        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out.sort_by(|(a, _), (b, _)| a.name.cmp(&b.name).then_with(|| a.digest.cmp(&b.digest)));
         merge_rows(out)
     }
 
@@ -1342,8 +1354,8 @@ mod tests {
     use tokio::process::{Child, Command};
 
     use super::{
-        AdapterState, Base, Plan, Runner, Scheduler, SchedulerConfig, base_clock,
-        least_recently_used, plan, runner_warns,
+        AdapterState, Base, Plan, Runner, RunningInfo, Scheduler, SchedulerConfig, base_clock,
+        least_recently_used, merge_rows, plan, runner_warns,
     };
     use crate::Error;
     use crate::models::{AdapterFiles, EngineFiles, Inputs, Loadable, RunnerFiles};
@@ -1738,5 +1750,50 @@ mod tests {
             .unwrap();
         drop(lease);
         scheduler.shutdown().await;
+    }
+
+    #[test]
+    fn merge_rows_merges_only_a_shared_base_with_its_plain_copy() {
+        let t0 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let row = |digest: &str, size: u64, loaded_s: u64, expires_s: Option<u64>| RunningInfo {
+            name: "laya:en".into(),
+            digest: digest.into(),
+            device: "metal".into(),
+            precision: "fp32".into(),
+            size,
+            loaded_at: t0 + Duration::from_secs(loaded_s),
+            expires_at: expires_s.map(|s| t0 + Duration::from_secs(s)),
+        };
+
+        // Two plain runners with different digests (e.g. a re-pulled tag) stay two rows.
+        let got = merge_rows(vec![
+            (row("sha256:old", 5000, 10, Some(100)), false),
+            (row("sha256:new", 5000, 20, Some(200)), false),
+        ]);
+        assert_eq!(got.len(), 2);
+
+        // Two plain rows with the same name and digest also stay separate.
+        let got = merge_rows(vec![
+            (row("sha256:d1", 5000, 10, Some(100)), false),
+            (row("sha256:d1", 5000, 20, Some(200)), false),
+        ]);
+        assert_eq!(got.len(), 2);
+
+        // A plain runner and a shared adapter base with the same name and digest merge.
+        let got = merge_rows(vec![
+            (row("sha256:d1", 5000, 20, Some(100)), false),
+            (row("sha256:d1", 5001, 10, None), true),
+        ]);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].size, 10001);
+        assert_eq!(got[0].loaded_at, t0 + Duration::from_secs(10));
+        assert_eq!(got[0].expires_at, None);
+
+        // A plain runner and a shared adapter base with different digests stay two rows.
+        let got = merge_rows(vec![
+            (row("sha256:old", 5000, 10, Some(100)), false),
+            (row("sha256:new", 5000, 20, Some(200)), true),
+        ]);
+        assert_eq!(got.len(), 2);
     }
 }
