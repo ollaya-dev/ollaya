@@ -82,6 +82,24 @@ impl Inputs {
     }
 }
 
+/// What an adapter model adds to its files (decision 0011). Its [`Loadable::files`] are the
+/// manifest's own layers: the base's tokenizer, `decision.json`, arch and weights.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdapterFiles {
+    /// The adapter spec layer (`ollaya_registry::adapter::AdapterSpec`).
+    pub spec: PathBuf,
+    /// The adapter's safetensors file.
+    pub weights: PathBuf,
+    /// The key adapter models of one base share a runner under.
+    pub key: String,
+    /// The base the adapter was created `FROM` (`details.parent_model`).
+    pub parent: String,
+    /// The base's manifest digest, as the spec records it.
+    pub base_manifest: String,
+    /// Bytes of the base's weights on disk, until a runner reports what it holds.
+    pub base_size: u64,
+}
+
 /// A model that answers requests itself.
 #[derive(Debug, Clone)]
 pub struct Loadable {
@@ -96,6 +114,19 @@ pub struct Loadable {
     pub questions: Option<Value>,
     /// Bytes on disk, for `ps` and scheduling.
     pub size: u64,
+    /// Set for an adapter model, which a runner shared with the other adapters of its base serves.
+    pub adapter: Option<AdapterFiles>,
+}
+
+impl Loadable {
+    /// What the scheduler keys this model's runner by: the manifest digest, so two tags of one
+    /// model share a runner, except for an adapter model, whose runner is the base's.
+    pub fn runner_key(&self) -> &str {
+        match &self.adapter {
+            Some(a) => &a.key,
+            None => &self.digest,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -140,7 +171,10 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
             questions,
         });
     }
-    if !matches!(config.model_format.as_str(), "" | "onnx" | "gguf") {
+    if !matches!(
+        config.model_format.as_str(),
+        "" | "onnx" | "gguf" | ollaya_registry::adapter::MODEL_FORMAT
+    ) {
         return Err(Error::Unsupported(format!(
             "{name} is a {} model, which this build of ollaya cannot run",
             config.model_format
@@ -190,6 +224,7 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
             config,
             questions,
             size: manifest.total_size(),
+            adapter: None,
         })));
     }
     let mut files = RunnerFiles {
@@ -225,7 +260,13 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
             _ => {}
         }
     }
-    if files.graph_fp32.is_none() && files.graph_fp16.is_none() {
+    let adapter = if config.model_format == ollaya_registry::adapter::MODEL_FORMAT {
+        Some(adapter_files(store, &manifest, &name.to_string())?)
+    } else {
+        None
+    };
+    // An adapter model runs on MLX only, from the base's arch layer and weights: no graph needed.
+    if adapter.is_none() && files.graph_fp32.is_none() && files.graph_fp16.is_none() {
         return Err(Error::Corrupt(format!("{name}: manifest has no graph")));
     }
     let files = EngineFiles::Onnx(files);
@@ -238,7 +279,55 @@ pub fn resolve_entry(store: &Store, entry: Entry) -> Result<Resolved, Error> {
         config,
         questions,
         size: manifest.total_size(),
+        adapter,
     })))
+}
+
+/// The adapter layers of an adapter model, checked against the base layers the manifest keeps.
+fn adapter_files(
+    store: &Store,
+    manifest: &ollaya_registry::Manifest,
+    name: &str,
+) -> Result<AdapterFiles, Error> {
+    use ollaya_registry::adapter::AdapterSpec;
+    let layer = |media_type: &str| {
+        manifest.layer(media_type).ok_or_else(|| {
+            Error::Corrupt(format!("{name}: adapter model has no {media_type} layer"))
+        })
+    };
+    let (spec_layer, weights_layer, arch) = (
+        layer(media::ADAPTER)?,
+        layer(media::ADAPTER_WEIGHTS)?,
+        layer(media::ARCH)?,
+    );
+    let spec: AdapterSpec = store.read_blob_json(spec_layer)?;
+    let base_weights: Vec<&Descriptor> = manifest.layers_of(media::WEIGHTS).collect();
+    let digests: Vec<String> = base_weights.iter().map(|w| w.digest.clone()).collect();
+    if spec.schema != ollaya_registry::adapter::SCHEMA
+        || spec.format != ollaya_registry::adapter::FORMAT
+    {
+        return Err(Error::Unsupported(format!(
+            "{name}: adapter schema {} {:?} is not one this version of ollaya reads; upgrade ollaya",
+            spec.schema, spec.format
+        )));
+    }
+    if spec.base.arch != arch.digest || spec.base.weights != digests {
+        return Err(Error::Corrupt(format!(
+            "{name}: the adapter was checked against another base than the manifest holds"
+        )));
+    }
+    let parent = {
+        let c: Value = store.read_blob_json(&manifest.config)?;
+        c["parent_model"].as_str().unwrap_or_default().to_owned()
+    };
+    Ok(AdapterFiles {
+        spec: store.blob_path(&spec_layer.digest)?,
+        weights: store.blob_path(&weights_layer.digest)?,
+        key: AdapterSpec::sharing_key(&arch.digest, &digests),
+        parent,
+        base_manifest: spec.base.manifest,
+        base_size: base_weights.iter().map(|w| w.size).sum(),
+    })
 }
 
 /// The precision an ONNX graph layer computes in, `fp16` or `fp32` (also when unannotated), or

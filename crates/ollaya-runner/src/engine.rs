@@ -13,7 +13,40 @@ use serde_json::Value;
 use crate::onnx::{Device, ModelFiles, OnnxModel};
 use crate::{Error, Output};
 
+/// Files of an adapter model for [`Engine::load_adapter`] (decision 0011).
+#[derive(Debug, Clone)]
+pub struct AdapterLoad {
+    /// What `/decide` names it by: the adapter model's manifest digest.
+    pub digest: String,
+    /// The adapter spec layer.
+    pub spec: std::path::PathBuf,
+    /// The adapter's safetensors file.
+    pub weights: std::path::PathBuf,
+    /// The adapter model's own `decision.json` and tokenizer.
+    pub decision: std::path::PathBuf,
+    pub tokenizer: std::path::PathBuf,
+}
+
 pub trait Engine: Send + Sync {
+    /// Load an adapter over this model's network and return the engine that answers as it,
+    /// with the bytes the adapter occupies. Only engines of layouts that take adapters do.
+    fn load_adapter(&self, _adapter: &AdapterLoad) -> Result<(Box<dyn Engine>, u64), Error> {
+        Err(Error::Model(
+            "this model does not take adapters (this version runs them on laya-markers-v1 on MLX)"
+                .into(),
+        ))
+    }
+
+    /// Drop the adapter loaded under `digest`.
+    fn unload_adapter(&self, _digest: &str) -> Result<(), Error> {
+        Ok(())
+    }
+
+    /// Bytes the model's tensors occupy, when the engine knows them.
+    fn memory_bytes(&self) -> Option<u64> {
+        None
+    }
+
     /// Answer every question about `state`, returning one logit per option per question.
     fn run(&self, state: &Value, questions: &Questions) -> Result<Output, Error>;
 
@@ -79,6 +112,21 @@ pub trait Engine: Send + Sync {
 impl Engine for OnnxModel {
     fn run(&self, state: &Value, questions: &Questions) -> Result<Output, Error> {
         OnnxModel::run(self, state, questions)
+    }
+
+    fn load_adapter(&self, a: &AdapterLoad) -> Result<(Box<dyn Engine>, u64), Error> {
+        // The front first: a bad decision.json or tokenizer loads no tensors.
+        let front = self.front(&a.decision, &a.tokenizer, Some(a.digest.clone()))?;
+        let bytes = self.net().add_adapter(&a.digest, &a.spec, &a.weights)?;
+        Ok((Box::new(front), bytes))
+    }
+
+    fn unload_adapter(&self, digest: &str) -> Result<(), Error> {
+        self.net().remove_adapter(digest)
+    }
+
+    fn memory_bytes(&self) -> Option<u64> {
+        self.net().bytes()
     }
 }
 

@@ -23,6 +23,8 @@ pub struct ServerConfig {
     pub keep_alive: KeepAlive,
     /// `OLLAYA_MAX_LOADED_MODELS`.
     pub max_loaded: usize,
+    /// `OLLAYA_MAX_ADAPTERS`: adapter models one runner holds over its base.
+    pub max_adapters: usize,
     /// `OLLAYA_MAX_QUEUE`: decision requests in flight before `503 QUEUE_FULL`.
     pub max_queue: usize,
     /// `OLLAYA_LOAD_TIMEOUT`.
@@ -57,6 +59,8 @@ pub enum ConfigError {
 }
 
 pub const DEFAULT_MAX_LOADED: usize = 3;
+/// Adapter models one runner holds over its base (decision 0011).
+pub const DEFAULT_MAX_ADAPTERS: usize = 16;
 pub const DEFAULT_LOAD_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Browser origins always allowed, as Ollama allows them.
@@ -178,6 +182,7 @@ impl ServerConfig {
             models,
             keep_alive,
             max_loaded: count("OLLAYA_MAX_LOADED_MODELS", DEFAULT_MAX_LOADED)?,
+            max_adapters: count("OLLAYA_MAX_ADAPTERS", DEFAULT_MAX_ADAPTERS)?,
             max_queue: count("OLLAYA_MAX_QUEUE", ollaya_api::DEFAULT_MAX_QUEUE)?,
             load_timeout,
             device,
@@ -211,6 +216,7 @@ mod tests {
         assert_eq!(c.host.bind_addr(), "127.0.0.1:11435");
         assert_eq!(c.keep_alive, KeepAlive::DEFAULT);
         assert_eq!((c.max_loaded, c.max_queue), (3, 512));
+        assert_eq!(c.max_adapters, 16);
         assert_eq!(c.load_timeout, Duration::from_secs(300));
         assert_eq!(c.device, "auto");
         assert_eq!(c.threads, None);

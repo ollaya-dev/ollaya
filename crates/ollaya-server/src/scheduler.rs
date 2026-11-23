@@ -21,7 +21,7 @@ use ollaya_decision::{cygnet, jebadiah, jevk5, llm_logits, snap, winnow};
 use ollaya_registry::pull::RunCheck;
 
 use crate::Error;
-use crate::models::{EngineFiles, Loadable};
+use crate::models::{AdapterFiles, EngineFiles, Loadable};
 
 /// How long a model stays loaded after its last request (the API's `keep_alive`).
 pub use ollaya_api::KeepAlive;
@@ -30,6 +30,8 @@ pub use ollaya_api::KeepAlive;
 pub struct SchedulerConfig {
     pub keep_alive: KeepAlive,
     pub max_loaded: usize,
+    /// Adapter models one runner holds over its base (`OLLAYA_MAX_ADAPTERS`).
+    pub max_adapters: usize,
     /// `auto`, `cpu`, `cuda`, `cuda:<n>` or `metal`, passed to runners.
     pub device: String,
     /// CPU threads per runner (`--threads`); `None` keeps each engine's default.
@@ -114,6 +116,39 @@ struct Hello {
     /// `onnx` or `mlx`; runners before 0.6 do not send it.
     #[serde(default)]
     engine: String,
+    /// Bytes the runner's tensors occupy, when it reports them (the MLX engine does).
+    #[serde(default)]
+    bytes: u64,
+}
+
+/// An adapter model loaded in a runner over its base.
+struct AdapterState {
+    name: String,
+    size: u64,
+    loaded_at: SystemTime,
+    leases: usize,
+    last_used: Instant,
+    /// When an idle adapter may be unloaded; `None` while leased or kept forever.
+    expires: Option<Instant>,
+    keep_forever: bool,
+    pinned: bool,
+    /// Being unloaded: no request may lease it any more.
+    removing: bool,
+}
+
+enum Slot {
+    Free,
+    Evict(String),
+    Unloading,
+    Full,
+}
+
+/// What a runner shared by adapter models knows about its base.
+struct Base {
+    /// The name the adapters were created `FROM`.
+    name: String,
+    /// The base's manifest digest.
+    manifest: String,
 }
 
 pub struct Runner {
@@ -126,8 +161,14 @@ pub struct Runner {
     pub size: u64,
     pub loaded_at: SystemTime,
     port: u16,
+    /// Set when the runner holds a base for adapter models.
+    base: Option<Base>,
+    adapters: Mutex<HashMap<String, AdapterState>>,
     child: tokio::sync::Mutex<Child>,
     http: reqwest::Client,
+    /// How long registering or dropping an adapter may take (`OLLAYA_LOAD_TIMEOUT`): both run
+    /// while the scheduler's load lock is held, behind the runner's queue of decisions.
+    load_timeout: Duration,
     leases: AtomicUsize,
     /// When an idle runner may be unloaded; `None` while leased or when kept forever.
     expires: Mutex<Option<Instant>>,
@@ -161,8 +202,12 @@ impl Runner {
         images: &[String],
         audio: &[String],
         timeout: Option<Duration>,
+        adapter: Option<&str>,
     ) -> Result<Value, Error> {
         let mut body = serde_json::json!({"state": state, "questions": questions});
+        if let Some(adapter) = adapter {
+            body["adapter"] = serde_json::json!(adapter);
+        }
         if !images.is_empty() {
             body["images"] = serde_json::json!(images);
         }
@@ -210,6 +255,270 @@ impl Runner {
         let mut child = self.child.lock().await;
         let _ = child.kill().await;
     }
+
+    /// Register an adapter model with the runner (`POST /adapters`): its tensors, and its own
+    /// `decision.json` and tokenizer. Returns the bytes the adapter occupies there.
+    async fn post_adapter(&self, model: &Loadable, adapter: &AdapterFiles) -> Result<u64, Error> {
+        let EngineFiles::Onnx(files) = &model.files else {
+            return Err(Error::Corrupt(format!(
+                "{}: an adapter model runs on MLX",
+                model.name
+            )));
+        };
+        let body = serde_json::json!({
+            "digest": model.digest,
+            "spec": adapter.spec,
+            "weights": adapter.weights,
+            "decision": files.decision,
+            "tokenizer": files.tokenizer,
+        });
+        let resp = self
+            .http
+            .post(format!("http://127.0.0.1:{}/adapters", self.port))
+            .timeout(self.load_timeout)
+            .json(&body)
+            .send()
+            .await;
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => return Err(self.load_error(model, &e).await),
+        };
+        let ok = resp.status().is_success();
+        let body: Value = match resp.json().await {
+            Ok(b) => b,
+            Err(e) => return Err(self.load_error(model, &e).await),
+        };
+        if !ok {
+            let message = body["error"]["message"]
+                .as_str()
+                .unwrap_or("the runner refused it");
+            return Err(Error::LoadFailed(format!(
+                "{} failed to load as an adapter: {message}",
+                model.name
+            )));
+        }
+        Ok(body["bytes"].as_u64().unwrap_or(0))
+    }
+
+    /// The error of a failed `POST /adapters`. After a timeout the runner may still finish loading
+    /// the adapter later and serve it outside the count, so a best-effort `DELETE` follows (the
+    /// runner takes it after the load, in its queue's order); its own answer is not waited for
+    /// beyond a few seconds.
+    async fn load_error(&self, model: &Loadable, e: &reqwest::Error) -> Error {
+        if e.is_timeout() {
+            let wait = self.load_timeout.min(Duration::from_secs(5));
+            if let Err(d) = self.delete_adapter(&model.digest, wait).await {
+                tracing::warn!(model = %self.name, "after the adapter load timed out: {d}");
+            }
+        }
+        Error::LoadFailed(format!("{}: {}", model.name, self.timed_out(e)))
+    }
+
+    /// An error of a request to the runner, with the reason a timeout stands for.
+    fn timed_out(&self, e: &reqwest::Error) -> String {
+        if e.is_timeout() {
+            format!(
+                "the runner did not answer within the load timeout ({} s)",
+                self.load_timeout.as_secs()
+            )
+        } else {
+            e.to_string()
+        }
+    }
+
+    /// Set the base's clock from the adapters that are left: kept forever only while one of them
+    /// is, and until the latest of their clocks. Called after an adapter goes, so a `-1` adapter
+    /// that is gone no longer keeps the base loaded.
+    fn recompute_clock(&self) {
+        let now = Instant::now();
+        let clock = base_clock(
+            self.adapters
+                .lock()
+                .unwrap()
+                .values()
+                .map(|a| (a.expires, a.keep_forever)),
+        );
+        *self.keep_forever.lock().unwrap() = clock.1;
+        *self.expires.lock().unwrap() = clock.0.or(Some(now));
+    }
+
+    /// Drop an adapter from the runner (`DELETE /adapters/<digest>`).
+    async fn delete_adapter(&self, digest: &str, timeout: Duration) -> Result<(), Error> {
+        let resp = self
+            .http
+            .delete(format!("http://127.0.0.1:{}/adapters/{digest}", self.port))
+            .timeout(timeout)
+            .send()
+            .await
+            .map_err(|e| Error::Runner(format!("{}: {}", self.name, self.timed_out(&e))))?;
+        if resp.status().is_success() || resp.status() == reqwest::StatusCode::NOT_FOUND {
+            Ok(())
+        } else {
+            Err(Error::Runner(format!(
+                "{}: dropping an adapter answered {}",
+                self.name,
+                resp.status()
+            )))
+        }
+    }
+
+    /// Where a new adapter goes: a free slot, one made free by unloading the least recently used
+    /// idle adapter (marked as being unloaded here), or nowhere.
+    fn adapter_slot(&self, digest: &str, max: usize) -> Slot {
+        let mut adapters = self.adapters.lock().unwrap();
+        if adapters.contains_key(digest) {
+            return Slot::Unloading;
+        }
+        if adapters.len() < max {
+            return Slot::Free;
+        }
+        // Adapters go before bases.
+        let candidates: Vec<(String, usize, Instant)> = adapters
+            .iter()
+            .filter(|(_, a)| !a.removing)
+            .map(|(d, a)| (d.clone(), a.leases, a.last_used))
+            .collect();
+        match least_recently_used(&candidates) {
+            Some(victim) => {
+                if let Some(a) = adapters.get_mut(&victim) {
+                    a.removing = true;
+                }
+                Slot::Evict(victim)
+            }
+            None => Slot::Full,
+        }
+    }
+
+    /// Lease the adapter if it is loaded and not being unloaded.
+    fn lease_adapter(&self, digest: &str) -> bool {
+        let mut adapters = self.adapters.lock().unwrap();
+        match adapters.get_mut(digest) {
+            Some(a) if !a.removing => {
+                a.leases += 1;
+                a.expires = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Mark the adapters `pick` chooses as being unloaded, so no request leases them meanwhile.
+    /// Adapters already being removed are skipped so no second DELETE is sent.
+    fn begin_remove(
+        &self,
+        pick: impl FnOnce(&HashMap<String, AdapterState>) -> Vec<String>,
+    ) -> Vec<String> {
+        let mut adapters = self.adapters.lock().unwrap();
+        let mut picked = pick(&adapters);
+        picked.retain(|d| {
+            adapters.get_mut(d).is_some_and(|a| {
+                if a.removing {
+                    false
+                } else {
+                    a.removing = true;
+                    true
+                }
+            })
+        });
+        picked
+    }
+
+    /// Drop an adapter that [`Self::begin_remove`] marked, once its leases are over. Spawned so a
+    /// cancelled `unload` future cannot leave the adapter stuck in `removing = true`.
+    async fn finish_remove(self: &Arc<Self>, digest: &str) {
+        let runner = self.clone();
+        let digest = digest.to_owned();
+        let _ = tokio::spawn(async move {
+            loop {
+                let leased = runner
+                    .adapters
+                    .lock()
+                    .unwrap()
+                    .get(&digest)
+                    .is_some_and(|a| a.leases > 0);
+                if !leased {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            if let Err(e) = runner.delete_adapter(&digest, runner.load_timeout).await {
+                tracing::warn!(model = %runner.name, "{e}");
+            }
+            if let Some(a) = runner.adapters.lock().unwrap().remove(&digest) {
+                tracing::info!(model = %a.name, "unloaded adapter");
+            }
+            runner.recompute_clock();
+        })
+        .await;
+    }
+
+    /// Wait until an in-flight removal of `digest` finishes (the entry is gone or replaced by a
+    /// new load with `removing == false`).
+    async fn wait_removed(&self, digest: &str) {
+        loop {
+            let removing = self
+                .adapters
+                .lock()
+                .unwrap()
+                .get(digest)
+                .is_some_and(|a| a.removing);
+            if !removing {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+}
+
+/// One row per loaded model name and digest when a model is loaded both as itself and as the
+/// base of adapters (decision 0011, section 3): its row counts both copies (`size`), is kept
+/// until stopped if either is, and otherwise lasts as long as the later one. Two plain runners
+/// with the same name (e.g. a re-pulled tag whose old digest is still loaded) stay two rows.
+/// Rows must be sorted by `(name, digest)`.
+fn merge_rows(rows: Vec<(RunningInfo, bool)>) -> Vec<RunningInfo> {
+    let mut out: Vec<(RunningInfo, bool)> = Vec::with_capacity(rows.len());
+    for (row, shared) in rows {
+        match out.last_mut() {
+            Some((last, last_shared))
+                if last.name == row.name
+                    && last.digest == row.digest
+                    && (*last_shared || shared) =>
+            {
+                last.size += row.size;
+                last.loaded_at = last.loaded_at.min(row.loaded_at);
+                last.expires_at = match (last.expires_at, row.expires_at) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    _ => None,
+                };
+                *last_shared = true;
+            }
+            _ => out.push((row, shared)),
+        }
+    }
+    out.into_iter().map(|(info, _)| info).collect()
+}
+
+/// The idle entry used longest ago: `(key, leases, last_used)` for each candidate. Eviction of
+/// runners and of adapters both pick this way.
+fn least_recently_used<K: Clone>(candidates: &[(K, usize, Instant)]) -> Option<K> {
+    candidates
+        .iter()
+        .filter(|(_, leases, _)| *leases == 0)
+        .min_by_key(|(_, _, used)| *used)
+        .map(|(key, _, _)| key.clone())
+}
+
+/// The clock of a base shared by adapters: kept forever while any adapter is, else until the
+/// latest of the adapters' clocks. `(expires, keep_forever)` for each adapter.
+fn base_clock(
+    adapters: impl IntoIterator<Item = (Option<Instant>, bool)>,
+) -> (Option<Instant>, bool) {
+    let mut clock = (None, false);
+    for (expires, forever) in adapters {
+        clock.1 |= forever;
+        clock.0 = clock.0.max(expires);
+    }
+    clock
 }
 
 impl Runner {
@@ -224,6 +533,45 @@ impl Runner {
 pub struct Lease {
     pub runner: Arc<Runner>,
     keep_alive: KeepAlive,
+    /// The manifest digest of the adapter model this lease is for, when it is one.
+    adapter: Option<String>,
+}
+
+impl Lease {
+    /// Ask the runner, as the adapter model this lease is for.
+    pub async fn decide(
+        &self,
+        state: &Value,
+        questions: &Value,
+        images: &[String],
+        audio: &[String],
+        timeout: Option<Duration>,
+    ) -> Result<Value, Error> {
+        self.runner
+            .decide(
+                state,
+                questions,
+                images,
+                audio,
+                timeout,
+                self.adapter.as_deref(),
+            )
+            .await
+    }
+
+    /// Keep the model this lease is for loaded until it is unloaded explicitly or evicted.
+    pub fn pin(&self) {
+        match &self.adapter {
+            None => self.runner.pin(),
+            Some(d) => {
+                if let Some(a) = self.runner.adapters.lock().unwrap().get_mut(d) {
+                    a.pinned = true;
+                    a.keep_forever = true;
+                }
+                *self.runner.keep_forever.lock().unwrap() = true;
+            }
+        }
+    }
 }
 
 impl std::ops::Deref for Lease {
@@ -237,6 +585,28 @@ impl Drop for Lease {
     fn drop(&mut self) {
         let r = &self.runner;
         *r.last_used.lock().unwrap() = Instant::now();
+        if let Some(digest) = &self.adapter {
+            let now = Instant::now();
+            let clock = {
+                let mut adapters = r.adapters.lock().unwrap();
+                if let Some(a) = adapters.get_mut(digest) {
+                    a.leases = a.leases.saturating_sub(1);
+                    a.last_used = now;
+                    match self.keep_alive {
+                        KeepAlive::Forever => a.keep_forever = true,
+                        KeepAlive::For(d) => {
+                            a.keep_forever = false;
+                            a.expires = Some(now + d);
+                        }
+                    }
+                }
+                base_clock(adapters.values().map(|a| (a.expires, a.keep_forever)))
+            };
+            *r.keep_forever.lock().unwrap() = clock.1;
+            *r.expires.lock().unwrap() = clock.0.or(Some(now));
+            r.leases.fetch_sub(1, Ordering::SeqCst);
+            return;
+        }
         match self.keep_alive {
             KeepAlive::Forever => *r.keep_forever.lock().unwrap() = true,
             KeepAlive::For(d) => {
@@ -281,7 +651,7 @@ impl Scheduler {
     pub fn run_check(&self) -> RunCheck {
         let llama = self.config.llama_dir.is_some();
         Arc::new(move |name, c| match c.model_format.as_str() {
-            "" | "onnx" | "router" => Ok(()),
+            "" | "onnx" | "router" | ollaya_registry::adapter::MODEL_FORMAT => Ok(()),
             "gguf" => match c.layout.as_deref() {
                 Some(l) if !LLAMA_LAYOUTS.contains(&l) => Err(format!(
                     "{name} uses the {l} layout, which this version of ollaya cannot run; upgrade ollaya"
@@ -299,55 +669,174 @@ impl Scheduler {
     }
 
     /// Lease a runner for `model`, loading it if needed. Returns the lease and the load time.
+    ///
+    /// An adapter model leases the runner of its base (loading that if needed), then loads
+    /// itself into it.
     pub async fn acquire(
         &self,
         model: &Loadable,
         keep_alive: Option<KeepAlive>,
     ) -> Result<(Lease, Duration), Error> {
-        let keep_alive = |r: &Runner| {
-            keep_alive.unwrap_or(if r.pinned.load(Ordering::SeqCst) {
+        let started = Instant::now();
+        let key = model.runner_key();
+        let mut loaded = false;
+        let fast = match &model.adapter {
+            None => self.lease_existing(key),
+            Some(_) => self.lease_existing_adapter(key, &model.digest),
+        };
+        let runner = match fast {
+            Some(r) => r,
+            None => {
+                let _guard = self.load_lock.lock().await;
+                let runner = match self.lease_existing(key) {
+                    Some(r) => r,
+                    None => {
+                        self.make_room().await;
+                        let runner = Arc::new(self.spawn(model).await?);
+                        runner.leases.fetch_add(1, Ordering::SeqCst);
+                        self.runners
+                            .lock()
+                            .unwrap()
+                            .insert(key.to_owned(), runner.clone());
+                        loaded = true;
+                        tracing::info!(model = %model.name, device = %runner.device, precision = %runner.precision,
+                            engine = %runner.engine, threads = self.config.threads,
+                            load_ms = started.elapsed().as_millis() as u64, "loaded model");
+                        runner
+                    }
+                };
+                // The runner is leased from here: a failure gives the lease back.
+                if let Some(files) = &model.adapter {
+                    match self.lease_adapter_locked(&runner, model, files).await {
+                        Ok(did_load) => loaded |= did_load,
+                        Err(e) => {
+                            self.give_back(&runner);
+                            return Err(e);
+                        }
+                    }
+                }
+                runner
+            }
+        };
+        let keep_alive = keep_alive.unwrap_or_else(|| {
+            let pinned = match &model.adapter {
+                Some(_) => runner
+                    .adapters
+                    .lock()
+                    .unwrap()
+                    .get(&model.digest)
+                    .is_some_and(|a| a.pinned),
+                None => runner.pinned.load(Ordering::SeqCst),
+            };
+            if pinned {
                 KeepAlive::Forever
             } else {
                 self.config.keep_alive
-            })
+            }
+        });
+        let lease = Lease {
+            keep_alive,
+            adapter: model.adapter.as_ref().map(|_| model.digest.clone()),
+            runner,
         };
-        if let Some(r) = self.lease_existing(&model.digest) {
-            return Ok((
-                Lease {
-                    keep_alive: keep_alive(&r),
-                    runner: r,
-                },
-                Duration::ZERO,
-            ));
-        }
-        let _guard = self.load_lock.lock().await;
-        if let Some(r) = self.lease_existing(&model.digest) {
-            return Ok((
-                Lease {
-                    keep_alive: keep_alive(&r),
-                    runner: r,
-                },
-                Duration::ZERO,
-            ));
-        }
-        self.make_room().await;
-        let started = Instant::now();
-        let runner = Arc::new(self.spawn(model).await?);
-        runner.leases.fetch_add(1, Ordering::SeqCst);
-        self.runners
-            .lock()
-            .unwrap()
-            .insert(model.digest.clone(), runner.clone());
-        tracing::info!(model = %model.name, device = %runner.device, precision = %runner.precision,
-            engine = %runner.engine, threads = self.config.threads,
-            load_ms = started.elapsed().as_millis() as u64, "loaded model");
         Ok((
-            Lease {
-                keep_alive: keep_alive(&runner),
-                runner,
+            lease,
+            if loaded {
+                started.elapsed()
+            } else {
+                Duration::ZERO
             },
-            started.elapsed(),
         ))
+    }
+
+    /// Lease `model` in `runner`, loading it into the runner when it is not there. Caller must
+    /// hold `self.load_lock`. Returns whether it was loaded. Only that adapter fails when it
+    /// cannot load: the base and the other adapters stay.
+    async fn lease_adapter_locked(
+        &self,
+        runner: &Arc<Runner>,
+        model: &Loadable,
+        files: &AdapterFiles,
+    ) -> Result<bool, Error> {
+        if runner.lease_adapter(&model.digest) {
+            return Ok(false);
+        }
+        let max = self.config.max_adapters.max(1);
+        let deadline = Instant::now() + self.config.load_timeout;
+        let victim = loop {
+            match runner.adapter_slot(&model.digest, max) {
+                // An unload of this very adapter is still running: wait it out, then load again.
+                Slot::Unloading => {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
+                        return Err(Error::LoadFailed(format!(
+                            "{}: timed out waiting for a previous unload to finish ({} s)",
+                            model.name,
+                            self.config.load_timeout.as_secs()
+                        )));
+                    }
+                    tokio::time::sleep(remaining.min(Duration::from_millis(20))).await;
+                }
+                Slot::Free => break None,
+                Slot::Evict(victim) => break Some(victim),
+                Slot::Full => {
+                    return Err(Error::LoadFailed(format!(
+                        "{} cannot load: the runner holds OLLAYA_MAX_ADAPTERS ({max}) adapters and all of them are in use",
+                        model.name
+                    )));
+                }
+            }
+        };
+        if let Some(victim) = victim {
+            runner.finish_remove(&victim).await;
+        }
+        let started = Instant::now();
+        let bytes = runner.post_adapter(model, files).await?;
+        runner.adapters.lock().unwrap().insert(
+            model.digest.clone(),
+            AdapterState {
+                name: model.name.to_string(),
+                size: bytes,
+                loaded_at: SystemTime::now(),
+                leases: 1,
+                last_used: Instant::now(),
+                expires: None,
+                keep_forever: false,
+                pinned: false,
+                removing: false,
+            },
+        );
+        tracing::info!(model = %model.name, base = %runner.name, bytes,
+            load_ms = started.elapsed().as_millis() as u64, "loaded adapter");
+        Ok(true)
+    }
+
+    /// Give back a runner lease taken for a load that failed; the runner's clock resumes from its
+    /// remaining adapters (as [`Lease::drop`] does), or starts from the default keep-alive when no
+    /// adapters are loaded yet.
+    fn give_back(&self, runner: &Runner) {
+        let now = Instant::now();
+        *runner.last_used.lock().unwrap() = now;
+        let (empty, clock) = {
+            let adapters = runner.adapters.lock().unwrap();
+            (
+                adapters.is_empty(),
+                base_clock(adapters.values().map(|a| (a.expires, a.keep_forever))),
+            )
+        };
+        if empty {
+            match self.config.keep_alive {
+                KeepAlive::Forever => *runner.keep_forever.lock().unwrap() = true,
+                KeepAlive::For(d) => {
+                    *runner.keep_forever.lock().unwrap() = false;
+                    *runner.expires.lock().unwrap() = Some(now + d);
+                }
+            }
+        } else {
+            *runner.keep_forever.lock().unwrap() = clock.1;
+            *runner.expires.lock().unwrap() = clock.0.or(Some(now));
+        }
+        runner.leases.fetch_sub(1, Ordering::SeqCst);
     }
 
     fn lease_existing(&self, digest: &str) -> Option<Arc<Runner>> {
@@ -358,55 +847,163 @@ impl Scheduler {
         Some(r)
     }
 
-    /// Unload a model now (the runner finishes in-flight requests first).
+    /// Lease an existing runner together with an already-loaded adapter, atomically under
+    /// `runners`. Returns `None` without taking a runner lease when the adapter is not loaded, so
+    /// no caller ever waits on `load_lock` while holding a runner lease.
+    fn lease_existing_adapter(&self, key: &str, adapter: &str) -> Option<Arc<Runner>> {
+        let runners = self.runners.lock().unwrap();
+        let r = runners.get(key)?.clone();
+        if !r.lease_adapter(adapter) {
+            return None;
+        }
+        r.leases.fetch_add(1, Ordering::SeqCst);
+        *r.expires.lock().unwrap() = None;
+        Some(r)
+    }
+
+    /// Take down the runner stored under `key` (the reaper's and `make_room`'s eviction): that
+    /// runner only. A plain `laya:en` that expires or is evicted leaves a shared base of adapters
+    /// created on it, and their keep-alive, alone.
+    async fn evict(&self, key: &str) {
+        let runner = self.runners.lock().unwrap().remove(key);
+        if let Some(r) = runner {
+            while r.leases.load(Ordering::SeqCst) > 0 {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            r.kill().await;
+            tracing::info!(model = %r.name, "unloaded model");
+        }
+    }
+
+    /// Unload a model now, at the user's word (`stop`, `delete`; the runner finishes in-flight
+    /// requests first). `digest` is the model's manifest digest. An adapter model leaves its
+    /// runner; the runner goes with its last adapter. A base also takes down the shared runner of
+    /// adapters created on it, with those adapters. Internal eviction does not: see `evict`.
     pub async fn unload(&self, digest: &str) -> bool {
-        let runner = self.runners.lock().unwrap().remove(digest);
-        match runner {
-            Some(r) => {
+        // The runner keyed by this digest, and the shared runner of any adapters created on this
+        // manifest: `ollaya stop <base>` reaches the base whether it was loaded as itself, as the
+        // base of adapters, or both. Its adapters go with it, as when it is evicted.
+        let gone: Vec<Arc<Runner>> = {
+            let mut runners = self.runners.lock().unwrap();
+            let keys: Vec<String> = runners
+                .iter()
+                .filter(|(key, r)| {
+                    key.as_str() == digest || r.base.as_ref().is_some_and(|b| b.manifest == digest)
+                })
+                .map(|(key, _)| key.clone())
+                .collect();
+            keys.iter().filter_map(|k| runners.remove(k)).collect()
+        };
+        if !gone.is_empty() {
+            for r in gone {
                 while r.leases.load(Ordering::SeqCst) > 0 {
                     tokio::time::sleep(Duration::from_millis(20)).await;
                 }
                 r.kill().await;
                 tracing::info!(model = %r.name, "unloaded model");
-                true
             }
-            None => false,
+            return true;
         }
+        let holder = self
+            .runners
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(_, r)| r.adapters.lock().unwrap().contains_key(digest))
+            .map(|(key, r)| (key.clone(), r.clone()));
+        let Some((key, runner)) = holder else {
+            return false;
+        };
+        let marked = runner.begin_remove(|a| {
+            a.get(digest)
+                .is_some_and(|s| !s.removing)
+                .then(|| digest.to_owned())
+                .into_iter()
+                .collect()
+        });
+        if marked.is_empty() {
+            // Another unload (the reaper or a concurrent stop) already claimed it: wait without
+            // sending a second DELETE.
+            runner.wait_removed(digest).await;
+        } else {
+            for d in marked {
+                runner.finish_remove(&d).await;
+            }
+        }
+        if runner.adapters.lock().unwrap().is_empty() {
+            let gone = {
+                let mut runners = self.runners.lock().unwrap();
+                match runners.get(&key) {
+                    Some(r) if Arc::ptr_eq(r, &runner) && r.leases.load(Ordering::SeqCst) == 0 => {
+                        runners.remove(&key)
+                    }
+                    _ => None,
+                }
+            };
+            if let Some(r) = gone {
+                r.kill().await;
+                tracing::info!(model = %r.name, "unloaded model");
+            }
+        }
+        true
     }
 
     pub fn running(&self) -> Vec<RunningInfo> {
         let now_i = Instant::now();
         let now_s = SystemTime::now();
-        let mut out: Vec<RunningInfo> = self
-            .runners
-            .lock()
-            .unwrap()
-            .values()
-            .map(|r| {
-                let busy = r.leases.load(Ordering::SeqCst) > 0;
-                let expires_at = if *r.keep_forever.lock().unwrap() {
-                    None
-                } else if busy {
-                    Some(now_s + Duration::from_secs(0))
-                } else {
-                    r.expires
-                        .lock()
-                        .unwrap()
-                        .map(|e| now_s + e.saturating_duration_since(now_i))
-                };
+        let at = |e: Instant| now_s + e.saturating_duration_since(now_i);
+        let mut out: Vec<(RunningInfo, bool)> = Vec::new();
+        for r in self.runners.lock().unwrap().values() {
+            let busy = r.leases.load(Ordering::SeqCst) > 0;
+            let expires_at = if *r.keep_forever.lock().unwrap() {
+                None
+            } else if busy {
+                Some(now_s + Duration::from_secs(0))
+            } else {
+                r.expires.lock().unwrap().map(at)
+            };
+            // One row per loaded model name: the base, and one for each adapter over it. The
+            // base's `size` is the base's, an adapter's only its own, so the rows add up to what
+            // the runner holds.
+            out.push((
                 RunningInfo {
                     name: r.name.clone(),
-                    digest: r.digest.clone(),
+                    digest: r
+                        .base
+                        .as_ref()
+                        .map_or_else(|| r.digest.clone(), |b| b.manifest.clone()),
                     device: r.device.clone(),
                     precision: r.precision.clone(),
                     size: r.size,
                     loaded_at: r.loaded_at,
                     expires_at,
-                }
-            })
-            .collect();
-        out.sort_by(|a, b| a.name.cmp(&b.name));
-        out
+                },
+                r.base.is_some(),
+            ));
+            for (digest, a) in r.adapters.lock().unwrap().iter() {
+                let expires_at = if a.keep_forever {
+                    None
+                } else if a.leases > 0 {
+                    Some(now_s)
+                } else {
+                    a.expires.map(at)
+                };
+                out.push((
+                    RunningInfo {
+                        name: a.name.clone(),
+                        digest: digest.clone(),
+                        device: r.device.clone(),
+                        precision: r.precision.clone(),
+                        size: a.size,
+                        loaded_at: a.loaded_at,
+                        expires_at,
+                    },
+                    false,
+                ));
+            }
+        }
+        out.sort_by(|(a, _), (b, _)| a.name.cmp(&b.name).then_with(|| a.digest.cmp(&b.digest)));
+        merge_rows(out)
     }
 
     /// Unload every runner (daemon shutdown).
@@ -425,6 +1022,32 @@ impl Scheduler {
 
     async fn reap(&self) {
         let now = Instant::now();
+        // Adapters unload on their own clocks, before their base's.
+        let holders: Vec<Arc<Runner>> = self
+            .runners
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|r| r.base.is_some())
+            .cloned()
+            .collect();
+        for r in holders {
+            let due = r.begin_remove(|adapters| {
+                adapters
+                    .iter()
+                    .filter(|(_, a)| {
+                        a.leases == 0
+                            && !a.keep_forever
+                            && !a.removing
+                            && a.expires.is_some_and(|e| e <= now)
+                    })
+                    .map(|(d, _)| d.clone())
+                    .collect()
+            });
+            for d in due {
+                r.finish_remove(&d).await;
+            }
+        }
         let mut expired = Vec::new();
         for (digest, r) in self.runners.lock().unwrap().iter() {
             let idle = r.leases.load(Ordering::SeqCst) == 0;
@@ -434,7 +1057,7 @@ impl Scheduler {
             }
         }
         for digest in expired {
-            self.unload(&digest).await;
+            self.evict(&digest).await;
         }
         // A runner that died on its own (crash, OOM kill) is forgotten so the next request reloads it.
         let mut dead = Vec::new();
@@ -457,18 +1080,28 @@ impl Scheduler {
             if runners.len() < self.config.max_loaded.max(1) {
                 return;
             }
-            runners
+            // Idle runners only; its adapters go with a runner that is evicted.
+            let candidates: Vec<(String, usize, Instant)> = runners
                 .iter()
-                .filter(|(_, r)| r.leases.load(Ordering::SeqCst) == 0)
-                .min_by_key(|(_, r)| *r.last_used.lock().unwrap())
-                .map(|(d, _)| d.clone())
+                .map(|(d, r)| {
+                    (
+                        d.clone(),
+                        r.leases.load(Ordering::SeqCst),
+                        *r.last_used.lock().unwrap(),
+                    )
+                })
+                .collect();
+            least_recently_used(&candidates)
         };
         if let Some(digest) = victim {
-            self.unload(&digest).await;
+            self.evict(&digest).await;
         }
     }
 
     async fn spawn(&self, model: &Loadable) -> Result<Runner, Error> {
+        if model.adapter.is_some() {
+            return self.spawn_adapter_base(model).await;
+        }
         let configured = Launch {
             exe: &self.config.exe,
             arg0: self.config.arg0.as_deref(),
@@ -501,6 +1134,29 @@ impl Scheduler {
             },
             _ => self.spawn_with(model, &configured).await,
         }
+    }
+
+    /// The runner for an adapter model's base: MLX only, so `auto` and `metal` start it on Metal
+    /// and any other device is refused (no fallback to the CPU).
+    async fn spawn_adapter_base(&self, model: &Loadable) -> Result<Runner, Error> {
+        if !matches!(self.config.device.as_str(), "auto" | "metal") {
+            return Err(Error::LoadFailed(format!(
+                "{} is an adapter model, which runs on MLX (the Metal GPU) only, and the device is {}",
+                model.name, self.config.device
+            )));
+        }
+        let launch = Launch {
+            exe: &self.config.exe,
+            arg0: self.config.arg0.as_deref(),
+            env: &self.config.env,
+            device: "metal",
+        };
+        self.spawn_with(model, &launch).await.map_err(|e| match e {
+            Error::LoadFailed(m) => Error::LoadFailed(format!(
+                "{m} (an adapter model runs on MLX only, on the Metal GPU)"
+            )),
+            other => other,
+        })
     }
 
     async fn spawn_with(&self, model: &Loadable, launch: &Launch<'_>) -> Result<Runner, Error> {
@@ -639,15 +1295,30 @@ impl Scheduler {
                 model.name
             );
         }
+        let base = model.adapter.as_ref().map(|a| Base {
+            name: a.parent.clone(),
+            manifest: a.base_manifest.clone(),
+        });
+        // What the runner reports it holds; else, for a base, its weights on disk.
+        let size = match (&model.adapter, hello.bytes) {
+            (Some(a), 0) => a.base_size,
+            (Some(_), bytes) => bytes,
+            (None, _) => model.size,
+        };
         Ok(Runner {
-            name: model.name.to_string(),
+            name: match &base {
+                Some(b) if !b.name.is_empty() => b.name.clone(),
+                _ => model.name.to_string(),
+            },
             digest: model.digest.clone(),
             device: hello.device,
             precision: hello.precision,
             engine: hello.engine,
-            size: model.size,
+            size,
             loaded_at: SystemTime::now(),
             port: hello.port,
+            base,
+            adapters: Mutex::new(HashMap::new()),
             child: tokio::sync::Mutex::new(child),
             // Plain HTTP to 127.0.0.1: no TLS roots, so a host without CA certificates works.
             http: reqwest::Client::builder()
@@ -655,6 +1326,7 @@ impl Scheduler {
                 .tls_certs_only(std::iter::empty())
                 .build()
                 .map_err(|e| Error::LoadFailed(e.to_string()))?,
+            load_timeout: self.config.load_timeout,
             leases: AtomicUsize::new(0),
             expires: Mutex::new(None),
             keep_forever: Mutex::new(false),
@@ -696,7 +1368,148 @@ const STDERR_TAIL: usize = 5;
 
 #[cfg(test)]
 mod tests {
-    use super::{Plan, plan, runner_warns};
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::process::Stdio;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant, SystemTime};
+
+    use axum::Json;
+    use axum::routing::{delete, post};
+    use ollaya_api::KeepAlive;
+    use ollaya_decision::Calibration;
+    use ollaya_registry::{ModelConfig, ModelName};
+    use serde_json::json;
+    use tokio::process::{Child, Command};
+
+    use super::{
+        AdapterState, Base, Plan, Runner, RunningInfo, Scheduler, SchedulerConfig, base_clock,
+        least_recently_used, merge_rows, plan, runner_warns,
+    };
+    use crate::Error;
+    use crate::models::{AdapterFiles, EngineFiles, Inputs, Loadable, RunnerFiles};
+
+    fn dummy_child() -> Child {
+        #[cfg(unix)]
+        let mut cmd = {
+            let mut c = Command::new("sleep");
+            c.arg("60");
+            c
+        };
+        #[cfg(windows)]
+        let mut cmd = {
+            let mut c = Command::new("ping");
+            c.args(["-n", "60", "127.0.0.1"]);
+            c
+        };
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap()
+    }
+
+    async fn mock_adapter_server() -> u16 {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = axum::Router::new()
+            .route("/adapters", post(|| async { Json(json!({"bytes": 1000})) }))
+            .route(
+                "/adapters/{digest}",
+                delete(|| async { Json(json!({"status": "ok"})) }),
+            );
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        port
+    }
+
+    fn test_scheduler(max_loaded: usize, load_timeout: Duration) -> Arc<Scheduler> {
+        Scheduler::new(SchedulerConfig {
+            keep_alive: KeepAlive::For(Duration::from_secs(300)),
+            max_loaded,
+            max_adapters: 4,
+            device: "metal".into(),
+            threads: None,
+            load_timeout,
+            exe: PathBuf::from("nonexistent-ollaya-test-exe"),
+            arg0: None,
+            env: vec![],
+            llama_dir: None,
+            cpu_exe: None,
+        })
+    }
+
+    fn test_adapter_loadable(dir: &Path, name: &str, digest: &str, base_key: &str) -> Loadable {
+        let placeholder = |file: &str| {
+            let p = dir.join(file);
+            if !p.exists() {
+                std::fs::write(&p, b"{}").unwrap();
+            }
+            p
+        };
+        let config: ModelConfig =
+            serde_json::from_value(json!({"model_format": "adapter", "family": "laya"})).unwrap();
+        Loadable {
+            name: ModelName::parse(name).unwrap(),
+            digest: digest.into(),
+            files: EngineFiles::Onnx(RunnerFiles {
+                graph_fp32: None,
+                graph_fp16: None,
+                tokenizer: placeholder("tokenizer.json"),
+                decision: placeholder("decision.json"),
+                arch: Some(placeholder("arch.json")),
+                weights: vec![placeholder("base.safetensors")],
+                vision_graph: None,
+            }),
+            calibration: Calibration::default(),
+            inputs: Inputs::default(),
+            config,
+            questions: None,
+            size: 1000,
+            adapter: Some(AdapterFiles {
+                spec: placeholder("spec.json"),
+                weights: placeholder("adapter.safetensors"),
+                key: base_key.into(),
+                parent: "laya:en".into(),
+                base_manifest: "sha256:base".into(),
+                base_size: 5000,
+            }),
+        }
+    }
+
+    fn test_shared_runner(
+        port: u16,
+        load_timeout: Duration,
+        adapters: HashMap<String, AdapterState>,
+        leases: usize,
+    ) -> Arc<Runner> {
+        Arc::new(Runner {
+            name: "laya:en".into(),
+            digest: "sha256:base".into(),
+            device: "metal".into(),
+            precision: "fp32".into(),
+            engine: "mlx".into(),
+            size: 5000,
+            loaded_at: SystemTime::now(),
+            port,
+            base: Some(Base {
+                name: "laya:en".into(),
+                manifest: "sha256:base".into(),
+            }),
+            adapters: Mutex::new(adapters),
+            child: tokio::sync::Mutex::new(dummy_child()),
+            http: reqwest::Client::builder().no_proxy().build().unwrap(),
+            load_timeout,
+            leases: AtomicUsize::new(leases),
+            expires: Mutex::new(None),
+            keep_forever: Mutex::new(false),
+            pinned: AtomicBool::new(false),
+            last_used: Mutex::new(Instant::now()),
+        })
+    }
 
     #[test]
     fn runner_warnings_are_recognised_with_or_without_colour() {
@@ -732,5 +1545,285 @@ mod tests {
         // Without a separate CPU executable, nothing changes for ONNX models.
         assert_eq!(plan("cpu", true, false), Plan::Configured);
         assert_eq!(plan("auto", true, false), Plan::Configured);
+    }
+
+    #[test]
+    fn the_victim_is_the_idle_entry_used_longest_ago() {
+        let t0 = Instant::now();
+        let at = |s| t0 + Duration::from_secs(s);
+        // The oldest is leased: it is never the victim; adapters and runners pick alike.
+        let list = [("a", 1, at(1)), ("b", 0, at(5)), ("c", 0, at(3))];
+        assert_eq!(least_recently_used(&list), Some("c"));
+        assert_eq!(least_recently_used(&[("a", 2, at(1))]), None);
+        assert_eq!(least_recently_used::<&str>(&[]), None);
+    }
+
+    #[test]
+    fn a_base_lives_as_long_as_its_longest_lived_adapter() {
+        let t0 = Instant::now();
+        let at = |s| Some(t0 + Duration::from_secs(s));
+        // The latest clock wins; an adapter still leased (no clock) does not shorten it.
+        assert_eq!(
+            base_clock([(at(10), false), (at(30), false), (None, false)]),
+            (at(30), false)
+        );
+        // `-1` on one adapter keeps the base forever.
+        assert_eq!(base_clock([(at(10), false), (None, true)]), (at(10), true));
+        assert_eq!(base_clock([]), (None, false));
+    }
+
+    #[tokio::test]
+    async fn dropped_unload_completes_and_allows_later_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let port = mock_adapter_server().await;
+        let scheduler = test_scheduler(2, Duration::from_secs(2));
+        let base_key = "shared-base";
+        let a_digest = "sha256:adapter-a";
+        let b_digest = "sha256:adapter-b";
+        let adapter_a = test_adapter_loadable(dir.path(), "ft-a:latest", a_digest, base_key);
+        let mut adapters = HashMap::new();
+        adapters.insert(
+            a_digest.into(),
+            AdapterState {
+                name: "ft-a:latest".into(),
+                size: 1000,
+                loaded_at: SystemTime::now(),
+                leases: 1,
+                last_used: Instant::now(),
+                expires: None,
+                keep_forever: false,
+                pinned: false,
+                removing: false,
+            },
+        );
+        adapters.insert(
+            b_digest.into(),
+            AdapterState {
+                name: "ft-b:latest".into(),
+                size: 1000,
+                loaded_at: SystemTime::now(),
+                leases: 0,
+                last_used: Instant::now(),
+                expires: None,
+                keep_forever: true,
+                pinned: false,
+                removing: false,
+            },
+        );
+        let runner = test_shared_runner(port, Duration::from_secs(2), adapters, 1);
+        scheduler
+            .runners
+            .lock()
+            .unwrap()
+            .insert(base_key.into(), runner.clone());
+
+        // Drop `unload` while `finish_remove` waits for adapter `a`'s active lease.
+        let cancelled = tokio::time::timeout(Duration::from_millis(60), scheduler.unload(a_digest))
+            .await
+            .is_err();
+        assert!(cancelled, "unload should block while lease is active");
+
+        // End the lease; a spawned `finish_remove` still finishes removing `a`.
+        if let Some(a) = runner.adapters.lock().unwrap().get_mut(a_digest) {
+            a.leases = 0;
+        }
+        runner.leases.store(0, Ordering::SeqCst);
+
+        let (lease, _) =
+            tokio::time::timeout(Duration::from_secs(2), scheduler.acquire(&adapter_a, None))
+                .await
+                .expect("acquire hung after cancelled unload")
+                .unwrap();
+        drop(lease);
+        scheduler.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn unloading_wait_is_bounded_by_load_timeout() {
+        let dir = tempfile::tempdir().unwrap();
+        let port = mock_adapter_server().await;
+        let scheduler = test_scheduler(2, Duration::from_millis(120));
+        let base_key = "shared-base";
+        let a_digest = "sha256:adapter-a";
+        let b_digest = "sha256:adapter-b";
+        let adapter_a = test_adapter_loadable(dir.path(), "ft-a:latest", a_digest, base_key);
+        let adapter_b = test_adapter_loadable(dir.path(), "ft-b:latest", b_digest, base_key);
+        let mut adapters = HashMap::new();
+        adapters.insert(
+            a_digest.into(),
+            AdapterState {
+                name: "ft-a:latest".into(),
+                size: 1000,
+                loaded_at: SystemTime::now(),
+                leases: 1,
+                last_used: Instant::now(),
+                expires: None,
+                keep_forever: false,
+                pinned: false,
+                removing: true,
+            },
+        );
+        let runner = test_shared_runner(port, Duration::from_millis(120), adapters, 1);
+        scheduler
+            .runners
+            .lock()
+            .unwrap()
+            .insert(base_key.into(), runner);
+
+        let err = tokio::time::timeout(Duration::from_secs(2), scheduler.acquire(&adapter_a, None))
+            .await
+            .expect("Slot::Unloading loop did not respect load_timeout")
+            .err()
+            .expect("expected LoadFailed");
+        assert!(
+            matches!(err, Error::LoadFailed(ref m) if m.contains("unload") || m.contains("timed out")),
+            "unexpected error: {err:?}"
+        );
+
+        // `load_lock` was released, so another adapter loads cleanly.
+        let (lease, _) =
+            tokio::time::timeout(Duration::from_secs(2), scheduler.acquire(&adapter_b, None))
+                .await
+                .expect("load_lock stayed held after bounded Unloading timeout")
+                .unwrap();
+        drop(lease);
+        scheduler.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn make_room_evict_does_not_deadlock_with_cold_adapter_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let port = mock_adapter_server().await;
+        let scheduler = test_scheduler(1, Duration::from_secs(2));
+        let base_key = "shared-base";
+        let a_digest = "sha256:adapter-a";
+        let b_digest = "sha256:adapter-b";
+        let adapter_b = test_adapter_loadable(dir.path(), "ft-b:latest", b_digest, base_key);
+
+        let idle_a = || {
+            let mut adapters = HashMap::new();
+            adapters.insert(
+                a_digest.into(),
+                AdapterState {
+                    name: "ft-a:latest".into(),
+                    size: 1000,
+                    loaded_at: SystemTime::now(),
+                    leases: 0,
+                    last_used: Instant::now(),
+                    expires: Some(Instant::now() + Duration::from_secs(300)),
+                    keep_forever: false,
+                    pinned: false,
+                    removing: false,
+                },
+            );
+            adapters
+        };
+
+        // Part 1: `make_room` holds `load_lock` and evicts idle runner R while a cold adapter
+        // request for B waits on `load_lock`.
+        let runner = test_shared_runner(port, Duration::from_secs(2), idle_a(), 0);
+        scheduler
+            .runners
+            .lock()
+            .unwrap()
+            .insert(base_key.into(), runner);
+
+        let guard = scheduler.load_lock.lock().await;
+        let task2 = tokio::spawn({
+            let s = scheduler.clone();
+            let b = adapter_b.clone();
+            async move { s.acquire(&b, None).await }
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        tokio::time::timeout(Duration::from_secs(2), scheduler.evict(base_key))
+            .await
+            .expect("evict deadlocked while adapter request waited on load_lock");
+        drop(guard);
+
+        let res = tokio::time::timeout(Duration::from_secs(2), task2)
+            .await
+            .expect("adapter request hung")
+            .unwrap();
+        assert!(
+            matches!(res, Err(Error::LoadFailed(_))),
+            "expected LoadFailed after victim was evicted"
+        );
+
+        // Part 2: when R is not evicted, a waiting cold-adapter request holds no runner lease
+        // across `load_lock` and finishes loading B once `load_lock` is released.
+        let runner2 = test_shared_runner(port, Duration::from_secs(2), idle_a(), 0);
+        scheduler
+            .runners
+            .lock()
+            .unwrap()
+            .insert(base_key.into(), runner2.clone());
+
+        let guard = scheduler.load_lock.lock().await;
+        let task2 = tokio::spawn({
+            let s = scheduler.clone();
+            let b = adapter_b.clone();
+            async move { s.acquire(&b, None).await }
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(
+            runner2.leases.load(Ordering::SeqCst),
+            0,
+            "cold adapter request held runner lease while waiting on load_lock"
+        );
+        drop(guard);
+
+        let (lease, _) = tokio::time::timeout(Duration::from_secs(2), task2)
+            .await
+            .expect("cold adapter request hung")
+            .unwrap()
+            .unwrap();
+        drop(lease);
+        scheduler.shutdown().await;
+    }
+
+    #[test]
+    fn merge_rows_merges_only_a_shared_base_with_its_plain_copy() {
+        let t0 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let row = |digest: &str, size: u64, loaded_s: u64, expires_s: Option<u64>| RunningInfo {
+            name: "laya:en".into(),
+            digest: digest.into(),
+            device: "metal".into(),
+            precision: "fp32".into(),
+            size,
+            loaded_at: t0 + Duration::from_secs(loaded_s),
+            expires_at: expires_s.map(|s| t0 + Duration::from_secs(s)),
+        };
+
+        // Two plain runners with different digests (e.g. a re-pulled tag) stay two rows.
+        let got = merge_rows(vec![
+            (row("sha256:old", 5000, 10, Some(100)), false),
+            (row("sha256:new", 5000, 20, Some(200)), false),
+        ]);
+        assert_eq!(got.len(), 2);
+
+        // Two plain rows with the same name and digest also stay separate.
+        let got = merge_rows(vec![
+            (row("sha256:d1", 5000, 10, Some(100)), false),
+            (row("sha256:d1", 5000, 20, Some(200)), false),
+        ]);
+        assert_eq!(got.len(), 2);
+
+        // A plain runner and a shared adapter base with the same name and digest merge.
+        let got = merge_rows(vec![
+            (row("sha256:d1", 5000, 20, Some(100)), false),
+            (row("sha256:d1", 5001, 10, None), true),
+        ]);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].size, 10001);
+        assert_eq!(got[0].loaded_at, t0 + Duration::from_secs(10));
+        assert_eq!(got[0].expires_at, None);
+
+        // A plain runner and a shared adapter base with different digests stay two rows.
+        let got = merge_rows(vec![
+            (row("sha256:old", 5000, 10, Some(100)), false),
+            (row("sha256:new", 5000, 20, Some(200)), true),
+        ]);
+        assert_eq!(got.len(), 2);
     }
 }

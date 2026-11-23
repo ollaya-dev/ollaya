@@ -24,12 +24,13 @@ use serde_json::{Value, json};
 // The fake runner
 
 mod fake_runner {
-    use std::sync::Arc;
+    use std::collections::HashSet;
+    use std::sync::{Arc, Mutex};
 
     use axum::Json;
     use axum::http::StatusCode;
     use axum::response::{IntoResponse, Response};
-    use axum::routing::{get, post};
+    use axum::routing::{delete, get, post};
     use serde_json::{Value, json};
 
     /// `runner --decision <file> ... --device <device>`: behaviour comes from the decision
@@ -76,16 +77,107 @@ mod fake_runner {
         } else {
             device
         };
+        // `bytes` is what a runner reports its base holds; an adapter's is 1000 (below).
         println!(
             "{}",
-            json!({"port": port, "device": device, "precision": "fp32"})
+            json!({"port": port, "device": device, "precision": "fp32", "engine": "mlx", "bytes": 5000})
         );
         let d = decision.clone();
+        // A runner whose queue is stuck: it takes the request and never answers.
+        let (hang_post, hang_delete) = (
+            fake["hang_adapter_post"].as_bool() == Some(true),
+            fake["hang_adapter_delete"].as_bool() == Some(true),
+        );
+        let d_log: Option<&'static str> = fake["delete_log"]
+            .as_str()
+            .map(|s| &*Box::leak(s.to_owned().into_boxed_str()));
+        let slow_ms = fake["slow_ms"].as_u64().unwrap_or(0);
+        let slow_log: Option<&'static str> = fake["slow_log"]
+            .as_str()
+            .map(|s| &*Box::leak(s.to_owned().into_boxed_str()));
+        let delete_ms = fake["delete_ms"].as_u64().unwrap_or(0);
+        let loaded: Arc<Mutex<HashSet<String>>> = Default::default();
+        let (on_decide, on_add, on_drop) = (loaded.clone(), loaded.clone(), loaded);
         let app = axum::Router::new()
             .route("/health", get(|| async { Json(json!({"status": "ok"})) }))
             .route(
                 "/decide",
-                post(move |Json(req): Json<Value>| async move { decide(&d, &req) }),
+                post(move |Json(req): Json<Value>| async move {
+                    // A request for an adapter the runner does not hold is a 404, as the real one's.
+                    if let Some(a) = req["adapter"].as_str()
+                        && !on_decide.lock().unwrap().contains(a)
+                    {
+                        return error(
+                            StatusCode::NOT_FOUND,
+                            json!({"code": "ADAPTER_NOT_FOUND", "message": format!("no adapter {a}")}),
+                        );
+                    }
+                    if slow_ms > 0 && req["state"].as_str().is_some_and(|s| s.contains("SLOW")) {
+                        if let Some(log) = slow_log {
+                            use std::io::Write as _;
+                            let mut f = std::fs::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(log)
+                                .unwrap();
+                            writeln!(f, "slow").unwrap();
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(slow_ms)).await;
+                    }
+                    decide(&d, &req)
+                }),
+            )
+            .route(
+                "/adapters",
+                post(move |Json(req): Json<Value>| async move {
+                    if hang_post {
+                        std::future::pending::<()>().await;
+                    }
+                    // The runner gets the adapter's own files, which exist in the store.
+                    for key in ["spec", "weights", "decision", "tokenizer"] {
+                        let ok = req[key].as_str().is_some_and(|p| std::path::Path::new(p).is_file());
+                        if !ok {
+                            return error(
+                                StatusCode::BAD_REQUEST,
+                                json!({"code": "ADAPTER_LOAD_FAILED", "message": format!("no file for {key}")}),
+                            );
+                        }
+                    }
+                    let own: Value = serde_json::from_str(
+                        &std::fs::read_to_string(req["decision"].as_str().unwrap()).unwrap(),
+                    )
+                    .unwrap();
+                    if own["fake"]["fail_adapter"].as_bool() == Some(true) {
+                        return error(
+                            StatusCode::BAD_REQUEST,
+                            json!({"code": "ADAPTER_LOAD_FAILED", "message": "fake adapter load failure"}),
+                        );
+                    }
+                    on_add.lock().unwrap().insert(req["digest"].as_str().unwrap().into());
+                    Json(json!({"bytes": 1000})).into_response()
+                }),
+            )
+            .route(
+                "/adapters/{digest}",
+                delete(move |axum::extract::Path(digest): axum::extract::Path<String>| async move {
+                    // The deletes the runner got, for a test to read.
+                    if let Some(log) = d_log {
+                        use std::io::Write as _;
+                        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(log).unwrap();
+                        writeln!(f, "{digest}").unwrap();
+                    }
+                    if hang_delete {
+                        std::future::pending::<()>().await;
+                    }
+                    if delete_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delete_ms)).await;
+                    }
+                    if on_drop.lock().unwrap().remove(&digest) {
+                        Json(json!({"status": "ok"})).into_response()
+                    } else {
+                        error(StatusCode::NOT_FOUND, json!({"code": "ADAPTER_NOT_FOUND", "message": "no"}))
+                    }
+                }),
             );
         axum::serve(listener, app).await.unwrap();
     }
@@ -131,8 +223,10 @@ mod fake_runner {
                 );
             }
             input_tokens += 10 + n;
+            // The base's answer is option 0; an adapter's is option 1: the two are told apart.
+            let win = usize::from(req["adapter"].is_string() && n > 1);
             let logits: Vec<f32> = (0..n)
-                .map(|i| if i == 0 { 2.0 } else { -(i as f32) / 4.0 })
+                .map(|i| if i == win { 2.0 } else { -(i as f32) / 4.0 })
                 .collect();
             let mut row = json!({"logits": logits});
             if act {
@@ -213,6 +307,138 @@ fn add_model(store: &Store, name: &str, languages: &[&str], fake: Value) {
     store
         .write_manifest(&name, &serde_json::to_vec(&manifest).unwrap())
         .unwrap();
+}
+
+/// A safetensors file of float32 tensors `(name, shape)`, zero-filled.
+fn safetensors(tensors: &[(&str, &[usize])]) -> Vec<u8> {
+    let mut header = serde_json::Map::new();
+    let mut at = 0u64;
+    for (name, shape) in tensors {
+        let bytes = shape.iter().product::<usize>() as u64 * 4;
+        header.insert(
+            (*name).into(),
+            json!({"dtype": "F32", "shape": shape, "data_offsets": [at, at + bytes]}),
+        );
+        at += bytes;
+    }
+    let header = Value::Object(header).to_string().into_bytes();
+    let mut out = (header.len() as u64).to_le_bytes().to_vec();
+    out.extend(header);
+    out.extend(vec![0u8; at as usize]);
+    out
+}
+
+/// An encoder the MLX engine runs: an arch layer and a safetensors weights layer next to the
+/// graph, as `laya:en` has. Its linears: `encoder.layers.0.attn.Wo` [8, 8] and
+/// `encoder.layers.0.mlp.Wi` [32, 8].
+fn add_mlx_model(store: &Store, name: &str, fake: Value) {
+    add_mlx_encoder(store, name, fake, "modernbert");
+}
+
+/// `add_mlx_model` with another backbone type in the arch layer.
+fn add_mlx_encoder(store: &Store, name: &str, fake: Value, backbone: &str) {
+    let config = json!({"model_format": "onnx", "family": "laya", "parameter_size": "421M",
+        "context_length": 512, "languages": ["en"], "description": format!("{name} for tests"),
+        "license": "Apache-2.0"});
+    let arch = json!({"schema": 1, "backbone": {"type": backbone, "prefix": "encoder."},
+        "head": {"type": "laya"}, "weights": {"format": "safetensors", "file": "model.safetensors"}});
+    let weights = safetensors(&[
+        ("encoder.layers.0.attn.Wo.weight", &[8, 8]),
+        ("encoder.layers.0.mlp.Wi.weight", &[32, 8]),
+        ("encoder.norm.weight", &[8]),
+    ]);
+    let manifest = Manifest {
+        schema_version: 2,
+        media_type: MANIFEST_V2.into(),
+        config: blob(store, media::CONFIG, config.to_string().as_bytes(), None),
+        layers: vec![
+            blob(
+                store,
+                media::GRAPH_ONNX,
+                format!("{name} fp32").as_bytes(),
+                Some("fp32"),
+            ),
+            blob(store, media::TOKENIZER, b"{}", None),
+            blob(
+                store,
+                media::DECISION,
+                decision_json(fake).to_string().as_bytes(),
+                None,
+            ),
+            blob(store, media::ARCH, arch.to_string().as_bytes(), None),
+            blob(store, media::WEIGHTS, &weights, None),
+        ],
+    };
+    store
+        .write_manifest(
+            &ModelName::parse(name).unwrap(),
+            &serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+}
+
+/// A peft adapter on `add_mlx_model`'s linears, rank 4.
+fn adapter_weights() -> Vec<u8> {
+    safetensors(&[
+        ("base_model.model.layers.0.attn.Wo.lora_A.weight", &[4, 8]),
+        ("base_model.model.layers.0.attn.Wo.lora_B.weight", &[8, 4]),
+        ("base_model.model.layers.0.mlp.Wi.lora_A.weight", &[4, 8]),
+        ("base_model.model.layers.0.mlp.Wi.lora_B.weight", &[32, 4]),
+    ])
+}
+
+fn adapter_config(alpha: u32) -> Value {
+    json!({"peft_type": "LORA", "r": 4, "lora_alpha": alpha, "use_rslora": false,
+           "use_dora": false, "base_model_name_or_path": "answerdotai/ModernBERT-large"})
+}
+
+fn sha(bytes: &[u8]) -> String {
+    format!("sha256:{}", sha256_hex(bytes))
+}
+
+/// `POST /api/blobs/:digest`, as the CLI uploads an adapter.
+async fn upload(d: &Daemon, bytes: &[u8]) -> String {
+    let digest = sha(bytes);
+    let r = http()
+        .post(d.url(&format!("/api/blobs/{digest}")))
+        .body(bytes.to_vec())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 201, "{}", r.text().await.unwrap());
+    digest
+}
+
+async fn create_adapter(
+    d: &Daemon,
+    name: &str,
+    from: &str,
+    config: Value,
+    weights: &str,
+) -> (u16, Value) {
+    let (status, _, body) = post_raw(
+        &d.url("/api/create"),
+        json!({"model": name, "from": from, "stream": false,
+               "adapter": {"config": config, "weights": weights}})
+        .to_string(),
+    )
+    .await;
+    (status, body)
+}
+
+/// A daemon with an MLX encoder `laya:en` and the adapter blob uploaded (device `metal`: adapter
+/// models run on MLX only; the fake runner takes any device).
+async fn adapter_daemon(tweak: impl FnOnce(&mut ServerConfig)) -> (Daemon, String) {
+    let d = Daemon::start(
+        |dir| add_mlx_model(&Store::open(dir).unwrap(), "laya:en", json!({})),
+        |c| {
+            c.device = "metal".into();
+            tweak(c);
+        },
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    (d, weights)
 }
 
 /// A GGUF model, which runs on llama.cpp: the GGUF file and its decision layer.
@@ -406,6 +632,995 @@ async fn liveness_version_and_request_ids() {
         .unwrap();
     assert_eq!(r.headers()["x-request-id"], "trace-42");
     assert_eq!(r.headers()["x-typesafe-request-id"], "trace-42");
+    d.stop().await;
+}
+
+async fn adapter_models_create_decide_share_a_runner_and_delete() {
+    let (d, weights) = adapter_daemon(|_| {}).await;
+    let base = d.client.show("laya:en").await.unwrap();
+    for (name, alpha) in [("ft-a", 8), ("ft-b", 16)] {
+        let (status, body) =
+            create_adapter(&d, name, "laya:en", adapter_config(alpha), &weights).await;
+        assert_eq!(
+            (status, &body["status"]),
+            (200, &json!("success")),
+            "{body}"
+        );
+    }
+    let shown = d.client.show("ft-a").await.unwrap();
+    assert_eq!(shown.details.format, "adapter");
+    assert_eq!(shown.details.parent_model, "laya:en");
+    // The manifest keeps the base's layers and adds the adapter's two.
+    let store = Store::open(d._dir.path()).unwrap();
+    let m = store
+        .read_manifest(&ModelName::parse("ft-a").unwrap())
+        .unwrap()
+        .unwrap()
+        .manifest;
+    assert!(m.layer(media::ARCH).is_some() && m.layer(media::ADAPTER).is_some());
+    assert_eq!(m.layer(media::ADAPTER_WEIGHTS).unwrap().digest, weights);
+    let spec: ollaya_registry::adapter::AdapterSpec = store
+        .read_blob_json(m.layer(media::ADAPTER).unwrap())
+        .unwrap();
+    assert_eq!((spec.rank, spec.scaling), (4, 2.0));
+    assert_eq!(
+        spec.targets,
+        ["encoder.layers.0.attn.Wo", "encoder.layers.0.mlp.Wi"]
+    );
+    // The same adapter on the same base writes the same spec blob (canonical form).
+    let (status, _) = create_adapter(&d, "ft-a2", "laya:en", adapter_config(8), &weights).await;
+    assert_eq!(status, 200);
+    let m2 = store
+        .read_manifest(&ModelName::parse("ft-a2").unwrap())
+        .unwrap()
+        .unwrap()
+        .manifest;
+    assert_eq!(
+        m2.layer(media::ADAPTER).unwrap().digest,
+        m.layer(media::ADAPTER).unwrap().digest
+    );
+
+    // Decide: each adapter answers as an adapter (option 1 in the fake), under its own name.
+    let client = &d.client;
+    let ask = |model: &'static str| async move {
+        client
+            .decide(&DecideRequest::new(
+                model,
+                json!("An invoice question."),
+                serde_json::from_value(triage()).ok(),
+            ))
+            .await
+            .unwrap()
+    };
+    let a = ask("ft-a").await;
+    assert_eq!(a.model, "ft-a:latest");
+    let b = ask("ft-b").await;
+    assert_eq!(b.model, "ft-b:latest");
+    assert_eq!(
+        a.answers["department"], b.answers["department"],
+        "the fake answers alike"
+    );
+
+    // One runner for both: the base's row, and one row for each adapter, which add up.
+    let ps = d.client.ps().await.unwrap().models;
+    let names: Vec<_> = ps.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["ft-a:latest", "ft-b:latest", "laya:en"],
+        "{names:?}"
+    );
+    let row = |n: &str| ps.iter().find(|m| m.name == n).unwrap();
+    assert_eq!(
+        (
+            row("laya:en").size,
+            row("ft-a:latest").size,
+            row("ft-b:latest").size
+        ),
+        (5000, 1000, 1000)
+    );
+    assert_eq!(row("ft-a:latest").details.parent_model, "laya:en");
+    assert_eq!(
+        row("laya:en").digest,
+        base.digest.trim_start_matches("sha256:")
+    );
+    assert_ne!(row("ft-a:latest").digest, row("ft-b:latest").digest);
+
+    // A plain model stays keyed by its manifest digest: asking for the base itself loads a
+    // second runner, with its own copy of the base.
+    let plain = ask("laya:en").await;
+    assert_eq!(plain.model, "laya:en");
+    // Two runners, but `ps` shows one row per name: `laya:en` once, with both copies counted.
+    let ps = d.client.ps().await.unwrap().models;
+    let names: Vec<_> = ps.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["ft-a:latest", "ft-b:latest", "laya:en"],
+        "{names:?}"
+    );
+    assert!(
+        ps.iter().find(|m| m.name == "laya:en").unwrap().size > 5000,
+        "the plain runner's copy and the shared base's"
+    );
+    // `stop laya:en` reaches both runners, and the adapters that were on the shared one go.
+    d.client.unload("laya:en").await.unwrap();
+    assert!(d.client.ps().await.unwrap().models.is_empty());
+    ask("ft-a").await;
+    ask("ft-b").await;
+    ask("laya:en").await;
+    assert_eq!(d.client.ps().await.unwrap().models.len(), 3);
+
+    // Deleting an adapter model drops it from its runner; the base and the other adapter stay.
+    d.client.delete("ft-a").await.unwrap();
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert!(
+        !names.contains(&"ft-a:latest".to_owned()) && names.contains(&"ft-b:latest".to_owned()),
+        "{names:?}"
+    );
+    ask("ft-b").await;
+    // Unloading the last adapter frees the runner.
+    d.client.unload("ft-b").await.unwrap();
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(
+        names,
+        ["laya:en"],
+        "only the plain base's own runner is left"
+    );
+    d.stop().await;
+}
+
+async fn adapter_refusals_name_the_problem_and_write_nothing() {
+    let (d, weights) = adapter_daemon(|_| {}).await;
+    let store = Store::open(d._dir.path()).unwrap();
+    let before = store.list().unwrap().len();
+    let refuse = |status: u16, body: &Value, what: &str| {
+        assert_eq!(status, 422, "{body}");
+        let text = body.to_string();
+        assert!(text.contains(what), "{what:?} not in {text}");
+    };
+    // modules_to_save in the config.
+    let mut config = adapter_config(8);
+    config["modules_to_save"] = json!(["classifier"]);
+    let (status, body) = create_adapter(&d, "x1", "laya:en", config, &weights).await;
+    refuse(status, &body, "modules_to_save");
+    // A trained head among the tensors.
+    let head = safetensors(&[
+        ("base_model.model.layers.0.attn.Wo.lora_A.weight", &[4, 8]),
+        ("base_model.model.layers.0.attn.Wo.lora_B.weight", &[8, 4]),
+        (
+            "base_model.model.classifier.modules_to_save.default.weight",
+            &[2, 8],
+        ),
+    ]);
+    let head = upload(&d, &head).await;
+    let (status, body) = create_adapter(&d, "x2", "laya:en", adapter_config(8), &head).await;
+    refuse(status, &body, "not a LoRA pair");
+    // A target module the base does not have, and a shape that is not the base's.
+    let unknown = upload(
+        &d,
+        &safetensors(&[
+            ("base_model.model.layers.7.attn.Wo.lora_A.weight", &[4, 8]),
+            ("base_model.model.layers.7.attn.Wo.lora_B.weight", &[8, 4]),
+        ]),
+    )
+    .await;
+    let (status, body) = create_adapter(&d, "x3", "laya:en", adapter_config(8), &unknown).await;
+    refuse(status, &body, "layers.7.attn.Wo");
+    let wide = upload(
+        &d,
+        &safetensors(&[
+            ("base_model.model.layers.0.mlp.Wi.lora_A.weight", &[4, 16]),
+            ("base_model.model.layers.0.mlp.Wi.lora_B.weight", &[32, 4]),
+        ]),
+    )
+    .await;
+    let (status, body) = create_adapter(&d, "x4", "laya:en", adapter_config(8), &wide).await;
+    refuse(status, &body, "[4, 8]");
+    // Offsets that run past the file, run backwards, or overlap (peft files are trusted by
+    // nobody: the runner subtracts them).
+    let lora = |at: [(u64, u64); 2]| {
+        let mut header = serde_json::Map::new();
+        for (name, shape, (b, e)) in [
+            (
+                "base_model.model.layers.0.attn.Wo.lora_A.weight",
+                [4, 8],
+                at[0],
+            ),
+            (
+                "base_model.model.layers.0.attn.Wo.lora_B.weight",
+                [8, 4],
+                at[1],
+            ),
+        ] {
+            header.insert(
+                name.into(),
+                json!({"dtype": "F32", "shape": shape, "data_offsets": [b, e]}),
+            );
+        }
+        let header = Value::Object(header).to_string().into_bytes();
+        let mut out = (header.len() as u64).to_le_bytes().to_vec();
+        out.extend(header);
+        out.extend(vec![0u8; 256]);
+        out
+    };
+    for (i, (at, what)) in [
+        ([(128, 0), (128, 256)], "reversed"),
+        ([(0, 128), (128, 9999)], "run past"),
+        ([(0, 128), (64, 192)], "overlap"),
+        ([(0, 100), (128, 256)], "bytes for shape"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let blob = upload(&d, &lora(at)).await;
+        let (status, body) =
+            create_adapter(&d, &format!("off{i}"), "laya:en", adapter_config(8), &blob).await;
+        refuse(status, &body, what);
+    }
+    // Options the engine does not run, and weights that were never uploaded.
+    let mut config = adapter_config(8);
+    config["use_dora"] = json!(true);
+    let (status, body) = create_adapter(&d, "x5", "laya:en", config, &weights).await;
+    refuse(status, &body, "use_dora");
+    let (status, body) = create_adapter(
+        &d,
+        "x6",
+        "laya:en",
+        adapter_config(8),
+        &sha(b"never uploaded"),
+    )
+    .await;
+    refuse(status, &body, "upload them first");
+    // A base with no arch layer, a router, an adapter model; PARAMETER precision.
+    let (status, body) = create_adapter(&d, "x7", "laya:en", adapter_config(8), &weights).await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = create_adapter(&d, "x8", "x7", adapter_config(8), &weights).await;
+    refuse(status, &body, "do not stack");
+    let (status, _, body) = post_raw(
+        &d.url("/api/create"),
+        json!({"model": "x9", "from": "laya:en", "parameters": {"precision": "fp32"}, "stream": false,
+               "adapter": {"config": adapter_config(8), "weights": weights}}).to_string(),
+    ).await;
+    refuse(status, &body, "precision");
+    // Nothing was written by any refusal: only `x7`, and the blobs uploaded for them.
+    assert_eq!(store.list().unwrap().len(), before + 1);
+    d.stop().await;
+
+    // A DeBERTa-v2 base: its position projections ignore the adapter, so it is refused.
+    let d = Daemon::start(
+        |dir| add_mlx_encoder(&Store::open(dir).unwrap(), "deb", json!({}), "deberta-v2"),
+        |c| c.device = "metal".into(),
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    let (status, body) = create_adapter(&d, "z", "deb", adapter_config(8), &weights).await;
+    refuse(status, &body, "not supported on DeBERTa-v2");
+    d.stop().await;
+
+    // A base with no arch layer (ONNX only).
+    let d = Daemon::start(
+        |dir| add_model(&Store::open(dir).unwrap(), "onnx-only", &["en"], json!({})),
+        |c| c.device = "metal".into(),
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    let (status, body) = create_adapter(&d, "y", "onnx-only", adapter_config(8), &weights).await;
+    refuse(status, &body, "no arch layer");
+    d.stop().await;
+}
+
+async fn adapter_models_run_on_mlx_only_and_fail_alone() {
+    // On the CPU: a message that says why, no runner, the base untouched.
+    let (d, weights) = adapter_daemon(|c| c.device = "cpu".into()).await;
+    let (status, _) = create_adapter(&d, "ft", "laya:en", adapter_config(8), &weights).await;
+    assert_eq!(status, 200);
+    let err = d
+        .client
+        .decide(&DecideRequest::new(
+            "ft",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap_err();
+    let (status, body) = api_err(err);
+    assert_eq!((status, body.code), (500, ErrorCode::ModelLoadFailed));
+    assert!(body.error.contains("MLX"), "{}", body.error);
+    assert!(d.client.ps().await.unwrap().models.is_empty());
+    d.stop().await;
+
+    // A load that fails because of one adapter leaves the base and the other adapters loaded.
+    let d = Daemon::start(
+        |dir| add_mlx_model(&Store::open(dir).unwrap(), "laya:en", json!({})),
+        |c| c.device = "metal".into(),
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    create_adapter(&d, "good", "laya:en", adapter_config(8), &weights).await;
+    // A third adapter model whose own decision.json makes the runner refuse it.
+    let store = Store::open(d._dir.path()).unwrap();
+    create_adapter(&d, "bad", "laya:en", adapter_config(16), &weights).await;
+    let name = ModelName::parse("bad").unwrap();
+    let mut m = store.read_manifest(&name).unwrap().unwrap().manifest;
+    m.layers.retain(|l| l.media_type != media::DECISION);
+    m.layers.push(blob(
+        &store,
+        media::DECISION,
+        decision_json(json!({"fail_adapter": true}))
+            .to_string()
+            .as_bytes(),
+        None,
+    ));
+    store
+        .write_manifest(&name, &serde_json::to_vec(&m).unwrap())
+        .unwrap();
+    let client = &d.client;
+    let ask = |model: &'static str| async move {
+        client
+            .decide(&DecideRequest::new(
+                model,
+                json!("x"),
+                serde_json::from_value(triage()).ok(),
+            ))
+            .await
+    };
+    ask("good").await.unwrap();
+    let (status, body) = api_err(ask("bad").await.unwrap_err());
+    assert_eq!((status, body.code), (500, ErrorCode::ModelLoadFailed));
+    assert!(
+        body.error.contains("fake adapter load failure"),
+        "{}",
+        body.error
+    );
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(names, ["good:latest", "laya:en"], "{names:?}");
+    ask("good").await.unwrap();
+    d.stop().await;
+}
+
+async fn the_adapter_limit_drops_the_least_recently_used_idle_adapter() {
+    let (d, weights) = adapter_daemon(|c| c.max_adapters = 2).await;
+    for (i, name) in ["a", "b", "c"].into_iter().enumerate() {
+        create_adapter(&d, name, "laya:en", adapter_config(8 + i as u32), &weights).await;
+    }
+    let client = &d.client;
+    let ask = |model: &'static str| async move {
+        client
+            .decide(&DecideRequest::new(
+                model,
+                json!("x"),
+                serde_json::from_value(triage()).ok(),
+            ))
+            .await
+    };
+    ask("a").await.unwrap();
+    ask("b").await.unwrap();
+    ask("a").await.unwrap();
+    // `b` is the least recently used: it goes, nothing else, and no process dies.
+    ask("c").await.unwrap();
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(names, ["a:latest", "c:latest", "laya:en"], "{names:?}");
+    // It loads again when asked for, dropping the then least recently used (`a`).
+    ask("b").await.unwrap();
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(names, ["b:latest", "c:latest", "laya:en"], "{names:?}");
+    d.stop().await;
+}
+
+/// A daemon whose `laya:en` has `fake` in its decision layer; adapters inherit it.
+async fn fake_adapter_daemon(fake: Value, load_timeout: Duration) -> (Daemon, String) {
+    let d = Daemon::start(
+        |dir| add_mlx_model(&Store::open(dir).unwrap(), "laya:en", fake),
+        |c| {
+            c.device = "metal".into();
+            c.load_timeout = load_timeout;
+        },
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    (d, weights)
+}
+
+async fn a_runner_that_never_answers_does_not_hold_the_load_lock_for_ever() {
+    // Registering an adapter: the runner takes the request and never answers.
+    let (d, weights) = fake_adapter_daemon(
+        json!({"hang_adapter_post": true}),
+        Duration::from_millis(800),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    let ask = |model: &'static str| {
+        let client = &d.client;
+        async move {
+            tokio::time::timeout(
+                Duration::from_secs(20),
+                client.decide(&DecideRequest::new(
+                    model,
+                    json!("x"),
+                    serde_json::from_value(triage()).ok(),
+                )),
+            )
+            .await
+            .expect("the load lock was held with no timeout")
+        }
+    };
+    let (status, body) = api_err(ask("a").await.unwrap_err());
+    assert_eq!((status, body.code), (500, ErrorCode::ModelLoadFailed));
+    assert!(body.error.contains("load timeout"), "{}", body.error);
+    // Every other load still goes: a plain model needs the same lock.
+    ask("laya:en").await.unwrap();
+    d.stop().await;
+
+    // After the timeout the daemon tells the runner to drop the adapter, in case it finishes
+    // loading it later and would serve it outside the count.
+    let log = std::env::temp_dir().join(format!("ollaya-deletes-{}", std::process::id()));
+    let _ = std::fs::remove_file(&log);
+    let (d, weights) = fake_adapter_daemon(
+        json!({"hang_adapter_post": true, "delete_log": log.display().to_string()}),
+        Duration::from_millis(800),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    let req = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    d.client.decide(&req).await.unwrap_err();
+    let digest = Store::open(d._dir.path())
+        .unwrap()
+        .read_manifest(&ModelName::parse("a").unwrap())
+        .unwrap()
+        .unwrap()
+        .digest;
+    let deleted = std::fs::read_to_string(&log).unwrap_or_default();
+    let _ = std::fs::remove_file(&log);
+    assert!(
+        deleted.contains(digest.trim_start_matches("sha256:")) || deleted.contains(&digest),
+        "no DELETE /adapters/<digest> after the timeout: {deleted:?}"
+    );
+    d.stop().await;
+
+    // Dropping an adapter: the unload gives up on the runner, forgets the adapter, and returns.
+    let (d, weights) = fake_adapter_daemon(
+        json!({"hang_adapter_delete": true}),
+        Duration::from_millis(800),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    let req = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    d.client.decide(&req).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(20), d.client.unload("a"))
+        .await
+        .expect("the unload waited for the runner with no timeout")
+        .unwrap();
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert!(!names.contains(&"a:latest".to_owned()), "{names:?}");
+    d.stop().await;
+}
+
+async fn the_base_stops_being_kept_when_its_keep_forever_adapter_goes() {
+    let (d, weights) = adapter_daemon(|_| {}).await;
+    // Different alphas, so that the two are two models (one digest each).
+    for (name, alpha) in [("a", 8), ("b", 16)] {
+        create_adapter(&d, name, "laya:en", adapter_config(alpha), &weights).await;
+    }
+    let mut keep = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    keep.keep_alive = Some(KeepAlive::Forever);
+    d.client.decide(&keep).await.unwrap();
+    let req = DecideRequest::new("b", json!("x"), serde_json::from_value(triage()).ok());
+    d.client.decide(&req).await.unwrap();
+    let expires = |ps: Vec<ollaya_api::RunningModel>, name: &str| {
+        ps.into_iter().find(|m| m.name == name).unwrap().expires_at
+    };
+    let ps = d.client.ps().await.unwrap().models;
+    assert_eq!(
+        expires(ps.clone(), "laya:en"),
+        None,
+        "-1 on `a` keeps the base"
+    );
+    assert!(expires(ps, "b:latest").is_some());
+    // `a` goes; the base's clock is now `b`'s.
+    d.client.unload("a").await.unwrap();
+    let ps = d.client.ps().await.unwrap().models;
+    assert!(
+        expires(ps, "laya:en").is_some(),
+        "the base was kept for ever by an adapter that is gone"
+    );
+    d.stop().await;
+}
+
+async fn an_expiring_plain_runner_leaves_the_shared_base_alone_and_stop_takes_it() {
+    let (d, weights) = adapter_daemon(|_| {}).await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    let mut keep = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    keep.keep_alive = Some(KeepAlive::Forever);
+    d.client.decide(&keep).await.unwrap();
+    // The plain `laya:en` is a second runner of the same name, and expires after a second.
+    let mut brief =
+        DecideRequest::new("laya:en", json!("x"), serde_json::from_value(triage()).ok());
+    brief.keep_alive = Some(KeepAlive::For(Duration::from_secs(1)));
+    d.client.decide(&brief).await.unwrap();
+    let size =
+        |ps: &[ollaya_api::RunningModel]| ps.iter().find(|m| m.name == "laya:en").map(|m| m.size);
+    assert!(size(&d.client.ps().await.unwrap().models) > Some(5000));
+    // Wait for the reaper to take the plain runner (its copy no longer counted).
+    let mut waited = 0;
+    while size(&d.client.ps().await.unwrap().models) != Some(5000) {
+        waited += 1;
+        assert!(waited < 100, "the plain runner never expired");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(
+        names,
+        ["a:latest", "laya:en"],
+        "the shared base went with it: {names:?}"
+    );
+    // The user's `stop laya:en` does take the shared base, with its adapters.
+    d.client.unload("laya:en").await.unwrap();
+    assert!(d.client.ps().await.unwrap().models.is_empty());
+    d.stop().await;
+}
+
+async fn blobs_follow_the_api_key_are_verified_and_pruned() {
+    let d = Daemon::start(laya_store, |c| c.api_key = Some("secret".into())).await;
+    let bytes = b"some adapter bytes".to_vec();
+    let digest = sha(&bytes);
+    let url = d.url(&format!("/api/blobs/{digest}"));
+    let anon = http();
+    assert_eq!(anon.head(&url).send().await.unwrap().status(), 401);
+    assert_eq!(
+        anon.post(&url)
+            .body(bytes.clone())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let keyed = |r: reqwest::RequestBuilder| r.bearer_auth("secret");
+    assert_eq!(keyed(anon.head(&url)).send().await.unwrap().status(), 404);
+    // A body that is not the digest's is refused and leaves nothing behind.
+    let r = keyed(anon.post(&url))
+        .body(b"other bytes".to_vec())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 422);
+    assert!(r.text().await.unwrap().contains("digest mismatch"));
+    let blobs = Store::open(d._dir.path()).unwrap().blobs_dir();
+    let leftovers = |blobs: &Path| {
+        std::fs::read_dir(blobs)
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("partial")
+            })
+            .count()
+    };
+    assert_eq!(leftovers(&blobs), 0);
+    assert_eq!(keyed(anon.head(&url)).send().await.unwrap().status(), 404);
+    // Not a digest at all.
+    let r = keyed(anon.post(d.url("/api/blobs/nonsense")))
+        .body("x")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 422);
+    // The right bytes are stored, also when sent twice.
+    for _ in 0..2 {
+        assert_eq!(
+            keyed(anon.post(&url))
+                .body(bytes.clone())
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            201
+        );
+    }
+    assert_eq!(keyed(anon.head(&url)).send().await.unwrap().status(), 200);
+    // No manifest references it: it falls under the pruning that every removal runs.
+    d.client.copy("laya:en", "copy").await.unwrap();
+    d.client.delete("copy").await.unwrap();
+    assert_eq!(keyed(anon.head(&url)).send().await.unwrap().status(), 404);
+
+    // The client the CLI uses: check, upload, check again; a wrong digest is an API error.
+    assert!(!d.client.blob_exists(&digest).await.unwrap());
+    d.client
+        .upload_blob(&digest, reqwest::Body::from(bytes.clone()))
+        .await
+        .unwrap();
+    assert!(d.client.blob_exists(&digest).await.unwrap());
+    let (status, _) = api_err(
+        d.client
+            .upload_blob(&sha(b"x"), reqwest::Body::from(bytes))
+            .await
+            .unwrap_err(),
+    );
+    assert_eq!(status, 422);
+    d.stop().await;
+}
+
+async fn a_cancelled_delete_finishes_unloading_and_does_not_block_later_loads() {
+    let log_dir = tempfile::tempdir().unwrap();
+    let slow_log = log_dir.path().join("slow.log");
+    let (d, weights) = fake_adapter_daemon(
+        json!({"slow_ms": 600, "slow_log": slow_log.display().to_string()}),
+        Duration::from_millis(800),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    create_adapter(&d, "b", "laya:en", adapter_config(16), &weights).await;
+    d.client
+        .decide(&DecideRequest::new(
+            "a",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap();
+
+    // Hold a lease on `a` inside `/decide`, then send a DELETE that disconnects early.
+    let slow = tokio::spawn({
+        let client = Client::new(&d.base).unwrap();
+        async move {
+            client
+                .decide(&DecideRequest::new(
+                    "a",
+                    json!("SLOW"),
+                    serde_json::from_value(triage()).ok(),
+                ))
+                .await
+        }
+    });
+    for _ in 0..300 {
+        if std::fs::read_to_string(&slow_log)
+            .unwrap_or_default()
+            .contains("slow")
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        std::fs::read_to_string(&slow_log)
+            .unwrap_or_default()
+            .contains("slow"),
+        "slow decision never reached the runner"
+    );
+
+    let impatient = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_millis(150))
+        .build()
+        .unwrap();
+    let res = impatient
+        .delete(d.url("/api/delete"))
+        .json(&json!({"model": "a"}))
+        .send()
+        .await;
+    assert!(res.is_err(), "impatient delete should have timed out");
+
+    slow.await.unwrap().unwrap();
+    // Wait until `store.remove` finishes in the spawned delete task.
+    let mut removed = false;
+    for _ in 0..40 {
+        let tags = d.client.tags().await.unwrap().models;
+        if !tags.iter().any(|m| m.name == "a:latest") {
+            removed = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(removed, "cancelled delete left `a:latest` in the store");
+
+    // Later loads (both `b` and re-creating/loading `a`) must not hang on `Slot::Unloading`.
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        d.client.decide(&DecideRequest::new(
+            "b",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        )),
+    )
+    .await
+    .expect("load of `b` hung after cancelled delete")
+    .unwrap();
+    let (status, _) = create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    assert_eq!(status, 200);
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        d.client.decide(&DecideRequest::new(
+            "a",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        )),
+    )
+    .await
+    .expect("reload of `a` hung after cancelled delete")
+    .unwrap();
+    d.stop().await;
+}
+
+async fn a_failed_adapter_load_keeps_the_other_adapters_keep_alive() {
+    let d = Daemon::start(
+        |dir| add_mlx_model(&Store::open(dir).unwrap(), "laya:en", json!({})),
+        |c| {
+            c.device = "metal".into();
+            c.keep_alive = KeepAlive::For(Duration::from_secs(60));
+        },
+    )
+    .await;
+    let weights = upload(&d, &adapter_weights()).await;
+    create_adapter(&d, "good", "laya:en", adapter_config(8), &weights).await;
+    create_adapter(&d, "bad", "laya:en", adapter_config(16), &weights).await;
+    let store = Store::open(d._dir.path()).unwrap();
+    let bad_name = ModelName::parse("bad").unwrap();
+    let mut m = store.read_manifest(&bad_name).unwrap().unwrap().manifest;
+    m.layers.retain(|l| l.media_type != media::DECISION);
+    m.layers.push(blob(
+        &store,
+        media::DECISION,
+        decision_json(json!({"fail_adapter": true}))
+            .to_string()
+            .as_bytes(),
+        None,
+    ));
+    store
+        .write_manifest(&bad_name, &serde_json::to_vec(&m).unwrap())
+        .unwrap();
+
+    // `good` holds a 1h keep-alive; `bad` failing must not cut the base back to 60s.
+    let mut long = DecideRequest::new("good", json!("x"), serde_json::from_value(triage()).ok());
+    long.keep_alive = Some(KeepAlive::For(Duration::from_secs(3600)));
+    d.client.decide(&long).await.unwrap();
+
+    let base_expires = |ps: &[ollaya_api::RunningModel]| {
+        ps.iter().find(|m| m.name == "laya:en").unwrap().expires_at
+    };
+    let before =
+        base_expires(&d.client.ps().await.unwrap().models).expect("laya:en should have an expiry");
+    assert!(
+        std::time::SystemTime::from(before)
+            .duration_since(std::time::SystemTime::now())
+            .unwrap()
+            > Duration::from_secs(1800)
+    );
+
+    let (status, body) = api_err(
+        d.client
+            .decide(&DecideRequest::new(
+                "bad",
+                json!("x"),
+                serde_json::from_value(triage()).ok(),
+            ))
+            .await
+            .unwrap_err(),
+    );
+    assert_eq!((status, body.code), (500, ErrorCode::ModelLoadFailed));
+
+    let after =
+        base_expires(&d.client.ps().await.unwrap().models).expect("laya:en should keep its expiry");
+    let remaining = std::time::SystemTime::from(after)
+        .duration_since(std::time::SystemTime::now())
+        .unwrap_or_default();
+    assert!(
+        remaining > Duration::from_secs(1800),
+        "failed adapter load cut base keep-alive short to {remaining:?}"
+    );
+
+    // Likewise when another adapter keeps the base loaded forever (`-1`).
+    let mut forever = DecideRequest::new("good", json!("x"), serde_json::from_value(triage()).ok());
+    forever.keep_alive = Some(KeepAlive::Forever);
+    d.client.decide(&forever).await.unwrap();
+    assert_eq!(base_expires(&d.client.ps().await.unwrap().models), None);
+
+    let (status, body) = api_err(
+        d.client
+            .decide(&DecideRequest::new(
+                "bad",
+                json!("x"),
+                serde_json::from_value(triage()).ok(),
+            ))
+            .await
+            .unwrap_err(),
+    );
+    assert_eq!((status, body.code), (500, ErrorCode::ModelLoadFailed));
+    assert_eq!(
+        base_expires(&d.client.ps().await.unwrap().models),
+        None,
+        "failed adapter load cleared keep_forever on the base"
+    );
+    d.stop().await;
+}
+
+async fn two_plain_runners_with_one_name_stay_two_ps_rows() {
+    let d = Daemon::start(
+        |dir| {
+            add_model(
+                &Store::open(dir).unwrap(),
+                "laya:en",
+                &["en"],
+                json!({"v": 1}),
+            )
+        },
+        |c| c.max_loaded = 4,
+    )
+    .await;
+    let store = Store::open(d._dir.path()).unwrap();
+    let name = ModelName::parse("laya:en").unwrap();
+    let d1 = store
+        .read_manifest(&name)
+        .unwrap()
+        .unwrap()
+        .digest
+        .trim_start_matches("sha256:")
+        .to_owned();
+    d.client
+        .decide(&DecideRequest::new(
+            "laya:en",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap();
+
+    // Re-pulling the tag gives a second manifest digest while the old runner stays loaded.
+    add_model(&store, "laya:en", &["en"], json!({"v": 2}));
+    let d2 = store
+        .read_manifest(&name)
+        .unwrap()
+        .unwrap()
+        .digest
+        .trim_start_matches("sha256:")
+        .to_owned();
+    assert_ne!(d1, d2);
+    d.client
+        .decide(&DecideRequest::new(
+            "laya:en",
+            json!("x"),
+            serde_json::from_value(triage()).ok(),
+        ))
+        .await
+        .unwrap();
+
+    let rows: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .filter(|m| m.name == "laya:en")
+        .collect();
+    let mut digests: Vec<_> = rows.iter().map(|m| m.digest.as_str()).collect();
+    digests.sort();
+    let mut expected = vec![d1.as_str(), d2.as_str()];
+    expected.sort();
+    assert_eq!(
+        digests, expected,
+        "two plain runners with one name should stay two ps rows: {digests:?}"
+    );
+    d.stop().await;
+}
+
+async fn a_stop_racing_the_reaper_sends_one_delete() {
+    let log_dir = tempfile::tempdir().unwrap();
+    let log = log_dir.path().join("deletes.log");
+    let (d, weights) = fake_adapter_daemon(
+        json!({"delete_ms": 400, "delete_log": log.display().to_string()}),
+        Duration::from_secs(5),
+    )
+    .await;
+    create_adapter(&d, "a", "laya:en", adapter_config(8), &weights).await;
+    create_adapter(&d, "b", "laya:en", adapter_config(16), &weights).await;
+
+    let mut keep_b = DecideRequest::new("b", json!("x"), serde_json::from_value(triage()).ok());
+    keep_b.keep_alive = Some(KeepAlive::Forever);
+    d.client.decide(&keep_b).await.unwrap();
+
+    let mut expire_a = DecideRequest::new("a", json!("x"), serde_json::from_value(triage()).ok());
+    expire_a.keep_alive = Some(KeepAlive::For(Duration::from_millis(100)));
+    d.client.decide(&expire_a).await.unwrap();
+
+    let a_digest = Store::open(d._dir.path())
+        .unwrap()
+        .read_manifest(&ModelName::parse("a").unwrap())
+        .unwrap()
+        .unwrap()
+        .digest;
+
+    // Wait until the reaper enters DELETE /adapters/<a_digest> (while `delete_ms` holds it open
+    // and `a.removing == true`), then race `unload("a")` against it.
+    let mut saw_delete = false;
+    for _ in 0..150 {
+        if std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .lines()
+            .any(|l| l.trim() == a_digest)
+        {
+            saw_delete = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(saw_delete, "reaper never started unloading `a`");
+
+    d.client.unload("a").await.unwrap();
+
+    let contents = std::fs::read_to_string(&log).unwrap_or_default();
+    let count = contents.lines().filter(|l| l.trim() == a_digest).count();
+    assert_eq!(
+        count, 1,
+        "expected 1 DELETE for {a_digest}, got: {contents:?}"
+    );
+
+    let names: Vec<_> = d
+        .client
+        .ps()
+        .await
+        .unwrap()
+        .models
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(names, ["b:latest", "laya:en"], "{names:?}");
     d.stop().await;
 }
 
@@ -1981,6 +3196,18 @@ fn main() {
         gguf_runner_that_dies_on_the_gpu_restarts_on_the_cpu,
         presets_create_show_decide_delete,
         read_only_refuses_store_changes,
+        adapter_models_create_decide_share_a_runner_and_delete,
+        adapter_refusals_name_the_problem_and_write_nothing,
+        adapter_models_run_on_mlx_only_and_fail_alone,
+        the_adapter_limit_drops_the_least_recently_used_idle_adapter,
+        a_runner_that_never_answers_does_not_hold_the_load_lock_for_ever,
+        the_base_stops_being_kept_when_its_keep_forever_adapter_goes,
+        an_expiring_plain_runner_leaves_the_shared_base_alone_and_stop_takes_it,
+        blobs_follow_the_api_key_are_verified_and_pruned,
+        a_cancelled_delete_finishes_unloading_and_does_not_block_later_loads,
+        a_failed_adapter_load_keeps_the_other_adapters_keep_alive,
+        two_plain_runners_with_one_name_stay_two_ps_rows,
+        a_stop_racing_the_reaper_sends_one_delete,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mut passed, mut failed) = (0, Vec::new());

@@ -1,5 +1,6 @@
 //! The Ollaya daemon: HTTP API, model resolution and the runner scheduler.
 
+mod adapter;
 pub mod config;
 pub mod http;
 pub mod launch;

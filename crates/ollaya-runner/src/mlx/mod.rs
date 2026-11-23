@@ -8,6 +8,7 @@
 //!
 //! Design and parity evidence: `docs/decisions/0001-mlx-engine.md`.
 
+mod adapter;
 pub mod arch;
 mod deberta;
 mod heads;
@@ -90,6 +91,13 @@ pub fn usable(arch: Option<&Path>, layout: &str) -> Result<PathBuf, String> {
 struct Model {
     backbone: Encoder,
     head: HeadModel,
+    /// The arch layer's backbone prefix: an adapter names modules without it.
+    prefix: String,
+    /// Bytes of the base's float32 tensors.
+    bytes: u64,
+    /// Adapters loaded over this base, by the digest the daemon names them by.
+    adapters:
+        std::cell::RefCell<std::collections::HashMap<String, std::rc::Rc<adapter::AdapterTensors>>>,
 }
 
 enum Encoder {
@@ -132,6 +140,7 @@ enum HeadModel {
 /// An encoder network on the MLX thread.
 pub struct MlxNet {
     worker: Worker<Model>,
+    bytes: u64,
 }
 
 impl MlxNet {
@@ -157,15 +166,64 @@ impl MlxNet {
             Model::load(&arch, &paths, &dir).map_err(|e| ollaya_mlx::Error(e.to_string()))
         })
         .map_err(mlx)?;
-        Ok(MlxNet { worker })
+        let bytes = worker.run(|m| Ok(m.bytes)).map_err(mlx)?;
+        Ok(MlxNet { worker, bytes })
     }
 
     pub fn info(&self) -> &MetalInfo {
         self.worker.info()
     }
 
+    /// Bytes the base's float32 tensors occupy.
+    pub fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
+    /// Load the adapter whose spec and safetensors file are given, under `digest`, over this base.
+    /// Returns the bytes it occupies. Loading it again replaces it.
+    pub fn add_adapter(&self, digest: &str, spec: &Path, weights: &Path) -> Result<u64, Error> {
+        let spec = adapter::Spec::read(spec)?;
+        let (digest, weights) = (digest.to_owned(), weights.to_owned());
+        self.worker
+            .run(move |m| {
+                let loaded = adapter::AdapterTensors::load(&weights, &spec, &m.prefix)
+                    .map_err(|e| ollaya_mlx::Error(e.to_string()))?;
+                if loaded.is_empty() {
+                    return Err(ollaya_mlx::Error("the adapter adapts no module".into()));
+                }
+                let bytes = loaded.bytes;
+                m.adapters
+                    .borrow_mut()
+                    .insert(digest, std::rc::Rc::new(loaded));
+                Ok(bytes)
+            })
+            .map_err(mlx)
+    }
+
+    /// Drop an adapter and its tensors.
+    pub fn remove_adapter(&self, digest: &str) -> Result<(), Error> {
+        let digest = digest.to_owned();
+        self.worker
+            .run(move |m| {
+                m.adapters.borrow_mut().remove(&digest);
+                Ok(())
+            })
+            .map_err(mlx)
+    }
+
     /// Run one padded batch; `outputs` names what an ONNX graph of this layout would return.
     pub fn run(&self, batch: &Batch, outputs: &[&str]) -> Result<Vec<Array2<f32>>, Error> {
+        self.run_with(batch, outputs, None)
+    }
+
+    /// [`Self::run`] as the adapter loaded under `adapter`, when there is one.
+    pub fn run_with(
+        &self,
+        batch: &Batch,
+        outputs: &[&str],
+        adapter: Option<&str>,
+    ) -> Result<Vec<Array2<f32>>, Error> {
+        let adapter = adapter.map(str::to_owned);
         let (rows, seq) = batch.input_ids.dim();
         let ids: Vec<i32> = batch.input_ids.iter().map(|&v| v as i32).collect();
         let attention: Vec<bool> = batch.attention.iter().map(|&v| v != 0).collect();
@@ -180,13 +238,21 @@ impl MlxNet {
             .qtype
             .as_ref()
             .map(|q| q.iter().map(|&v| v as i32).collect());
-        let (main, act) = self
-            .worker
-            .run(move |m| {
-                m.forward_chunked(rows, seq, ids, attention, markers, qtype)
-                    .map_err(|e| ollaya_mlx::Error(e.to_string()))
-            })
-            .map_err(mlx)?;
+        let (main, act) =
+            self.worker
+                .run(move |m| {
+                    let chosen = match &adapter {
+                        Some(d) => Some(m.adapters.borrow().get(d).cloned().ok_or_else(|| {
+                            ollaya_mlx::Error(format!("no adapter {d} is loaded"))
+                        })?),
+                        None => None,
+                    };
+                    // Active for this pass only: a request to the base is never touched by an adapter.
+                    let _active = adapter::Active::set(chosen);
+                    m.forward_chunked(rows, seq, ids, attention, markers, qtype)
+                        .map_err(|e| ollaya_mlx::Error(e.to_string()))
+                })
+                .map_err(mlx)?;
         let mut main = Some(main);
         let mut act = act;
         outputs
@@ -215,6 +281,10 @@ fn arch_dir(arch_path: &Path) -> PathBuf {
 impl Model {
     fn load(arch: &Arch, paths: &[PathBuf], dir: &Path) -> Result<Model, Error> {
         let t = Tensors::open(paths, dir, &arch.weights)?;
+        let t = match &arch.lora {
+            Some(lora) => t.with_lora(arch.backbone.prefix(), lora),
+            None => t,
+        };
         let backbone = match &arch.backbone {
             Backbone::Modernbert(c) => Encoder::ModernBert(modernbert::ModernBert::load(c, &t)?),
             Backbone::DebertaV2(c) => Encoder::DebertaV2(deberta::DebertaV2::load(c, &t)?),
@@ -253,7 +323,13 @@ impl Model {
                 ));
             }
         };
-        Ok(Model { backbone, head })
+        Ok(Model {
+            backbone,
+            head,
+            prefix: arch.backbone.prefix().to_owned(),
+            bytes: t.bytes_read(),
+            adapters: Default::default(),
+        })
     }
 
     /// [`Self::forward`] in passes of as many rows as the backbone takes at once, the outputs

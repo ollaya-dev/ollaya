@@ -314,6 +314,7 @@ pub fn create_request(name: &str, mf: modelfile::Modelfile) -> Result<CreateRequ
             .precision
             .map(|p| CreateParameters { precision: Some(p) }),
         license: mf.license.map(License::One),
+        adapter: None,
         description: mf.description,
         stream: None,
     })
@@ -323,14 +324,73 @@ pub fn create_request(name: &str, mf: modelfile::Modelfile) -> Result<CreateRequ
 /// pulls implicitly).
 pub async fn create(client: &Client, name: &str, file: &Path) -> Result<()> {
     let mf = modelfile::read(file)?;
-    let req = create_request(name, mf)?;
+    let adapter_dir = mf.adapter.clone();
+    let mut req = create_request(name, mf)?;
     match client.show(&req.from).await {
         Ok(_) => {}
         Err(e) if e.is_model_not_found() => pull(client, &req.from, false).await?,
         Err(e) => return Err(e.into()),
     }
+    if let Some(dir) = adapter_dir {
+        req.adapter = Some(upload_adapter(client, &dir).await?);
+    }
     client.create(&req, |p| println!("{}", p.status)).await?;
     Ok(())
+}
+
+/// Send a PEFT adapter directory to the daemon: its safetensors file is hashed and, when the
+/// daemon lacks it, uploaded (`/api/blobs`); `adapter_config.json` travels with the create request.
+async fn upload_adapter(client: &Client, dir: &Path) -> Result<ollaya_api::CreateAdapter> {
+    use sha2::{Digest as _, Sha256};
+    use tokio::io::AsyncReadExt as _;
+
+    let config_path = dir.join("adapter_config.json");
+    let weights_path = dir.join("adapter_model.safetensors");
+    let config: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&config_path)
+            .with_context(|| format!("ADAPTER: reading {}", config_path.display()))?,
+    )
+    .with_context(|| format!("ADAPTER: {} is not JSON", config_path.display()))?;
+    let open = || async {
+        tokio::fs::File::open(&weights_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("ADAPTER: reading {}: {e}", weights_path.display()))
+    };
+    let mut file = open().await?;
+    let size = file.metadata().await?.len();
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = file.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let digest = format!("sha256:{}", hex::encode(hasher.finalize()));
+    if client.blob_exists(&digest).await? {
+        println!("adapter weights {digest} are already on the server");
+    } else {
+        println!("uploading adapter weights {digest} ({size} bytes)");
+        let stream = futures_util::stream::unfold(open().await?, |mut file| async move {
+            let mut chunk = vec![0u8; 1 << 20];
+            match file.read(&mut chunk).await {
+                Ok(0) => None,
+                Ok(n) => {
+                    chunk.truncate(n);
+                    Some((Ok::<_, std::io::Error>(chunk), file))
+                }
+                Err(e) => Some((Err(e), file)),
+            }
+        });
+        client
+            .upload_blob(&digest, reqwest::Body::wrap_stream(stream))
+            .await?;
+    }
+    Ok(ollaya_api::CreateAdapter {
+        config,
+        weights: digest,
+    })
 }
 
 pub async fn preset_list(client: &Client) -> Result<()> {

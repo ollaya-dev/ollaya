@@ -34,6 +34,8 @@ pub struct Tensors {
     /// A LoRA adapter to merge into the backbone's weights: the backbone's name prefix, the
     /// adapter's, and the scaling.
     lora: Option<(String, String, f32)>,
+    /// Bytes of the float32 arrays handed out so far: what the model holds in memory.
+    bytes: std::cell::Cell<u64>,
 }
 
 fn dtype(tag: &str) -> Result<Dtype, Error> {
@@ -100,7 +102,33 @@ impl Tensors {
             files,
             index,
             lora: None,
+            bytes: std::cell::Cell::new(0),
         })
+    }
+
+    /// One safetensors file by its path: an adapter's tensors, read by their own names.
+    pub fn open_safetensors(path: &Path) -> Result<Tensors, Error> {
+        let err = |e: &dyn std::fmt::Display| Error::Model(format!("{}: {e}", path.display()));
+        let file = File::open(path).map_err(|e| err(&e))?;
+        let size = file.metadata().map_err(|e| err(&e))?.len();
+        let mut index = safetensors_index(&file).map_err(|e| err(&e))?;
+        if let Some((name, _)) = index.iter().find(|(_, e)| e.offset + e.len > size) {
+            return Err(err(&format!("tensor {name} lies past the end of the file")));
+        }
+        for e in index.values_mut() {
+            e.file = 0;
+        }
+        Ok(Tensors {
+            files: vec![(file, path.to_path_buf())],
+            index,
+            lora: None,
+            bytes: std::cell::Cell::new(0),
+        })
+    }
+
+    /// Bytes of float32 arrays this index has handed out ([`Self::get`] and [`Self::raw`]).
+    pub fn bytes_read(&self) -> u64 {
+        self.bytes.get()
     }
 
     /// Merge `lora` into every backbone weight (`<backbone_prefix>…weight`) that the adapter holds
@@ -145,7 +173,7 @@ impl Tensors {
     }
 
     /// `name` as float32, checked against `shape`, as stored.
-    fn raw(&self, name: &str, shape: &[usize]) -> Result<Array, Error> {
+    pub(super) fn raw(&self, name: &str, shape: &[usize]) -> Result<Array, Error> {
         let e = self.index.get(name).ok_or_else(|| {
             Error::Model(format!("{}: no tensor {name}", self.files[0].1.display()))
         })?;
@@ -169,6 +197,8 @@ impl Tensors {
         };
         // Materialise now, so the file bytes and any half-precision copy are freed per tensor.
         a.eval().map_err(mlx)?;
+        self.bytes
+            .set(self.bytes.get() + e.shape.iter().product::<usize>() as u64 * 4);
         Ok(a)
     }
 
@@ -197,6 +227,7 @@ fn safetensors_index(file: &File) -> Result<HashMap<String, Entry>, String> {
     let header: serde_json::Map<String, serde_json::Value> =
         serde_json::from_slice(&header).map_err(|e| e.to_string())?;
     let base = 8 + n;
+    let file_len = file.metadata().map_err(|e| e.to_string())?.len();
     let mut index = HashMap::new();
     for (name, v) in header {
         if name == "__metadata__" {
@@ -209,12 +240,19 @@ fn safetensors_index(file: &File) -> Result<HashMap<String, Entry>, String> {
             serde_json::from_value(v["data_offsets"].clone()).map_err(|e| e.to_string())?;
         // Tensors of dtypes the models never read (I64 buffers and the like) are left out.
         let Ok(dt) = dtype(tag) else { continue };
-        let e = entry(dt, shape, base + offsets[0]);
-        if offsets[1] - offsets[0] != e.len {
-            return Err(format!(
-                "tensor {name}: {} bytes for its shape",
-                offsets[1] - offsets[0]
-            ));
+        let size = offsets[1]
+            .checked_sub(offsets[0])
+            .ok_or_else(|| format!("tensor {name}: data_offsets {offsets:?} are reversed"))?;
+        let begin = base
+            .checked_add(offsets[0])
+            .filter(|_| {
+                base.checked_add(offsets[1])
+                    .is_some_and(|end| end <= file_len)
+            })
+            .ok_or_else(|| format!("tensor {name}: data_offsets {offsets:?} run past the file"))?;
+        let e = entry(dt, shape, begin);
+        if size != e.len {
+            return Err(format!("tensor {name}: {size} bytes for its shape"));
         }
         index.insert(name, e);
     }

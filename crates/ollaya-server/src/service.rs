@@ -99,6 +99,16 @@ pub struct CreateSpec {
     pub precision: Option<String>,
     pub license: Option<String>,
     pub description: Option<String>,
+    /// Make the model a LoRA adapter over `from` (decision 0011).
+    pub adapter: Option<AdapterInput>,
+}
+
+/// A LoRA adapter to create a model from: peft's `adapter_config.json`, and the digest of the
+/// uploaded safetensors blob.
+#[derive(Debug, Clone)]
+pub struct AdapterInput {
+    pub config: Value,
+    pub weights: String,
 }
 
 #[derive(Debug, Clone)]
@@ -404,6 +414,25 @@ impl Ollaya {
                 "PARAMETER precision {p:?}: {from} has no {p} graph"
             )));
         }
+        // Checked before anything is written: an adapter that does not fit its base writes nothing.
+        let adapter = match &spec.adapter {
+            Some(a) => {
+                if spec.precision.is_some() {
+                    return Err(Error::InvalidRequest(
+                        "PARAMETER precision cannot be combined with ADAPTER".into(),
+                    ));
+                }
+                Some(crate::adapter::spec_for(
+                    &self.store,
+                    &from.to_string(),
+                    &entry.digest,
+                    &entry.manifest,
+                    &a.config,
+                    &a.weights,
+                )?)
+            }
+            None => None,
+        };
         let mut manifest = entry.manifest;
         let inherited: HashSet<String> = manifest.layers.iter().map(|l| l.digest.clone()).collect();
         let blob = |media_type: &str, bytes: Vec<u8>| -> Result<Descriptor, Error> {
@@ -459,10 +488,33 @@ impl Ollaya {
         if let Some(l) = &spec.license {
             replace(media::LICENSE, l.clone().into_bytes())?;
         }
+        if let (Some(a), Some(adapter)) = (&spec.adapter, &adapter) {
+            replace(media::ADAPTER, adapter.canonical())?;
+            // The weights are already in the store, uploaded and verified; only the layer is new.
+            let size = std::fs::metadata(self.store.blob_path(&a.weights)?)
+                .map_err(ollaya_registry::Error::from)?
+                .len();
+            manifest
+                .layers
+                .retain(|l| l.media_type != media::ADAPTER_WEIGHTS);
+            manifest.layers.push(Descriptor {
+                media_type: media::ADAPTER_WEIGHTS.into(),
+                digest: a.weights.clone(),
+                size,
+                urls: vec![],
+                annotations: Default::default(),
+            });
+        }
         // The config records where the model came from (`details.parent_model`).
         let mut config: Value = self.store.read_blob_json(&manifest.config)?;
         if let Some(obj) = config.as_object_mut() {
             obj.insert("parent_model".into(), Value::String(from.to_string()));
+            if adapter.is_some() {
+                obj.insert(
+                    "model_format".into(),
+                    Value::String(ollaya_registry::adapter::MODEL_FORMAT.into()),
+                );
+            }
             if let Some(desc) = &spec.description {
                 obj.insert("description".into(), Value::String(desc.clone()));
             }
