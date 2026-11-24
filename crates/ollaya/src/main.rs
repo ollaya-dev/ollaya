@@ -156,7 +156,9 @@ enum Command {
 }
 
 /// Logs at the levels in `OLLAYA_LOG` (else `default`) to stderr, or to `<log_dir>/server.log`.
+/// Panics are reported with [`report_panic`].
 fn logging(default: &str, log_dir: Option<&std::path::Path>) -> Result<()> {
+    std::panic::set_hook(Box::new(report_panic));
     let filter = EnvFilter::try_from_env("OLLAYA_LOG").unwrap_or_else(|_| default.into());
     match log_dir {
         Some(dir) => {
@@ -200,6 +202,33 @@ where
             .with_writer(writer)
             .with_filter(filter.and(cap)),
     )
+}
+
+/// A panic's message if it is a literal, else a placeholder: a formatted message can quote a
+/// value, and so request content (a string sliced out of bounds prints the string).
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&'static str>()
+        .copied()
+        .unwrap_or("(the message is not shown: it can quote request content)")
+}
+
+/// Stands in for Rust's panic report in the processes that log: the thread, the place and
+/// [`panic_message`], and a backtrace when `RUST_BACKTRACE` asks for one.
+fn report_panic(info: &std::panic::PanicHookInfo) {
+    let thread = std::thread::current();
+    let place = info
+        .location()
+        .map_or_else(|| "an unknown place".to_owned(), ToString::to_string);
+    eprintln!(
+        "thread '{}' panicked at {place}:\n{}",
+        thread.name().unwrap_or("<unnamed>"),
+        panic_message(info.payload())
+    );
+    let backtrace = std::backtrace::Backtrace::capture();
+    if backtrace.status() == std::backtrace::BacktraceStatus::Captured {
+        eprintln!("stack backtrace:\n{backtrace}");
+    }
 }
 
 /// `ollaya -v`: the server's version, and the client's when they differ (as Ollama prints it).
@@ -410,6 +439,21 @@ mod tests {
     fn parse(args: &[&str]) -> Cli {
         parse_cli(std::iter::once("ollaya").chain(args.iter().copied()))
             .unwrap_or_else(|e| panic!("{args:?}: {e}"))
+    }
+
+    #[test]
+    fn panic_reports_show_literal_messages_only() {
+        let literal = std::panic::catch_unwind(|| panic!("model thread stopped")).unwrap_err();
+        assert_eq!(panic_message(literal.as_ref()), "model thread stopped");
+        // `unwrap` on a parse error quotes the value that did not parse.
+        let unwrapped =
+            std::panic::catch_unwind(|| serde_json::from_str::<u32>(r#""Kq07 a state""#).unwrap())
+                .unwrap_err();
+        assert!(unwrapped.downcast_ref::<String>().unwrap().contains("Kq07"));
+        assert!(!panic_message(unwrapped.as_ref()).contains("Kq07"));
+        let state = "Kq07 a state";
+        let formatted = std::panic::catch_unwind(|| panic!("bad state {state}")).unwrap_err();
+        assert!(!panic_message(formatted.as_ref()).contains("Kq07"));
     }
 
     #[test]
