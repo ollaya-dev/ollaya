@@ -20,6 +20,10 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use ollaya_server::config::VERSION;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::{FilterExt, LevelFilter, Targets};
+use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::prelude::*;
 
 #[derive(Parser)]
 #[command(
@@ -153,10 +157,7 @@ enum Command {
 
 /// Logs at the levels in `OLLAYA_LOG` (else `default`) to stderr, or to `<log_dir>/server.log`.
 fn logging(default: &str, log_dir: Option<&std::path::Path>) -> Result<()> {
-    let builder = tracing_subscriber::fmt().with_env_filter(
-        tracing_subscriber::EnvFilter::try_from_env("OLLAYA_LOG")
-            .unwrap_or_else(|_| default.into()),
-    );
+    let filter = EnvFilter::try_from_env("OLLAYA_LOG").unwrap_or_else(|_| default.into());
     match log_dir {
         Some(dir) => {
             std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
@@ -166,16 +167,39 @@ fn logging(default: &str, log_dir: Option<&std::path::Path>) -> Result<()> {
                 .append(true)
                 .open(&path)
                 .with_context(|| format!("opening {}", path.display()))?;
-            builder.with_ansi(false).with_writer(file).init();
+            subscriber(filter, file, false).init();
         }
         // No colour codes when stderr is a pipe: a runner's stderr is read by the daemon, and the
         // daemon's by systemd's journal or a log file.
-        None => builder
-            .with_ansi(std::io::stderr().is_terminal())
-            .with_writer(std::io::stderr)
-            .init(),
+        None => subscriber(filter, std::io::stderr, std::io::stderr().is_terminal()).init(),
     }
     Ok(())
+}
+
+/// Targets whose log can quote request content, and the most each one logs, whatever
+/// `OLLAYA_LOG` asks: tokenizers traces each character it normalizes, axum traces a rejected
+/// body with its parse error, and rmcp logs each MCP request and response at debug.
+const CONTENT_TARGETS: [(&str, LevelFilter); 3] = [
+    ("tokenizers", LevelFilter::WARN),
+    ("axum::rejection", LevelFilter::OFF),
+    ("rmcp", LevelFilter::INFO),
+];
+
+/// The events `filter` enables, capped at [`CONTENT_TARGETS`], as text to `writer`. The cap keeps
+/// `filter`'s max-level hint, so the `log` bridge still skips the records below it.
+fn subscriber<W>(filter: EnvFilter, writer: W, ansi: bool) -> impl tracing::Subscriber + Send + Sync
+where
+    W: for<'w> MakeWriter<'w> + Send + Sync + 'static,
+{
+    let cap = Targets::new()
+        .with_default(LevelFilter::TRACE)
+        .with_targets(CONTENT_TARGETS);
+    tracing_subscriber::registry().with(
+        tracing_subscriber::fmt::layer()
+            .with_ansi(ansi)
+            .with_writer(writer)
+            .with_filter(filter.and(cap)),
+    )
 }
 
 /// `ollaya -v`: the server's version, and the client's when they differ (as Ollama prints it).
@@ -386,6 +410,27 @@ mod tests {
     fn parse(args: &[&str]) -> Cli {
         parse_cli(std::iter::once("ollaya").chain(args.iter().copied()))
             .unwrap_or_else(|e| panic!("{args:?}: {e}"))
+    }
+
+    #[test]
+    fn log_caps_the_targets_that_quote_content() {
+        use tracing::{Level, Subscriber};
+        // The cap keeps the level hint, so the `log` bridge skips records below `info`.
+        let info = subscriber(EnvFilter::new("info"), std::io::sink, false);
+        assert_eq!(info.max_level_hint(), Some(LevelFilter::INFO));
+        let trace = subscriber(EnvFilter::new("trace"), std::io::sink, false);
+        tracing::subscriber::with_default(trace, || {
+            assert!(tracing::enabled!(target: "ollaya_server::http", Level::TRACE));
+            assert!(tracing::enabled!(target: "tokenizers::tokenizer", Level::WARN));
+            assert!(!tracing::enabled!(target: "tokenizers::tokenizer::normalizer", Level::INFO));
+            assert!(!tracing::enabled!(target: "axum::rejection", Level::TRACE));
+            assert!(!tracing::enabled!(target: "rmcp::service", Level::DEBUG));
+        });
+        // A cap never raises a level.
+        let warn = subscriber(EnvFilter::new("warn"), std::io::sink, false);
+        tracing::subscriber::with_default(warn, || {
+            assert!(!tracing::enabled!(target: "rmcp::service", Level::INFO));
+        });
     }
 
     #[test]
