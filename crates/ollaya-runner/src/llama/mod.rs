@@ -24,6 +24,7 @@ use std::ffi::{CString, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use ollaya_decision::Questions;
 use ollaya_decision::cygnet::{self, CygnetConfig};
@@ -261,8 +262,36 @@ fn model_error(msg: impl Into<String>) -> Error {
     Error::Model(msg.into())
 }
 
-/// llama.cpp's log, through `tracing` (warnings and errors as such, the rest at debug level).
+/// The level a llama.cpp message goes to `tracing` at, or `None` to drop it. `previous` is the
+/// level of the last message that was not a continuation (`LOG_LEVEL_CONT`).
+///
+/// DEBUG messages never leave: with `LLAMA_BATCH_DEBUG` set, llama.cpp prints each token of a
+/// request with its text at that level. Their continuation lines go with them.
+fn log_level(level: c_int, previous: c_int) -> Option<tracing::Level> {
+    let level = if level == ffi::LOG_LEVEL_CONT {
+        previous
+    } else {
+        level
+    };
+    match level {
+        ffi::LOG_LEVEL_ERROR => Some(tracing::Level::ERROR),
+        ffi::LOG_LEVEL_WARN => Some(tracing::Level::WARN),
+        ffi::LOG_LEVEL_DEBUG => None,
+        _ => Some(tracing::Level::DEBUG),
+    }
+}
+
+/// llama.cpp's log, through `tracing` (warnings and errors as such, information at debug level,
+/// debug messages dropped: see [`log_level`]).
 unsafe extern "C" fn log(level: c_int, text: *const c_char, _: *mut c_void) {
+    static PREVIOUS: AtomicI32 = AtomicI32::new(ffi::LOG_LEVEL_INFO);
+    let previous = PREVIOUS.load(Ordering::Relaxed);
+    if level != ffi::LOG_LEVEL_CONT {
+        PREVIOUS.store(level, Ordering::Relaxed);
+    }
+    let Some(level) = log_level(level, previous) else {
+        return;
+    };
     // SAFETY: llama.cpp passes a NUL-terminated message.
     let text = unsafe { ffi::cstr(text) };
     let text = text.trim_end();
@@ -270,8 +299,8 @@ unsafe extern "C" fn log(level: c_int, text: *const c_char, _: *mut c_void) {
         return;
     }
     match level {
-        ffi::LOG_LEVEL_ERROR => tracing::error!(target: "llama.cpp", "{text}"),
-        ffi::LOG_LEVEL_WARN => tracing::warn!(target: "llama.cpp", "{text}"),
+        tracing::Level::ERROR => tracing::error!(target: "llama.cpp", "{text}"),
+        tracing::Level::WARN => tracing::warn!(target: "llama.cpp", "{text}"),
         _ => tracing::debug!(target: "llama.cpp", "{text}"),
     }
 }
@@ -1954,6 +1983,30 @@ impl crate::engine::Engine for LlamaModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn log_drops_debug_messages_and_their_continuations() {
+        use ffi::{
+            LOG_LEVEL_CONT, LOG_LEVEL_DEBUG, LOG_LEVEL_ERROR, LOG_LEVEL_INFO, LOG_LEVEL_WARN,
+        };
+        use tracing::Level;
+        for previous in [LOG_LEVEL_DEBUG, LOG_LEVEL_INFO, LOG_LEVEL_WARN] {
+            assert_eq!(log_level(LOG_LEVEL_DEBUG, previous), None);
+            assert_eq!(log_level(LOG_LEVEL_INFO, previous), Some(Level::DEBUG));
+            assert_eq!(log_level(LOG_LEVEL_WARN, previous), Some(Level::WARN));
+            assert_eq!(log_level(LOG_LEVEL_ERROR, previous), Some(Level::ERROR));
+        }
+        assert_eq!(log_level(LOG_LEVEL_CONT, LOG_LEVEL_DEBUG), None);
+        assert_eq!(
+            log_level(LOG_LEVEL_CONT, LOG_LEVEL_INFO),
+            Some(Level::DEBUG)
+        );
+        assert_eq!(log_level(LOG_LEVEL_CONT, LOG_LEVEL_WARN), Some(Level::WARN));
+        assert_eq!(
+            log_level(LOG_LEVEL_CONT, LOG_LEVEL_ERROR),
+            Some(Level::ERROR)
+        );
+    }
 
     #[test]
     fn image_tail_preserves_delimiters_and_retokenized_boundary() {

@@ -26,8 +26,12 @@ pub const DEVICE_TYPE_GPU: c_int = 1;
 pub const DEVICE_TYPE_IGPU: c_int = 2;
 
 /// `enum ggml_log_level`.
+pub const LOG_LEVEL_DEBUG: c_int = 1;
+pub const LOG_LEVEL_INFO: c_int = 2;
 pub const LOG_LEVEL_WARN: c_int = 3;
 pub const LOG_LEVEL_ERROR: c_int = 4;
+/// Continues the previous message, at its level.
+pub const LOG_LEVEL_CONT: c_int = 5;
 
 pub type LogCallback = unsafe extern "C" fn(level: c_int, text: *const c_char, user: *mut c_void);
 /// `llama_tokenize(vocab, text, text_len, tokens, n_tokens_max, add_special, parse_special)`.
