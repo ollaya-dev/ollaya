@@ -1806,8 +1806,8 @@ Therefore:
   limit bound the work one request can cause.
 - **Registry data is untrusted.** Every blob is verified against its sha256 before use, and
   manifests and JSON layers are validated when read.
-- **User data stays out of logs and errors.** `state` and question text are never logged, and are
-  not echoed in errors (no `input` in issues).
+- **User data stays out of logs and errors.** `state` and question text are never logged
+  ([Logs](#logs)), and are not echoed in errors (no `input` in issues).
 - **Internal errors** (`500 INTERNAL`) never include paths, stack traces or runner output. The
   server log has them under the request ID.
 
@@ -1837,6 +1837,19 @@ These are the variables that change API behaviour.
 | `OLLAYA_PRELOAD` | unset | Models to load with `keep_alive: -1` right after start, in order, comma-separated (`laya:en,laya:multilingual`), so a restarted daemon is warm without a request. Until every one was tried, `GET /api/ready` answers `503` `Ollaya is loading models`; then `200` `Ollaya is ready`. A preloaded model stays loaded: a request without its own `keep_alive` does not start its unload clock, while an explicit `keep_alive`, `ollaya stop`, or room for another model at `OLLAYA_MAX_LOADED_MODELS` still unloads it; listing more models than that limit logs a warning at start. A model that fails to load is logged and loads on its first request instead. `GET /` stays the liveness check throughout, since the CLI uses it to find a running daemon. `GET /api/ready` needs no API key, so a load balancer's health check can read it. An invalid name stops the daemon at start. |
 
 The daemon reads these at startup. The packaged systemd service and the desktop app start `ollaya serve` with their own environment, so set them in the service's `Environment=` lines (or the app's launcher) rather than your shell.
+
+### Logs
+
+The daemon writes its log to stderr, or to `server.log` in `OLLAYA_LOG_DIR`. `OLLAYA_LOG` sets the levels. Each level adds to the levels above it:
+
+- `error` and `warn`: failures and fallbacks. Examples are a model that fails to preload, a runner that exits, a model that runs on the CPU because its GPU failed, and a custom preset file that does not parse (its name, the error kind, the line and the column). The warnings and errors of each runner also go here.
+- `info`: the start (address, version, model store) and the stop, and each model load (name, device, precision, load time) and unload.
+- `debug`: one line for each request (request ID, method, path, status, duration), and the rest of the runners' logs.
+- `trace`: the connections of the HTTP libraries.
+
+The log never holds request content at any level: no state, question text, options, images or audio. It holds names (models, presets) and request paths only. Three libraries can quote content in their own logs. The `ollaya` processes (the daemon, its runners and `ollaya mcp`) cap them, whatever `OLLAYA_LOG` asks: `tokenizers` at `warn`, the rejected bodies of `axum` off, and `rmcp` (the MCP server) at `info`. A runner drops the debug messages of llama.cpp, which can print each token of a request. A panic report shows its place, and its message only when the message is a literal.
+
+The HTTP test `logs_hold_no_request_content` in `crates/ollaya-server/tests/http.rs` keeps this true. It sends a marker in each content field to each route that takes content. The requests succeed, fail validation, are not JSON, name an unknown model, or make a runner fail. The test captures every line that the daemon writes at `info` and at `trace`, with its runners' stderr and its panics. It fails when a line holds a part of a marker, in any letter case or escaped form.
 
 ## 16. Verification checklist
 

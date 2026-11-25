@@ -28,6 +28,8 @@ tracing.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# The log guard in tests/http.rs captures everything the daemon logs.
+tracing-subscriber.workspace = true
 
 # The HTTP tests run the test binary itself as a fake runner (`<test exe> runner ...`), so they
 # need their own `main`.

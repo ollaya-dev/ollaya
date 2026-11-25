@@ -19,6 +19,7 @@ use ollaya_registry::{ModelName, Store};
 use ollaya_server::config::ServerConfig;
 use ollaya_server::http::{RunnerLaunch, build, serve_on};
 use serde_json::{Value, json};
+use tracing_subscriber::EnvFilter;
 
 // ------------------------------------------------------------------------------------------------
 // The fake runner
@@ -1951,6 +1952,287 @@ async fn read_only_refuses_store_changes() {
     d.stop().await;
 }
 
+// ------------------------------------------------------------------------------------------------
+// The log guard: the daemon never logs request content
+
+/// The content fields of a request. Each one gets its own marker.
+const CONTENT: [&str; 14] = [
+    "state",
+    "state key",
+    "state value",
+    "question id",
+    "instructions",
+    "choice option",
+    "choice description",
+    "score label",
+    "noul when_true",
+    "noul when_false",
+    "type tag",
+    "image",
+    "preset description",
+    "model description",
+];
+
+/// The marker of a content field: an unusual word with a non-ASCII letter and a quote, so that
+/// its escaped forms differ from the plain one.
+fn marker(field: &str) -> String {
+    let i = CONTENT.iter().position(|f| *f == field).unwrap();
+    format!("Kq{i:02}zx{i:02}é\"j{i:02}W")
+}
+
+/// What a log line must not hold for `marker`: the marker and each 6-character part of it, plain
+/// and escaped as Rust's `{:?}`, Rust's `escape_default` and ASCII-only JSON write them.
+fn needles(marker: &str) -> Vec<String> {
+    let chars: Vec<char> = marker.chars().collect();
+    let parts = std::iter::once(marker.to_owned()).chain(chars.windows(6).map(String::from_iter));
+    parts
+        .flat_map(|p| {
+            let debug = format!("{p:?}");
+            let ascii_json: String = p
+                .chars()
+                .map(|c| match c {
+                    '"' => "\\\"".to_owned(),
+                    c if c.is_ascii() => c.to_string(),
+                    c => format!("\\u{:04x}", c as u32),
+                })
+                .collect();
+            [
+                debug[1..debug.len() - 1].to_owned(),
+                p.escape_default().to_string(),
+                ascii_json,
+                p,
+            ]
+        })
+        .collect()
+}
+
+/// The lines of `log` that hold a marker in any letter case, with each marker shown as the name
+/// of its field.
+fn leaks(log: &str) -> Vec<String> {
+    let needles: Vec<(&str, Vec<String>)> = CONTENT
+        .iter()
+        .map(|field| (*field, needles(&marker(field))))
+        .collect();
+    let lower: Vec<(&str, Vec<String>)> = needles
+        .iter()
+        .map(|(field, ns)| (*field, ns.iter().map(|n| n.to_lowercase()).collect()))
+        .collect();
+    log.lines()
+        .filter(|line| {
+            let line = line.to_lowercase();
+            lower
+                .iter()
+                .flat_map(|(_, ns)| ns)
+                .any(|n| line.contains(n))
+        })
+        .map(|line| {
+            let mut shown = line.to_owned();
+            for (field, ns) in &needles {
+                for n in ns {
+                    for form in [n.clone(), n.to_lowercase(), n.to_uppercase()] {
+                        shown = shown.replace(&form, &format!("<{field}>"));
+                    }
+                }
+            }
+            shown
+        })
+        .collect()
+}
+
+/// What the daemon logs while a capture runs: its events and `log` records, its runners'
+/// standard error (which it logs), and panic messages.
+static CAPTURED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn capture(text: &str) {
+    if let Some(log) = CAPTURED.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        log.push_str(text);
+    }
+}
+
+struct CaptureWriter;
+
+impl std::io::Write for CaptureWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        capture(&String::from_utf8_lossy(buf));
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Each route that takes content, with a marker in each content field, in requests that succeed,
+/// fail validation, are not JSON, name an unknown model, or make a runner fail.
+async fn send_content() {
+    let m = marker;
+    let d = Daemon::start(
+        |dir| {
+            laya_store(dir);
+            let store = Store::open(dir).unwrap();
+            add_model(&store, "broken:latest", &["en"], json!({"fail_load": true}));
+            // A preset file that no longer parses: from another version, or edited by hand.
+            let file = json!({"description": m("preset description"), "questions": {
+                m("question id"): {"type": "score", "instructions": m("instructions"),
+                                   "criteria": m("score label")}}});
+            std::fs::create_dir_all(dir.join("presets")).unwrap();
+            std::fs::write(dir.join("presets/broken.json"), file.to_string()).unwrap();
+        },
+        |_| {},
+    )
+    .await;
+    let questions = json!({
+        m("question id"): {"type": "choice", "instructions": m("instructions"),
+                           "criteria": {m("choice option"): m("choice description"), "other": "Else"}},
+        "urgency": {"type": "score", "instructions": m("instructions"),
+                    "criteria": [m("score label"), "high"]},
+        "refund": {"type": "noul", "instructions": m("instructions"),
+                   "criteria": {"when_true": m("noul when_true"), "when_false": m("noul when_false")}},
+    });
+    let invalid = json!({
+        m("question id"): {"type": m("type tag"), "instructions": m("instructions")},
+        "urgency": {"type": "score", "criteria": m("score label")},
+    });
+    let object_state = json!({m("state key"): m("state value")});
+    let not_json = |body: Value| {
+        let text = body.to_string();
+        text[..text.len() - 1].to_owned() + ", "
+    };
+    let mut cases: Vec<(&str, String, u16)> = Vec::new();
+    for route in ["/api/decide", "/v1/systemone", "/v1/decisions"] {
+        let ok = json!({"model": "laya", "state": m("state"), "questions": questions});
+        cases.extend([
+            (route, ok.to_string(), 200),
+            (route, not_json(ok), 400),
+            (
+                route,
+                json!({"model": "laya:en", "state": object_state, "questions": questions})
+                    .to_string(),
+                200,
+            ),
+            (
+                route,
+                json!({"model": "laya", "state": m("state"), "questions": invalid,
+                       "images": [m("image")]})
+                .to_string(),
+                422,
+            ),
+            (
+                route,
+                json!({"model": "nope", "state": m("state"), "questions": questions}).to_string(),
+                404,
+            ),
+            // The fake runner fails a state with CRASH in it.
+            (
+                route,
+                json!({"model": "laya:en", "state": format!("CRASH {}", m("state")),
+                       "questions": questions})
+                .to_string(),
+                500,
+            ),
+            (
+                route,
+                json!({"model": "broken", "state": m("state"), "questions": questions}).to_string(),
+                500,
+            ),
+        ]);
+    }
+    let preset = json!({"name": "mine", "description": m("preset description"),
+                        "questions": questions});
+    let create = json!({"model": "mine", "from": "laya:en", "questions": questions,
+                        "description": m("model description"), "stream": false});
+    cases.extend([
+        ("/api/presets/create", preset.to_string(), 200),
+        ("/api/presets/create", not_json(preset), 400),
+        (
+            "/api/presets/create",
+            json!({"name": "mine", "description": m("preset description"), "questions": invalid})
+                .to_string(),
+            422,
+        ),
+        (
+            "/api/decide",
+            json!({"model": "laya", "state": m("state"), "preset": "mine"}).to_string(),
+            200,
+        ),
+        (
+            "/api/decide",
+            json!({"model": "laya", "state": m("state"), "preset": "broken"}).to_string(),
+            500,
+        ),
+        (
+            "/api/presets/show",
+            json!({"name": "broken"}).to_string(),
+            500,
+        ),
+        ("/api/create", create.to_string(), 200),
+        ("/api/create", not_json(create), 400),
+        (
+            "/api/create",
+            json!({"model": "mine2", "from": "laya:en", "questions": invalid,
+                   "description": m("model description")})
+            .to_string(),
+            422,
+        ),
+    ]);
+    for (route, body, want) in cases {
+        let (status, _, _) = post_raw(&d.url(route), body).await;
+        // The body is left out: it can quote the markers.
+        assert_eq!(status, want, "{route}");
+    }
+    // Listing the presets reads the file that no longer parses.
+    let r = http().get(d.url("/api/presets")).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    d.stop().await;
+}
+
+/// The daemon's log holds no request content, at the default level (`info`) and at the most
+/// verbose one (`trace`).
+async fn logs_hold_no_request_content() {
+    // The check itself: a short part of a marker, in any letter case or escaped form, is a leak.
+    let m = marker("instructions");
+    let part: String = m.chars().skip(2).take(6).collect();
+    for line in [
+        format!("x {part} y"),
+        m.to_uppercase(),
+        format!("{m:?}"),
+        m.escape_default().to_string(),
+        m.replace('é', "\\u00E9").replace('"', "\\\""),
+    ] {
+        assert_eq!(leaks(&line).len(), 1, "{line}");
+    }
+    assert!(leaks("Kq04 zx04").is_empty());
+
+    let builder = tracing_subscriber::fmt()
+        .with_env_filter("trace")
+        .with_ansi(false)
+        .with_writer(|| CaptureWriter)
+        .with_filter_reloading();
+    let level = builder.reload_handle();
+    // Also sends `log` records to the capture, at every level.
+    builder.init();
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        capture(&format!("{info}\n"));
+        previous(info);
+    }));
+    let mut leaked = Vec::new();
+    for filter in ["info", "trace"] {
+        level.reload(EnvFilter::new(filter)).unwrap();
+        *CAPTURED.lock().unwrap() = Some(String::new());
+        send_content().await;
+        let log = CAPTURED.lock().unwrap().take().unwrap();
+        assert!(!log.is_empty(), "nothing captured at {filter}");
+        leaked.extend(leaks(&log).into_iter().map(|l| format!("at {filter}: {l}")));
+    }
+    level.reload(EnvFilter::new("off")).unwrap();
+    assert!(
+        leaked.is_empty(),
+        "request content in the log:\n{}",
+        leaked.join("\n")
+    );
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("runner") {
@@ -1981,6 +2263,7 @@ fn main() {
         gguf_runner_that_dies_on_the_gpu_restarts_on_the_cpu,
         presets_create_show_decide_delete,
         read_only_refuses_store_changes,
+        logs_hold_no_request_content,
     ];
     let rt = tokio::runtime::Runtime::new().unwrap();
     let (mut passed, mut failed) = (0, Vec::new());

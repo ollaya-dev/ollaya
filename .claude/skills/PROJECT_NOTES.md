@@ -59,6 +59,7 @@ The skills in this directory are generic, third-party guidance (see [THIRD_PARTY
   - Carry a request ID and the entry point (CLI or HTTP) from the daemon to the runner.
   - Don't add metrics backends, OpenTelemetry exporters, alerting or any outbound telemetry unless the user asks.
   - Treat request `state` as user data and don't log it.
+  - Never log request content at any level. The HTTP test `logs_hold_no_request_content` fails when the daemon's log holds any of it.
 
 ## Git, CI, releases (git-workflow-and-versioning, incremental-implementation, ci-cd-and-automation, shipping-and-launch)
 

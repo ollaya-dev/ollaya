@@ -51,8 +51,17 @@ impl PresetStore {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(io(e)),
         };
-        let file: PresetFile = serde_json::from_str(&text)
-            .map_err(|e| Error::Corrupt(format!("preset {}: {e}", path.display())))?;
+        // serde's message can quote a value of the file (a question's text), which `list` logs:
+        // name the place only.
+        let file: PresetFile = serde_json::from_str(&text).map_err(|e| {
+            Error::Corrupt(format!(
+                "preset {}: {:?} error at line {} column {}",
+                path.display(),
+                e.classify(),
+                e.line(),
+                e.column()
+            ))
+        })?;
         let modified = std::fs::metadata(&path)
             .and_then(|m| m.modified())
             .map(DateTime::<Utc>::from)
