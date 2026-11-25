@@ -45,10 +45,13 @@ impl Spec {
     }
 }
 
-/// `Aᵀ` [in, r] and `Bᵀ` [r, out] of one adapted linear.
+/// `Aᵀ` [in, r] and `Bᵀ` [r, out] of one adapted linear, plus `Aᵀ` chunked along `in` for
+/// compensated `x Aᵀ` summation when `in > KAHAN_CHUNK`.
 struct Pair {
     a_t: Array,
     b_t: Array,
+    /// `(n, pad, a_batched [n, KAHAN_CHUNK, r])` when `in > KAHAN_CHUNK`.
+    a_batched: Option<(i32, i32, Array)>,
 }
 
 /// One adapter's tensors, on the MLX thread.
@@ -99,7 +102,29 @@ impl AdapterTensors {
             let b_t = t.raw(&b, &[out, r])?.transpose(&[1, 0]).map_err(mlx)?;
             a_t.eval().map_err(mlx)?;
             b_t.eval().map_err(mlx)?;
-            pairs.insert(target.clone(), Pair { a_t, b_t });
+            let a_batched = match batched_plan(inp as i32, KAHAN_CHUNK) {
+                Some((n, pad)) => {
+                    let r_dim = r as i32;
+                    let a_pad = if pad > 0 {
+                        let zeros = Array::full(&[pad, r_dim], 0.0).map_err(mlx)?;
+                        Array::concatenate(&[&a_t, &zeros], 0).map_err(mlx)?
+                    } else {
+                        a_t.clone()
+                    };
+                    let ab = a_pad.reshape(&[n, KAHAN_CHUNK, r_dim]).map_err(mlx)?;
+                    ab.eval().map_err(mlx)?;
+                    Some((n, pad, ab))
+                }
+                None => None,
+            };
+            pairs.insert(
+                target.clone(),
+                Pair {
+                    a_t,
+                    b_t,
+                    a_batched,
+                },
+            );
         }
         Ok(AdapterTensors {
             scaling: Array::scalar(spec.scaling as f32),
@@ -133,6 +158,69 @@ impl Drop for Active {
     }
 }
 
+/// Reduction-axis chunk width for `x Aᵀ`: computing `KAHAN_CHUNK`-wide partial matmuls in one
+/// batched matmul and reducing them with Kahan summation keeps the unmerged branch within 1e-3
+/// of both the merged model and the fp64 reference on `laya:en`.
+const KAHAN_CHUNK: i32 = 128;
+
+/// Chunk count `n` and zero-padding width `pad` for splitting `k_dim` into `chunk`-wide slices,
+/// or `None` when a single matmul fits inside `chunk`.
+fn batched_plan(k_dim: i32, chunk: i32) -> Option<(i32, i32)> {
+    if k_dim <= chunk {
+        return None;
+    }
+    let n = (k_dim as usize).div_ceil(chunk as usize) as i32;
+    Some((n, n * chunk - k_dim))
+}
+
+/// `x Aᵀ` via one batched matmul over `KAHAN_CHUNK`-wide `k` slices, reduced with Kahan summation.
+fn matmul_kahan(x: &Array, pair: &Pair) -> Result<Array, ollaya_mlx::Error> {
+    let Some((n, pad, a_batched)) = &pair.a_batched else {
+        return x.matmul(&pair.a_t);
+    };
+    let (n, pad) = (*n, *pad);
+    let xs = x.shape();
+    let nd = xs.len();
+    let k_dim = xs[nd - 1];
+    let m: i32 = xs[..nd - 1].iter().product();
+    let r_dim = pair.b_t.shape()[0];
+    let x2d = x.reshape(&[m, k_dim])?;
+    let x_pad = if pad > 0 {
+        Array::concatenate(&[&x2d, &Array::full(&[m, pad], 0.0)?], 1)?
+    } else {
+        x2d
+    };
+    let x_batched = x_pad.reshape(&[m, n, KAHAN_CHUNK])?.transpose(&[1, 0, 2])?;
+    let partials = x_batched.matmul(a_batched)?;
+    let chunks = partials.split(n, 0)?;
+    let mut sum: Option<Array> = None;
+    let mut comp: Option<Array> = None;
+    for p in &chunks {
+        match (&sum, &comp) {
+            (None, _) => {
+                sum = Some(p.clone());
+            }
+            (Some(s), None) => {
+                let t = s.add(p)?;
+                let c = t.subtract(s)?.subtract(p)?;
+                sum = Some(t);
+                comp = Some(c);
+            }
+            (Some(s), Some(c)) => {
+                let y = p.subtract(c)?;
+                let t = s.add(&y)?;
+                let next_c = t.subtract(s)?.subtract(&y)?;
+                sum = Some(t);
+                comp = Some(next_c);
+            }
+        }
+    }
+    let reduced = sum.expect("batched_plan ensures n >= 2").squeeze(0)?;
+    let mut out_shape = xs[..nd - 1].to_vec();
+    out_shape.push(r_dim);
+    reduced.reshape(&out_shape)
+}
+
 /// `scaling · (x Aᵀ) Bᵀ` for the linear named `name`, when the active adapter adapts it.
 pub fn delta(name: &str, x: &Array) -> Result<Option<Array>, Error> {
     ACTIVE.with(|a| {
@@ -143,10 +231,30 @@ pub fn delta(name: &str, x: &Array) -> Result<Option<Array>, Error> {
         let Some(pair) = set.pairs.get(name) else {
             return Ok(None);
         };
-        x.matmul(&pair.a_t)
+        matmul_kahan(x, pair)
             .and_then(|h| h.matmul(&pair.b_t))
             .and_then(|d| d.multiply(&set.scaling))
             .map(Some)
             .map_err(mlx)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batched_plan_handles_multiples_remainders_and_small_dims() {
+        assert_eq!(batched_plan(1024, KAHAN_CHUNK), Some((8, 0)));
+        // ModernBERT mlp.Wo has K = 2624, requiring 64 zeros of padding across 21 chunks.
+        assert_eq!(batched_plan(2624, KAHAN_CHUNK), Some((21, 64)));
+        for k in [129, 256, 1024, 2624, 3072] {
+            let (n, pad) = batched_plan(k, KAHAN_CHUNK).unwrap();
+            assert_eq!(n * KAHAN_CHUNK, k + pad);
+            assert!((0..KAHAN_CHUNK).contains(&pad));
+        }
+        assert_eq!(batched_plan(128, KAHAN_CHUNK), None);
+        assert_eq!(batched_plan(64, KAHAN_CHUNK), None);
+        assert_eq!(batched_plan(0, KAHAN_CHUNK), None);
+    }
 }
