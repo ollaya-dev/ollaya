@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 // Menu bar template images (black, alpha only) of the gaze mark: awake (rings and pupil) and
 // asleep (the bottom of each ring, eyes closed). 54x44 px: macOS draws them 18pt tall.
-//   swift scripts/tray-icons.swift src-tauri/icons
+//   swift scripts/tray-icons.swift icons
 let (w, h) = (54, 44)
 let scale: CGFloat = 1.78
 func render(_ asleep: Bool, _ path: String) {

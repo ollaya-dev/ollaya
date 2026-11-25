@@ -1,0 +1,55 @@
+[package]
+name = "ollaya-desktop"
+description = "Ollaya's desktop app: the server, the model library and a playground, drawn with Rune"
+version = "0.18.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/ollaya-dev/ollaya"
+publish = false
+
+# Its own workspace: the engine's builds and CI never pull in Rune, and Rune's `[patch.crates-io]`
+# (below) applies only here.
+[workspace]
+
+[[bin]]
+name = "ollaya-desktop"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+dirs = "7.0.0"
+futures-util = "0.3.34"
+ollaya-api = { path = "../crates/ollaya-api" }
+reqwest = { version = "0.13.5", features = ["json"] }
+# Rune is pre-release: pin a rev of `dev` and patch what its root Cargo.toml patches, at the same rev.
+rune = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+# Rune's controls: the playground's pickers and the model card's Markdown.
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620", features = ["markdown"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+tokio = { version = "1.53.1", features = ["rt", "time", "sync", "macros", "process"] }
+
+# macOS: Rune has no status item yet (anomalyco/rune#141), so the menu bar item is ours, in AppKit.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-foundation = "0.3.2"
+objc2-app-kit = "0.3.2"
+
+[patch.crates-io]
+winit = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+sctk-adwaita = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+naga = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+accesskit_atspi_common = { git = "https://github.com/anomalyco/rune", rev = "3864fce599855b810973f67024ef33e8f2af5620" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# Windows: the executable's icon and version details (build.rs).
+[build-dependencies]
+winresource = "0.1.34"

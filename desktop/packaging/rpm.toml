@@ -1,0 +1,28 @@
+# cargo-generate-rpm's settings (https://github.com/cat-in-136/cargo-generate-rpm, 0.21.1) for the
+# Linux .rpm, which cargo-packager does not make. desktop.yml unpacks cargo-packager's .deb into
+# target/rpm-root first, so the two packages hold the same files, then runs:
+#
+#   cargo generate-rpm --metadata-overwrite packaging/rpm.toml -o target/packager/
+#
+# The version and the license come from Cargo.toml.
+
+# The Tauri app's package name (its product name in kebab case, as the .deb's), so an install
+# upgrades in place.
+name = "ollaya"
+summary = "Run decision models locally"
+url = "https://ollaya.dev"
+vendor = "Ollaya"
+# Requirements by hand, the .deb's by their library names: the automatic ones would also require
+# the llama.cpp libraries this package carries itself.
+auto-req = "no"
+assets = [
+  { source = "target/rpm-root/usr/bin/*", dest = "/usr/bin/", mode = "755" },
+  { source = "target/rpm-root/usr/lib/**/*", dest = "/usr/lib/", mode = "755" },
+  { source = "target/rpm-root/usr/share/**/*", dest = "/usr/share/", mode = "644" },
+]
+
+[requires]
+"libgomp.so.1()(64bit)" = "*"
+"libxkbcommon.so.0()(64bit)" = "*"
+"libvulkan.so.1()(64bit)" = "*"
+"libfontconfig.so.1()(64bit)" = "*"

@@ -99,8 +99,8 @@ jobs:
           ls -l target/release/ollaya target/release/mlx.metallib
 
   desktop:
-    name: Desktop app on ${{ matrix.os }} (typecheck, clippy)
-    # macOS too: the menu bar (src-tauri/src/tray.rs) is compiled only there.
+    name: Desktop app on ${{ matrix.os }} (fmt, clippy)
+    # macOS too: the menu bar (src/menubar.rs) is compiled only there.
     strategy:
       fail-fast: false
       matrix:
@@ -110,31 +110,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
       - name: Install Rust
         run: |
           rustup toolchain install ${{ env.RUST_TOOLCHAIN }} --profile minimal --component rustfmt,clippy
           rustup default ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: desktop/src-tauri -> target
-      - name: Linux webview dependencies
+          workspaces: desktop -> target
+      - name: Linux build dependencies
         if: runner.os == 'Linux'
+        # Rune links libxkbcommon.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-      - name: Page (typecheck and build)
-        working-directory: desktop
-        run: npm ci && npm run ui
+          sudo apt-get install -y libxkbcommon-dev
       - name: Rust
-        working-directory: desktop/src-tauri
+        working-directory: desktop
         run: |
-          # Tauri checks that the bundled engine exists; a placeholder is enough for clippy.
-          mkdir -p binaries && touch "binaries/ollaya-$(rustc -vV | sed -n 's/^host: //p')"
           cargo fmt --check
           cargo clippy --all-targets --locked -- -D warnings
 

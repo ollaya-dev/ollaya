@@ -1,10 +1,11 @@
 name: Desktop app
 
-# Builds the Tauri app (desktop/) for macOS, Windows and Linux, with the `ollaya` engine bundled
-# inside (externalBin), as workflow artifacts. For a v* tag, release.yml runs it and attaches the
-# installers to the release; the Windows build there takes the engine from the windows-amd64
-# archive release.yml has just packaged, and compiles the app while it waits for it. Running it
-# by hand (workflow_dispatch) builds every engine here.
+# Builds the desktop app (desktop/, Rust on Rune) for macOS, Windows and Linux, with the `ollaya`
+# engine next to it, and packages it with cargo-packager (desktop/Packager.toml) and, for the .rpm,
+# cargo-generate-rpm (desktop/packaging/rpm.toml), as workflow artifacts. For a v* tag, release.yml
+# runs it and attaches the installers to the release; the Windows build there takes the engine from
+# the windows-amd64 archive release.yml has just packaged, and compiles the app while it waits for
+# it. Running it by hand (workflow_dispatch) builds every engine here.
 #
 # Signing is on when its secrets exist:
 #   macOS   APPLE_CERTIFICATE (base64 .p12 of the "Developer ID Application" certificate),
@@ -31,9 +32,13 @@ env:
   # Rust 1.100 moved build scripts' OUT_DIR one level deeper (<profile>/build/<package>/<hash>/out);
   # ort-sys 2.0.0-rc.13, pinned with ort, then copies DirectML.dll to the wrong directory and the
   # Windows build panics. Lift the pin with ort rc.15 or later (an ONNX Runtime update: full parity).
+  # Rune's own rust-toolchain.toml pins 1.99.1 too.
   RUST_TOOLCHAIN: '1.99.1'
   CARGO_TERM_COLOR: always
+  CARGO_PACKAGER_VERSION: '0.11.8'
+  CARGO_GENERATE_RPM_VERSION: '0.21.1'
   # Secrets can't be tested in `if:`; these flags can.
+  APPLE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' && 'yes' || '' }}
   APPLE_NOTARY: ${{ secrets.APPLE_API_KEY_P8 != '' && 'yes' || '' }}
 
 jobs:
@@ -48,16 +53,19 @@ jobs:
             triple: aarch64-apple-darwin
             features: ollaya-runner/coreml,ollaya-runner/mlx
             exe: ''
+            formats: app,dmg
           - name: Windows (x64)
             runner: windows-latest
             triple: x86_64-pc-windows-msvc
             features: ''
             exe: .exe
+            formats: nsis,wix
           - name: Linux (x64)
             runner: ubuntu-24.04
             triple: x86_64-unknown-linux-gnu
             features: ''
             exe: ''
+            formats: deb,appimage
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -68,11 +76,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
+      - name: Packager.toml has the crate's version
+        shell: bash
+        run: |
+          crate=$(sed -n 's/^version = "\(.*\)"$/\1/p' desktop/Cargo.toml | head -1)
+          packager=$(sed -n 's/^version = "\(.*\)"$/\1/p' desktop/Packager.toml | head -1)
+          [ "$crate" = "$packager" ] || {
+            echo "desktop/Packager.toml says $packager, desktop/Cargo.toml $crate (scripts/bump-version.sh sets both)" >&2
+            exit 1
+          }
       - name: Install Rust
         run: |
           rustup toolchain install ${{ env.RUST_TOOLCHAIN }} --profile minimal
@@ -82,15 +94,24 @@ jobs:
           key: desktop-${{ matrix.triple }}
           workspaces: |
             . -> target
-            desktop/src-tauri -> target
+            desktop -> target
           cache-directories: |
             ~/.cache/ort.pyke.io
             ~/Library/Caches/ort.pyke.io
-      - name: Linux webview dependencies
+      - name: Install the packagers
+        shell: bash
+        # rust-cache keeps ~/.cargo/bin, so a later run finds them installed.
+        run: |
+          cargo install --locked "cargo-packager@$CARGO_PACKAGER_VERSION"
+          if [ "${{ runner.os }}" = Linux ]; then
+            cargo install --locked "cargo-generate-rpm@$CARGO_GENERATE_RPM_VERSION"
+          fi
+      - name: Linux build dependencies
         if: runner.os == 'Linux'
+        # Rune links libxkbcommon. Wayland, X11, Vulkan and fontconfig it loads at run time.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libxkbcommon-dev
       - name: MLX build cache
         if: runner.os == 'macOS'
         run: echo "OLLAYA_MLX_DIR=$HOME/.cache/ollaya-mlx" >>"$GITHUB_ENV"
@@ -104,6 +125,17 @@ jobs:
         if: runner.os == 'macOS'
         # Xcode 26 ships the Metal compiler as a separate component.
         run: xcrun -sdk macosx metal --version || xcodebuild -downloadComponent MetalToolchain
+      - name: Build the app
+        # First, so that in a release the Windows build compiles it while release.yml builds the
+        # engine: the app does not need the engine to build.
+        working-directory: desktop
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = macOS ]; then
+            # Packager.toml's LSMinimumSystemVersion.
+            export MACOSX_DEPLOYMENT_TARGET=14.0
+          fi
+          cargo build --release --locked
       - name: Build the engine
         if: env.RELEASE_ENGINE != 'true'
         shell: bash
@@ -115,23 +147,13 @@ jobs:
             export MACOSX_DEPLOYMENT_TARGET=14.0
           fi
           cargo build --release --locked -p ollaya ${FEATURES:+--features "$FEATURES"}
-      - name: Compile the app while release.yml builds the engine
-        if: env.RELEASE_ENGINE == 'true'
-        shell: bash
-        # tauri-build only needs the engine to exist. The real one replaces this placeholder below,
-        # which rebuilds the app crate alone; the dependencies are compiled by then.
-        run: |
-          mkdir -p desktop/src-tauri/binaries
-          echo placeholder >"desktop/src-tauri/binaries/ollaya-${{ matrix.triple }}${{ matrix.exe }}"
-          cd desktop
-          npm ci
-          npx tauri build --no-bundle
       - name: The engine from release.yml
         if: env.RELEASE_ENGINE == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        # ollaya.exe and the DLLs it links: bin/ of the windows-amd64 archive.
+        # ollaya.exe and the DLLs it links: bin/ of the windows-amd64 archive. The next step stages
+        # its GPU runner too.
         run: |
           scripts/wait-artifact.sh engine-windows-amd64 "$RUNNER_TEMP/engine"
           7z x -bd -bso0 -o"$RUNNER_TEMP/engine" "$RUNNER_TEMP/engine/ollaya-windows-amd64.zip"
@@ -139,45 +161,46 @@ jobs:
           cp "$RUNNER_TEMP"/engine/bin/* target/release/
           ls -l target/release
           target/release/ollaya.exe --version
-          # The GPU runner and the FILES.sha256 of this release's GPU packs: the app's server uses
-          # a command-line install's pack when it is one of these (desktop/src-tauri/src/lib.rs).
-          lib=desktop/src-tauri/lib/ollaya
-          mkdir -p "$lib"
-          cp "$RUNNER_TEMP/engine/lib/ollaya/ollaya-cuda-runner.exe" "$lib/"
-          cp "$RUNNER_TEMP/engine/ollaya-windows-amd64-cuda.sha256" "$lib/cuda_v13.FILES.sha256"
-          cp "$RUNNER_TEMP/engine/ollaya-windows-amd64-cuda12.sha256" "$lib/cuda_v12.FILES.sha256"
-          ls -l "$lib"
-      - name: Bundle the engine (externalBin)
+      - name: Stage the app, the engine and the resources
         shell: bash
+        # desktop/target/stage is what Packager.toml packages: the executables and, on Windows, the
+        # DLLs side by side, and the resources (lib/ollaya, mlx_metal) as they are installed.
         run: |
-          mkdir -p desktop/src-tauri/binaries
-          cp "target/release/ollaya${{ matrix.exe }}" "desktop/src-tauri/binaries/ollaya-${{ matrix.triple }}${{ matrix.exe }}"
+          stage=desktop/target/stage
+          rm -rf "$stage" desktop/target/packager
+          mkdir -p "$stage"
+          cp "desktop/target/release/ollaya-desktop${{ matrix.exe }}" "target/release/ollaya${{ matrix.exe }}" "$stage/"
           # DLLs that ONNX Runtime needs on Windows go next to the executables.
-          resources=
           for dll in target/release/*.dll; do
             [ -f "$dll" ] || continue
-            name=$(basename "$dll")
-            cp "$dll" desktop/src-tauri/
-            resources="${resources:+$resources,}\"$name\":\"$name\""
+            cp "$dll" "$stage/"
           done
-          # llama.cpp's libraries for GGUF models (CPU and Vulkan on Windows; Metal and CPU on macOS), which the app
-          # points `ollaya serve` at with OLLAYA_LIBRARY_PATH=<resources>/lib/ollaya.
+          # llama.cpp's libraries for GGUF models (CPU and Vulkan on Windows; Metal and CPU on
+          # macOS), which the app points `ollaya serve` at with OLLAYA_LIBRARY_PATH=<resources>/lib/ollaya.
           case "${{ matrix.triple }}" in
             aarch64-apple-darwin) kind=darwin-arm64 ;;
             x86_64-pc-windows-msvc) kind=windows-amd64 ;;
             *) kind=linux-amd64 ;;
           esac
-          scripts/llama-cpp.sh "$kind" desktop/src-tauri/lib/ollaya/llama \
-            desktop/src-tauri/lib/ollaya/llama.cpp-THIRD_PARTY_NOTICES
-          resources="${resources:+$resources,}\"lib/ollaya/\":\"lib/ollaya/\""
-          # MLX's Metal library: the runner finds it in Contents/Resources/mlx_metal/.
-          if [ -f target/release/mlx.metallib ]; then
-            mkdir -p desktop/src-tauri/mlx_metal
-            cp target/release/mlx.metallib desktop/src-tauri/mlx_metal/
-            resources="$resources,\"mlx_metal/mlx.metallib\":\"mlx_metal/mlx.metallib\""
+          scripts/llama-cpp.sh "$kind" "$stage/lib/ollaya/llama" "$stage/lib/ollaya/llama.cpp-THIRD_PARTY_NOTICES"
+          if [ "${{ runner.os }}" = macOS ]; then
+            # MLX's Metal library: the runner finds it in Contents/Resources/mlx_metal/.
+            mkdir -p "$stage/mlx_metal"
+            cp target/release/mlx.metallib "$stage/mlx_metal/"
           fi
-          echo "TAURI_EXTRA={\"bundle\":{\"resources\":{$resources}}}" >>"$GITHUB_ENV"
-          echo "Resources: {$resources}"
+          if [ "$RELEASE_ENGINE" = true ]; then
+            # The GPU runner and the FILES.sha256 of this release's GPU packs: the app's server uses
+            # a command-line install's pack when it is one of these (docs/distribution.md, "Desktop app").
+            cp "$RUNNER_TEMP/engine/lib/ollaya/ollaya-cuda-runner.exe" "$stage/lib/ollaya/"
+            cp "$RUNNER_TEMP/engine/ollaya-windows-amd64-cuda.sha256" "$stage/lib/ollaya/cuda_v13.FILES.sha256"
+            cp "$RUNNER_TEMP/engine/ollaya-windows-amd64-cuda12.sha256" "$stage/lib/ollaya/cuda_v12.FILES.sha256"
+          fi
+          find "$stage" -type f | sort
+          # The staged engine loads the staged llama.cpp and finds the CPU.
+          lib=$PWD/$stage/lib/ollaya
+          if [ "${{ runner.os }}" = Windows ]; then lib=$(cygpath -w "$lib"); fi
+          OLLAYA_LIBRARY_PATH=$lib "$stage/ollaya${{ matrix.exe }}" llama-devices | tee "$RUNNER_TEMP/devices.json"
+          grep -q '"type": "cpu"' "$RUNNER_TEMP/devices.json"
       - name: Smoke test a shared GPU pack
         if: env.RELEASE_ENGINE == 'true' && github.event_name == 'workflow_dispatch'
         shell: bash
@@ -186,7 +209,7 @@ jobs:
         # A command-line install's pack (stand-in files; this runner has no GPU), and the bundled
         # server started as the app starts it: GPU runners come from a copy of the app's runner.
         run: |
-          cli=$RUNNER_TEMP/cli/lib/ollaya app=desktop/src-tauri/lib/ollaya
+          cli=$RUNNER_TEMP/cli/lib/ollaya app=desktop/target/stage/lib/ollaya
           mkdir -p "$cli/cuda_v13"
           for f in onnxruntime_providers_shared.dll onnxruntime_providers_cuda.dll onnxruntime.dll; do
             echo stand-in >"$cli/cuda_v13/$f"
@@ -195,33 +218,6 @@ jobs:
           target/release/ollaya.exe stop
           ls -l "$cli/cuda_v13"
           cmp "$cli"/cuda_v13/ollaya-runner-*.exe "$app/ollaya-cuda-runner.exe"
-      - name: Sign llama.cpp for notarization
-        # Notarization needs every Mach-O in the app signed with the Developer ID, the hardened
-        # runtime and a timestamp. Tauri signs the app and the engine; the llama.cpp files are
-        # resources, so they are signed here, in a keychain of their own.
-        if: runner.os == 'macOS' && env.APPLE_NOTARY == 'yes'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          kc=$RUNNER_TEMP/llama-signing.keychain-db
-          pw=$(openssl rand -hex 16)
-          security create-keychain -p "$pw" "$kc"
-          security set-keychain-settings -lut 3600 "$kc"
-          security unlock-keychain -p "$pw" "$kc"
-          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode >"$RUNNER_TEMP/llama-signing.p12"
-          security import "$RUNNER_TEMP/llama-signing.p12" -k "$kc" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          rm -f "$RUNNER_TEMP/llama-signing.p12"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$kc" >/dev/null
-          # codesign finds an identity only in a keychain on the search list.
-          # shellcheck disable=SC2046
-          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
-          for f in desktop/src-tauri/lib/ollaya/llama/*; do
-            codesign --force --options runtime --timestamp --keychain "$kc" --sign "$APPLE_SIGNING_IDENTITY" "$f"
-          done
-          codesign --verify --strict --verbose=2 desktop/src-tauri/lib/ollaya/llama/libllama.0.dylib
-          security delete-keychain "$kc"
       - name: Apple notarization key
         if: runner.os == 'macOS' && env.APPLE_NOTARY == 'yes'
         env:
@@ -231,30 +227,74 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s' "$APPLE_API_KEY_P8" >"$HOME/.appstoreconnect/private_keys/AuthKey_$APPLE_API_KEY.p8"
           echo "APPLE_API_KEY_PATH=$HOME/.appstoreconnect/private_keys/AuthKey_$APPLE_API_KEY.p8" >>"$GITHUB_ENV"
-      - name: Build the app
+      - name: Package
         working-directory: desktop
         shell: bash
         env:
+          FORMATS: ${{ matrix.formats }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          # linuxdeploy runs its AppImage plugin, itself an AppImage, without FUSE.
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        # On macOS, with the Developer ID, cargo-packager signs every Mach-O in the bundle (llama.cpp's
+        # libraries, the engine, the app) with the hardened runtime and a timestamp, the .app, then
+        # notarizes and staples the .app (APPLE_API_*), then signs the .dmg around it. It imports
+        # APPLE_CERTIFICATE into a keychain of its own for that, and deletes it after.
         run: |
-          npm ci
-          # Unsigned builds when the secrets are absent (forks, first runs).
-          [ -n "$APPLE_CERTIFICATE" ] || unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
+          if [ "${{ runner.os }}" = macOS ] && [ "$APPLE_SIGNING" = yes ]; then
+            perl -pi -e 's/^\[macos\]$/[macos]\nsigning-identity = "$ENV{APPLE_SIGNING_IDENTITY}"/' Packager.toml
+            grep -q '^signing-identity = "..*"$' Packager.toml
+          else
+            # Unsigned builds when the secrets are absent (forks, first runs).
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
+          fi
           [ -n "$APPLE_API_ISSUER" ] || unset APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_PATH
-          npx tauri build --config "$TAURI_EXTRA"
+          cargo packager -c Packager.toml -f "$FORMATS"
+          ls -l target/packager
+      - name: The .rpm
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        # cargo-packager makes no .rpm. cargo-generate-rpm packs the .deb's files with
+        # packaging/rpm.toml's settings, which override a table it insists on finding in Cargo.toml:
+        # the empty one added here.
+        run: |
+          printf '\n[package.metadata.generate-rpm]\n' >>Cargo.toml
+          rm -rf target/rpm-root
+          dpkg-deb -x target/packager/*.deb target/rpm-root
+          cargo generate-rpm --metadata-overwrite packaging/rpm.toml -o target/packager/
+          dpkg-deb -I target/packager/*.deb
+          ls -l target/packager
+      - name: Check the app bundle
+        if: runner.os == 'macOS'
+        working-directory: desktop/target/packager
+        # Signed, the engine runs with the hardened runtime, whose library validation lets it load
+        # only libraries signed by the same team: it must still load llama.cpp from the bundle.
+        run: |
+          app=Ollaya.app/Contents
+          plutil -p "$app/Info.plist"
+          ls -l "$app/MacOS" "$app/Resources/lib/ollaya/llama" "$app/Resources/mlx_metal"
+          if [ "$APPLE_SIGNING" = yes ]; then
+            codesign --verify --strict --deep --verbose=2 Ollaya.app
+          fi
+          if [ "$APPLE_NOTARY" = yes ]; then
+            xcrun stapler validate Ollaya.app
+            spctl --assess --type execute --verbose=2 Ollaya.app
+          fi
+          OLLAYA_LIBRARY_PATH="$PWD/$app/Resources/lib/ollaya" "$app/MacOS/ollaya" llama-devices | tee devices.json
+          grep -q '"type": "cpu"' devices.json
+          rm devices.json
       - name: Notarize the disk image
-        # Tauri notarizes and staples the app inside; the .dmg around it needs its own ticket, or
-        # Gatekeeper calls a downloaded disk image "unnotarized".
+        # cargo-packager notarizes and staples the app inside; the .dmg around it needs its own
+        # ticket, or Gatekeeper calls a downloaded disk image "unnotarized".
         if: runner.os == 'macOS' && env.APPLE_NOTARY == 'yes'
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: |
-          for dmg in desktop/src-tauri/target/release/bundle/dmg/*.dmg; do
+          for dmg in desktop/target/packager/*.dmg; do
             xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" \
               --issuer "$APPLE_API_ISSUER" --wait --timeout 30m
             xcrun stapler staple "$dmg"
@@ -262,17 +302,28 @@ jobs:
           done
       - name: Collect installers
         shell: bash
-        # Stable names, so the website can link releases/latest/download/<name>.
+        # Stable names, so the website can link releases/latest/download/<name>. Each must be there
+        # exactly once.
         run: |
           mkdir -p out
-          b=desktop/src-tauri/target/release/bundle
-          take() { for f in $1; do if [ -f "$f" ]; then cp "$f" "out/$2"; fi; done; }
-          take "$b/dmg/*.dmg" Ollaya-macos-arm64.dmg
-          take "$b/nsis/*-setup.exe" Ollaya-windows-x64-setup.exe
-          take "$b/msi/*.msi" Ollaya-windows-x64.msi
-          take "$b/appimage/*.AppImage" Ollaya-linux-x86_64.AppImage
-          take "$b/deb/*.deb" Ollaya-linux-amd64.deb
-          take "$b/rpm/*.rpm" Ollaya-linux-x86_64.rpm
+          take() {
+            # shellcheck disable=SC2086 # $1 is a pattern
+            set -- "$2" desktop/target/packager/$1
+            [ $# -eq 2 ] && [ -f "$2" ] || { echo "$1: expected one file, found: ${*:2}" >&2; exit 1; }
+            cp "$2" "out/$1"
+          }
+          case "${{ runner.os }}" in
+            macOS) take '*.dmg' Ollaya-macos-arm64.dmg ;;
+            Windows)
+              take '*-setup.exe' Ollaya-windows-x64-setup.exe
+              take '*.msi' Ollaya-windows-x64.msi
+              ;;
+            Linux)
+              take '*.AppImage' Ollaya-linux-x86_64.AppImage
+              take '*.deb' Ollaya-linux-amd64.deb
+              take '*.rpm' Ollaya-linux-x86_64.rpm
+              ;;
+          esac
           ls -l out
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

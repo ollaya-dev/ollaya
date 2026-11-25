@@ -1,0 +1,81 @@
+# How cargo-packager (https://github.com/crabnebula-dev/cargo-packager, 0.11.8) packages the app:
+# the macOS .app and .dmg, the Windows NSIS and MSI installers, the Linux .deb and AppImage. The
+# Linux .rpm comes from cargo-generate-rpm (packaging/rpm.toml), which cargo-packager does not make.
+#
+# It packages what is staged in target/stage, and builds nothing itself. desktop.yml stages the app,
+# the engine and the resources, then runs, per platform:
+#
+#   cargo packager -c Packager.toml -f app,dmg      # macOS
+#   cargo packager -c Packager.toml -f nsis,wix     # Windows
+#   cargo packager -c Packager.toml -f deb,appimage # Linux
+#
+# The packages land in target/packager. docs/distribution.md ("Desktop app") has the layout.
+
+# Required: without it cargo-packager 0.11.8 fails on this file ("Not a directory"), as it looks
+# for the name in a Cargo.toml with the file's path as a directory.
+name = "ollaya-desktop"
+product-name = "Ollaya"
+# The crate's version. scripts/bump-version.sh sets both; desktop.yml fails when they differ.
+version = "0.18.0"
+# The Tauri app's identifier, so an install upgrades in place.
+identifier = "dev.ollaya.app"
+description = "Run decision models locally"
+long-description = "Ollaya downloads and serves open decision models on your own machine: typed, calibrated answers in milliseconds, private and open source."
+homepage = "https://ollaya.dev"
+publisher = "Ollaya"
+authors = ["Ollaya"]
+copyright = "© 2026 Ollaya"
+category = "DeveloperTool"
+icons = [
+  "icons/32x32.png",
+  "icons/128x128.png",
+  "icons/128x128@2x.png",
+  "icons/icon.icns",
+  "icons/icon.ico",
+]
+
+out-dir = "target/packager"
+binaries-dir = "target/stage"
+# The app and the engine it starts, in one directory: Contents/MacOS on macOS, the install
+# directory on Windows, /usr/bin on Linux. The app is not called `Ollaya`: APFS is case-insensitive,
+# and the engine is `ollaya`. On Windows both get `.exe`.
+binaries = [
+  { path = "ollaya-desktop", main = true },
+  { path = "ollaya" },
+]
+# Contents/Resources on macOS, the install directory on Windows, /usr/lib/ollaya-desktop on Linux.
+# A source that is not there is skipped, so each platform stages only what it ships.
+resources = [
+  # llama.cpp's libraries (scripts/llama-cpp.sh); on Windows also the GPU runner and the GPU
+  # packs' FILES.sha256 (cuda_v13.FILES.sha256, cuda_v12.FILES.sha256).
+  { src = "target/stage/lib/ollaya", target = "lib/ollaya" },
+  # macOS: MLX's Metal library. The runner looks in <exe dir>/../Resources/mlx_metal.
+  { src = "target/stage/mlx_metal", target = "mlx_metal" },
+  # Windows: the DLLs the engine links (ONNX Runtime, DirectML), next to the executables.
+  { src = "target/stage/*.dll", target = "." },
+]
+
+[macos]
+minimum-system-version = "14.0"
+# LSUIElement: a menu bar app. The app shows its Dock icon itself when its window opens.
+background-app = true
+# signing-identity: desktop.yml adds the Developer ID here when its secret exists. cargo-packager
+# then signs every Mach-O in the bundle, inside out, with the hardened runtime and a timestamp
+# (llama.cpp's libraries, the engine, the app), and the .dmg. Without it nothing is signed. Do not
+# sign ad hoc ("-"): with the hardened runtime and no Team ID, the engine's library validation
+# refuses llama.cpp's libraries, and GGUF models fail to load.
+
+[nsis]
+# Per user, in %LOCALAPPDATA%\Ollaya, as the Tauri app was. Its uninstall entry is
+# HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Ollaya, the Tauri app's, so it upgrades
+# that install.
+installer-mode = "currentUser"
+
+[wix]
+# cargo-packager's template with the Tauri app's UpgradeCode, so the MSI replaces the Tauri MSI.
+template = "packaging/wix/main.wxs"
+
+[deb]
+# Linked: libxkbcommon (Rune). Loaded at run time: libgomp (llama.cpp's CPU backends), the Vulkan
+# loader (wgpu draws with Vulkan on Linux), fontconfig (text).
+depends = ["libgomp1", "libxkbcommon0", "libvulkan1", "libfontconfig1"]

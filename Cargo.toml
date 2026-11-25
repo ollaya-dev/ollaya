@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-# The desktop app (Tauri) is its own workspace: its webview dependencies stay out of the engine's builds.
+# The desktop app (Rune) is its own workspace: its UI dependencies stay out of the engine's builds.
 exclude = ["desktop"]
 
 [workspace.package]

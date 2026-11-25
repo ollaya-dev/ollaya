@@ -18,7 +18,7 @@ import type { Child } from 'hono/jsx'
 import { withResults } from './data/numbers'
 import { Layout, type PageMeta } from './components/Layout'
 import { catalog, featuredTags, fullName, getTag, searchIndex } from './data/catalog'
-import { blogPosts, docPages, readmes } from './generated/content'
+import { blogPosts, cards, docPages, readmes } from './generated/content'
 import { hasAsset, setAssetVersions } from './lib/assets'
 import { setBenchOrigin } from './lib/bench'
 import { setGithubStars } from './lib/stars'
@@ -62,6 +62,8 @@ function appLibrary() {
         languages: t.languages,
       })),
       readme: readmes[m.name] ? withResults(readmes[m.name]!) : null,
+      // The desktop app draws the card itself, from Markdown (desktop/src/library.rs).
+      card: cards[m.name] ? withResults(cards[m.name]!) : null,
     })),
   }
 }

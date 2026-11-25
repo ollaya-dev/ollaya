@@ -586,26 +586,42 @@ $env:OLLAYA_NO_CUDA = '1'; irm https://ollaya.dev/install.ps1 | iex   # CPU only
 
 ## Desktop app
 
-`desktop/` is a Tauri 2 app: a Rust backend over `ollaya-api` and a plain TypeScript page. It is a
-separate Cargo workspace, so the engine's builds and CI never pull in the webview stack
-(WebKitGTK on Linux).
+`desktop/` is a Rust app over `ollaya-api`, drawn with [Rune](https://github.com/anomalyco/rune),
+which renders on the GPU itself (Metal, Direct3D 12, Vulkan), with no webview. It is a separate
+Cargo workspace, so the engine's builds and CI never pull in the UI stack.
 
-- **The window:** two pages. Overview shows the server's address, its API endpoints, requests,
-  requests per second, the median response time and the latest requests (`GET /api/activity`).
-  Models shows the library as cards; each opens a page with its versions, a panel to try it and its
-  model card. The library comes from `https://ollaya.dev/data/library.json`, which the site build
-  writes, so a model added to the site appears in the app without a new release.
+- **The window:** four pages. Discover lists the library with a search, and shows each family's
+  versions (download with progress, or remove) and its model card. My Models is the table of
+  installed versions, with load, unload, try and remove. Playground runs a model on a state with a
+  preset, the model's own questions or custom JSON questions, and shows each answer with its
+  confidence. Server shows the address, the API endpoints, requests, requests per second, the
+  median response time and the latest requests (`GET /api/activity`). The library comes from
+  `https://ollaya.dev/data/library.json`, which the site build writes, with each model card as
+  Markdown (`card`), so a model added to the site appears in the app without a new release.
 
-- **macOS:** a menu bar app (`src-tauri/src/tray.rs`): no Dock icon until the window is open,
-  and a menu with the server's state, Start/Stop, the installed models (checked when loaded;
-  click to load or unload), downloads, Open at Login (a LaunchAgent) and Quit. Windows and Linux
-  get the window only.
-- **The engine inside:** `desktop.yml` builds `ollaya` for the target and copies it to
-  `desktop/src-tauri/binaries/ollaya-<target triple>`, which Tauri bundles next to the app
-  (`externalBin`). The app runs `ollaya serve` from there, and `ollaya stop` for the server it
-  started when it quits. In a release, the Windows build takes the engine from the windows-amd64
-  archive `release.yml` has just packaged instead (its `bin\`), and compiles the app while it waits
-  for it.
+- **macOS:** a menu bar app (`src/menubar.rs`, `LSUIElement`): no Dock icon until the window is
+  open, and a menu with the server's state and a switch to start and stop it, its address (click to
+  copy), the installed models (checked when loaded; click to load or unload) and the library's
+  (click to download), a newer release, Open at Login (a LaunchAgent, `src/login.rs`) and Quit.
+  Windows and Linux get the window only.
+- **The engine inside:** the app's executable is `ollaya-desktop`, and the engine `ollaya` is
+  installed next to it (on macOS the app is not called `Ollaya`: APFS is case-insensitive). With
+  them come the resources: llama.cpp's libraries in `lib/ollaya/` (`scripts/llama-cpp.sh`), and on
+  macOS MLX's `mlx_metal/mlx.metallib`. `desktop.yml` builds both executables and stages them in
+  `desktop/target/stage`, and cargo-packager installs them as `desktop/Packager.toml` says:
+
+  | | Executables | Resources |
+  |---|---|---|
+  | macOS | `Ollaya.app/Contents/MacOS/` | `Ollaya.app/Contents/Resources/` |
+  | Windows | The install directory, with the DLLs the engine links | The install directory |
+  | Linux (.deb, .rpm, AppImage) | `/usr/bin/` | `/usr/lib/ollaya-desktop/` |
+
+  The app finds the resources from its own path (`resource_dir` in `src/engine.rs`) and the engine
+  as `OLLAYA_BIN`, else next to itself, else on `PATH`. It runs `ollaya serve` with
+  `OLLAYA_LIBRARY_PATH=<resources>/lib/ollaya`, and `ollaya stop` for the server it started when
+  it quits. In a release, the Windows build takes the engine from the windows-amd64 archive
+  `release.yml` has just packaged instead (its `bin\`), and compiles the app while it waits for
+  it.
 - **GPU.** The installers carry no GPU pack (1.4 GB and more). The engine inside is built without
   the `cuda` feature (on Windows with pyke's `directml` set, whose `DirectML.dll` the app bundles),
   except the released Windows one, which is the command line's. On Windows and Linux the app uses
@@ -625,20 +641,34 @@ separate Cargo workspace, so the engine's builds and CI never pull in the webvie
   The Linux app carries no runner yet, so it has only the second. Downloading the pack from the
   app (with the same `FILES.sha256` check) is not done either.
 - **Installers:** `Ollaya-macos-arm64.dmg`, `Ollaya-windows-x64-setup.exe` (NSIS, per-user),
-  `Ollaya-windows-x64.msi`, `Ollaya-linux-x86_64.AppImage` and `Ollaya-linux-amd64.deb`. The names are
-  stable, so the website links `releases/latest/download/<name>`. For a `v*` tag `release.yml` runs
-  `desktop.yml` and attaches them once the release exists; `desktop.yml` on its own
-  (workflow_dispatch) builds them as workflow artifacts.
-- **Developing:** `cd desktop && npm ci`, copy a built `ollaya` into `src-tauri/binaries/` under its
-  triple name, then `npx tauri dev`. `npm run preview` builds the page against a fake backend for
-  design work in a browser. `OLLAYA_LIBRARY_URL` points the app at another library, such as
-  `site/dist/data/library.json` served locally before the site is deployed.
+  `Ollaya-windows-x64.msi`, `Ollaya-linux-x86_64.AppImage`, `Ollaya-linux-amd64.deb` and
+  `Ollaya-linux-x86_64.rpm`. The names are stable, so the website links
+  `releases/latest/download/<name>`. For a `v*` tag `release.yml` runs `desktop.yml` and attaches
+  them once the release exists; `desktop.yml` on its own (workflow_dispatch) builds them as
+  workflow artifacts.
+  - **Tools.** [cargo-packager](https://github.com/crabnebula-dev/cargo-packager) makes all but
+    the .rpm, from `desktop/Packager.toml`.
+    [cargo-generate-rpm](https://github.com/cat-in-136/cargo-generate-rpm) makes the .rpm from the
+    .deb's files, with `desktop/packaging/rpm.toml`. `desktop.yml` pins both versions.
+  - **Upgrades.** The installers replace an install of the Tauri app: the identifier is still
+    `dev.ollaya.app`, the NSIS installer writes the same uninstall entry
+    (`HKCU\...\Uninstall\Ollaya`) and directory (`%LOCALAPPDATA%\Ollaya`), the MSI keeps the Tauri
+    MSI's UpgradeCode (`desktop/packaging/wix/main.wxs`), and the Linux packages are still called
+    `ollaya`.
+- **Developing:** `cd desktop && OLLAYA_BIN=../target/release/ollaya cargo run`, with an engine
+  built in the workspace. `OLLAYA_LIBRARY_URL` points the app at another library, such as
+  `site/dist/data/library.json` served locally before the site is deployed. To try an installer,
+  stage `target/stage` as `desktop.yml` does, then run
+  `cargo packager -c Packager.toml -f app` (or `dmg`, `nsis`, `deb`, …) in `desktop/`.
 
 ### Signing the desktop app
 
 **macOS.** The app is signed with a "Developer ID Application" certificate and notarized by Apple,
 so Gatekeeper opens it without a warning. `desktop.yml` does both when these repository secrets
-exist:
+exist. It writes the identity into `Packager.toml`, and cargo-packager signs every Mach-O in the
+bundle from the inside out (llama.cpp's libraries, the engine, the app) with the hardened runtime
+and a timestamp, notarizes and staples the .app, and signs the .dmg; `desktop.yml` then notarizes
+and staples the .dmg too.
 
 | Secret | Value |
 |---|---|
@@ -647,7 +677,9 @@ exist:
 | `APPLE_SIGNING_IDENTITY` | `Developer ID Application: <name> (<team id>)`, as `security find-identity -v -p codesigning` prints it |
 | `APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_P8` | An App Store Connect API key (Users and Access → Integrations → Keys, role Developer): issuer ID, key ID and the `.p8` file's contents |
 
-Without them the build is unsigned, and macOS asks users to right-click → Open the first time.
+Without them the build is unsigned, and macOS asks users to right-click → Open the first time. It
+is never signed ad hoc (`-`): the hardened runtime's library validation then refuses llama.cpp's
+libraries, which have no Team ID, and GGUF models fail to load.
 
 **Windows.** Without a signature, SmartScreen warns on first run. Options, cheapest first:
 
@@ -660,7 +692,10 @@ Without them the build is unsigned, and macOS asks users to right-click → Open
 - **A regular OV certificate** from a CA (Sectigo, SSL.com and others), a few hundred dollars a year,
   with a cloud key for CI.
 
-Any of them plugs into Tauri's `bundle.windows.signCommand`. Even signed, a new publisher builds
+Any of them plugs into cargo-packager's `sign-command` in `Packager.toml`'s `[windows]` table, a
+command line with `%1` for the file to sign. cargo-packager signs `ollaya-desktop.exe`, the NSIS
+uninstaller and both installers with it, but not the engine or the DLLs: `desktop.yml` would sign
+those with the same command after staging them. Even signed, a new publisher builds
 SmartScreen reputation over its first downloads.
 
 ## Docker
