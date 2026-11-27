@@ -19,6 +19,7 @@ const footerGroups: { title: string; links: { href: string; label: string }[] }[
       { href: '/search', label: 'Models' },
       ...(hasAsset('try.js') ? [{ href: '/try', label: 'Try in the browser' }] : []),
       { href: benchUrl(), label: 'Ollaya Bench' },
+      { href: '/waitlist', label: 'Ollaya Cloud waitlist' },
       { href: '/stats', label: 'Stats' },
       { href: '/blog', label: 'Blog' },
     ],

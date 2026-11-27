@@ -33,6 +33,7 @@ import { DotPlot, Scatter } from './components/charts'
 import { runs } from './data/results'
 import { SearchPage } from './pages/search'
 import { TryPage } from './pages/try'
+import { InferenceWaitlistPage, WaitlistPage } from './pages/waitlist'
 import { MODEL } from './data/try'
 import { llmsFullTxt, llmsTxt } from './pages/llms'
 import { ContributorsPage } from './pages/contributors'
@@ -156,6 +157,22 @@ function pages(origin: string): Page[] {
           },
         ]
       : []),
+    {
+      url: '/waitlist',
+      meta: {
+        title: 'Ollaya Cloud waitlist',
+        description: 'Join the waitlist for the Ollaya Cloud beta: Ollaya decision models behind one API and a dashboard.',
+      },
+      render: () => <WaitlistPage />,
+    },
+    {
+      url: '/waitlist/inference',
+      meta: {
+        title: 'Apply for inference access',
+        description: 'Apply for API access to Ollaya decision models on Ollaya Cloud.',
+      },
+      render: () => <InferenceWaitlistPage />,
+    },
     {
       url: '/contributors',
       meta: {

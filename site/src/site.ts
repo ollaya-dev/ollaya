@@ -29,6 +29,15 @@ export const LOCAL_API = `http://localhost:${LOCAL_PORT}`
 export const COPYRIGHT_YEAR = 2026
 
 /**
+ * Ollaya Cloud's waitlist (src/pages/waitlist.tsx). The sign-in service of Ollaya Cloud answers under /dashboard on
+ * this host. The Turnstile site key is public; its widget allows this host only.
+ */
+export const CLOUD = {
+  waitlistApi: '/dashboard/api/auth/waitlist',
+  turnstileSiteKey: '0x4AAAAAAGT8hh-XNar3xgws',
+}
+
+/**
  * Visit counting with Open Analytics (open source, cookieless, no personal data), self-hosted at
  * oa.cobanov.run. `key` is the site's public tracking key (oa_pk_…); empty leaves the script out.
  * Its host must also be allowed in public/_headers (script-src and connect-src).
