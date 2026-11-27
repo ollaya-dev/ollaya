@@ -28,7 +28,7 @@
   ],
   // Each visitor's inference key for an organization, AES-GCM encrypted with the KEYS_SECRET secret
   // (`openssl rand -base64 32 | npx wrangler secret put KEYS_SECRET`).
-  "kv_namespaces": [{ "binding": "CLOUD_KEYS", "id": "KV_NAMESPACE_ID" }],
+  "kv_namespaces": [{ "binding": "CLOUD_KEYS", "id": "31194d805f2443969af833c1a603200b" }],
 
   // Custom domains — each zone (ollaya.dev, cobanov.dev) must be in the same Cloudflare account.
   // Wrangler creates the DNS records and certificates on deploy.
