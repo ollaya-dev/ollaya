@@ -1,6 +1,8 @@
 // A fake backend for `npm run preview`: a few real library entries, invented local state, requests
-// and answers.
-import type { Activity, Backend, DecideResponse, LibraryModel, LocalModel, PullProgress, Questions, Status } from './backend'
+// and answers. Ollaya Cloud: #cloud starts signed in and on Ollaya Cloud, #credits too with an
+// organization out of credits; signing in is approved by itself after a few seconds.
+import type { Activity, Backend, CloudStatus, DecideResponse, LibraryModel, LocalModel, PullProgress, Questions, Status } from './backend'
+import { CloudError } from './cloud-error'
 
 const card = (name: string) =>
   `<p>${name} is a decision model. It reads a <em>state</em> and typed questions and returns calibrated probabilities.</p><h3 id="usage"><a href="#usage">Usage</a></h3><div class="codeblock"><pre><code>ollaya run ${name} --preset triage "I was charged twice"</code></pre></div><h3 id="limits"><a href="#limits">Limits</a></h3><ul><li><strong>State.</strong> 512 tokens.</li></ul><p>Weights from <a href="https://huggingface.co">Hugging Face</a>.</p>`
@@ -106,6 +108,10 @@ export function mock(): Backend {
         }))
   let total = 1_284
   let listener: ((p: PullProgress) => void) | null = null
+  const onCloud = ['#cloud', '#credits'].includes(location.hash)
+  let cloud: CloudStatus = { signed_in: onCloud, email: onCloud ? 'you@example.com' : null, mode: onCloud ? 'cloud' : 'local', sign_in: null, error: null }
+  let cloudListener: ((s: CloudStatus) => void) | null = null
+  let approving: ReturnType<typeof setTimeout> | undefined
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
   return {
     status: async () => status,
@@ -180,6 +186,48 @@ export function mock(): Backend {
     },
     onPullProgress: (handler) => {
       listener = handler
+    },
+    cloudStatus: async () => cloud,
+    cloudSignIn: async () => {
+      await wait(300)
+      cloud = { ...cloud, error: null, sign_in: { user_code: 'EECA3HW8', verification_uri: 'https://ollaya.dev/dashboard/device' } }
+      clearTimeout(approving)
+      approving = setTimeout(() => {
+        cloud = { ...cloud, signed_in: true, email: 'you@example.com', sign_in: null }
+        cloudListener?.(cloud)
+      }, 5000)
+      return cloud
+    },
+    cloudOpenSignIn: async () => {},
+    cloudCancelSignIn: async () => {
+      clearTimeout(approving)
+      return (cloud = { ...cloud, sign_in: null })
+    },
+    cloudSignOut: async () => (cloud = { ...cloud, signed_in: false, email: null }),
+    cloudSetMode: async (mode) => (cloud = { ...cloud, mode }),
+    cloudModels: async () => ['coba:1b', 'coba:400m', 'coba:150m-ternary', 'sura:2b', 'sura:0.8b'],
+    cloudDecide: async (model, _state, preset, questions): Promise<DecideResponse> => {
+      await wait(400)
+      if (!cloud.signed_in) throw new CloudError('SIGNED_OUT', 'You are signed out of Ollaya Cloud. Sign in again.')
+      if (location.hash === '#credits')
+        throw new CloudError(
+          'INSUFFICIENT_CREDITS',
+          'Your Ollaya Cloud organization has no credits left (insufficient credits). Add credits at https://ollaya.dev/dashboard, or run on Local.',
+        )
+      if (!preset && !questions) throw new CloudError('INVALID_REQUEST', 'questions: Field required')
+      return {
+        model,
+        routing: null,
+        total_duration: 41_000_000,
+        answers: {
+          intent: { type: 'choice', choice: 'refund', confidence: 0.97 },
+          is_urgent: { type: 'noul', noul: 0.21 },
+          refund_requested: { type: 'noul', noul: 0.91 },
+        },
+      }
+    },
+    onCloudStatus: (handler) => {
+      cloudListener = handler
     },
   }
 }

@@ -6,7 +6,9 @@
 //! the same models. The web page in `ui/` calls the commands below.
 //!
 //! On macOS the app lives in the menu bar (`tray.rs`), with no Dock icon until its window is open.
+//! Signed in to Ollaya Cloud (`cloud.rs`), the Playground can run decisions there instead.
 
+mod cloud;
 #[cfg(target_os = "macos")]
 mod tray;
 
@@ -695,6 +697,18 @@ async fn decide(
     preset: Option<String>,
     questions: Option<String>,
 ) -> Result<DecideResponse, String> {
+    let request = decide_request(model, state, preset, questions)?;
+    client()?.decide(&request).await.map_err(|e| e.to_string())
+}
+
+/// The `/api/decide` body for the Playground's model, state, preset and questions: the local
+/// server's, and Ollaya Cloud's (`cloud::cloud_decide`).
+fn decide_request(
+    model: String,
+    state: String,
+    preset: Option<String>,
+    questions: Option<String>,
+) -> Result<DecideRequest, String> {
     // A built-in preset's questions are sent as questions, so any server answers them; a custom
     // preset lives on the server, which resolves it by name (`preset` on /api/decide).
     let custom = preset
@@ -717,13 +731,19 @@ async fn decide(
     };
     let mut request = DecideRequest::new(model, state, questions);
     request.preset = custom;
-    client()?.decide(&request).await.map_err(|e| e.to_string())
+    Ok(request)
 }
 
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(AppState::default())
+        .manage(cloud::Cloud::new(Box::new(cloud::Keychain)))
         .setup(|app| {
+            // Where the app remembers Local or Ollaya Cloud (no secrets: those are in the keychain).
+            if let Ok(dir) = app.path().app_config_dir() {
+                app.state::<cloud::Cloud>()
+                    .set_settings_path(dir.join("cloud.json"));
+            }
             #[cfg(target_os = "macos")]
             tray::init(app.handle())?;
             // Elsewhere the window is the app: show it (it starts hidden for the macOS menu bar).
@@ -758,7 +778,15 @@ pub fn run() {
             update_available,
             open_download,
             open_link,
-            decide
+            decide,
+            cloud::cloud_status,
+            cloud::cloud_sign_in,
+            cloud::cloud_open_sign_in,
+            cloud::cloud_cancel_sign_in,
+            cloud::cloud_sign_out,
+            cloud::cloud_set_mode,
+            cloud::cloud_models,
+            cloud::cloud_decide
         ])
         .build(tauri::generate_context!())
         .expect("building the Ollaya app");
