@@ -340,7 +340,7 @@ $('[data-cloud]').addEventListener('click', async () => {
     if (!names.length) throw new Error('Ollaya Cloud lists no models.')
     const select = $('[data-cloud-model]')
     select.innerHTML = names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')
-    select.value = names.includes(d.name) ? d.name : names[0]
+    select.value = [d.cloudDefault, d.name].find((n) => n && names.includes(n)) ?? names[0]
     select.addEventListener('change', () => decide())
     model = cloud
     btn.hidden = true

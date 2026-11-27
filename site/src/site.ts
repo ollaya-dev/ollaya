@@ -38,6 +38,9 @@ export const CLOUD = {
   turnstileSiteKey: '0x4AAAAAAGT8hh-XNar3xgws',
   signIn: '/dashboard/sign-in',
   dashboard: '/dashboard',
+  // /try's first choice on Ollaya Cloud. Until the cloud engine has the other catalog models (Ege: from 28 Nov,
+  // 05:00 UTC), only coba:68m-ternary answers there; empty picks the page's own model.
+  tryModel: 'coba:68m-ternary',
 }
 
 /**
