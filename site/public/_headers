@@ -17,6 +17,11 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: credentialless
 
+# The waitlist pages (src/pages/waitlist.tsx) load the Cloudflare Turnstile check against spam: its script and its frame.
+/waitlist*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://oa-c.cobanov.run https://static.cloudflareinsights.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://oa-c.cobanov.run; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
 # onnxruntime-web's thread workers: they instantiate the WebAssembly module and live inside /try's isolation.
 /static/ort-wasm-simd-threaded*
   ! Content-Security-Policy

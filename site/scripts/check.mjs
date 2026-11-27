@@ -76,8 +76,12 @@ const redirects = (await readFile(join(dist, '_redirects'), 'utf8').catch(() => 
   .filter((l) => l.trim() && !l.trim().startsWith('#'))
   .map((l) => l.trim().split(/\s+/)[0])
 
+// Ollaya Cloud's dashboard and its sign-in service answer under /dashboard on the same host, from another Worker.
+const otherWorker = /^\/dashboard(\/|$)/
+
 function resolves(urlPath) {
   const p = decodeURIComponent(urlPath)
+  if (otherWorker.test(p)) return true
   if (p === '/') return fileSet.has('index.html')
   const rel = p.slice(1).replace(/\/$/, '')
   return fileSet.has(rel) || fileSet.has(`${rel}.html`) || fileSet.has(`${rel}/index.html`) || redirects.includes(p)
