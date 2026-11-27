@@ -1,7 +1,7 @@
 import { hasAsset } from '../lib/assets'
 import { benchUrl } from '../lib/bench'
 import { githubStars } from '../lib/stars'
-import { GITHUB_URL } from '../site'
+import { CLOUD, GITHUB_URL } from '../site'
 import { Icon } from './Icon'
 import { LogoMark } from './Logo'
 
@@ -53,6 +53,38 @@ function NavSearch({ id, big }: { id: string; big?: boolean }) {
   )
 }
 
+// Ollaya Cloud's account: "Sign in" in the page, swapped by public/static/app.js for the visitor's menu when
+// /dashboard/api/auth/get-session says they are signed in. The session cookie has Path=/dashboard, so only that
+// request carries it; the site itself never sees it.
+function Account() {
+  return (
+    <>
+      <a href={CLOUD.signIn} class="hidden h-9 items-center rounded-md px-3 text-sm text-body hover:text-fg md:inline-flex" data-account-out data-sign-in>
+        Sign in
+      </a>
+      <details class="relative hidden md:block" data-account-in data-account-menu hidden>
+        <summary class="inline-flex h-9 max-w-48 cursor-pointer list-none items-center gap-1.5 rounded-md px-3 text-sm text-body hover:text-fg [&::-webkit-details-marker]:hidden">
+          <span class="truncate" data-account-email>
+            Account
+          </span>
+          <Icon name="chevronDown" class="size-3.5 shrink-0" />
+        </summary>
+        <div class="panel panel-strong absolute top-full right-0 z-50 mt-2 w-56 overflow-hidden rounded-md py-1 text-sm">
+          <p class="truncate px-3 py-2 text-[13px] text-muted" data-account-email>
+            Signed in
+          </p>
+          <a href={CLOUD.dashboard} class="block px-3 py-2 text-fg hover:bg-fill">
+            Dashboard
+          </a>
+          <button type="button" class="block w-full px-3 py-2 text-left text-fg hover:bg-fill" data-sign-out>
+            Sign out
+          </button>
+        </div>
+      </details>
+    </>
+  )
+}
+
 export function Header({ active, hideSearch }: { active?: PageNav; hideSearch?: boolean }) {
   const stars = githubStars()
   return (
@@ -78,6 +110,7 @@ export function Header({ active, hideSearch }: { active?: PageNav; hideSearch?: 
             {stars ?? 'GitHub'}
             {stars ? <span class="sr-only"> stars</span> : null}
           </a>
+          <Account />
           <a href="/download" class="inline-flex h-9 items-center rounded-md bg-btn px-4 text-sm font-medium text-btn-fg hover:bg-btn-hover" aria-current={active === 'download' ? 'page' : undefined}>
             Download
           </a>
@@ -96,6 +129,21 @@ export function Header({ active, hideSearch }: { active?: PageNav; hideSearch?: 
                     </a>
                   </li>
                 ))}
+                <li data-account-out>
+                  <a href={CLOUD.signIn} class="block py-2 hover:underline underline-offset-4" data-sign-in>
+                    Sign in
+                  </a>
+                </li>
+                <li data-account-in hidden>
+                  <a href={CLOUD.dashboard} class="block py-2 hover:underline underline-offset-4">
+                    Dashboard
+                  </a>
+                </li>
+                <li data-account-in hidden>
+                  <button type="button" class="block py-2 text-left hover:underline underline-offset-4" data-sign-out>
+                    Sign out
+                  </button>
+                </li>
               </ul>
             </div>
           </details>

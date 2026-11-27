@@ -1,9 +1,11 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // Ollaya website — a fully static site served by Workers Static Assets.
-  // There is no Worker script ("main"): requests never run code, so it stays on the free plan.
-  // Build first (`npm run build` writes ./dist), then `wrangler deploy` uploads ./dist.
+  // Ollaya website — a static site served by Workers Static Assets, with a small Worker for /api/* only.
+  // Pages and files are assets: requests for them never run code (and cost nothing on the free plan). The Worker
+  // (worker/index.ts) runs for /api/* (Ollaya Cloud for signed-in visitors) and for paths that match no asset.
+  // Build first (`npm run build` writes ./dist), then `wrangler deploy` uploads ./dist and the Worker.
   "name": "ollaya",
+  "main": "./worker/index.ts",
   "compatibility_date": "2026-09-15",
 
   "assets": {
@@ -11,8 +13,22 @@
     // Unknown paths get dist/404.html with status 404.
     "not_found_handling": "404-page",
     // "/docs/api" serves docs/api.html; "/docs/api.html" and "/docs/api/" redirect to "/docs/api".
-    "html_handling": "auto-trailing-slash"
+    "html_handling": "auto-trailing-slash",
+    // The Worker hands every path that is not /api/* back to the assets.
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   },
+
+  // Ollaya Cloud (Ege's Workers; do not change them from here). The sign-in service gives the JWKS that checks the
+  // visitor's JWT, the gateway makes inference keys and runs /api/decide. Service bindings, because a Worker's own
+  // fetch() to ollaya.dev/dashboard/* does not reach the route Workers of its zone.
+  "services": [
+    { "binding": "AUTH", "service": "ollaya-cloud-auth" },
+    { "binding": "GATEWAY", "service": "ollaya-cloud-gateway" }
+  ],
+  // Each visitor's inference key for an organization, AES-GCM encrypted with the KEYS_SECRET secret
+  // (`openssl rand -base64 32 | npx wrangler secret put KEYS_SECRET`).
+  "kv_namespaces": [{ "binding": "CLOUD_KEYS", "id": "31194d805f2443969af833c1a603200b" }],
 
   // Custom domains — each zone (ollaya.dev, cobanov.dev) must be in the same Cloudflare account.
   // Wrangler creates the DNS records and certificates on deploy.

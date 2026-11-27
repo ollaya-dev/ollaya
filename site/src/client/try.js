@@ -196,7 +196,8 @@ async function decide() {
     $('[data-answers]').innerHTML = `<ul class="divide-y divide-line" role="list">${Object.entries(r.answers)
       .map(([id, a]) => answerHtml(id, a, sent.questions[id]))
       .join('')}</ul>`
-    $('[data-latency]').textContent = `${Math.round(ms)} ms · ${r.usage?.input_tokens ?? '?'} tokens`
+    const where = model === cloud ? ' · Ollaya Cloud' : ''
+    $('[data-latency]').textContent = `${Math.round(ms)} ms · ${r.usage?.input_tokens ?? '?'} tokens${where}`
   } catch (e) {
     $('[data-latency]').textContent = ''
     $('[data-answers]').innerHTML = `<p class="text-sm text-fail">${esc(e.message ?? e)}</p>`
@@ -258,11 +259,102 @@ $('[data-load]').addEventListener('click', async () => {
     const backend = `WebAssembly${threads > 1 ? `, ${threads} threads` : ''}`
     status(`Loaded in ${((performance.now() - t) / 1000).toFixed(1)} s · ${backend}`)
     btn.hidden = true
+    $('[data-cloud]').hidden = true
+    $('[data-cloud-sign-in]').hidden = true
     $('[data-decide]').disabled = false
     $('[data-decide-hint]').textContent = 'Edits re-run on their own.'
     decide()
   } catch (e) {
     status(`Could not load the model: ${e.message ?? e}`)
+    btn.disabled = false
+  }
+})
+
+// --- Ollaya Cloud ----------------------------------------------------------------------------------------
+// For a visitor signed in to Ollaya Cloud (on this host, under /dashboard): the request goes to the site's Worker
+// (worker/index.ts) with a 5-minute JWT from the sign-in service, and the Worker runs it with the visitor's own
+// inference key, billed to their first (personal) organization. The key never reaches the page.
+
+class SignInNeeded extends Error {}
+
+const session = { token: '', expires: 0, org: '' }
+
+function claims(jwt) {
+  const part = jwt.split('.')[1] ?? ''
+  const b64 = part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=')
+  return JSON.parse(atob(b64))
+}
+
+async function cloudToken() {
+  if (session.token && Date.now() < session.expires - 30_000) return session.token
+  const r = await fetch('/dashboard/api/auth/token', { credentials: 'same-origin', headers: { accept: 'application/json' } })
+  if (r.status === 401) throw new SignInNeeded('Sign in to Ollaya Cloud first.')
+  if (!r.ok) throw new Error(`The Ollaya Cloud sign-in service answered ${r.status}.`)
+  const { token } = await r.json()
+  session.token = token
+  session.expires = (claims(token).exp ?? 0) * 1000
+  return token
+}
+
+async function cloudOrg() {
+  if (session.org) return session.org
+  const r = await fetch('/dashboard/api/auth/organization/list', { credentials: 'same-origin', headers: { accept: 'application/json' } })
+  if (r.status === 401) throw new SignInNeeded('Sign in to Ollaya Cloud first.')
+  if (!r.ok) throw new Error(`The Ollaya Cloud sign-in service answered ${r.status} for your organizations.`)
+  const orgs = await r.json()
+  if (!Array.isArray(orgs) || !orgs[0]?.id) throw new Error('Your Ollaya Cloud account has no organization yet.')
+  session.org = orgs[0].id
+  return session.org
+}
+
+const cloud = {
+  async decide(req) {
+    const [token, org] = await Promise.all([cloudToken(), cloudOrg()])
+    const r = await fetch('/api/cloud/decide', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ ...req, org, model: $('[data-cloud-model]').value }),
+    })
+    const answer = await r.json().catch(() => null)
+    if (r.status === 401 && answer?.code === 'SIGN_IN') {
+      session.token = ''
+      throw new SignInNeeded('Your Ollaya Cloud sign-in has ended: sign in again.')
+    }
+    if (!r.ok) throw new Error(answer?.error ?? `Ollaya Cloud answered ${r.status}.`)
+    return answer
+  },
+}
+
+const signInHint = (show) => ($('[data-cloud-sign-in]').hidden = !show)
+
+$('[data-cloud]').addEventListener('click', async () => {
+  const btn = $('[data-cloud]')
+  btn.disabled = true
+  signInHint(false)
+  try {
+    status('Checking your Ollaya Cloud sign-in…')
+    await Promise.all([cloudToken(), cloudOrg()])
+    const r = await fetch('/api/cloud/models', { headers: { accept: 'application/json' } })
+    if (!r.ok) throw new Error(`The Ollaya Cloud model list answered ${r.status}.`)
+    const names = ((await r.json()).data ?? []).map((m) => m.name).filter(Boolean)
+    if (!names.length) throw new Error('Ollaya Cloud lists no models.')
+    const select = $('[data-cloud-model]')
+    select.innerHTML = names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')
+    select.value = names.includes(d.name) ? d.name : names[0]
+    select.addEventListener('change', () => decide())
+    model = cloud
+    btn.hidden = true
+    $('[data-load]').hidden = true
+    $('[data-cloud-picker]').hidden = false
+    $('[data-privacy]').textContent =
+      'On Ollaya Cloud the request goes to Ollaya Cloud and runs there, billed to your organization. Load the model instead to keep the text in this page.'
+    status('Running on Ollaya Cloud.')
+    $('[data-decide]').disabled = false
+    $('[data-decide-hint]').textContent = 'Edits re-run on their own.'
+    decide()
+  } catch (e) {
+    status(e instanceof SignInNeeded ? e.message : `Could not use Ollaya Cloud: ${e.message ?? e}`)
+    signInHint(e instanceof SignInNeeded)
     btn.disabled = false
   }
 })

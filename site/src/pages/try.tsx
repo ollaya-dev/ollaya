@@ -2,7 +2,7 @@ import { Icon } from '../components/Icon'
 import { btnPrimary, btnSecondary, CodeTabs, OutlinePill, SizeBadge, textLink } from '../components/ui'
 import { EXAMPLES, MODEL, type TryExample } from '../data/try'
 import { asset } from '../lib/assets'
-import { LOCAL_API } from '../site'
+import { CLOUD, LOCAL_API } from '../site'
 
 // The page is static; src/client/try.js (bundled to /static/try.js by scripts/build.mjs) loads the model on the
 // button, renders the example's questions and the answers. The first example is rendered here too, so the page
@@ -128,6 +128,19 @@ export function TryPage() {
                 <Icon name="download" class="size-4" />
                 Load the model ({MODEL.size})
               </button>
+              <button type="button" class={`${btnSecondary} disabled:opacity-50`} data-cloud>
+                Run on Ollaya Cloud
+              </button>
+              <div class="flex items-center gap-2" data-cloud-picker hidden>
+                <label for="try-cloud-model" class="text-[13px] text-muted">
+                  Ollaya Cloud model
+                </label>
+                <select
+                  id="try-cloud-model"
+                  class="rounded-md border border-line bg-canvas px-3 py-2 font-mono text-[13px] text-fg hover:border-line-strong focus:border-line-strong focus:ring-4 focus:ring-fill-strong focus:outline-none"
+                  data-cloud-model
+                ></select>
+              </div>
             </div>
           </div>
           <div class="mt-5">
@@ -144,6 +157,17 @@ export function TryPage() {
             </div>
             <p class="mt-2 min-h-5 text-[13px] text-muted tabular-nums" aria-live="polite" data-status>
               Not loaded. Nothing downloads until you press the button.
+            </p>
+            <p class="text-[13px] text-muted" data-cloud-sign-in hidden>
+              Ollaya Cloud runs the request for you and bills it to your organization.{' '}
+              <a href={CLOUD.signIn} class={textLink} data-sign-in>
+                Sign in
+              </a>{' '}
+              first, or{' '}
+              <a href="/waitlist" class={textLink}>
+                join the waitlist
+              </a>
+              .
             </p>
           </div>
         </section>
@@ -238,7 +262,7 @@ export function TryPage() {
 
         <p class="mt-6 flex max-w-3xl gap-2.5 text-[13px] leading-relaxed text-muted">
           <Icon name="info" class="mt-px size-4 shrink-0" />
-          <span>
+          <span data-privacy>
             The text never leaves this page: the tokenizer, the graph and the answers all run in your browser. Only the
             model's files are downloaded, unmodified, from its author's Hugging Face repository.
           </span>
