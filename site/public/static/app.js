@@ -383,4 +383,65 @@
     })
     sync()
   })
+
+  // --- Ollaya Cloud account: "Sign in" becomes the visitor's menu when they are signed in -----------------
+  // Ollaya Cloud's sign-in service answers under /dashboard on this host; its session cookie (Path=/dashboard) goes
+  // only with that request. The answer is kept in sessionStorage for a few minutes, so a visitor who is not signed
+  // in does not ask on every page. Pressing Sign in forgets it, so the page asks again after the sign-in.
+  ;(() => {
+    if (!$('[data-account-out]')) return
+    const KEY = 'ollaya.account'
+    const TTL = 5 * 60 * 1000
+    const forget = () => {
+      try {
+        sessionStorage.removeItem(KEY)
+      } catch {}
+    }
+    const closeMenu = () => $('[data-account-menu]')?.removeAttribute('open')
+    const show = (user) => {
+      $$('[data-account-out]').forEach((n) => (n.hidden = !!user))
+      $$('[data-account-in]').forEach((n) => (n.hidden = !user))
+      $$('[data-account-email]').forEach((n) => (n.textContent = user?.email ?? ''))
+    }
+    $$('[data-sign-in]').forEach((a) => a.addEventListener('click', forget))
+    $$('[data-sign-out]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        b.disabled = true
+        await fetch('/dashboard/api/auth/sign-out', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        }).catch(() => null)
+        forget()
+        show(null)
+        closeMenu()
+        b.disabled = false
+        document.dispatchEvent(new CustomEvent('ollaya:signed-out'))
+      }),
+    )
+    // The menu closes on a click outside it and on Escape.
+    document.addEventListener('click', (e) => {
+      const menu = $('[data-account-menu]')
+      if (menu?.open && !menu.contains(e.target)) closeMenu()
+    })
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMenu()
+    })
+    let cached
+    try {
+      cached = JSON.parse(sessionStorage.getItem(KEY) ?? 'null')
+    } catch {}
+    if (cached && Date.now() - cached.at < TTL) return show(cached.user)
+    fetch('/dashboard/api/auth/get-session', { credentials: 'same-origin', headers: { accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((session) => {
+        const user = session?.user?.email ? { email: session.user.email } : null
+        try {
+          sessionStorage.setItem(KEY, JSON.stringify({ user, at: Date.now() }))
+        } catch {}
+        show(user)
+      })
+  })()
 })()

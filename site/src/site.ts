@@ -29,12 +29,15 @@ export const LOCAL_API = `http://localhost:${LOCAL_PORT}`
 export const COPYRIGHT_YEAR = 2026
 
 /**
- * Ollaya Cloud's waitlist (src/pages/waitlist.tsx). The sign-in service of Ollaya Cloud answers under /dashboard on
- * this host. The Turnstile site key is public; its widget allows this host only.
+ * Ollaya Cloud on this host. Its dashboard and sign-in service answer under /dashboard (other Workers): the
+ * waitlist (src/pages/waitlist.tsx) and the header's Sign in. The site's own Worker answers under /api/cloud
+ * (worker/index.ts). The Turnstile site key is public; its widget allows this host only.
  */
 export const CLOUD = {
   waitlistApi: '/dashboard/api/auth/waitlist',
   turnstileSiteKey: '0x4AAAAAAGT8hh-XNar3xgws',
+  signIn: '/dashboard/sign-in',
+  dashboard: '/dashboard',
 }
 
 /**
