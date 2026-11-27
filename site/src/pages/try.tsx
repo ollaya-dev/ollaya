@@ -100,6 +100,7 @@ export function TryPage() {
         data-repo={MODEL.repo}
         data-revision={MODEL.revision}
         data-name={modelName}
+        data-cloud-default={CLOUD.tryModel}
         data-runtime-wasm={asset('ollaya-wasm.js')}
         data-ollaya-wasm={asset('ollaya_web_bg.wasm')}
         data-ort-wasm={asset('ort-wasm-simd-threaded.wasm')}
