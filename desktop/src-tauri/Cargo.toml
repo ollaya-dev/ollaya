@@ -21,6 +21,10 @@ tauri-build = { version = "2.5", features = [] }
 anyhow = "1.0.104"
 dirs = "7.0.0"
 futures-util = "0.3.34"
+# Ollaya Cloud's device session and inference key live in the system's keychain (cloud.rs): the
+# macOS Keychain, Windows' Credential Manager, the Secret Service on Linux (over the D-Bus that tao
+# already links). Each feature only applies on its own system.
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 ollaya-api = { path = "../../crates/ollaya-api" }
 reqwest = { version = "0.13.5", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }

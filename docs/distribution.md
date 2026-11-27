@@ -600,6 +600,17 @@ separate Cargo workspace, so the engine's builds and CI never pull in the webvie
   and a menu with the server's state, Start/Stop, the installed models (checked when loaded;
   click to load or unload), downloads, Open at Login (a LaunchAgent) and Quit. Windows and Linux
   get the window only.
+- **Ollaya Cloud** (`src-tauri/src/cloud.rs`): the Playground runs on the local server or, signed
+  in, on Ollaya Cloud; the app remembers which in its config directory (`cloud.json`, default
+  Local). Signing in is the OAuth device flow against `ollaya.dev/dashboard/api/auth`
+  (`client_id` `ollaya-desktop`): the app shows the code and opens the browser on it. The device
+  session (7 days, sliding) and the inference key it makes for the account's first organization
+  live in the system keychain (`keyring`: the macOS Keychain, Windows' Credential Manager, the
+  Secret Service on Linux), never in a file; the 5-minute JWT only in memory. Every request goes
+  from Rust, never from the page: `api.ollaya.dev` refuses any request with an `Origin` header,
+  and the page gets only signed in or not, the email, the code, the mode, the catalog's model names
+  and answers or errors. `npm run preview` with `#cloud` starts signed in, `#credits` with an
+  organization out of credits.
 - **The engine inside:** `desktop.yml` builds `ollaya` for the target and copies it to
   `desktop/src-tauri/binaries/ollaya-<target triple>`, which Tauri bundles next to the app
   (`externalBin`). The app runs `ollaya serve` from there, and `ollaya stop` for the server it

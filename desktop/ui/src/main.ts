@@ -1,10 +1,14 @@
 // Ollaya desktop, laid out as a desktop app: a rail of pages on the left (Discover, My Models,
 // Playground, Server), the page in the middle and the server's status in a bar along the bottom.
+// The Playground runs on the local server or, signed in, on Ollaya Cloud.
 // Plain DOM, rendered from one state object.
 import {
   backend,
+  CloudError,
   type ActivityResponse,
   type Answer,
+  type CloudMode,
+  type CloudStatus,
   type DecideResponse,
   type LibraryModel,
   type Preset,
@@ -92,8 +96,22 @@ const state = {
   running: false,
   result: null as DecideResponse | null,
   runError: '',
+  /** The CloudError code of `runError` (INSUFFICIENT_CREDITS…), when it came from Ollaya Cloud. */
+  runErrorCode: '',
   copied: '',
+  /** Signed in or not, and where decisions run; the session and the key never come here. */
+  cloud: { signed_in: false, email: null, mode: 'local', sign_in: null, error: null } as CloudStatus,
+  cloudBusy: false,
+  /** The models Ollaya Cloud runs: names of its own, not the local ones. */
+  cloudModels: [] as string[],
+  cloudModelsError: '',
+  cloudModel: '',
 }
+
+/** Where the dashboard is, for an organization out of credits. */
+const DASHBOARD = 'https://ollaya.dev/dashboard'
+
+const onCloud = () => state.cloud.mode === 'cloud'
 
 /** What `/api/decide` with `preset: triage` is shown with when someone asks for an example. */
 const EXAMPLE = "My order never arrived and support ignores me. Refund me today or I'm switching to your competitor."
@@ -213,23 +231,72 @@ async function remove(tag: string) {
 }
 
 async function run() {
-  const model = state.runModel
+  const cloud = onCloud()
+  const model = cloud ? state.cloudModel : state.runModel
   if (!model || !state.input.trim()) return
   state.running = true
   state.runError = ''
+  state.runErrorCode = ''
   render()
+  const custom = state.preset === 'custom'
   try {
-    // A model with built-in questions gets the state alone.
-    state.result = (await builtinOf(model))
-      ? await backend.decide(model, state.input, null, null)
-      : state.preset === 'custom'
-        ? await backend.decide(model, state.input, null, state.customQuestions)
-        : await backend.decide(model, state.input, state.preset, null)
+    // A model with built-in questions gets the state alone (Ollaya Cloud's models take questions).
+    state.result = cloud
+      ? await backend.cloudDecide(model, state.input, custom ? null : state.preset, custom ? state.customQuestions : null)
+      : (await builtinOf(model))
+        ? await backend.decide(model, state.input, null, null)
+        : custom
+          ? await backend.decide(model, state.input, null, state.customQuestions)
+          : await backend.decide(model, state.input, state.preset, null)
   } catch (e) {
     state.result = null
     state.runError = String(e)
+    state.runErrorCode = e instanceof CloudError ? e.code : ''
+    if (state.runErrorCode === 'SIGNED_OUT') state.cloud = await backend.cloudStatus()
   }
   state.running = false
+  render()
+}
+
+/** Run a sign-in action, showing what went wrong in the cloud status. */
+async function cloudAction(action: () => Promise<CloudStatus>) {
+  state.cloudBusy = true
+  render()
+  try {
+    state.cloud = await action()
+  } catch (e) {
+    state.cloud = { ...state.cloud, error: String(e) }
+  }
+  state.cloudBusy = false
+  render()
+}
+
+const signIn = () => cloudAction(backend.cloudSignIn)
+const cancelSignIn = () => cloudAction(backend.cloudCancelSignIn)
+const signOut = () => cloudAction(backend.cloudSignOut)
+
+/** Run the Playground on the local server or on Ollaya Cloud; the app remembers the choice. */
+async function setMode(mode: CloudMode) {
+  if (mode === state.cloud.mode) return
+  state.result = null
+  state.runError = ''
+  state.runErrorCode = ''
+  await cloudAction(() => backend.cloudSetMode(mode))
+}
+
+let listingCloud = false
+
+async function loadCloudModels() {
+  if (listingCloud) return
+  listingCloud = true
+  state.cloudModelsError = ''
+  try {
+    state.cloudModels = await backend.cloudModels()
+    if (!state.cloudModels.length) state.cloudModelsError = 'Ollaya Cloud lists no models.'
+  } catch (e) {
+    state.cloudModelsError = String(e)
+  }
+  listingCloud = false
   render()
 }
 
@@ -406,6 +473,7 @@ function statusBar(): HTMLElement {
     running ? h('span', { class: 'truncate' }, state.loaded.length ? `· loaded: ${state.loaded.join(', ')}` : '· nothing loaded') : null,
     state.statusError ? h('span', { class: 'truncate text-bad', title: state.statusError }, state.statusError) : null,
     h('span', { class: 'flex-1' }),
+    ...cloudBar(),
     state.update ? h('button', { class: 'text-fg underline underline-offset-4', title: 'Opens the download page', onClick: () => void backend.openDownload() }, `Update to ${state.update}`) : null,
     h(
       'button',
@@ -415,6 +483,26 @@ function statusBar(): HTMLElement {
     ),
     s?.version ? h('span', { class: 'tabular-nums' }, `v${s.version}`) : null,
   )
+}
+
+/** Ollaya Cloud in the status bar: Sign in, the code while signing in, or the account and Sign out. */
+function cloudBar(): Child[] {
+  const c = state.cloud
+  const quiet = 'hover:text-fg disabled:opacity-50'
+  if (c.signed_in)
+    return [
+      h('span', { class: 'max-w-56 truncate', title: c.email ? `Signed in to Ollaya Cloud as ${c.email}` : 'Signed in to Ollaya Cloud' }, c.email ? `Ollaya Cloud · ${c.email}` : 'Ollaya Cloud'),
+      h('button', { class: quiet, disabled: state.cloudBusy, onClick: () => void signOut() }, 'Sign out'),
+    ]
+  if (c.sign_in)
+    return [
+      h('span', { title: 'Approve this code in your browser' }, 'Ollaya Cloud code ', h('span', { class: `${mono} text-fg` }, c.sign_in.user_code)),
+      h('button', { class: quiet, onClick: () => void cancelSignIn() }, 'Cancel'),
+    ]
+  return [
+    c.error ? h('span', { class: 'max-w-64 truncate text-bad', title: c.error }, c.error) : null,
+    h('button', { class: quiet, disabled: state.cloudBusy, onClick: () => void signIn() }, 'Sign in to Ollaya Cloud'),
+  ]
 }
 
 // --- view: discover -------------------------------------------------------------------------------
@@ -617,22 +705,103 @@ function mine(): HTMLElement {
 
 // --- view: playground -----------------------------------------------------------------------------
 
+const toolbarClass = 'flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2 text-xs text-muted'
+
+/** Local or Ollaya Cloud: where the Playground's decisions run. */
+function modeSwitch(): HTMLElement {
+  const item = (mode: CloudMode, text: string) =>
+    h(
+      'button',
+      {
+        class: `rounded px-2 py-0.5 ${state.cloud.mode === mode ? 'bg-fill-strong text-fg' : 'text-muted hover:text-fg'}`,
+        role: 'radio',
+        'aria-checked': state.cloud.mode === mode ? 'true' : 'false',
+        onClick: () => void setMode(mode),
+      },
+      text,
+    )
+  return h(
+    'span',
+    { class: 'inline-flex h-7 items-center gap-0.5 rounded-md border border-line px-0.5 text-[11px]', role: 'radiogroup', 'aria-label': 'Where decisions run' },
+    item('local', 'Local'),
+    item('cloud', 'Ollaya Cloud'),
+  )
+}
+
+/** A Playground with nothing to run yet: the switch, and why. */
+function withSwitch(content: HTMLElement): HTMLElement {
+  return h('div', { class: 'flex min-h-0 flex-1 flex-col' }, h('div', { class: toolbarClass }, modeSwitch()), content)
+}
+
+/** Ollaya Cloud, signed out: Sign in, or the code to approve in the browser. */
+function signInPanel(): HTMLElement {
+  const c = state.cloud
+  if (c.sign_in)
+    return h(
+      'div',
+      { class: 'flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center' },
+      h('p', { class: label }, 'Your code'),
+      h('p', { class: 'font-mono text-3xl font-semibold tracking-[0.2em] text-fg select-all' }, c.sign_in.user_code),
+      h('p', { class: 'max-w-sm text-[13px] leading-relaxed text-muted' }, `Your browser opened ${c.sign_in.verification_uri.replace(/^https:\/\//, '')}. Check that it shows this code, then approve it there.`),
+      h('p', { class: 'inline-flex items-center gap-2 text-xs text-muted' }, icon(ICON.spinner, 'size-3.5'), 'Waiting for approval…'),
+      h(
+        'span',
+        { class: 'mt-2 flex gap-2' },
+        h('button', { class: btnSecondary, onClick: () => void backend.cloudOpenSignIn() }, icon(ICON.external, 'size-3.5'), 'Open the browser again'),
+        h('button', { class: btnSecondary, onClick: () => void cancelSignIn() }, 'Cancel'),
+      ),
+    )
+  return empty(
+    'Sign in to Ollaya Cloud to run decisions on its models. Requests are billed to your organization.',
+    c.error ? h('p', { class: 'max-w-md text-xs text-bad' }, c.error) : null,
+    h('button', { class: btnPrimary, disabled: state.cloudBusy, onClick: () => void signIn() }, state.cloudBusy ? icon(ICON.spinner, 'size-3.5') : null, 'Sign in to Ollaya Cloud'),
+  )
+}
+
 function playground(): HTMLElement {
-  const tags = allInstalled()
-  const running = !!state.status?.running
-  if (!running) return empty(state.status === null ? 'Checking the server…' : 'Start the server to run a model.')
-  if (!tags.length) return empty('Download a model first.', h('button', { class: btnSecondary, onClick: () => go('discover') }, 'Discover models'))
-  if (!tags.includes(state.runModel)) state.runModel = tags[0]!
+  const cloud = onCloud()
+  let tags: string[]
+  if (cloud) {
+    if (!state.cloud.signed_in) return withSwitch(signInPanel())
+    if (!state.cloudModels.length) {
+      if (!state.cloudModelsError) void loadCloudModels()
+      return withSwitch(
+        state.cloudModelsError
+          ? empty(`Ollaya Cloud's models could not be listed: ${state.cloudModelsError}`, h('button', { class: btnSecondary, onClick: () => void loadCloudModels() }, 'Try again'))
+          : empty("Loading Ollaya Cloud's models…"),
+      )
+    }
+    tags = state.cloudModels
+    if (!tags.includes(state.cloudModel)) state.cloudModel = tags[0]!
+  } else {
+    tags = allInstalled()
+    const running = !!state.status?.running
+    if (!running) return withSwitch(empty(state.status === null ? 'Checking the server…' : 'Start the server to run a model.'))
+    if (!tags.length) return withSwitch(empty('Download a model first.', h('button', { class: btnSecondary, onClick: () => go('discover') }, 'Discover models')))
+    if (!tags.includes(state.runModel)) state.runModel = tags[0]!
+  }
+  const model = cloud ? state.cloudModel : state.runModel
   // A model with built-in questions takes no preset or custom questions. Until the server says
-  // which kind this version is, neither the inputs nor the note show.
-  const own = state.builtin.get(state.runModel)
+  // which kind this version is, neither the inputs nor the note show. Ollaya Cloud's take questions.
+  const own = cloud ? null : state.builtin.get(state.runModel)
   if (own === undefined) void builtinOf(state.runModel)
+  // Custom presets are saved on the local server, so Ollaya Cloud offers the built-in ones.
+  const presets = cloud ? state.presets.filter((p) => p.builtin) : state.presets
+  if (cloud && state.preset !== 'custom' && !presets.some((p) => p.name === state.preset)) state.preset = presets[0]?.name ?? 'custom'
   const mac = navigator.platform.toLowerCase().includes('mac')
+  const pick = (e: Event) => {
+    const value = (e.target as HTMLSelectElement).value
+    if (cloud) state.cloudModel = value
+    else state.runModel = value
+    state.result = null
+    render()
+  }
   const toolbar = h(
     'div',
-    { class: 'flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2 text-xs text-muted' },
-    'Model',
-    select({ 'aria-label': 'Model', onChange: (e) => ((state.runModel = (e.target as HTMLSelectElement).value), (state.result = null), render()) }, ...tags.map((t) => option(t, t, t === state.runModel))),
+    { class: toolbarClass },
+    modeSwitch(),
+    h('span', { class: 'ml-2' }, 'Model'),
+    select({ 'aria-label': 'Model', onChange: pick }, ...tags.map((t) => option(t, t, t === model))),
     own
       ? h('span', { class: 'ml-2' }, 'Asks its own questions: ', h('span', { class: `${mono} text-body` }, own.join(', ')))
       : own === null
@@ -642,7 +811,7 @@ function playground(): HTMLElement {
             'Questions',
             select(
               { 'aria-label': 'Questions', onChange: (e) => ((state.preset = (e.target as HTMLSelectElement).value), render()) },
-              ...state.presets.map((p) => option(p.name, p.builtin ? `${p.name} preset` : `${p.name} (your preset)`, p.name === state.preset)),
+              ...presets.map((p) => option(p.name, p.builtin ? `${p.name} preset` : `${p.name} (your preset)`, p.name === state.preset)),
               option('custom', 'Custom JSON', state.preset === 'custom'),
             ),
           )
@@ -689,7 +858,7 @@ function playground(): HTMLElement {
     { id: 'main-pane', class: 'flex min-w-0 flex-1 flex-col overflow-y-auto' },
     h('div', { class: 'flex h-8 shrink-0 items-center border-b border-line px-4' }, h('span', { class: label }, 'Answers')),
     state.runError
-      ? h('p', { class: 'p-4 text-xs text-bad' }, state.runError)
+      ? runError()
       : state.result
         ? results(state.result)
         : empty(state.running ? 'Running…' : 'The answers appear here: one per question, with how sure the model is.'),
@@ -697,11 +866,30 @@ function playground(): HTMLElement {
   return h('div', { class: 'flex min-h-0 flex-1 flex-col' }, toolbar, h('div', { class: 'flex min-h-0 flex-1' }, input, out))
 }
 
+/** A failed run. An organization out of credits is a state to act on, not a crash. */
+function runError(): HTMLElement {
+  const credits = state.runErrorCode === 'INSUFFICIENT_CREDITS'
+  return h(
+    'div',
+    { class: 'space-y-3 p-4' },
+    h('p', { class: 'text-xs leading-relaxed text-bad' }, state.runError),
+    credits
+      ? h(
+          'span',
+          { class: 'flex gap-2' },
+          h('button', { class: btnSecondary, onClick: () => void backend.openLink(DASHBOARD) }, icon(ICON.external, 'size-3.5'), 'Open the dashboard'),
+          h('button', { class: btnSecondary, onClick: () => void setMode('local') }, 'Run on Local'),
+        )
+      : null,
+  )
+}
+
 /** One row per answer: the question, the answer, a meter of ten segments and its probability. */
 function results(r: DecideResponse): HTMLElement {
+  const cloud = onCloud()
   // qwen3guard's `category` is the harm it would name if it judged the text unsafe, whatever the
   // text (docs/families/qwen3guard.md), so it means little while `unsafe` is low.
-  const guard = r.answers.unsafe?.type === 'noul' && !!state.builtin.get(state.runModel)?.includes('category') && 'category' in r.answers
+  const guard = !cloud && r.answers.unsafe?.type === 'noul' && !!state.builtin.get(state.runModel)?.includes('category') && 'category' in r.answers
   const quiet = guard && (r.answers.unsafe?.noul ?? 0) < 0.5
   const rows = Object.entries(r.answers).map(([q, a]) => {
     const [text, note, p] = describe(a)
@@ -723,7 +911,15 @@ function results(r: DecideResponse): HTMLElement {
     'div',
     {},
     h('ul', { role: 'list' }, ...rows),
-    h('p', { class: 'px-4 py-2.5 text-[11px] text-muted' }, 'Answered by ', h('span', { class: `${mono} text-body` }, r.routing?.model ?? r.model), ' in ', h('span', { class: 'text-fg' }, `${ms(r.total_duration / 1e6)} ms`)),
+    h(
+      'p',
+      { class: 'px-4 py-2.5 text-[11px] text-muted' },
+      'Answered by ',
+      h('span', { class: `${mono} text-body` }, r.routing?.model ?? r.model),
+      cloud ? ' on Ollaya Cloud' : null,
+      Number.isFinite(r.total_duration) ? ' in ' : null,
+      Number.isFinite(r.total_duration) ? h('span', { class: 'text-fg' }, `${ms(r.total_duration / 1e6)} ms`) : null,
+    ),
     guard ? h('p', { class: 'px-4 pb-3 text-[11px] text-muted' }, 'category is the kind of harm the model would name if it judged the text unsafe. It only means something when unsafe is high.') : null,
   )
 }
@@ -849,6 +1045,11 @@ function render() {
   }
 }
 
+backend.onCloudStatus((s) => {
+  state.cloud = s
+  render()
+})
+
 backend.onPullProgress((p) => {
   if (p.done) return
   state.pulling.set(p.model, { completed: p.completed, total: p.total, status: p.status })
@@ -873,11 +1074,12 @@ async function boot() {
     state.presets = presets.value
     state.customQuestions = JSON.stringify(presets.value.find((p) => p.name === 'triage')?.questions ?? {}, null, 2)
   }
+  state.cloud = await backend.cloudStatus().catch(() => state.cloud)
   await refresh()
   // Like Ollama's app: the server runs while the app is open.
   if (!state.status?.running) await toggleServer()
   // With models on this computer, start where they run; a first run starts where they are found.
-  if (state.installed.size) state.page = 'playground'
+  if (state.installed.size || onCloud()) state.page = 'playground'
   // Custom presets live on the server, which may only have started just now.
   state.presets = await backend.presets().catch(() => state.presets)
   state.update = await backend.updateAvailable().catch(() => null)
